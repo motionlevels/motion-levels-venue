@@ -1,0 +1,6 @@
+.DS_Store
+
+# Runtime recording output can grow quickly and should not be committed.
+recordings/
+engine/recordings/
+floor-controller/recordings/
