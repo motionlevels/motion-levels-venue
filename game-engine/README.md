@@ -21,6 +21,7 @@ go run ./game-engine/cmd/game-engine -controller 127.0.0.1:9090
 
 The defaults are:
 
+- game-engine API: `http://127.0.0.1:8082/api/status`
 - controller frame stream: `127.0.0.1:9090`
 - pressure event stream: `127.0.0.1:9091`
 - game: `loop`
@@ -28,6 +29,25 @@ The defaults are:
 - brightness: `80%`
 
 ## Games
+
+The primary player menu now lives in `apps/player-menu`. It is a standalone
+Vite/React kiosk UI that talks to the local game-engine API:
+
+```sh
+cd apps/player-menu
+npm install
+npm run dev
+```
+
+Open:
+
+```txt
+http://127.0.0.1:5174
+```
+
+Choosing a game updates the running game immediately through the local
+game-engine API at `http://127.0.0.1:8082`. Music is switched with the game, and
+pressure events continue to flow through the same controller stream.
 
 ### Whack-a-mole
 

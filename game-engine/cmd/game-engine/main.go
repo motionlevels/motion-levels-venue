@@ -18,6 +18,7 @@ import (
 )
 
 type config struct {
+	HTTPAddr       string
 	ControllerAddr string
 	PressureAddr   string
 	Game           string
@@ -44,6 +45,7 @@ type floorGame interface {
 
 func main() {
 	cfg := config{}
+	flag.StringVar(&cfg.HTTPAddr, "http", ":8082", "HTTP address for the game-engine API; empty disables")
 	flag.StringVar(&cfg.ControllerAddr, "controller", "127.0.0.1:9090", "floor-controller frame stream address")
 	flag.StringVar(&cfg.PressureAddr, "pressure-events", "127.0.0.1:9091", "floor-controller pressure event stream address")
 	flag.StringVar(&cfg.Game, "game", "loop", "game to run: loop or whack-a-mole")
@@ -70,7 +72,7 @@ func main() {
 		log.Fatal(err)
 	}
 	if audioPlayer != nil {
-		if err := audioPlayer.Preload(cfg.MusicRef, cfg.StartCueRef, cfg.CoinCueRef, cfg.DamageCueRef, cfg.WinCueRef); err != nil {
+		if err := audioPlayer.Preload(preloadAudioRefs(cfg)...); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -81,8 +83,10 @@ func main() {
 		return
 	}
 
+	runtime := newGameRuntime(cfg, audioPlayer)
+	go serveGameAPI(cfg.HTTPAddr, runtime)
 	for {
-		if err := run(cfg, audioPlayer); err != nil {
+		if err := run(cfg, runtime); err != nil {
 			log.Printf("game-engine stream ended: %v", err)
 			time.Sleep(time.Second)
 		}
@@ -154,10 +158,9 @@ func runAudioTest(player *audio.Player, cfg config) error {
 	return nil
 }
 
-func run(cfg config, audioPlayer *audio.Player) error {
+func run(cfg config, runtime *gameRuntime) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	game := newGame(cfg)
 
 	conn, err := net.Dial("tcp", cfg.ControllerAddr)
 	if err != nil {
@@ -165,32 +168,19 @@ func run(cfg config, audioPlayer *audio.Player) error {
 	}
 	defer conn.Close()
 	log.Printf("connected to floor-controller: %s", cfg.ControllerAddr)
-	if audioPlayer != nil {
-		if cfg.MusicRef != "" {
-			if err := audioPlayer.StartLoop(cfg.MusicRef, cfg.MusicVolume); err != nil {
-				log.Printf("background music: %v", err)
-			}
-		}
-		if cfg.StartCueRef != "" {
-			if err := audioPlayer.PlayCue(cfg.StartCueRef, cfg.CueVolume); err != nil {
-				log.Printf("start cue: %v", err)
-			}
-		}
-		defer audioPlayer.StopLoop()
-	}
 
 	writer := bufio.NewWriterSize(conn, 1<<20)
 	ticker := time.NewTicker(time.Duration(float64(time.Second) / float64(cfg.FPS)))
 	defer ticker.Stop()
 
 	startedAt := time.Now()
-	if (audioPlayer != nil || game != nil) && cfg.PressureAddr != "" {
-		go pressureEventLoop(ctx, cfg, audioPlayer, game, startedAt)
+	if runtime != nil && cfg.PressureAddr != "" {
+		go pressureEventLoop(ctx, cfg, runtime, startedAt)
 	}
 	var sequence uint64
 	for now := range ticker.C {
 		sequence++
-		frame := makeFrame(sequence, now, now.Sub(startedAt).Seconds(), cfg.Brightness, game)
+		frame := makeFrame(sequence, now, now.Sub(startedAt).Seconds(), runtime)
 		if err := pbstream.Write(writer, frame); err != nil {
 			return err
 		}
@@ -201,7 +191,7 @@ func run(cfg config, audioPlayer *audio.Player) error {
 	return nil
 }
 
-func pressureEventLoop(ctx context.Context, cfg config, audioPlayer *audio.Player, game floorGame, startedAt time.Time) {
+func pressureEventLoop(ctx context.Context, cfg config, runtime *gameRuntime, startedAt time.Time) {
 	for {
 		if ctx.Err() != nil {
 			return
@@ -225,7 +215,9 @@ func pressureEventLoop(ctx context.Context, cfg config, audioPlayer *audio.Playe
 				log.Printf("pressure stream ended: %v", err)
 				break
 			}
-			handlePressureEvent(cfg, audioPlayer, game, startedAt, &event)
+			if runtime != nil {
+				runtime.HandlePressure(&event, startedAt)
+			}
 		}
 	}
 }
@@ -297,17 +289,6 @@ func clamp01(value float64) float64 {
 	return value
 }
 
-func newGame(cfg config) floorGame {
-	switch cfg.Game {
-	case "whack-a-mole":
-		log.Printf("game: whack-a-mole players=%d", cfg.PlayerCount)
-		return whackamole.New(cfg.PlayerCount, time.Now())
-	default:
-		log.Printf("game: loop")
-		return nil
-	}
-}
-
 func normalizeGame(value string) string {
 	switch value {
 	case "whack-a-mole", "whackamole", "mole":
@@ -317,7 +298,12 @@ func normalizeGame(value string) string {
 	}
 }
 
-func makeFrame(sequence uint64, now time.Time, seconds float64, brightness int, game floorGame) *recordingpb.FrameRecord {
+func makeFrame(sequence uint64, now time.Time, seconds float64, runtime *gameRuntime) *recordingpb.FrameRecord {
+	brightness := 80
+	var gameColors []animation.RGB
+	if runtime != nil {
+		brightness, gameColors = runtime.Render(now)
+	}
 	scale := float64(brightness) / 100
 	frame := &recordingpb.FrameRecord{
 		Sequence:  sequence,
@@ -325,10 +311,6 @@ func makeFrame(sequence uint64, now time.Time, seconds float64, brightness int, 
 		Width:     animation.GridWidth,
 		Height:    animation.GridHeight,
 		Tiles:     make([]*recordingpb.TileState, 0, animation.GridWidth*animation.GridHeight),
-	}
-	var gameColors []animation.RGB
-	if game != nil {
-		gameColors = game.Render(now)
 	}
 	for y := 0; y < animation.GridHeight; y++ {
 		for x := 0; x < animation.GridWidth; x++ {
