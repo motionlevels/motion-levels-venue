@@ -13,9 +13,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
 	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
 	"github.com/lobis/motion-levels/packages/contracts/gamepb"
+	"github.com/lobis/motion-levels/packages/contracts/inputpb"
 )
 
 func TestMakeFrameProducesCompleteLogicalBoard(t *testing.T) {
@@ -63,27 +65,6 @@ func TestAudioPlayerDisabledByDefault(t *testing.T) {
 	}
 	if player != nil {
 		t.Fatal("audio player should be nil when audio is disabled")
-	}
-}
-
-func TestCueForPressureUsesCurrentTileColor(t *testing.T) {
-	cfg := config{CoinCueRef: "coin", DamageCueRef: "damage"}
-	var foundCoin bool
-	var foundDamage bool
-
-	for y := 0; y < 32; y++ {
-		for x := 0; x < 16; x++ {
-			switch cueForPressure(cfg, x, y, 0) {
-			case "coin":
-				foundCoin = true
-			case "damage":
-				foundDamage = true
-			}
-		}
-	}
-
-	if !foundCoin || !foundDamage {
-		t.Fatalf("classifier found coin=%v damage=%v, want both", foundCoin, foundDamage)
 	}
 }
 
@@ -205,6 +186,62 @@ func TestAmbientSelectionChangesRenderedFrame(t *testing.T) {
 	}
 	if runtime.Status().CurrentGame != "ambient-spark" {
 		t.Fatalf("status game = %q, want ambient-spark", runtime.Status().CurrentGame)
+	}
+}
+
+func TestAmbientPressureAddsTouchEffect(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 100, PlayerCount: 1, Game: "ambient-pulse"}, nil, nil)
+	now := time.Now()
+	renderAt := now.Add(300 * time.Millisecond)
+
+	_, before := runtime.Render(renderAt)
+	runtime.HandlePressure(&inputpb.PressureEvent{
+		X:         8,
+		Y:         16,
+		Pressed:   true,
+		UnixNanos: now.UnixNano(),
+	}, now)
+	_, after := runtime.Render(renderAt)
+
+	index := 16*animation.GridWidth + 8
+	if before[index] == after[index] {
+		t.Fatalf("pressed tile color did not change: before=%+v after=%+v", before[index], after[index])
+	}
+}
+
+func TestAmbientPressureDoesNotPlayGenericCue(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "coin.wav"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "damage.wav"), []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	backend := &recordingBackend{}
+	player := audio.NewPlayer(dir, backend)
+	runtime := newGameRuntime(config{
+		Brightness:   100,
+		PlayerCount:  1,
+		Game:         "ambient-pulse",
+		MusicRef:     "",
+		StartCueRef:  "",
+		CoinCueRef:   "coin.wav",
+		DamageCueRef: "damage.wav",
+	}, player, nil)
+
+	runtime.HandlePressure(&inputpb.PressureEvent{
+		X:         8,
+		Y:         16,
+		Pressed:   true,
+		UnixNanos: time.Now().UnixNano(),
+	}, time.Now())
+	time.Sleep(20 * time.Millisecond)
+
+	if got := backend.count(filepath.Join(dir, "coin.wav")); got != 0 {
+		t.Fatalf("coin cue plays on ambient press = %d, want 0", got)
+	}
+	if got := backend.count(filepath.Join(dir, "damage.wav")); got != 0 {
+		t.Fatalf("damage cue plays on ambient press = %d, want 0", got)
 	}
 }
 

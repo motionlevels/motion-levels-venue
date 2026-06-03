@@ -14,11 +14,9 @@ const (
 	GridWidth  = animation.GridWidth
 	GridHeight = animation.GridHeight
 
-	gameDuration       = 60 * time.Second
 	countdownDuration  = 3 * time.Second
 	globalImmunity     = time.Second
 	damageFlash        = 420 * time.Millisecond
-	safeStepScore      = 1
 	DefaultMusicRef    = "Motion/canciones/Background07.mp3"
 	DefaultMusicVolume = 0.20
 )
@@ -70,11 +68,16 @@ type Game struct {
 	score            int
 	speed            float64
 	started          time.Time
-	endAt            time.Time
 	gameOver         bool
 	lastTick         time.Time
 	immuneUntil      time.Time
 	damageFlashUntil time.Time
+	claimedPlatforms []claimedPlatform
+}
+
+type claimedPlatform struct {
+	phaseA float64
+	phaseB float64
 }
 
 var playerColors = []struct {
@@ -102,7 +105,6 @@ func NewWithSeed(playerCount int, now time.Time, _ int64, difficulty string) *Ga
 		lives:       settings.lives,
 		speed:       settings.speed,
 		started:     now.Add(countdownDuration),
-		endAt:       now.Add(countdownDuration + gameDuration),
 		lastTick:    now,
 	}
 }
@@ -138,8 +140,14 @@ func (g *Game) Press(event whackamole.PressEvent, now time.Time) []whackamole.Ev
 		return []whackamole.Event{{Cue: whackamole.CueMiss, Message: "Vida perdida · " + strconv.Itoa(g.lives)}}
 	}
 
-	g.score += safeStepScore
-	return []whackamole.Event{{Cue: whackamole.CueHit, Message: "Zona segura +" + strconv.Itoa(safeStepScore)}}
+	claimed := g.claimedMask(g.patternSeconds(now))
+	if claimed[pointIndex(pt)] {
+		return nil
+	}
+
+	g.claimedPlatforms = append(g.claimedPlatforms, newClaimedPlatform(pt, g.patternSeconds(now)))
+	g.score = len(g.claimedPlatforms)
+	return []whackamole.Event{{Cue: whackamole.CueHit, Message: "Plataforma nueva · " + strconv.Itoa(g.score)}}
 }
 
 func (g *Game) Render(now time.Time) []RGB {
@@ -149,9 +157,14 @@ func (g *Game) Render(now time.Time) []RGB {
 
 	frame := make([]RGB, GridWidth*GridHeight)
 	seconds := g.patternSeconds(now)
+	claimed := g.claimedMask(seconds)
 	for y := 0; y < GridHeight; y++ {
 		for x := 0; x < GridWidth; x++ {
-			color := colorAt(Point{X: x, Y: y}, seconds)
+			pt := Point{X: x, Y: y}
+			color := colorAt(pt, seconds)
+			if claimed[pointIndex(pt)] && !g.inCountdown(now) && !g.gameOver {
+				color = claimedColor(color, now)
+			}
 			if g.inCountdown(now) {
 				color = scaleRGB(color, 0.34)
 			}
@@ -202,10 +215,6 @@ func (g *Game) Snapshot(now time.Time) Snapshot {
 	if now.After(g.started) {
 		elapsed = now.Sub(g.started).Milliseconds()
 	}
-	remaining := int64(0)
-	if now.Before(g.endAt) {
-		remaining = g.endAt.Sub(now).Milliseconds()
-	}
 	countdown := int64(0)
 	if g.inCountdown(now) {
 		countdown = g.started.Sub(now).Milliseconds()
@@ -218,11 +227,11 @@ func (g *Game) Snapshot(now time.Time) Snapshot {
 	return Snapshot{
 		Phase:           phase,
 		Players:         players,
-		Score:           g.score + int(elapsed/1000),
+		Score:           g.score,
 		StartedUnix:     g.started.Unix(),
-		EndsUnix:        g.endAt.Unix(),
+		EndsUnix:        0,
 		ElapsedMillis:   elapsed,
-		RemainingMillis: remaining,
+		RemainingMillis: 0,
 		CountdownMillis: countdown,
 		ActiveTargets:   lavaTileCount(g.patternSeconds(now)),
 		Lives:           g.lives,
@@ -239,9 +248,6 @@ func (g *Game) tickLocked(now time.Time) {
 		now = g.lastTick
 	}
 	g.lastTick = now
-	if !g.gameOver && !g.endAt.IsZero() && !now.Before(g.endAt) {
-		g.gameOver = true
-	}
 }
 
 func (g *Game) patternSeconds(now time.Time) float64 {
@@ -278,6 +284,123 @@ func lavaAt(pt Point, seconds float64) bool {
 	return heatField(pt, seconds) >= 0.34
 }
 
+func newClaimedPlatform(pt Point, seconds float64) claimedPlatform {
+	phaseA, phaseB := platformPhase(pt, seconds)
+	return claimedPlatform{
+		phaseA: phaseA,
+		phaseB: phaseB,
+	}
+}
+
+func (g *Game) claimedMask(seconds float64) []bool {
+	mask := make([]bool, GridWidth*GridHeight)
+	for index := range g.claimedPlatforms {
+		seed, ok := g.claimedPlatforms[index].currentSeed(seconds)
+		if !ok {
+			continue
+		}
+		safeSeed, ok := nearestSafeTile(seed, seconds)
+		if !ok {
+			continue
+		}
+		markSafeComponent(mask, safeSeed, seconds)
+	}
+	return mask
+}
+
+func (platform claimedPlatform) currentSeed(seconds float64) (Point, bool) {
+	x, y := solvePlatformPosition(platform.phaseA, platform.phaseB, seconds)
+	if x < -6 || x > float64(GridWidth+5) || y < -6 || y > float64(GridHeight+5) {
+		return Point{}, false
+	}
+	return Point{X: int(math.Round(x)), Y: int(math.Round(y))}, true
+}
+
+func platformPhase(pt Point, seconds float64) (float64, float64) {
+	nx := float64(pt.X) / float64(GridWidth)
+	ny := float64(pt.Y) / float64(GridHeight)
+	return 3.0*nx + 1.6*ny + seconds*0.7, 2.2*nx - 3.2*ny - seconds*0.5
+}
+
+func solvePlatformPosition(phaseA, phaseB, seconds float64) (float64, float64) {
+	rhsA := phaseA - seconds*0.7
+	rhsB := phaseB + seconds*0.5
+	const determinant = -13.12
+	nx := (rhsA*(-3.2) - 1.6*rhsB) / determinant
+	ny := (3.0*rhsB - 2.2*rhsA) / determinant
+	return nx * float64(GridWidth), ny * float64(GridHeight)
+}
+
+func nearestSafeTile(seed Point, seconds float64) (Point, bool) {
+	if inBounds(seed.X, seed.Y) && !lavaAt(seed, seconds) {
+		return seed, true
+	}
+	best := Point{}
+	bestDistance := math.MaxFloat64
+	found := false
+	for radius := 1; radius <= 6; radius++ {
+		for y := seed.Y - radius; y <= seed.Y+radius; y++ {
+			for x := seed.X - radius; x <= seed.X+radius; x++ {
+				if !inBounds(x, y) {
+					continue
+				}
+				pt := Point{X: x, Y: y}
+				if lavaAt(pt, seconds) {
+					continue
+				}
+				distance := math.Hypot(float64(x-seed.X), float64(y-seed.Y))
+				if distance < bestDistance {
+					best = pt
+					bestDistance = distance
+					found = true
+				}
+			}
+		}
+		if found {
+			return best, true
+		}
+	}
+	return Point{}, false
+}
+
+func markSafeComponent(mask []bool, seed Point, seconds float64) {
+	if !inBounds(seed.X, seed.Y) || lavaAt(seed, seconds) {
+		return
+	}
+	queue := []Point{seed}
+	seen := make([]bool, GridWidth*GridHeight)
+	seen[pointIndex(seed)] = true
+	for len(queue) > 0 {
+		pt := queue[0]
+		queue = queue[1:]
+		mask[pointIndex(pt)] = true
+		for _, next := range neighbors(pt) {
+			index := pointIndex(next)
+			if seen[index] || lavaAt(next, seconds) {
+				continue
+			}
+			seen[index] = true
+			queue = append(queue, next)
+		}
+	}
+}
+
+func neighbors(pt Point) []Point {
+	out := make([]Point, 0, 4)
+	candidates := []Point{
+		{X: pt.X + 1, Y: pt.Y},
+		{X: pt.X - 1, Y: pt.Y},
+		{X: pt.X, Y: pt.Y + 1},
+		{X: pt.X, Y: pt.Y - 1},
+	}
+	for _, candidate := range candidates {
+		if inBounds(candidate.X, candidate.Y) {
+			out = append(out, candidate)
+		}
+	}
+	return out
+}
+
 func colorAt(pt Point, seconds float64) RGB {
 	field := heatField(pt, seconds)
 	if field < 0.34 {
@@ -310,6 +433,15 @@ func damageColor(color RGB, now time.Time, remaining time.Duration) RGB {
 		R: clampByte(math.Round(255 * amount)),
 		G: clampByte(math.Round(32 * amount * strobe)),
 		B: clampByte(math.Round(32 * amount * strobe)),
+	})
+}
+
+func claimedColor(color RGB, now time.Time) RGB {
+	pulse := 0.72 + 0.28*math.Sin(float64(now.UnixNano())/float64(time.Second)*math.Pi*3)
+	return addRGB(scaleRGB(color, 0.22), RGB{
+		R: clampByte(math.Round(18 + 18*pulse)),
+		G: clampByte(math.Round(132 + 95*pulse)),
+		B: clampByte(math.Round(24 + 42*pulse)),
 	})
 }
 
@@ -374,6 +506,10 @@ func clamp01(value float64) float64 {
 		return 1
 	}
 	return value
+}
+
+func pointIndex(pt Point) int {
+	return pt.Y*GridWidth + pt.X
 }
 
 func inBounds(x, y int) bool {

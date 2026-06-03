@@ -295,13 +295,7 @@ func handlePressureEvent(cfg config, audioPlayer *audio.Player, game floorGame, 
 		for _, gameEvent := range game.Press(whackamole.PressEvent{X: int(event.X), Y: int(event.Y), Pressed: event.Pressed}, now) {
 			playCue(cfg, audioPlayer, cueRef(cfg, gameEvent.Cue))
 		}
-		return
 	}
-	if audioPlayer == nil || !event.Pressed {
-		return
-	}
-	seconds := now.Sub(startedAt).Seconds()
-	playCue(cfg, audioPlayer, cueForPressure(cfg, int(event.X), int(event.Y), seconds))
 }
 
 func playCue(cfg config, audioPlayer *audio.Player, ref string) {
@@ -329,15 +323,6 @@ func cueRef(cfg config, cue string) string {
 	default:
 		return ""
 	}
-}
-
-func cueForPressure(cfg config, x, y int, seconds float64) string {
-	color := animation.Color(cfg.Game, x, y, seconds)
-	r, g, b := int(color.R), int(color.G), int(color.B)
-	if r > g+40 && r > b+40 {
-		return cfg.DamageCueRef
-	}
-	return cfg.CoinCueRef
 }
 
 func clamp01(value float64) float64 {

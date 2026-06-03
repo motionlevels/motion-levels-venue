@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"math"
 	"sync"
 	"time"
 
@@ -20,23 +21,30 @@ import (
 const loopMusicRef = "Motion/canciones/Background01.mp3"
 
 type gameRuntime struct {
-	mu         sync.RWMutex
-	base       config
-	current    config
-	game       floorGame
-	audio      *audio.Player
-	started    time.Time
-	lastEvent  displayEvent
-	recorder   *sessionrecording.Recorder
-	sessionID  string
-	sessionSeq uint64
-	rngSeed    int64
-	paused     bool
-	pausedAt   time.Time
-	pauseTotal time.Duration
-	narrated   map[string]bool
-	introUntil time.Time
-	audioMuted bool
+	mu             sync.RWMutex
+	base           config
+	current        config
+	game           floorGame
+	audio          *audio.Player
+	started        time.Time
+	lastEvent      displayEvent
+	recorder       *sessionrecording.Recorder
+	sessionID      string
+	sessionSeq     uint64
+	rngSeed        int64
+	paused         bool
+	pausedAt       time.Time
+	pauseTotal     time.Duration
+	narrated       map[string]bool
+	introUntil     time.Time
+	audioMuted     bool
+	ambientTouches []ambientTouch
+}
+
+type ambientTouch struct {
+	x       int
+	y       int
+	started time.Time
 }
 
 type displayEvent struct {
@@ -227,10 +235,11 @@ func (r *gameRuntime) Render(now time.Time) (int, []animation.RGB) {
 	game := r.game
 	started := r.started
 	gameNow := r.effectiveNowLocked(now)
+	touches := copyActiveAmbientTouchesLocked(r.ambientTouches, gameNow)
 	r.mu.RUnlock()
 	if game == nil {
 		if animation.IsAmbientMode(gameID) {
-			return brightness, renderAmbient(gameID, gameNow, started)
+			return brightness, renderAmbient(gameID, gameNow, started, touches)
 		}
 		return brightness, nil
 	}
@@ -250,13 +259,9 @@ func (r *gameRuntime) HandlePressure(event *inputpb.PressureEvent, fallbackStart
 	cfg := r.current
 	game := r.game
 	audioPlayer := r.audio
-	startedAt := r.started
 	paused := r.paused
 	gameNow := r.effectiveNowLocked(now)
 	r.mu.RUnlock()
-	if startedAt.IsZero() {
-		startedAt = fallbackStartedAt
-	}
 	r.recordPressureInput(event, now)
 	if paused {
 		return
@@ -269,11 +274,9 @@ func (r *gameRuntime) HandlePressure(event *inputpb.PressureEvent, fallbackStart
 		}
 		return
 	}
-	if audioPlayer == nil || !event.Pressed {
-		return
+	if event.Pressed && animation.IsAmbientMode(cfg.Game) {
+		r.addAmbientTouch(int(event.X), int(event.Y), gameNow)
 	}
-	seconds := gameNow.Sub(startedAt).Seconds()
-	r.playCue(cfg, audioPlayer, "loop-pressure", cueForPressure(cfg, int(event.X), int(event.Y), seconds), now)
 }
 
 func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
@@ -468,6 +471,7 @@ func (r *gameRuntime) applyLockedWithNarration(cfg config, playAudio bool, mode 
 	r.rngSeed = now.UnixNano()
 	r.game = makeGame(cfg, r.rngSeed, gameNow)
 	r.lastEvent = displayEvent{}
+	r.ambientTouches = nil
 	r.paused = false
 	r.pausedAt = time.Time{}
 	r.pauseTotal = 0
@@ -849,7 +853,49 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 	}
 }
 
-func renderAmbient(game string, now time.Time, started time.Time) []animation.RGB {
+const (
+	ambientTouchLifetime = 2200 * time.Millisecond
+	ambientMaxTouches    = 64
+)
+
+func (r *gameRuntime) addAmbientTouch(x, y int, now time.Time) {
+	if x < 0 || x >= animation.GridWidth || y < 0 || y >= animation.GridHeight {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ambientTouches = appendActiveAmbientTouchesLocked(r.ambientTouches, now)
+	r.ambientTouches = append(r.ambientTouches, ambientTouch{x: x, y: y, started: now})
+	if len(r.ambientTouches) > ambientMaxTouches {
+		r.ambientTouches = r.ambientTouches[len(r.ambientTouches)-ambientMaxTouches:]
+	}
+}
+
+func copyActiveAmbientTouchesLocked(touches []ambientTouch, now time.Time) []ambientTouch {
+	out := make([]ambientTouch, 0, len(touches))
+	for _, touch := range touches {
+		if now.Sub(touch.started) <= ambientTouchLifetime {
+			out = append(out, touch)
+		}
+	}
+	return out
+}
+
+func appendActiveAmbientTouchesLocked(touches []ambientTouch, now time.Time) []ambientTouch {
+	if len(touches) == 0 {
+		return touches
+	}
+	write := 0
+	for _, touch := range touches {
+		if now.Sub(touch.started) <= ambientTouchLifetime {
+			touches[write] = touch
+			write++
+		}
+	}
+	return touches[:write]
+}
+
+func renderAmbient(game string, now time.Time, started time.Time, touches []ambientTouch) []animation.RGB {
 	seconds := float64(0)
 	if !now.IsZero() && !started.IsZero() {
 		seconds = now.Sub(started).Seconds()
@@ -857,10 +903,81 @@ func renderAmbient(game string, now time.Time, started time.Time) []animation.RG
 	frame := make([]animation.RGB, animation.GridWidth*animation.GridHeight)
 	for y := 0; y < animation.GridHeight; y++ {
 		for x := 0; x < animation.GridWidth; x++ {
-			frame[y*animation.GridWidth+x] = animation.Color(game, x, y, seconds)
+			color := animation.Color(game, x, y, seconds)
+			if len(touches) > 0 {
+				color = applyAmbientTouches(game, color, x, y, now, touches)
+			}
+			frame[y*animation.GridWidth+x] = color
 		}
 	}
 	return frame
+}
+
+func applyAmbientTouches(game string, base animation.RGB, x, y int, now time.Time, touches []ambientTouch) animation.RGB {
+	r := float64(base.R)
+	g := float64(base.G)
+	b := float64(base.B)
+	for _, touch := range touches {
+		age := now.Sub(touch.started).Seconds()
+		if age < 0 || age > ambientTouchLifetime.Seconds() {
+			continue
+		}
+		dist := math.Hypot(float64(x-touch.x), float64(y-touch.y))
+		intensity := ambientTouchIntensity(game, dist, age)
+		if intensity <= 0 {
+			continue
+		}
+		tr, tg, tb := ambientTouchColor(game, age)
+		r += tr * intensity
+		g += tg * intensity
+		b += tb * intensity
+	}
+	return animation.RGB{R: clampByte(r), G: clampByte(g), B: clampByte(b)}
+}
+
+func ambientTouchIntensity(game string, dist, age float64) float64 {
+	fade := 1 - age/ambientTouchLifetime.Seconds()
+	if fade <= 0 {
+		return 0
+	}
+	switch game {
+	case "ambient-pulse":
+		radius := age * 10.5
+		ring := math.Exp(-math.Pow(dist-radius, 2) / 3.8)
+		center := math.Exp(-dist*dist/5.5) * math.Exp(-age*2.2)
+		return clamp01((ring*1.2 + center*0.55) * fade)
+	case "ambient-comet":
+		radius := age * 7.0
+		return clamp01(math.Exp(-math.Pow(dist-radius, 2)/2.2) * fade * 0.9)
+	case "ambient-spark":
+		return clamp01(math.Exp(-dist*dist/4.5) * math.Exp(-age*3.0) * 1.15)
+	default:
+		radius := age * 8.0
+		return clamp01(math.Exp(-math.Pow(dist-radius, 2)/4.0) * fade)
+	}
+}
+
+func ambientTouchColor(game string, age float64) (float64, float64, float64) {
+	switch game {
+	case "ambient-pulse":
+		return 70, 255, 190
+	case "ambient-comet":
+		return 90, 170, 255
+	case "ambient-spark":
+		return 255, 120 + 60*math.Sin(age*12), 40
+	default:
+		return 180, 255, 120
+	}
+}
+
+func clampByte(value float64) byte {
+	if value <= 0 {
+		return 0
+	}
+	if value >= 255 {
+		return 255
+	}
+	return byte(math.Round(value))
 }
 
 func configForSelection(base config, game string, players int) config {
@@ -907,7 +1024,7 @@ func gameCatalog() []gameCatalogEntry {
 		{
 			Game:        "lava",
 			Label:       "El suelo es lava",
-			Description: "Avoid flowing lava tiles, lose shared team lives, and survive the timer.",
+			Description: "Avoid flowing lava tiles, keep shared team lives, and claim as many unique safe platforms as possible.",
 			Music:       lava.DefaultMusicRef,
 			Players:     true,
 			MinPlayers:  1,

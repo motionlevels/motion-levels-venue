@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { controlGame, fetchEngineStatus, selectGame, type EngineStatus } from "./api";
-import { categories, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
+import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
 import { BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, LogoIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
 import { defaultFloorAnim, floorAnimations } from "./floor";
@@ -65,10 +65,10 @@ function loadMenuState(): MenuState {
         });
       return {
         teamName: "",
-        category: "featured",
-        selectedGame: "whack-a-mole",
         difficulty: "easy",
         ...saved,
+        category: saved.selectedGame === "whack-a-mole" && wasOldUntouchedDefault ? "team" : saved.category || "team",
+        selectedGame: saved.selectedGame === "whack-a-mole" && wasOldUntouchedDefault ? "lava" : saved.selectedGame || "lava",
         players: wasOldUntouchedDefault ? defaultPlayers : savedPlayers,
         nextPlayerId: wasOldUntouchedDefault ? 1 : saved.nextPlayerId || 0,
         narrationArmed,
@@ -80,8 +80,8 @@ function loadMenuState(): MenuState {
   return {
     teamName: "",
     players: defaultPlayers,
-    category: "featured",
-    selectedGame: "whack-a-mole",
+    category: "team",
+    selectedGame: "lava",
     difficulty: "easy",
     nextPlayerId: 1,
     narrationArmed: {},
@@ -156,11 +156,14 @@ export default function App() {
   const selectedDifficulty = difficulties.find((difficulty) => difficulty.id === menu.difficulty) || difficulties[0];
   const pickerPlayer = menu.players.find((player) => player.id === colorPickerFor) || null;
   const removePlayer = menu.players.find((player) => player.id === confirmRemove) || null;
+  const connectionState = error ? "connection-off" : status ? "connection-on" : "connection-pending";
+  const playerCount = activePlayers.length || 1;
+  const playerCountLabel = `${playerCount} ${playerCount === 1 ? "jugador" : "jugadores"}`;
 
   useEffect(() => {
-    document.documentElement.style.setProperty("--accent", activeCategory.color);
-    document.documentElement.style.setProperty("--accent-rgb", hexToRGB(activeCategory.color));
-  }, [activeCategory.color]);
+    document.documentElement.style.setProperty("--accent", colors.green);
+    document.documentElement.style.setProperty("--accent-rgb", hexToRGB(colors.green));
+  }, []);
 
   function addPlayer() {
     setMenu((current) => {
@@ -295,7 +298,7 @@ export default function App() {
         [game.id]: armed,
       },
     }));
-    setMessage(armed ? "Narración activada para la próxima partida" : "Narración desactivada");
+    setMessage((current) => (current.startsWith("Narración") ? "" : current));
   }
 
   async function launch(gameID = selectedGame.id) {
@@ -380,27 +383,45 @@ export default function App() {
   const introActive = screenMode === "game" && introUntil > nowMs;
   const countdownValue = screenMode === "game" && !introActive ? Math.max(0, Math.ceil((countdownUntil - nowMs) / 1000)) : 0;
 
+  function enterBrowserFullscreen() {
+    if (document.fullscreenElement) return;
+    const root = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
+    const requestFullscreen = root.requestFullscreen?.bind(root) || root.webkitRequestFullscreen?.bind(root);
+    if (!requestFullscreen) return;
+    Promise.resolve(requestFullscreen()).catch((err) => {
+      console.warn("Fullscreen request failed", err);
+    });
+  }
+
   return (
-    <main className={`app ${keyboardTarget ? "keyboard-open" : ""} ${screenMode === "game" ? "playing" : ""}`}>
+    <main className={`app ${connectionState} ${keyboardTarget ? "keyboard-open" : ""} ${screenMode === "game" ? "playing" : ""}`}>
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark">
+          <button className="brand-mark" type="button" aria-label="Entrar en pantalla completa" onClick={enterBrowserFullscreen}>
             <LogoIcon />
-          </div>
+          </button>
           <div className="brand-copy">
             <b>Motion Levels</b>
             <span>Quiosco</span>
           </div>
         </div>
-        <div className="title-stack">
-          <div className="eyebrow">{activeCategory.label}</div>
-          <h1>{activeCategory.title}</h1>
-        </div>
+        <nav className="category-tabs top-category-tabs" aria-label="Categorías de juegos">
+          {categories.map((category) => (
+            <button
+              key={category.id}
+              className={`tab ${menu.category === category.id ? "active" : ""}`}
+              type="button"
+              aria-pressed={menu.category === category.id}
+              onClick={() => {
+                const first = games.find((game) => game.category === category.id);
+                setMenu((current) => ({ ...current, category: category.id, selectedGame: first?.id || current.selectedGame }));
+              }}
+            >
+              {category.label}
+            </button>
+          ))}
+        </nav>
         <div className="status-capsules">
-          <div className="capsule status-dot">
-            <span className={`live-dot ${status && !error ? "on" : ""}`} />
-            <strong>{error ? "Sin conexión" : "Conectado"}</strong>
-          </div>
           <button
             className={`capsule audio-btn ${status?.audioMuted ? "muted" : ""}`}
             type="button"
@@ -417,7 +438,7 @@ export default function App() {
                 <span key={player.id} style={{ "--pc": player.color } as CSSProperties} />
               ))}
             </span>
-            <strong>Equipo</strong>
+            <strong>{playerCountLabel}</strong>
           </button>
         </div>
       </header>
@@ -445,7 +466,10 @@ export default function App() {
         <div className={`drawer-backdrop ${teamOpen ? "open" : ""}`} onClick={() => setTeamOpen(false)} />
         <aside className={`panel team-panel team-drawer ${teamOpen ? "open" : ""}`} aria-label="Configuración del equipo" aria-hidden={!teamOpen}>
           <div className="drawer-head">
-            <strong>Equipo</strong>
+            <div>
+              <strong>Equipo</strong>
+              <span>{playerCountLabel}</span>
+            </div>
             <button className="icon-button" type="button" aria-label="Cerrar equipo" onClick={() => setTeamOpen(false)}>
               <CloseIcon />
             </button>
@@ -463,23 +487,6 @@ export default function App() {
               onClick={() => setKeyboardTarget({ kind: "team" })}
               onChange={(event) => setMenu((current) => ({ ...current, teamName: event.target.value }))}
             />
-          </section>
-
-          <section>
-            <div className="micro difficulty-label">Dificultad</div>
-            <div className="difficulty">
-              {difficulties.map((difficulty) => (
-                <button
-                  key={difficulty.id}
-                  className={`seg ${menu.difficulty === difficulty.id ? "active" : ""}`}
-                  style={{ "--accent": difficulty.color, "--accent-rgb": hexToRGB(difficulty.color) } as CSSProperties}
-                  type="button"
-                  onClick={() => setMenu((current) => ({ ...current, difficulty: difficulty.id }))}
-                >
-                  {difficulty.label}
-                </button>
-              ))}
-            </div>
           </section>
 
           <section className="roster" aria-label="Jugadores">
@@ -537,78 +544,89 @@ export default function App() {
         </aside>
 
         <section className="main-panel">
-          <nav className="category-tabs" aria-label="Categorías de juegos">
-            {categories.map((category) => (
-              <button
-                key={category.id}
-                className={`tab ${menu.category === category.id ? "active" : ""}`}
-                style={{ "--tc": category.color } as CSSProperties}
-                type="button"
-                onClick={() => {
-                  const first = games.find((game) => game.category === category.id);
-                  setMenu((current) => ({ ...current, category: category.id, selectedGame: first?.id || current.selectedGame }));
-                }}
-              >
-                {category.label}
-              </button>
-            ))}
-          </nav>
+          <section className="browse-content">
+            <section className="game-grid-panel" aria-labelledby="games-heading">
+              <div className="section-head">
+                <div>
+                  <span className="micro">Elige juego</span>
+                  <h2 id="games-heading">{activeCategory.label}</h2>
+                </div>
+                <span className="grid-count">{visibleGames.length} modos</span>
+              </div>
+              <section key={menu.category} ref={gamesScrollRef} className="games game-grid" aria-label="Juegos">
+                {visibleGames.map((game, index) => {
+                  const future = Boolean(game.disabled);
+                  const engineAvailable = availableGames.has(engineGameID(game));
+                  const selected = menu.selectedGame === game.id;
+                  const active = selected && status?.currentGame === engineGameID(game);
+                  return (
+                    <button
+                      key={game.id}
+                      className={`card game-card ${future ? "disabled" : ""} ${!future && !engineAvailable ? "unavailable" : ""} ${selected ? "selected" : ""} ${active ? "active" : ""}`}
+                      style={{ "--c": game.color, "--crgb": hexToRGB(game.color), "--i": index } as CSSProperties}
+                      type="button"
+                      disabled={future}
+                      data-game-id={game.id}
+                      aria-pressed={selected}
+                      onClick={() => selectGameCard(game.id)}
+                    >
+                      <Preview animationID={previewAnimationID(game)} />
+                      <div className="game-body">
+                        <h3>{game.label}</h3>
+                      </div>
+                    </button>
+                  );
+                })}
+              </section>
+            </section>
 
-          <section
-            key={menu.category}
-            ref={gamesScrollRef}
-            className={`games game-carousel ${visibleGames.length === 1 ? "single" : ""}`}
-            aria-label="Juegos"
-            onPointerDown={beginGamesDrag}
-            onPointerMove={moveGamesDrag}
-            onPointerUp={endGamesDrag}
-            onPointerCancel={endGamesDrag}
-          >
-            {visibleGames.map((game, index) => {
-              const future = Boolean(game.disabled);
-              const engineAvailable = availableGames.has(engineGameID(game));
-              const selected = menu.selectedGame === game.id;
-              const active = selected && status?.currentGame === engineGameID(game);
-              return (
-                <button
-                  key={game.id}
-                  className={`card game-card ${future ? "disabled" : ""} ${!future && !engineAvailable ? "unavailable" : ""} ${selected ? "selected" : ""} ${active ? "active" : ""}`}
-                  style={{ "--c": game.color, "--crgb": hexToRGB(game.color), "--i": index } as CSSProperties}
-                  type="button"
-                  disabled={future}
-                  data-game-id={game.id}
-                  aria-pressed={selected}
-                >
-                  <Preview animationID={previewAnimationID(game)} />
-                  <div className="game-body">
-                    <h3>{game.label}</h3>
-                    <p>{game.description}</p>
-                    <div className="tags">
-                      <span className="tag accent">{game.players === "Todos" ? "Todos los jugadores" : `${game.players} jugadores`}</span>
-                      <span className="tag">{game.difficulty}</span>
-                      {selected ? <span className="tag selected">Seleccionado</span> : null}
-                      {future ? <span className="tag soon">Próximamente</span> : null}
-                      {!future && !engineAvailable ? <span className="tag soon">{error ? "Sin conexión" : "No disponible"}</span> : null}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+            <aside className="panel detail-panel" style={{ "--c": selectedGame.color, "--crgb": hexToRGB(selectedGame.color) } as CSSProperties} aria-label="Juego seleccionado">
+              <div className="detail-preview">
+                <Preview animationID={previewAnimationID(selectedGame)} />
+              </div>
+              <div className="detail-copy">
+                <span className="micro">Seleccionado</span>
+                <h2>{selectedGame.label}</h2>
+                <p>{selectedGame.description}</p>
+                <div className="detail-rules">
+                  <span className="micro">Reglas rápidas</span>
+                  <ul>
+                    {selectedGame.rules.map((rule) => (
+                      <li key={rule}>{rule}</li>
+                    ))}
+                  </ul>
+                </div>
+                <p className="detail-note">
+                  {isAmbientCard(selectedGame)
+                    ? "Las animaciones de ambiente se pueden cambiar al instante desde esta pantalla."
+                    : "Revisa equipo y dificultad antes de empezar. La partida se lanza desde el botón principal."}
+                </p>
+              </div>
+            </aside>
           </section>
 
           <section className="panel launch-bar" aria-label="Resumen de inicio">
-            <div className="launch-copy">
-              {activePlayers.length
-                ? activePlayers.slice(0, 6).map((player) => (
-                    <span key={player.id} className="player-pill" style={{ "--pc": player.color } as CSSProperties}>
-                      <span />
-                      <span>{playerLabel(menu.players, player)}</span>
-                    </span>
-                  ))
-                : <span className="message">Sin jugadores activos</span>}
-              <span className={`message ${error ? "error" : ""}`}>
-                {error || message || (isAmbientCard(selectedGame) ? `${selectedGame.label} · Ambiente` : `${selectedGame.label} · ${activePlayers.length || 1} ${activePlayers.length === 1 ? "jugador" : "jugadores"} · ${selectedDifficulty.label}`)}
-              </span>
+            <div className={`launch-copy ${isAmbientCard(selectedGame) ? "ambient" : ""}`}>
+              <div className="launch-selected">
+                <span className={`launch-status ${error ? "error" : ""}`}>{error || message || (isAmbientCard(selectedGame) ? "Ambiente listo" : "Listo para jugar")}</span>
+                <strong>{selectedGame.label}</strong>
+              </div>
+              {!isAmbientCard(selectedGame) ? (
+                <div className="launch-difficulty" role="group" aria-label="Dificultad">
+                  {difficulties.map((difficulty) => (
+                    <button
+                      key={difficulty.id}
+                      className={`launch-difficulty-button ${menu.difficulty === difficulty.id ? "active" : ""}`}
+                      style={{ "--accent": difficulty.color, "--accent-rgb": hexToRGB(difficulty.color) } as CSSProperties}
+                      type="button"
+                      aria-pressed={menu.difficulty === difficulty.id}
+                      onClick={() => setMenu((current) => ({ ...current, difficulty: difficulty.id }))}
+                    >
+                      {difficulty.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
             {(() => {
               const engineAvailable = availableGames.has(engineGameID(selectedGame));
