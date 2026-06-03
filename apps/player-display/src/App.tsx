@@ -26,6 +26,10 @@ const emptyStatus: DisplayStatus = {
   lastEventMessage: "",
 };
 
+function isTeamScoreGame(currentGame: string): boolean {
+  return currentGame === "lava" || currentGame === "temporada1";
+}
+
 export default function App() {
   const [status, setStatus] = useState<DisplayStatus>(emptyStatus);
   const [connected, setConnected] = useState(false);
@@ -62,10 +66,12 @@ export default function App() {
     };
   }, []);
 
+  const teamScoreGame = isTeamScoreGame(status.currentGame);
   const leader = useMemo(() => {
+    if (teamScoreGame) return null;
     if (!status.players.length) return null;
     return [...status.players].sort((left, right) => right.score - left.score)[0];
-  }, [status.players]);
+  }, [status.players, teamScoreGame]);
 
   const lifeLoss = status.lastEventCue === "miss" && status.currentGame === "lava";
   const eventClass = status.lastEventCue ? `event-${status.lastEventCue}${lifeLoss ? " event-life-loss" : ""}` : "";
@@ -112,8 +118,23 @@ export default function App() {
         </article>
       </section>
 
-      <section className={`player-grid count-${Math.min(Math.max(status.players.length, 1), 3)}`} aria-label="Players">
-        {status.players.length ? (
+      <section className={`player-grid ${teamScoreGame ? "team-score" : ""} count-${Math.min(Math.max(status.players.length, 1), 3)}`} aria-label={teamScoreGame ? "Equipo" : "Players"}>
+        {teamScoreGame && status.players.length ? (
+          <article className="team-card">
+            <div className="team-card-head">
+              <span>Equipo</span>
+              <strong>{status.players.length} {status.players.length === 1 ? "jugador" : "jugadores"}</strong>
+            </div>
+            <div className="team-roster">
+              {status.players.map((player) => (
+                <span className="team-player" key={player.index} style={{ "--player": colorCSS(player.color), "--player-rgb": colorRGB(player.color) } as CSSProperties}>
+                  <i />
+                  {playerLabelES(player.label)}
+                </span>
+              ))}
+            </div>
+          </article>
+        ) : status.players.length ? (
           status.players.map((player) => (
             <article
               className={`player-card ${leader?.index === player.index ? "leader" : ""}`}

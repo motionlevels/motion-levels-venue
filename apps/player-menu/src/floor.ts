@@ -173,8 +173,8 @@ const lava: FloorAnim = (x, y, cols, rows, t) => {
   return [255 * flicker, (45 + 150 * heat) * flicker, 8 * heat * flicker];
 };
 
-// Parkour: blue current platform, travelling green target, and red lava underneath.
-const parkour: FloorAnim = (x, y, cols, rows, t) => {
+// Saltos: blue current platform, travelling green target, and red lava underneath.
+const saltos: FloorAnim = (x, y, cols, rows, t) => {
   const current = { x: Math.floor(cols / 2), y: 4 };
   const path = [
     { x: 4, y: 12 },
@@ -231,6 +231,6 @@ export const floorAnimations: Record<string, FloorAnim> = {
   "ambient-pulse": ambientPulse,
   "ambient-spark": ambientSpark,
   lava,
-  parkour,
+  saltos,
   duel,
 };

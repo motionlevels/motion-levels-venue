@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { controlGame, fetchEngineStatus, selectGame, type EngineStatus } from "./api";
 import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
-import { BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, LogoIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
+import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, LogoIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
 import { defaultFloorAnim, floorAnimations } from "./floor";
@@ -22,8 +22,14 @@ type MenuState = {
   selectedGame: string;
   difficulty: DifficultyID;
   selectedLevels: Record<string, string>;
+  levelProgress: Record<string, LevelProgress>;
   nextPlayerId: number;
   narrationArmed: Record<string, boolean>;
+};
+
+type LevelProgress = {
+  unlockedThrough: number;
+  bestByLevel: Record<string, DifficultyID>;
 };
 
 type KeyboardTarget = { kind: "team" } | { kind: "player"; id: number };
@@ -44,6 +50,10 @@ function previewAnimationID(game: GameCard): string {
   return game.previewAnimation || game.id;
 }
 
+function levelPreviewAnimationID(game: GameCard, level?: NonNullable<GameCard["levels"]>[number]): string {
+  return level?.previewAnimation || previewAnimationID(game);
+}
+
 function isAmbientCard(game: GameCard): boolean {
   return game.category === "attract";
 }
@@ -53,7 +63,7 @@ function isIndividualCard(game: GameCard): boolean {
 }
 
 function usesDifficulty(game: GameCard): boolean {
-  return !isAmbientCard(game) && !game.levels?.length;
+  return !isAmbientCard(game) && (!game.levels?.length || Boolean(game.allowDifficultyWithLevels));
 }
 
 function supportsNarration(game: GameCard): boolean {
@@ -64,12 +74,40 @@ function defaultLevelID(game: GameCard): string {
   return game.levels?.[0]?.id || "";
 }
 
+function levelNumber(levelID: string): number {
+  const value = Number(levelID.replace(/^level-/, ""));
+  return Number.isFinite(value) && value > 0 ? value : 1;
+}
+
+function difficultyRank(difficulty: DifficultyID): number {
+  return difficulties.findIndex((candidate) => candidate.id === difficulty);
+}
+
+function higherDifficulty(a: DifficultyID | undefined, b: DifficultyID): DifficultyID {
+  if (!a) return b;
+  return difficultyRank(b) > difficultyRank(a) ? b : a;
+}
+
+function progressFor(game: GameCard, state: MenuState): LevelProgress {
+  return state.levelProgress[game.id] || { unlockedThrough: 1, bestByLevel: {} };
+}
+
+function isLevelUnlocked(game: GameCard, levelID: string, state: MenuState): boolean {
+  if (!game.levels?.length) return true;
+  return levelNumber(levelID) <= progressFor(game, state).unlockedThrough;
+}
+
+function difficultyColor(difficulty?: DifficultyID): string {
+  return difficulties.find((candidate) => candidate.id === difficulty)?.color || colors.green;
+}
+
 function loadMenuState(): MenuState {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || "null") as Partial<MenuState> | null;
     if (saved && typeof saved === "object") {
       const narrationArmed = saved.narrationArmed && typeof saved.narrationArmed === "object" ? saved.narrationArmed : {};
       const selectedLevels = saved.selectedLevels && typeof saved.selectedLevels === "object" ? saved.selectedLevels : {};
+      const levelProgress = saved.levelProgress && typeof saved.levelProgress === "object" ? saved.levelProgress : {};
       const savedPlayers = Array.isArray(saved.players) ? saved.players : [];
       const wasOldUntouchedDefault =
         !saved.teamName &&
@@ -86,6 +124,7 @@ function loadMenuState(): MenuState {
         category: saved.selectedGame === "whack-a-mole" && wasOldUntouchedDefault ? "team" : saved.category || "team",
         selectedGame: saved.selectedGame === "whack-a-mole" && wasOldUntouchedDefault ? "lava" : saved.selectedGame || "lava",
         selectedLevels,
+        levelProgress,
         players: wasOldUntouchedDefault ? defaultPlayers : savedPlayers,
         nextPlayerId: wasOldUntouchedDefault ? 1 : saved.nextPlayerId || 0,
         narrationArmed,
@@ -101,6 +140,7 @@ function loadMenuState(): MenuState {
     selectedGame: "lava",
     difficulty: "easy",
     selectedLevels: {},
+    levelProgress: {},
     nextPlayerId: 1,
     narrationArmed: {},
   };
@@ -173,9 +213,11 @@ export default function App() {
   const [teamOpen, setTeamOpen] = useState(false);
   const [screenMode, setScreenMode] = useState<ScreenMode>("browse");
   const [launchedGameID, setLaunchedGameID] = useState(menu.selectedGame);
+  const [levelBrowserGameID, setLevelBrowserGameID] = useState<string | null>(null);
   const [introUntil, setIntroUntil] = useState(0);
   const [countdownUntil, setCountdownUntil] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const processedFinishedSessions = useRef(new Set<string>());
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(menu));
@@ -207,6 +249,33 @@ export default function App() {
     return () => window.clearInterval(id);
   }, [screenMode]);
 
+  useEffect(() => {
+    if (!status || status.phase !== "finished" || !status.sessionId) return;
+    const game = games.find((candidate) => engineGameID(candidate) === status.currentGame);
+    if (!game?.levels?.length) return;
+    if (processedFinishedSessions.current.has(status.sessionId)) return;
+    processedFinishedSessions.current.add(status.sessionId);
+    const finishedLevel = status.level || selectedLevelFor(game);
+    const finishedNumber = levelNumber(finishedLevel);
+    setMenu((current) => {
+      const previous = progressFor(game, current);
+      const nextBest = { ...previous.bestByLevel };
+      if (status.success) {
+        nextBest[finishedLevel] = higherDifficulty(nextBest[finishedLevel], current.difficulty);
+      }
+      return {
+        ...current,
+        levelProgress: {
+          ...current.levelProgress,
+          [game.id]: {
+            unlockedThrough: Math.min(game.levels?.length || finishedNumber, Math.max(previous.unlockedThrough || 1, finishedNumber + 1)),
+            bestByLevel: nextBest,
+          },
+        },
+      };
+    });
+  }, [status?.sessionId, status?.phase, status?.success, status?.level, status?.currentGame]);
+
   // Esc closes the topmost overlay (keyboard first, then dialogs, then the team drawer).
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -225,8 +294,16 @@ export default function App() {
   const activeCategory = categories.find((category) => category.id === menu.category) || categories[0];
   const selectedGame = games.find((game) => game.id === menu.selectedGame) || games[0];
   const launchedGame = games.find((game) => game.id === launchedGameID) || selectedGame;
+  const levelBrowserGame = games.find((game) => game.id === levelBrowserGameID && game.category === menu.category && game.levels?.length) || null;
+  const browsingLevels = Boolean(levelBrowserGame);
   const visibleGames = games.filter((game) => game.category === menu.category);
   const selectedDifficulty = difficulties.find((difficulty) => difficulty.id === menu.difficulty) || difficulties[0];
+  const selectedLevel = selectedGame.levels?.find((level) => level.id === selectedLevelFor(selectedGame));
+  const selectedLevelProgress = progressFor(selectedGame, menu);
+  const selectedLevelIndex = selectedLevel ? levelNumber(selectedLevel.id) : 0;
+  const selectedLevelBest = selectedLevel ? selectedLevelProgress.bestByLevel[selectedLevel.id] : undefined;
+  const selectedLevelBestLabel = selectedLevelBest ? difficulties.find((difficulty) => difficulty.id === selectedLevelBest)?.label || selectedLevelBest : "Sin superar";
+  const levelDetail = Boolean(selectedGame.levels?.length && selectedLevel);
   const launchedPlayers = isIndividualCard(launchedGame) ? activePlayers.slice(0, 1) : activePlayers;
   const launchedLevel = launchedGame.levels?.find((level) => level.id === (status?.level || selectedLevelFor(launchedGame)));
   const launchedModeLabel = isAmbientCard(launchedGame) ? "Ambiente" : launchedLevel?.label || selectedDifficulty.label;
@@ -335,6 +412,7 @@ export default function App() {
       selectedGame: gameID,
       selectedLevels: game?.levels?.length && !current.selectedLevels[gameID] ? { ...current.selectedLevels, [gameID]: defaultLevelID(game) } : current.selectedLevels,
     }));
+    setLevelBrowserGameID(game?.levels?.length ? game.id : null);
     if (game && isAmbientCard(game) && !game.disabled && availableGames.has(engineGameID(game))) {
       void launch(game.id);
     }
@@ -342,10 +420,12 @@ export default function App() {
 
   function selectedLevelFor(game: GameCard, state = menu): string {
     if (!game.levels?.length) return "";
-    return state.selectedLevels[game.id] || defaultLevelID(game);
+    const selected = state.selectedLevels[game.id] || defaultLevelID(game);
+    return isLevelUnlocked(game, selected, state) ? selected : defaultLevelID(game);
   }
 
   function setSelectedLevel(game: GameCard, levelID: string) {
+    if (!isLevelUnlocked(game, levelID, menu)) return;
     setMenu((current) => ({
       ...current,
       selectedLevels: {
@@ -353,6 +433,30 @@ export default function App() {
         [game.id]: levelID,
       },
     }));
+  }
+
+  function renderLevelOption(game: GameCard, level: NonNullable<GameCard["levels"]>[number]) {
+    const active = selectedLevelFor(game) === level.id;
+    const progress = progressFor(game, menu);
+    const bestDifficulty = progress.bestByLevel[level.id];
+    const locked = !isLevelUnlocked(game, level.id, menu);
+    return (
+      <button
+        key={level.id}
+        className={`level-option ${active ? "active" : ""} ${locked ? "locked" : ""} ${bestDifficulty ? "passed" : ""}`}
+        style={{ "--level-color": difficultyColor(bestDifficulty), "--level-rgb": hexToRGB(difficultyColor(bestDifficulty)), "--c": game.color, "--crgb": hexToRGB(game.color) } as CSSProperties}
+        type="button"
+        role="radio"
+        disabled={locked}
+        aria-checked={active}
+        aria-disabled={locked}
+        onClick={() => setSelectedLevel(game, level.id)}
+      >
+        <Preview src={level.previewSrc} animationID={levelPreviewAnimationID(game, level)} compact />
+        <strong>{level.label}</strong>
+        <span>{locked ? "Bloqueado" : bestDifficulty ? `Superado en ${difficulties.find((difficulty) => difficulty.id === bestDifficulty)?.label}` : level.description}</span>
+      </button>
+    );
   }
 
   function narrationArmedFor(game: GameCard, state = menu): boolean {
@@ -387,6 +491,12 @@ export default function App() {
     const launchPlayers = nextMenu.players.filter((player) => player.active);
     const rosterForGame = isIndividualCard(game) ? launchPlayers.slice(0, 1) : launchPlayers;
     const selectedLevel = selectedLevelFor(game, nextMenu);
+    if (selectedLevel && !isLevelUnlocked(game, selectedLevel, nextMenu)) {
+      setMenu(nextMenu);
+      setMessage("");
+      setError("Nivel bloqueado");
+      return;
+    }
     setMenu(nextMenu);
     setMessage("Iniciando");
     setError("");
@@ -505,6 +615,7 @@ export default function App() {
               onClick={() => {
                 const first = games.find((game) => game.category === category.id);
                 setMenu((current) => ({ ...current, category: category.id, selectedGame: first?.id || current.selectedGame }));
+                setLevelBrowserGameID(null);
               }}
             >
               {category.label}
@@ -638,79 +749,113 @@ export default function App() {
             <section className="game-grid-panel" aria-labelledby="games-heading">
               <div className="section-head">
                 <div>
-                  <span className="micro">Elige juego</span>
-                  <h2 id="games-heading">{activeCategory.label}</h2>
+                  <span className="micro">{browsingLevels ? "Elige nivel" : "Elige juego"}</span>
+                  <h2 id="games-heading">{levelBrowserGame?.label || activeCategory.label}</h2>
                 </div>
-                <span className="grid-count">{visibleGames.length} modos</span>
+                {browsingLevels ? (
+                  <button className="btn compact back-to-games" type="button" onClick={() => setLevelBrowserGameID(null)}>
+                    <ArrowLeftIcon />
+                    Juegos
+                  </button>
+                ) : (
+                  <span className="grid-count">{visibleGames.length} modos</span>
+                )}
               </div>
-              <section key={menu.category} className="games game-grid" aria-label="Juegos">
-                {visibleGames.map((game, index) => {
-                  const future = Boolean(game.disabled);
-                  const engineAvailable = availableGames.has(engineGameID(game));
-                  const selected = menu.selectedGame === game.id;
-                  const active = selected && status?.currentGame === engineGameID(game);
-                  return (
-                    <button
-                      key={game.id}
-                      className={`card game-card ${future ? "disabled" : ""} ${!future && !engineAvailable ? "unavailable" : ""} ${selected ? "selected" : ""} ${active ? "active" : ""}`}
-                      style={{ "--c": game.color, "--crgb": hexToRGB(game.color), "--i": index } as CSSProperties}
-                      type="button"
-                      disabled={future}
-                      data-game-id={game.id}
-                      aria-pressed={selected}
-                      onClick={() => selectGameCard(game.id)}
-                    >
-                      <Preview animationID={previewAnimationID(game)} />
-                      <div className="game-body">
-                        <h3>{game.label}</h3>
-                      </div>
-                    </button>
-                  );
-                })}
-              </section>
+              {browsingLevels && levelBrowserGame?.levels?.length ? (
+                <section key={`${levelBrowserGame.id}-levels`} className="levels-grid" role="radiogroup" aria-label={`Niveles de ${levelBrowserGame.label}`}>
+                  {levelBrowserGame.levels.map((level) => renderLevelOption(levelBrowserGame, level))}
+                </section>
+              ) : (
+                <section key={menu.category} className="games game-grid" aria-label="Juegos">
+                  {visibleGames.map((game, index) => {
+                    const future = Boolean(game.disabled);
+                    const engineAvailable = availableGames.has(engineGameID(game));
+                    const selected = menu.selectedGame === game.id;
+                    const active = selected && status?.currentGame === engineGameID(game);
+                    return (
+                      <button
+                        key={game.id}
+                        className={`card game-card ${future ? "disabled" : ""} ${!future && !engineAvailable ? "unavailable" : ""} ${selected ? "selected" : ""} ${active ? "active" : ""}`}
+                        style={{ "--c": game.color, "--crgb": hexToRGB(game.color), "--i": index } as CSSProperties}
+                        type="button"
+                        disabled={future}
+                        data-game-id={game.id}
+                        aria-pressed={selected}
+                        onClick={() => selectGameCard(game.id)}
+                      >
+                        <Preview animationID={previewAnimationID(game)} />
+                        <div className="game-body">
+                          <h3>{game.label}</h3>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </section>
+              )}
             </section>
 
-            <aside className="panel detail-panel" style={{ "--c": selectedGame.color, "--crgb": hexToRGB(selectedGame.color) } as CSSProperties} aria-label="Juego seleccionado">
+            <aside className={`panel detail-panel ${levelDetail ? "level-detail-panel" : ""}`} style={{ "--c": selectedGame.color, "--crgb": hexToRGB(selectedGame.color) } as CSSProperties} aria-label="Juego seleccionado">
               <div className="detail-preview">
-                <Preview animationID={previewAnimationID(selectedGame)} />
+                <Preview src={selectedLevel?.previewSrc} animationID={levelPreviewAnimationID(selectedGame, selectedLevel)} />
               </div>
               <div className="detail-copy">
-                <span className="micro">Seleccionado</span>
-                <h2>{selectedGame.label}</h2>
-                <p>{selectedGame.description}</p>
-                {selectedGame.levels?.length ? (
-                  <div className="level-selector" role="radiogroup" aria-label="Nivel">
-                    {selectedGame.levels.map((level) => {
-                      const active = selectedLevelFor(selectedGame) === level.id;
-                      return (
-                        <button
-                          key={level.id}
-                          className={`level-option ${active ? "active" : ""}`}
-                          type="button"
-                          role="radio"
-                          aria-checked={active}
-                          onClick={() => setSelectedLevel(selectedGame, level.id)}
-                        >
-                          <strong>{level.label}</strong>
-                          <span>{level.description}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-                <div className="detail-rules">
-                  <span className="micro">Reglas rápidas</span>
-                  <ul>
-                    {selectedGame.rules.map((rule) => (
-                      <li key={rule}>{rule}</li>
-                    ))}
-                  </ul>
-                </div>
-                <p className="detail-note">
-                  {isAmbientCard(selectedGame)
-                    ? "Las animaciones de ambiente se pueden cambiar al instante desde esta pantalla."
-                    : "Revisa equipo y dificultad antes de empezar. La partida se lanza desde el botón principal."}
-                </p>
+                {levelDetail && selectedLevel ? (
+                  <>
+                    <section className="season-summary" aria-label="Juego actual">
+                      <span className="micro">Juego actual</span>
+                      <div className="season-title-row">
+                        <h2>{selectedGame.label}</h2>
+                        <span className="season-progress">
+                          {selectedLevelIndex}/{selectedGame.levels?.length}
+                        </span>
+                      </div>
+                      <p>{selectedGame.description}</p>
+                    </section>
+                    <section className="season-level-card" aria-label="Nivel seleccionado">
+                      <div>
+                        <span className="micro">Nivel seleccionado</span>
+                        <strong>{selectedLevel.label}</strong>
+                        <p>{selectedLevel.description}</p>
+                      </div>
+                      <button className="btn compact level-change-button" type="button" onClick={() => setLevelBrowserGameID(selectedGame.id)}>
+                        Cambiar nivel
+                      </button>
+                    </section>
+                    <section className="season-facts" aria-label="Resumen de partida">
+                      <div>
+                        <span>Equipo</span>
+                        <strong>{playerCountLabel}</strong>
+                      </div>
+                      <div>
+                        <span>Dificultad</span>
+                        <strong>{selectedDifficulty.label}</strong>
+                      </div>
+                      <div>
+                        <span>Mejor marca</span>
+                        <strong>{selectedLevelBestLabel}</strong>
+                      </div>
+                    </section>
+                  </>
+                ) : (
+                  <>
+                    <span className="micro">Seleccionado</span>
+                    <h2>{selectedGame.label}</h2>
+                    <p>{selectedGame.description}</p>
+                    <div className="detail-rules">
+                      <span className="micro">Reglas rápidas</span>
+                      <ul>
+                        {selectedGame.rules.map((rule) => (
+                          <li key={rule}>{rule}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <p className="detail-note">
+                      {isAmbientCard(selectedGame)
+                        ? "Las animaciones de ambiente se pueden cambiar al instante desde esta pantalla."
+                        : "Revisa equipo y dificultad antes de empezar. La partida se lanza desde el botón principal."}
+                    </p>
+                  </>
+                )}
               </div>
             </aside>
           </section>
@@ -741,8 +886,9 @@ export default function App() {
             {(() => {
               const engineAvailable = availableGames.has(engineGameID(selectedGame));
               const rosterBlocked = !isAmbientCard(selectedGame) && Boolean(rosterIssue);
-              const blocked = selectedGame.disabled || !engineAvailable || rosterBlocked;
-              const blockedLabel = rosterBlocked ? "Revisa equipo" : selectedGame.disabled ? "Próximamente" : error ? "Sin conexión" : "No disponible";
+              const levelBlocked = Boolean(selectedGame.levels?.length && !isLevelUnlocked(selectedGame, selectedLevelFor(selectedGame), menu));
+              const blocked = selectedGame.disabled || !engineAvailable || rosterBlocked || levelBlocked;
+              const blockedLabel = levelBlocked ? "Nivel bloqueado" : rosterBlocked ? "Revisa equipo" : selectedGame.disabled ? "Próximamente" : error ? "Sin conexión" : "No disponible";
               return (
                 <div className="launch-actions">
                   {supportsNarration(selectedGame) ? (
@@ -1056,11 +1202,11 @@ function TouchKeyboard({
   );
 }
 
-function Preview({ animationID }: { animationID: string }) {
+function Preview({ animationID, compact = false, src }: { animationID: string; compact?: boolean; src?: string }) {
   const anim = floorAnimations[animationID] || defaultFloorAnim;
   return (
-    <div className="preview">
-      <FloorPreview anim={anim} orientation="landscape" />
+    <div className={`preview ${compact ? "compact-preview" : ""}`}>
+      {src ? <img className="preview-media" src={src} alt="" aria-hidden="true" /> : <FloorPreview anim={anim} orientation="landscape" />}
     </div>
   );
 }

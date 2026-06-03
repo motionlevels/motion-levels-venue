@@ -13,7 +13,8 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
 	"github.com/lobis/motion-levels/game-engine/internal/games/lava"
-	"github.com/lobis/motion-levels/game-engine/internal/games/parkour"
+	"github.com/lobis/motion-levels/game-engine/internal/games/saltos"
+	"github.com/lobis/motion-levels/game-engine/internal/games/temporada1"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
 	"github.com/lobis/motion-levels/packages/contracts/inputpb"
@@ -68,7 +69,7 @@ func main() {
 	flag.StringVar(&cfg.HTTPAddr, "http", ":8082", "HTTP address for the game-engine API; empty disables")
 	flag.StringVar(&cfg.ControllerAddr, "controller", "127.0.0.1:9090", "floor-controller frame stream address")
 	flag.StringVar(&cfg.PressureAddr, "pressure-events", "127.0.0.1:9091", "floor-controller pressure event stream address")
-	flag.StringVar(&cfg.Game, "game", "loop", "game to run: loop, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, or parkour")
+	flag.StringVar(&cfg.Game, "game", "loop", "game to run: loop, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, or temporada1")
 	flag.StringVar(&cfg.Difficulty, "difficulty", "easy", "difficulty for games that support it: easy, medium, hard, expert")
 	flag.StringVar(&cfg.Level, "level", "starter", "level for games that support level selection")
 	flag.IntVar(&cfg.PlayerCount, "players", 1, "number of players for focused games")
@@ -142,9 +143,11 @@ func main() {
 func (c *config) normalize() {
 	c.Game = normalizeGame(c.Game)
 	c.Difficulty = normalizeDifficulty(c.Difficulty)
-	if c.Game == "parkour" {
-		c.Level = parkour.NormalizeLevel(c.Level)
+	if c.Game == "saltos" {
+		c.Level = saltos.NormalizeLevel(c.Level)
 		c.PlayerCount = 1
+	} else if c.Game == "temporada1" {
+		c.Level = temporada1.NormalizeLevel(c.Level)
 	} else {
 		c.Level = ""
 	}
@@ -178,9 +181,13 @@ func (c *config) normalize() {
 		c.MusicRef = lava.DefaultMusicRef
 		c.MusicVolume = lava.DefaultMusicVolume
 	}
-	if c.Game == "parkour" && c.MusicRef == "Motion/canciones/Background01.mp3" {
-		c.MusicRef = parkour.DefaultMusicRef
-		c.MusicVolume = parkour.DefaultMusicVolume
+	if c.Game == "saltos" && c.MusicRef == "Motion/canciones/Background01.mp3" {
+		c.MusicRef = saltos.DefaultMusicRef
+		c.MusicVolume = saltos.DefaultMusicVolume
+	}
+	if c.Game == "temporada1" && c.MusicRef == "Motion/canciones/Background01.mp3" {
+		c.MusicRef = temporada1.DefaultMusicRef
+		c.MusicVolume = temporada1.DefaultMusicVolume
 	}
 	if c.NarrationCueRef == "" {
 		c.NarrationCueRef = defaultNarrationRef(c.Game)
@@ -368,8 +375,10 @@ func normalizeGame(value string) string {
 		return "whack-a-mole"
 	case "lava", "floor-is-lava", "el-suelo-es-lava":
 		return "lava"
-	case "parkour", "jump", "salto", "salamandra":
-		return "parkour"
+	case "saltos", "jump", "salta", "salto":
+		return "saltos"
+	case "temporada1", "temporada-1", "season1", "season-1":
+		return "temporada1"
 	case "loop", "ambient-comet", "ambient-pulse", "ambient-spark":
 		return value
 	default:

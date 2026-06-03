@@ -17,6 +17,14 @@ export function PlusIcon() {
   );
 }
 
+export function ArrowLeftIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M38 16 22 32l16 16M24 32h30" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function BoltIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">

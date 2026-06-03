@@ -24,9 +24,11 @@ export type EngineStatus = {
   audioMuted: boolean;
   paused: boolean;
   phase: string;
+  success: boolean;
   introRemainingMillis: number;
   countdownRemainingMillis: number;
   startedUnix: number;
+  sessionId: string;
   catalog: EngineGame[];
 };
 

@@ -1,3 +1,5 @@
+import temporada1Level1Preview from "./assets/previews/temporada1-level-1.gif";
+
 export const colors = {
   cyan: "#36d9ff",
   green: "#8dff6e",
@@ -68,6 +70,7 @@ export type GameCard = {
   description: string;
   rules: string[];
   levels?: GameLevel[];
+  allowDifficultyWithLevels?: boolean;
   engineGame?: string;
   previewAnimation?: string;
   disabled?: boolean;
@@ -77,7 +80,16 @@ export type GameLevel = {
   id: string;
   label: string;
   description: string;
+  previewSrc?: string;
+  previewAnimation?: string;
 };
+
+export const temporada1Levels: GameLevel[] = Array.from({ length: 24 }, (_, index) => ({
+  id: `level-${index + 1}`,
+  label: `Nivel ${index + 1}`,
+  description: index === 23 ? "Final boss de temporada." : "Reto clásico de temporada.",
+  previewSrc: index === 0 ? temporada1Level1Preview : undefined,
+}));
 
 export const games: GameCard[] = [
   {
@@ -154,8 +166,8 @@ export const games: GameCard[] = [
     previewAnimation: "loop",
   },
   {
-    id: "parkour",
-    label: "Parkour",
+    id: "saltos",
+    label: "Saltos",
     category: "individual",
     color: colors.orange,
     players: "1",
@@ -165,8 +177,8 @@ export const games: GameCard[] = [
     audio: "Música + efectos",
     description: "Salta de la plataforma azul a la verde sin tocar la lava. Cada salto correcto suma un punto.",
     rules: ["Empieza sobre la plataforma azul.", "Salta a la plataforma verde cuando aparezca.", "Cualquier baldosa roja termina la partida."],
-    engineGame: "parkour",
-    previewAnimation: "parkour",
+    engineGame: "saltos",
+    previewAnimation: "saltos",
     levels: [
       {
         id: "starter",
@@ -258,6 +270,23 @@ export const games: GameCard[] = [
     rules: ["Buscad la zona verde.", "Todos los jugadores deben llegar.", "La zona se mueve cada ronda."],
     previewAnimation: "ambient-pulse",
     disabled: true,
+  },
+  {
+    id: "temporada1",
+    label: "Temporada 1",
+    category: "team",
+    color: colors.green,
+    players: "1-6",
+    difficulty: "Fácil-Experto",
+    duration: "Niveles",
+    mode: "Temporada",
+    audio: "Música + efectos",
+    description: "Una ruta cooperativa de 24 niveles con puntos, peligros y retos clásicos de la pista.",
+    rules: ["El nivel 1 empieza desbloqueado.", "Jugar un nivel desbloquea el siguiente.", "El color del nivel marca la mejor dificultad superada."],
+    engineGame: "temporada1",
+    previewAnimation: "ambient-pulse",
+    allowDifficultyWithLevels: true,
+    levels: temporada1Levels,
   },
   {
     id: "team-pulse",

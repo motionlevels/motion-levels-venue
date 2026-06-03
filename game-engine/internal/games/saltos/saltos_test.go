@@ -1,4 +1,4 @@
-package parkour
+package saltos
 
 import (
 	"testing"

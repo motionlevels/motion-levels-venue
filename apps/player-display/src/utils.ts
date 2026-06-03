@@ -57,6 +57,7 @@ export function playerLabelES(label: string): string {
 const gameTitlesES: Record<string, string> = {
   "whack-a-mole": "Atrapa al topo",
   lava: "El suelo es lava",
+  temporada1: "Temporada 1",
   loop: "Arcoíris",
   "ambient-comet": "Cometas",
   "ambient-pulse": "Pulso",

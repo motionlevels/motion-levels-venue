@@ -589,6 +589,13 @@ button.capsule:hover {
   height: 20px;
 }
 
+.btn.compact {
+  min-height: 46px;
+  padding: 0 16px;
+  font-size: 15px;
+  border-radius: var(--r-pill);
+}
+
 .btn:hover:not(:disabled) {
   border-color: var(--line-strong);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
@@ -803,6 +810,10 @@ button.capsule:hover {
   white-space: nowrap;
 }
 
+.back-to-games {
+  min-width: 132px;
+}
+
 .tab.active svg {
   opacity: 1;
 }
@@ -826,6 +837,29 @@ button.capsule:hover {
 }
 
 .games::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.levels-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  align-content: start;
+  gap: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  touch-action: pan-y;
+}
+
+.levels-grid::-webkit-scrollbar {
+  width: 8px;
+}
+
+.levels-grid::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.2);
 }
@@ -904,6 +938,23 @@ button.capsule:hover {
   border-bottom: 1px solid var(--line);
 }
 
+.preview-media {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: calc(100% - 8px);
+  max-height: calc(100% - 8px);
+  object-fit: contain;
+  border-radius: 0;
+  transform: rotateX(12deg) rotateZ(0.3deg);
+  transform-origin: center 56%;
+  box-shadow:
+    0 18px 34px -20px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 0 42px -6px rgba(var(--crgb), 0.4);
+  image-rendering: pixelated;
+}
+
 .floor-canvas {
   display: block;
   width: auto;
@@ -977,6 +1028,17 @@ button.capsule:hover {
   gap: 12px;
 }
 
+.level-detail-panel {
+  grid-template-rows: 178px minmax(0, 1fr);
+}
+
+.level-detail-panel .detail-copy {
+  padding: 18px;
+  grid-template-rows: auto auto auto;
+  align-content: start;
+  gap: 14px;
+}
+
 .detail-copy h2 {
   margin: 0;
   color: var(--text);
@@ -993,20 +1055,15 @@ button.capsule:hover {
   line-height: 1.36;
 }
 
-.level-selector {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-}
-
 .level-option {
   min-width: 0;
-  min-height: 58px;
-  padding: 10px 12px;
+  min-height: 152px;
+  padding: 0;
   display: grid;
-  align-content: center;
-  gap: 4px;
+  grid-template-rows: minmax(92px, 1fr) auto auto;
+  align-content: stretch;
+  gap: 0;
+  overflow: hidden;
   text-align: left;
   border-radius: var(--r-sm);
   border: 1px solid var(--line);
@@ -1019,6 +1076,21 @@ button.capsule:hover {
     background 160ms var(--ease),
     box-shadow 160ms var(--ease),
     transform 160ms var(--ease);
+}
+
+.level-option .preview {
+  min-height: 0;
+  height: 100%;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    radial-gradient(72% 60% at 50% 38%, rgba(var(--accent-rgb), 0.13), transparent 72%),
+    linear-gradient(180deg, #070d16, #04070b);
+}
+
+.level-option .compact-preview .floor-canvas,
+.level-option .compact-preview .preview-media {
+  max-height: calc(100% - 10px);
+  transform: rotateX(8deg) rotateZ(0.2deg);
 }
 
 .level-option:hover {
@@ -1037,15 +1109,39 @@ button.capsule:hover {
     0 0 22px -16px rgba(var(--accent-rgb), 0.88);
 }
 
+.level-option.passed {
+  color: var(--text);
+  border-color: rgba(var(--level-rgb), 0.74);
+  background:
+    linear-gradient(180deg, rgba(var(--level-rgb), 0.16), rgba(var(--level-rgb), 0.04)),
+    rgba(7, 12, 20, 0.86);
+}
+
+.level-option.locked {
+  cursor: not-allowed;
+  color: rgba(173, 184, 204, 0.42);
+  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(9, 13, 20, 0.48);
+  box-shadow: none;
+  transform: none;
+}
+
+.level-option.locked:hover {
+  border-color: rgba(255, 255, 255, 0.06);
+  transform: none;
+}
+
 .level-option strong,
 .level-option span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding-inline: 13px;
 }
 
 .level-option strong {
-  font-size: 15px;
+  padding-top: 11px;
+  font-size: 16px;
   line-height: 1;
 }
 
@@ -1055,6 +1151,8 @@ button.capsule:hover {
   font-size: 12px;
   font-weight: 750;
   line-height: 1.18;
+  padding-top: 5px;
+  padding-bottom: 12px;
   white-space: nowrap;
 }
 
@@ -1097,6 +1195,150 @@ button.capsule:hover {
 .detail-note {
   color: var(--muted) !important;
   font-size: 13px !important;
+}
+
+.season-summary {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.season-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.season-title-row h2 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.season-progress {
+  flex: 0 0 auto;
+  min-width: 76px;
+  min-height: 38px;
+  padding: 0 14px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(var(--accent-rgb), 0.36);
+  border-radius: 999px;
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.season-summary p,
+.season-level-card p {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--soft);
+  font-weight: 750;
+  line-height: 1.28;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+}
+
+.season-summary p {
+  font-size: 15px;
+  -webkit-line-clamp: 2;
+}
+
+.season-level-card {
+  min-width: 0;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 14px;
+  border: 1px solid rgba(var(--accent-rgb), 0.34);
+  border-radius: var(--r-md);
+  background:
+    linear-gradient(135deg, rgba(var(--accent-rgb), 0.14), rgba(var(--accent-rgb), 0.03) 58%),
+    rgba(7, 13, 21, 0.76);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    0 0 28px -24px rgba(var(--accent-rgb), 0.7);
+}
+
+.season-level-card > div {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 8px;
+}
+
+.season-level-card strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 34px;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.season-level-card p {
+  font-size: 14px;
+  -webkit-line-clamp: 2;
+}
+
+.level-change-button {
+  min-width: 154px;
+  min-height: 64px;
+  align-self: center;
+  justify-content: center;
+}
+
+.season-facts {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.season-facts div {
+  min-width: 0;
+  min-height: 74px;
+  padding: 12px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)),
+    rgba(8, 14, 23, 0.62);
+}
+
+.season-facts span,
+.season-facts strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.season-facts span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.season-facts strong {
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1;
 }
 
 /* ---------- Launch bar ---------- */

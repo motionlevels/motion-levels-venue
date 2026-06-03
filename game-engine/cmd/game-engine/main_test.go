@@ -111,12 +111,20 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 		t.Fatalf("lava narration = %q, want lava intro", lava.NarrationCueRef)
 	}
 
-	parkour := configForSelection(base, "jump", 4)
-	if parkour.Game != "parkour" || parkour.PlayerCount != 1 || parkour.Level != "starter" {
-		t.Fatalf("parkour selection = %+v", parkour)
+	saltos := configForSelection(base, "jump", 4)
+	if saltos.Game != "saltos" || saltos.PlayerCount != 1 || saltos.Level != "starter" {
+		t.Fatalf("saltos selection = %+v", saltos)
 	}
-	if parkour.MusicRef != "Motion/canciones/Background07.mp3" {
-		t.Fatalf("parkour music = %q, want Background07", parkour.MusicRef)
+	if saltos.MusicRef != "Motion/canciones/Background07.mp3" {
+		t.Fatalf("saltos music = %q, want Background07", saltos.MusicRef)
+	}
+
+	season := configForSelection(base, "temporada-1", 4)
+	if season.Game != "temporada1" || season.PlayerCount != 4 || season.Level != "level-1" {
+		t.Fatalf("temporada1 selection = %+v", season)
+	}
+	if season.MusicRef != "Motion/canciones/Background07.mp3" {
+		t.Fatalf("temporada1 music = %q, want Background07", season.MusicRef)
 	}
 
 	loop := configForSelection(base, "loop", 6)
@@ -154,8 +162,8 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if len(status.Catalog) != 7 {
-		t.Fatalf("catalog = %d entries, want 7", len(status.Catalog))
+	if len(status.Catalog) != 8 {
+		t.Fatalf("catalog = %d entries, want 8", len(status.Catalog))
 	}
 
 	body := bytes.NewBufferString(`{"game":"lava","playerCount":3,"difficulty":"expert"}`)
@@ -174,20 +182,36 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 		t.Fatalf("selected status = %+v", status)
 	}
 
-	body = bytes.NewBufferString(`{"game":"parkour","playerCount":3,"level":"classic"}`)
+	body = bytes.NewBufferString(`{"game":"saltos","playerCount":3,"level":"classic"}`)
 	response, err = http.Post(server.URL+"/api/select", "application/json", body)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		t.Fatalf("parkour select response = %d", response.StatusCode)
+		t.Fatalf("saltos select response = %d", response.StatusCode)
 	}
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if status.CurrentGame != "parkour" || status.PlayerCount != 1 || status.Level != "classic" {
-		t.Fatalf("selected parkour status = %+v", status)
+	if status.CurrentGame != "saltos" || status.PlayerCount != 1 || status.Level != "classic" {
+		t.Fatalf("selected saltos status = %+v", status)
+	}
+
+	body = bytes.NewBufferString(`{"game":"temporada1","playerCount":4,"difficulty":"medium","level":"level-2"}`)
+	response, err = http.Post(server.URL+"/api/select", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("temporada1 select response = %d", response.StatusCode)
+	}
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status.CurrentGame != "temporada1" || status.PlayerCount != 4 || status.Difficulty != "medium" || status.Level != "level-2" {
+		t.Fatalf("selected temporada1 status = %+v", status)
 	}
 }
 
