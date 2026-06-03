@@ -1,4 +1,9 @@
 .DS_Store
+node_modules/
+dist/
+*.tsbuildinfo
+.qa/
+.motion-levels-controller-id
 
 # Runtime recording output can grow quickly and should not be committed.
 recordings/
