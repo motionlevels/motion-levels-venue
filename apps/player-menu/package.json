@@ -3,23 +3,49 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "electron:dev": "PLAYER_MENU_URL=http://127.0.0.1:5174 electron electron/main.cjs",
-    "electron": "npm run build && electron electron/main.cjs"
+    "electron": "npm run build && electron electron/main.cjs",
+    "pack:mac": "npm run build && electron-builder --mac dir",
+    "dist:mac": "npm run build && electron-builder --mac dmg"
+  },
+  "build": {
+    "appId": "dev.obis.motionlevels.player-menu",
+    "productName": "Motion Levels Player Menu",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.games",
+      "identity": null,
+      "target": [
+        "dir"
+      ]
+    },
+    "dmg": {
+      "sign": false
+    }
   },
   "dependencies": {
     "react": "^19.2.1",
     "react-dom": "^19.2.1"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^5.1.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
     "electron": "^39.2.7",
+    "electron-builder": "^26.8.1",
     "typescript": "^5.9.3",
     "vite": "^7.2.6"
   }

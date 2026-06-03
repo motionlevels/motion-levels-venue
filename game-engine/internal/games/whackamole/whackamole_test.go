@@ -146,3 +146,54 @@ func TestMissReturnsMissCue(t *testing.T) {
 		t.Fatalf("events = %+v, want miss cue", events)
 	}
 }
+
+func TestSnapshotReportsScoreAndPhase(t *testing.T) {
+	now := time.Now()
+	game := &Game{
+		players:      make([]playerState, 1),
+		setupStarted: now.Add(-4 * time.Second),
+		setupUntil:   now.Add(-time.Second),
+		started:      now.Add(-time.Second),
+		endAt:        now.Add(time.Minute),
+		hits:         map[Point]int{},
+	}
+	game.players[0].score = 12
+	game.spawnTarget(0, now)
+
+	snapshot := game.Snapshot(now)
+	if snapshot.Phase != "running" {
+		t.Fatalf("phase = %q, want running", snapshot.Phase)
+	}
+	if snapshot.Score != 12 || len(snapshot.Players) != 1 || snapshot.Players[0].Score != 12 {
+		t.Fatalf("snapshot scores = %+v", snapshot)
+	}
+	if snapshot.RemainingMillis <= 0 {
+		t.Fatalf("remaining = %d, want positive", snapshot.RemainingMillis)
+	}
+	if snapshot.Lives != -1 {
+		t.Fatalf("lives = %d, want unlimited sentinel", snapshot.Lives)
+	}
+}
+
+func TestNewWithSeedProducesSameInitialTarget(t *testing.T) {
+	now := time.Now()
+	left := NewWithSeed(1, now, 42)
+	right := NewWithSeed(1, now, 42)
+	left.setupStarted = now.Add(-4 * time.Second)
+	left.setupUntil = now.Add(-time.Second)
+	left.started = left.setupUntil
+	left.endAt = now.Add(time.Minute)
+	right.setupStarted = left.setupStarted
+	right.setupUntil = left.setupUntil
+	right.started = left.started
+	right.endAt = left.endAt
+
+	left.spawnTarget(0, now)
+	right.spawnTarget(0, now)
+	if len(left.targets) != 1 || len(right.targets) != 1 {
+		t.Fatalf("targets = %d/%d, want 1/1", len(left.targets), len(right.targets))
+	}
+	if left.targets[0].origin != right.targets[0].origin {
+		t.Fatalf("origins = %+v/%+v, want equal", left.targets[0].origin, right.targets[0].origin)
+	}
+}

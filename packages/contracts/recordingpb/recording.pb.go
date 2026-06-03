@@ -22,14 +22,19 @@ const (
 )
 
 type FrameRecord struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sequence      uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
-	UnixNanos     int64                  `protobuf:"varint,2,opt,name=unix_nanos,json=unixNanos,proto3" json:"unix_nanos,omitempty"`
-	Width         uint32                 `protobuf:"varint,3,opt,name=width,proto3" json:"width,omitempty"`
-	Height        uint32                 `protobuf:"varint,4,opt,name=height,proto3" json:"height,omitempty"`
-	Tiles         []*TileState           `protobuf:"bytes,5,rep,name=tiles,proto3" json:"tiles,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"open.v1"`
+	Sequence                     uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	UnixNanos                    int64                  `protobuf:"varint,2,opt,name=unix_nanos,json=unixNanos,proto3" json:"unix_nanos,omitempty"`
+	Width                        uint32                 `protobuf:"varint,3,opt,name=width,proto3" json:"width,omitempty"`
+	Height                       uint32                 `protobuf:"varint,4,opt,name=height,proto3" json:"height,omitempty"`
+	Tiles                        []*TileState           `protobuf:"bytes,5,rep,name=tiles,proto3" json:"tiles,omitempty"`
+	SessionId                    string                 `protobuf:"bytes,6,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	GameFrameSequence            uint64                 `protobuf:"varint,7,opt,name=game_frame_sequence,json=gameFrameSequence,proto3" json:"game_frame_sequence,omitempty"`
+	GameUnixNanos                int64                  `protobuf:"varint,8,opt,name=game_unix_nanos,json=gameUnixNanos,proto3" json:"game_unix_nanos,omitempty"`
+	ControllerReceivedUnixNanos  int64                  `protobuf:"varint,9,opt,name=controller_received_unix_nanos,json=controllerReceivedUnixNanos,proto3" json:"controller_received_unix_nanos,omitempty"`
+	ControllerPresentedUnixNanos int64                  `protobuf:"varint,10,opt,name=controller_presented_unix_nanos,json=controllerPresentedUnixNanos,proto3" json:"controller_presented_unix_nanos,omitempty"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *FrameRecord) Reset() {
@@ -95,6 +100,41 @@ func (x *FrameRecord) GetTiles() []*TileState {
 		return x.Tiles
 	}
 	return nil
+}
+
+func (x *FrameRecord) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *FrameRecord) GetGameFrameSequence() uint64 {
+	if x != nil {
+		return x.GameFrameSequence
+	}
+	return 0
+}
+
+func (x *FrameRecord) GetGameUnixNanos() int64 {
+	if x != nil {
+		return x.GameUnixNanos
+	}
+	return 0
+}
+
+func (x *FrameRecord) GetControllerReceivedUnixNanos() int64 {
+	if x != nil {
+		return x.ControllerReceivedUnixNanos
+	}
+	return 0
+}
+
+func (x *FrameRecord) GetControllerPresentedUnixNanos() int64 {
+	if x != nil {
+		return x.ControllerPresentedUnixNanos
+	}
+	return 0
 }
 
 type TileState struct {
@@ -185,14 +225,21 @@ var File_packages_contracts_recordingpb_recording_proto protoreflect.FileDescrip
 
 const file_packages_contracts_recordingpb_recording_proto_rawDesc = "" +
 	"\n" +
-	".packages/contracts/recordingpb/recording.proto\x12 motionlevels.engine.recording.v1\"\xb9\x01\n" +
+	".packages/contracts/recordingpb/recording.proto\x12 motionlevels.engine.recording.v1\"\xbc\x03\n" +
 	"\vFrameRecord\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12\x1d\n" +
 	"\n" +
 	"unix_nanos\x18\x02 \x01(\x03R\tunixNanos\x12\x14\n" +
 	"\x05width\x18\x03 \x01(\rR\x05width\x12\x16\n" +
 	"\x06height\x18\x04 \x01(\rR\x06height\x12A\n" +
-	"\x05tiles\x18\x05 \x03(\v2+.motionlevels.engine.recording.v1.TileStateR\x05tiles\"k\n" +
+	"\x05tiles\x18\x05 \x03(\v2+.motionlevels.engine.recording.v1.TileStateR\x05tiles\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x06 \x01(\tR\tsessionId\x12.\n" +
+	"\x13game_frame_sequence\x18\a \x01(\x04R\x11gameFrameSequence\x12&\n" +
+	"\x0fgame_unix_nanos\x18\b \x01(\x03R\rgameUnixNanos\x12C\n" +
+	"\x1econtroller_received_unix_nanos\x18\t \x01(\x03R\x1bcontrollerReceivedUnixNanos\x12E\n" +
+	"\x1fcontroller_presented_unix_nanos\x18\n" +
+	" \x01(\x03R\x1ccontrollerPresentedUnixNanos\"k\n" +
 	"\tTileState\x12\f\n" +
 	"\x01x\x18\x01 \x01(\rR\x01x\x12\f\n" +
 	"\x01y\x18\x02 \x01(\rR\x01y\x12\f\n" +

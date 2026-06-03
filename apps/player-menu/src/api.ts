@@ -6,16 +6,23 @@ export type EngineGame = {
   players: boolean;
   minPlayers: number;
   maxPlayers: number;
+  difficulty: boolean;
   volume: number;
 };
 
 export type EngineStatus = {
   currentGame: string;
   label: string;
+  difficulty: string;
   playerCount: number;
   music: string;
   musicVolume: number;
   audioEnabled: boolean;
+  audioMuted: boolean;
+  paused: boolean;
+  phase: string;
+  introRemainingMillis: number;
+  countdownRemainingMillis: number;
   startedUnix: number;
   catalog: EngineGame[];
 };
@@ -23,6 +30,8 @@ export type EngineStatus = {
 export type SelectGameRequest = {
   game: string;
   playerCount: number;
+  difficulty?: string;
+  narrationEnabled?: boolean;
 };
 
 const fallbackEngineURL = "http://127.0.0.1:8082";
@@ -44,6 +53,20 @@ export async function selectGame(request: SelectGameRequest): Promise<EngineStat
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return response.json() as Promise<EngineStatus>;
+}
+
+export type ControlGameAction = "pause" | "resume" | "restart" | "exit" | "narration" | "mute" | "unmute" | "toggle_mute";
+
+export async function controlGame(action: ControlGameAction): Promise<EngineStatus> {
+  const response = await fetch(`${engineBaseURL()}/api/control`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action }),
   });
   if (!response.ok) {
     throw new Error(await response.text());

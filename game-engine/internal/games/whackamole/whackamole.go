@@ -61,6 +61,26 @@ type Event struct {
 	Message string
 }
 
+type PlayerSnapshot struct {
+	Index int
+	Label string
+	Color RGB
+	Score int
+}
+
+type Snapshot struct {
+	Phase           string
+	Players         []PlayerSnapshot
+	Score           int
+	StartedUnix     int64
+	EndsUnix        int64
+	ElapsedMillis   int64
+	RemainingMillis int64
+	CountdownMillis int64
+	ActiveTargets   int
+	Lives           int
+}
+
 type Game struct {
 	mu sync.Mutex
 
@@ -77,6 +97,7 @@ type Game struct {
 	endAt           time.Time
 	gameOver        bool
 	lastTick        time.Time
+	rng             *rand.Rand
 }
 
 type playerState struct {
@@ -108,15 +129,20 @@ var playerColors = []struct {
 }
 
 func New(playerCount int, now time.Time) *Game {
+	return NewWithSeed(playerCount, now, now.UnixNano())
+}
+
+func NewWithSeed(playerCount int, now time.Time, seed int64) *Game {
 	playerCount = clampInt(playerCount, 1, len(playerColors))
 	game := &Game{
 		players:         make([]playerState, playerCount),
 		startPadPresses: make([]map[Point]bool, playerCount),
 		startPadHold:    make([]time.Time, playerCount),
-		startPadOrigins: shuffledStartPadOrigins(playerCount),
 		hits:            make(map[Point]int),
 		lastTick:        now,
+		rng:             rand.New(rand.NewSource(seed)),
 	}
+	game.startPadOrigins = game.shuffledStartPadOrigins(playerCount)
 	for i := range game.startPadPresses {
 		game.startPadPresses[i] = map[Point]bool{}
 	}
@@ -179,6 +205,78 @@ func (g *Game) Score() int {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.totalScoreLocked()
+}
+
+func (g *Game) Snapshot(now time.Time) Snapshot {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.tickLocked(now)
+
+	players := make([]PlayerSnapshot, 0, len(g.players))
+	for i, player := range g.players {
+		color := RGB{}
+		label := "Player " + strconv.Itoa(i+1)
+		if i >= 0 && i < len(playerColors) {
+			color = playerColors[i].rgb
+			label = playerColors[i].label
+		}
+		players = append(players, PlayerSnapshot{
+			Index: i,
+			Label: label,
+			Color: color,
+			Score: player.score,
+		})
+	}
+
+	phase := "running"
+	if g.awaitingPlayers() {
+		phase = "ready"
+	} else if g.inSetup(now) {
+		phase = "countdown"
+	} else if g.gameOver {
+		phase = "finished"
+	}
+
+	startedUnix := int64(0)
+	if !g.started.IsZero() {
+		startedUnix = g.started.Unix()
+	}
+	endsUnix := int64(0)
+	if !g.endAt.IsZero() {
+		endsUnix = g.endAt.Unix()
+	}
+	elapsed := int64(0)
+	if !g.started.IsZero() && now.After(g.started) {
+		elapsed = now.Sub(g.started).Milliseconds()
+	}
+	remaining := int64(0)
+	if !g.endAt.IsZero() && now.Before(g.endAt) {
+		remaining = g.endAt.Sub(now).Milliseconds()
+	}
+	countdown := int64(0)
+	if g.inSetup(now) {
+		countdown = g.setupUntil.Sub(now).Milliseconds()
+	}
+
+	activeTargets := 0
+	for _, target := range g.targets {
+		if target.active {
+			activeTargets++
+		}
+	}
+
+	return Snapshot{
+		Phase:           phase,
+		Players:         players,
+		Score:           g.totalScoreLocked(),
+		StartedUnix:     startedUnix,
+		EndsUnix:        endsUnix,
+		ElapsedMillis:   elapsed,
+		RemainingMillis: remaining,
+		CountdownMillis: countdown,
+		ActiveTargets:   activeTargets,
+		Lives:           -1,
+	}
 }
 
 func (g *Game) tickLocked(now time.Time) []Event {
@@ -305,7 +403,7 @@ func (g *Game) startPadColorLocked(pt Point, now time.Time) RGB {
 	return RGB{}
 }
 
-func shuffledStartPadOrigins(playerCount int) []Point {
+func (g *Game) shuffledStartPadOrigins(playerCount int) []Point {
 	slots := startPadCornerOrigins()
 	playerCount = clampInt(playerCount, 0, len(slots))
 	if playerCount == 2 {
@@ -313,13 +411,13 @@ func shuffledStartPadOrigins(playerCount int) []Point {
 			{slots[0], slots[1]},
 			{slots[2], slots[3]},
 		}
-		origins := append([]Point(nil), diagonals[rand.Intn(len(diagonals))]...)
-		if rand.Intn(2) == 1 {
+		origins := append([]Point(nil), diagonals[g.randIntn(len(diagonals))]...)
+		if g.randIntn(2) == 1 {
 			origins[0], origins[1] = origins[1], origins[0]
 		}
 		return origins
 	}
-	order := rand.Perm(len(slots))
+	order := g.randPerm(len(slots))
 	origins := make([]Point, playerCount)
 	for i := range origins {
 		origins[i] = slots[order[i]]
@@ -469,12 +567,26 @@ func (g *Game) pickTargetOrigin(player int) (Point, bool) {
 		}
 	}
 	if len(candidates) > 0 {
-		return candidates[rand.Intn(len(candidates))], true
+		return candidates[g.randIntn(len(candidates))], true
 	}
 	if len(fallback) > 0 {
-		return fallback[rand.Intn(len(fallback))], true
+		return fallback[g.randIntn(len(fallback))], true
 	}
 	return Point{}, false
+}
+
+func (g *Game) randIntn(n int) int {
+	if g.rng == nil {
+		g.rng = rand.New(rand.NewSource(1))
+	}
+	return g.rng.Intn(n)
+}
+
+func (g *Game) randPerm(n int) []int {
+	if g.rng == nil {
+		g.rng = rand.New(rand.NewSource(1))
+	}
+	return g.rng.Perm(n)
 }
 
 func (g *Game) occupiedTiles() map[Point]bool {

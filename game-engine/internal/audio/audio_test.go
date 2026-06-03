@@ -54,6 +54,25 @@ func TestStartLoopReplacesPreviousLoop(t *testing.T) {
 	player.StopLoop()
 }
 
+func TestStopAllCancelsActiveCues(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cue.mp3")
+	if err := os.WriteFile(path, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	backend := &blockingBackend{started: make(chan string, 1), ended: make(chan struct{}, 1)}
+	player := NewPlayer(dir, backend)
+	if err := player.PlayCue("cue.mp3", 0.5); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-backend.started; got != path {
+		t.Fatalf("cue path = %q, want %q", got, path)
+	}
+	player.StopAll()
+	<-backend.ended
+}
+
 func TestCommandArgsForCommonPlayers(t *testing.T) {
 	if got := commandArgs("afplay", "/tmp/a.mp3", 0.25); len(got) != 3 || got[0] != "-v" || got[1] != "0.250" {
 		t.Fatalf("afplay args = %v", got)
@@ -132,11 +151,15 @@ func (fakeBackend) Play(context.Context, string, float64) error {
 
 type blockingBackend struct {
 	started chan string
+	ended   chan struct{}
 }
 
 func (b *blockingBackend) Play(ctx context.Context, path string, volume float64) error {
 	b.started <- path
 	<-ctx.Done()
+	if b.ended != nil {
+		b.ended <- struct{}{}
+	}
 	return context.Canceled
 }
 

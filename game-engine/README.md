@@ -49,6 +49,52 @@ Choosing a game updates the running game immediately through the local
 game-engine API at `http://127.0.0.1:8082`. Music is switched with the game, and
 pressure events continue to flow through the same controller stream.
 
+The player-facing TV display lives in `apps/player-display`. It subscribes to
+the game-engine display stream:
+
+```txt
+http://127.0.0.1:8082/api/display/events
+```
+
+The display app is visual-only for now. Low-latency music and cue playback stay
+owned by the Go game-engine process and use the game-engine PC's default audio
+output, usually the HDMI TV.
+
+## Session Recordings
+
+The game-engine writes authoritative session logs by default:
+
+```txt
+game-recordings/YYYYMMDDTHHMMSSZ.game.pbstream
+```
+
+These files use protobuf `GameSessionRecord` messages from
+`packages/contracts/gamepb/game.proto`, written as length-delimited pbstream
+records. Active files end in `.open` and are renamed into place after a clean
+close; startup recovery finalizes leftover `.open` files so a crash does not
+leave data invisible.
+
+The session log records:
+
+- session start/end, including `session_id` and RNG seed
+- accepted menu selections from the game-engine API point of view
+- API interactions observed by the engine
+- pressure inputs received from the floor-controller
+- game events such as start, hit, miss, and win
+- audio cue intents triggered by the engine
+- periodic player-display snapshots
+
+Important flags:
+
+- `-record-sessions`: directory or `.game.pbstream` file path. Empty disables
+  session recording.
+- `-session-segment-bytes`: max bytes per segment before rotation.
+- `-display-snapshot-fps`: how often display snapshots are recorded.
+
+The floor-controller still owns physical frame recordings. Session replay should
+join game-engine `.game.pbstream` files with controller frame recordings by
+time range and, later, by an explicit shared `session_id`.
+
 ### Whack-a-mole
 
 `whack-a-mole` is the first focused game ported from the previous repo. It uses

@@ -2,13 +2,14 @@ const { app, BrowserWindow } = require("electron");
 const path = require("node:path");
 
 function createWindow() {
+  const fullscreen = process.env.PLAYER_MENU_FULLSCREEN !== "0";
   const window = new BrowserWindow({
     width: 1280,
-    height: 800,
+    height: 720,
     minWidth: 1024,
-    minHeight: 680,
+    minHeight: 576,
     backgroundColor: "#03060a",
-    fullscreen: process.env.PLAYER_MENU_FULLSCREEN === "1",
+    fullscreen,
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,

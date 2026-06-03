@@ -39,13 +39,16 @@ type Player struct {
 	resolved   map[string]string
 	loopCancel context.CancelFunc
 	loopRef    string
+	cueCancels map[uint64]context.CancelFunc
+	nextCueID  uint64
 }
 
 func NewPlayer(assetsDir string, backend Backend) *Player {
 	return &Player{
-		assetsDir: strings.TrimSpace(assetsDir),
-		backend:   backend,
-		resolved:  make(map[string]string),
+		assetsDir:  strings.TrimSpace(assetsDir),
+		backend:    backend,
+		resolved:   make(map[string]string),
+		cueCancels: make(map[uint64]context.CancelFunc),
 	}
 }
 
@@ -100,12 +103,35 @@ func (p *Player) PlayCue(ref string, volume float64) error {
 		return err
 	}
 	volume = normalizeVolume(volume, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	p.mu.Lock()
+	p.nextCueID++
+	cueID := p.nextCueID
+	p.cueCancels[cueID] = cancel
+	p.mu.Unlock()
 	go func() {
-		if err := p.backend.Play(context.Background(), path, volume); err != nil {
+		defer func() {
+			p.mu.Lock()
+			delete(p.cueCancels, cueID)
+			p.mu.Unlock()
+			cancel()
+		}()
+		if err := p.backend.Play(ctx, path, volume); err != nil && !errors.Is(err, context.Canceled) {
 			log.Printf("audio cue %s: %v", ref, err)
 		}
 	}()
 	return nil
+}
+
+func (p *Player) Duration(ref string) (time.Duration, error) {
+	if p == nil {
+		return 0, nil
+	}
+	path, err := p.Resolve(ref)
+	if err != nil {
+		return 0, err
+	}
+	return audioFileDuration(path)
 }
 
 func (p *Player) StartLoop(ref string, volume float64) error {
@@ -161,6 +187,29 @@ func (p *Player) StopLoop() {
 	}
 	p.loopCancel = nil
 	p.loopRef = ""
+}
+
+func (p *Player) StopCues() {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(p.cueCancels))
+	for _, cancel := range p.cueCancels {
+		cancels = append(cancels, cancel)
+	}
+	p.mu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+}
+
+func (p *Player) StopAll() {
+	if p == nil {
+		return
+	}
+	p.StopLoop()
+	p.StopCues()
 }
 
 func (p *Player) Resolve(ref string) (string, error) {
@@ -309,6 +358,22 @@ func decodeAudioFile(path string) ([]byte, int, int, error) {
 	default:
 		return nil, 0, 0, fmt.Errorf("unsupported audio format %q", filepath.Ext(path))
 	}
+}
+
+func audioFileDuration(path string) (time.Duration, error) {
+	pcm, sampleRate, channels, err := decodeAudioFile(path)
+	if err != nil {
+		return 0, err
+	}
+	if sampleRate <= 0 || channels <= 0 {
+		return 0, fmt.Errorf("%s has invalid audio metadata", path)
+	}
+	bytesPerFrame := channels * 2
+	if bytesPerFrame <= 0 {
+		return 0, fmt.Errorf("%s has invalid channel count", path)
+	}
+	frames := len(pcm) / bytesPerFrame
+	return time.Duration(float64(frames) / float64(sampleRate) * float64(time.Second)), nil
 }
 
 func decodeMP3(path string) ([]byte, int, int, error) {

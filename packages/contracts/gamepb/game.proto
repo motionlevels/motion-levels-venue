@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package motionlevels.engine.game.v1;
+
+option go_package = "github.com/lobis/motion-levels/packages/contracts/gamepb";
+
+message GameSessionRecord {
+  string session_id = 1;
+  uint64 sequence = 2;
+  int64 unix_nanos = 3;
+
+  oneof payload {
+    SessionStarted session_started = 10;
+    SessionEnded session_ended = 11;
+    ApiInteraction api_interaction = 12;
+    MenuCommand menu_command = 13;
+    PressureInput pressure_input = 14;
+    GameEvent game_event = 15;
+    AudioCue audio_cue = 16;
+    DisplaySnapshot display_snapshot = 17;
+  }
+}
+
+message SessionStarted {
+  string game = 1;
+  string label = 2;
+  uint32 player_count = 3;
+  int64 rng_seed = 4;
+  int64 started_unix_nanos = 5;
+}
+
+message SessionEnded {
+  string reason = 1;
+  int64 ended_unix_nanos = 2;
+}
+
+message ApiInteraction {
+  string method = 1;
+  string path = 2;
+  string remote_addr = 3;
+  int64 unix_nanos = 4;
+  uint32 status = 5;
+}
+
+message MenuCommand {
+  string command = 1;
+  string game = 2;
+  uint32 player_count = 3;
+  int64 unix_nanos = 4;
+}
+
+message PressureInput {
+  uint64 source_sequence = 1;
+  int64 unix_nanos = 2;
+  uint32 x = 3;
+  uint32 y = 4;
+  bool pressed = 5;
+  string source = 6;
+  uint32 controller = 7;
+  uint32 channel = 8;
+  uint32 position = 9;
+}
+
+message GameEvent {
+  string cue = 1;
+  string message = 2;
+  int64 unix_nanos = 3;
+}
+
+message AudioCue {
+  string ref = 1;
+  string cue = 2;
+  double volume = 3;
+  int64 unix_nanos = 4;
+}
+
+message DisplaySnapshot {
+  string current_game = 1;
+  string label = 2;
+  string phase = 3;
+  uint32 player_count = 4;
+  repeated DisplayPlayer players = 5;
+  int32 score = 6;
+  int32 lives = 7;
+  int64 started_unix = 8;
+  int64 ends_unix = 9;
+  int64 elapsed_millis = 10;
+  int64 remaining_millis = 11;
+  uint32 active_targets = 12;
+  bool audio_enabled = 13;
+  int64 last_event_unix_nanos = 14;
+  string last_event_cue = 15;
+  string last_event_message = 16;
+  int64 intro_remaining_millis = 17;
+  int64 countdown_remaining_millis = 18;
+  bool audio_muted = 19;
+}
+
+message DisplayPlayer {
+  uint32 index = 1;
+  string label = 2;
+  Color color = 3;
+  int32 score = 4;
+  int32 lives = 5;
+}
+
+message Color {
+  uint32 r = 1;
+  uint32 g = 2;
+  uint32 b = 3;
+}

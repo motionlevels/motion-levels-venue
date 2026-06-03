@@ -9,75 +9,18 @@ export function LogoIcon() {
   );
 }
 
-export function GameIcon({ name }: { name: "mole" | "loop" | "lava" | "duel" }) {
-  if (name === "mole") {
-    return (
-      <svg viewBox="0 0 64 64" aria-hidden="true">
-        <ellipse cx="32" cy="55" rx="25" ry="5" fill="currentColor" opacity=".22" />
-        <path d="M21 52V37c0-8 5-14 14-14s14 6 14 14v15" fill="currentColor" />
-        <path d="M14 52c0-6 4-10 10-10 5 0 9 4 10 10" fill="currentColor" opacity=".35" />
-        <circle cx="31" cy="37" r="2.7" fill="#06101a" />
-        <circle cx="40" cy="37" r="2.7" fill="#06101a" />
-        <ellipse cx="35.5" cy="43.5" rx="3" ry="2.4" fill="#06101a" />
-      </svg>
-    );
-  }
-  if (name === "lava") {
-    return (
-      <svg viewBox="0 0 64 64" aria-hidden="true">
-        <path d="M34 6c2 10-7 12-3 20 1-4 6-6 7-12 6 5 9 12 9 18 0 8-7 13-15 13s-15-5-15-13c0-8 7-13 17-26Z" fill="currentColor" />
-        <path d="M6 50c4 0 4-3 8-3s4 3 8 3 4-3 8-3 4 3 8 3 4-3 8-3 4 3 6 3v6H6Z" fill="currentColor" opacity=".45" />
-      </svg>
-    );
-  }
-  if (name === "duel") {
-    return (
-      <svg viewBox="0 0 64 64" aria-hidden="true">
-        <path d="M15 11l25 25M49 11 24 36" stroke="currentColor" strokeWidth="5.5" strokeLinecap="round" />
-        <path d="M40 36l10 10M24 36 14 46" stroke="currentColor" strokeWidth="6.5" strokeLinecap="round" opacity=".5" />
-        <circle cx="32" cy="29" r="3" fill="currentColor" />
-      </svg>
-    );
-  }
+export function PlusIcon() {
   return (
-    <svg viewBox="0 0 64 64" aria-hidden="true">
-      <path d="M18 22h23a11 11 0 0 1 0 22H23" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-      <path d="m22 13-9 9 9 9" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M32 14v36M14 32h36" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
     </svg>
   );
 }
 
-export function UsersIcon() {
+export function BoltIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 64 64" aria-hidden="true">
-      <circle cx="25" cy="23" r="9" fill="currentColor" />
-      <path d="M9 55c0-11 7-18 16-18s16 7 16 18" fill="currentColor" />
-      <circle cx="45" cy="25" r="7" fill="currentColor" opacity=".65" />
-    </svg>
-  );
-}
-
-export function CategoryIcon({ id }: { id: string }) {
-  if (id === "team") return <UsersIcon />;
-  if (id === "versus") {
-    return (
-      <svg width="15" height="15" viewBox="0 0 64 64" aria-hidden="true">
-        <path d="M14 12l16 40M50 12 34 52" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-        <path d="M20 34h24" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (id === "attract") {
-    return (
-      <svg width="15" height="15" viewBox="0 0 64 64" aria-hidden="true">
-        <path d="M18 22h23a11 11 0 0 1 0 22H23" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-        <path d="m22 13-9 9 9 9" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    );
-  }
-  return (
-    <svg width="15" height="15" viewBox="0 0 64 64" aria-hidden="true">
-      <path d="M32 8l8 17 18 3-13 13 3 18-16-9-16 9 3-18L6 28l18-3Z" fill="currentColor" />
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M35 6 14 36h14l-3 22 23-32H33Z" fill="currentColor" />
     </svg>
   );
 }
@@ -90,11 +33,37 @@ export function CheckIcon() {
   );
 }
 
-export function BenchIcon() {
+export function PauseIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
-      <circle cx="32" cy="32" r="22" fill="none" stroke="currentColor" strokeWidth="5" />
-      <path d="M24 22v20M40 22v20" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+      <rect x="20" y="16" width="8" height="32" rx="3" fill="currentColor" />
+      <rect x="36" y="16" width="8" height="32" rx="3" fill="currentColor" />
+    </svg>
+  );
+}
+
+export function PlayIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M22 16l26 16-26 16Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+export function BackspaceIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M24 14h28a4 4 0 0 1 4 4v28a4 4 0 0 1-4 4H24L6 32Z" fill="none" stroke="currentColor" strokeWidth="5" strokeLinejoin="round" />
+      <path d="M30 25l14 14M44 25 30 39" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function RestartIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M48 19A22 22 0 1 0 53 42" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+      <path d="M48 8v16H32" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -103,6 +72,24 @@ export function CloseIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
       <path d="M18 18l28 28M46 18 18 46" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function VolumeIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M10 25h12l16-13v40L22 39H10Z" fill="currentColor" />
+      <path d="M45 22a14 14 0 0 1 0 20M51 14a25 25 0 0 1 0 36" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function VolumeMutedIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M10 25h12l16-13v40L22 39H10Z" fill="currentColor" />
+      <path d="M47 25l13 13M60 25 47 38" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
     </svg>
   );
 }

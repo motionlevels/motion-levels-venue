@@ -1,11 +1,15 @@
 .DS_Store
 node_modules/
 dist/
+release/
 *.tsbuildinfo
 .qa/
+.claude/
+.secrets/
 .motion-levels-controller-id
 
 # Runtime recording output can grow quickly and should not be committed.
 recordings/
 engine/recordings/
 floor-controller/recordings/
+game-recordings/

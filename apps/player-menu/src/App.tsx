@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties } from "react";
-import { fetchEngineStatus, selectGame, type EngineStatus } from "./api";
-import { categories, colors, difficulties, games, nameHints, playerColors, type CategoryID, type DifficultyID } from "./catalog";
-import { BenchIcon, CategoryIcon, CheckIcon, CloseIcon, GameIcon, LogoIcon, UsersIcon } from "./icons";
-import { hexToRGB, initials, mix } from "./utils";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import { controlGame, fetchEngineStatus, selectGame, type EngineStatus } from "./api";
+import { categories, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
+import { BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, LogoIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
+import { FloorPreview } from "./FloorPreview";
+import { defaultFloorAnim, floorAnimations } from "./floor";
+import { hexToRGB, initials } from "./utils";
 
 type Player = {
   id: number;
@@ -19,25 +21,57 @@ type MenuState = {
   selectedGame: string;
   difficulty: DifficultyID;
   nextPlayerId: number;
+  narrationArmed: Record<string, boolean>;
 };
 
 type KeyboardTarget = { kind: "team" } | { kind: "player"; id: number };
+type ScreenMode = "browse" | "game";
 
 const storageKey = "ml-player-menu-state-v1";
-const keyboardRows = ["1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
+const maxPlayers = 6;
+// Spanish QWERTY with Ñ.
+const keyboardRows = ["1234567890", "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM"];
+const defaultPlayers: Player[] = [{ id: 1, name: "", color: playerColors[0], active: true }];
+
+function engineGameID(game: GameCard): string {
+  return game.engineGame || game.id;
+}
+
+function previewAnimationID(game: GameCard): string {
+  return game.previewAnimation || game.id;
+}
+
+function isAmbientCard(game: GameCard): boolean {
+  return game.category === "attract";
+}
+
+function supportsNarration(game: GameCard): boolean {
+  return engineGameID(game) === "lava";
+}
 
 function loadMenuState(): MenuState {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || "null") as Partial<MenuState> | null;
     if (saved && typeof saved === "object") {
+      const narrationArmed = saved.narrationArmed && typeof saved.narrationArmed === "object" ? saved.narrationArmed : {};
+      const savedPlayers = Array.isArray(saved.players) ? saved.players : [];
+      const wasOldUntouchedDefault =
+        !saved.teamName &&
+        savedPlayers.length === 2 &&
+        savedPlayers.every((player, index) => {
+          const name = String(player?.name || "").trim();
+          const oldName = index === 0 ? "Red" : "Blue";
+          return player && player.active && (name === "" || name === oldName);
+        });
       return {
         teamName: "",
-        players: [],
         category: "featured",
         selectedGame: "whack-a-mole",
         difficulty: "easy",
-        nextPlayerId: 0,
         ...saved,
+        players: wasOldUntouchedDefault ? defaultPlayers : savedPlayers,
+        nextPlayerId: wasOldUntouchedDefault ? 1 : saved.nextPlayerId || 0,
+        narrationArmed,
       };
     }
   } catch {
@@ -45,15 +79,25 @@ function loadMenuState(): MenuState {
   }
   return {
     teamName: "",
-    players: [
-      { id: 1, name: "Red", color: playerColors[0], active: true },
-      { id: 2, name: "Blue", color: playerColors[5], active: true },
-    ],
+    players: defaultPlayers,
     category: "featured",
     selectedGame: "whack-a-mole",
     difficulty: "easy",
-    nextPlayerId: 2,
+    nextPlayerId: 1,
+    narrationArmed: {},
   };
+}
+
+// Players get a "Jugador N" placeholder until they are named.
+function playerLabel(players: Player[], player: Player): string {
+  const name = player.name.trim();
+  if (name) return name;
+  return `Jugador ${players.indexOf(player) + 1}`;
+}
+
+function avatarLabel(players: Player[], player: Player): string {
+  const name = player.name.trim();
+  return name ? initials(name) : `${players.indexOf(player) + 1}`;
 }
 
 export default function App() {
@@ -62,6 +106,16 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [keyboardTarget, setKeyboardTarget] = useState<KeyboardTarget | null>(null);
+  const [colorPickerFor, setColorPickerFor] = useState<number | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<number | null>(null);
+  const [teamOpen, setTeamOpen] = useState(false);
+  const [screenMode, setScreenMode] = useState<ScreenMode>("browse");
+  const [launchedGameID, setLaunchedGameID] = useState(menu.selectedGame);
+  const [introUntil, setIntroUntil] = useState(0);
+  const [countdownUntil, setCountdownUntil] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const gamesScrollRef = useRef<HTMLElement | null>(null);
+  const gamesDragRef = useRef({ dragging: false, didMove: false, pointerId: 0, startX: 0, scrollLeft: 0, gameID: "" });
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(menu));
@@ -76,7 +130,7 @@ export default function App() {
         setStatus(next);
         setError("");
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Game engine offline");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Sin conexión con el motor");
       }
     }
     refresh();
@@ -87,12 +141,21 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (screenMode !== "game") return;
+    const id = window.setInterval(() => setNowMs(Date.now()), 100);
+    return () => window.clearInterval(id);
+  }, [screenMode]);
+
   const availableGames = useMemo(() => new Set((status?.catalog || []).map((entry) => entry.game)), [status]);
   const activePlayers = menu.players.filter((player) => player.active);
   const activeCategory = categories.find((category) => category.id === menu.category) || categories[0];
   const selectedGame = games.find((game) => game.id === menu.selectedGame) || games[0];
+  const launchedGame = games.find((game) => game.id === launchedGameID) || selectedGame;
   const visibleGames = games.filter((game) => game.category === menu.category);
   const selectedDifficulty = difficulties.find((difficulty) => difficulty.id === menu.difficulty) || difficulties[0];
+  const pickerPlayer = menu.players.find((player) => player.id === colorPickerFor) || null;
+  const removePlayer = menu.players.find((player) => player.id === confirmRemove) || null;
 
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", activeCategory.color);
@@ -101,7 +164,7 @@ export default function App() {
 
   function addPlayer() {
     setMenu((current) => {
-      if (current.players.length >= 6) return current;
+      if (current.players.length >= maxPlayers) return current;
       const index = current.players.length;
       return {
         ...current,
@@ -109,7 +172,7 @@ export default function App() {
           ...current.players,
           {
             id: current.nextPlayerId + 1,
-            name: nameHints[index % nameHints.length],
+            name: "",
             color: playerColors[index % playerColors.length],
             active: true,
           },
@@ -123,7 +186,7 @@ export default function App() {
     if (current.players.some((player) => player.active)) return current;
     return {
       ...current,
-      players: [{ id: current.nextPlayerId + 1, name: "Red", color: playerColors[0], active: true }],
+      players: [{ id: current.nextPlayerId + 1, name: "", color: playerColors[0], active: true }],
       nextPlayerId: current.nextPlayerId + 1,
     };
   }
@@ -135,6 +198,11 @@ export default function App() {
     }));
   }
 
+  function deletePlayer(id: number) {
+    setMenu((current) => ({ ...current, players: current.players.filter((player) => player.id !== id) }));
+    setConfirmRemove(null);
+  }
+
   function keyboardValue() {
     if (!keyboardTarget) return "";
     if (keyboardTarget.kind === "team") return menu.teamName;
@@ -143,9 +211,9 @@ export default function App() {
 
   function keyboardTitle() {
     if (!keyboardTarget) return "";
-    if (keyboardTarget.kind === "team") return "Team name";
+    if (keyboardTarget.kind === "team") return "Nombre del equipo";
     const player = menu.players.find((candidate) => candidate.id === keyboardTarget.id);
-    return player ? `Player ${menu.players.indexOf(player) + 1}` : "Player";
+    return player ? `Jugador ${menu.players.indexOf(player) + 1}` : "Jugador";
   }
 
   function setKeyboardValue(value: string) {
@@ -162,35 +230,158 @@ export default function App() {
     setKeyboardValue(`${keyboardValue()}${key}`);
   }
 
-  function cycleColor(id: number) {
+  function beginGamesDrag(event: ReactPointerEvent<HTMLElement>) {
+    const scroller = gamesScrollRef.current;
+    if (!scroller || event.button !== 0) return;
+    const card = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-game-id]");
+    gamesDragRef.current = {
+      dragging: true,
+      didMove: false,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      scrollLeft: scroller.scrollLeft,
+      gameID: card?.dataset.gameId || "",
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.classList.add("dragging");
+  }
+
+  function moveGamesDrag(event: ReactPointerEvent<HTMLElement>) {
+    const state = gamesDragRef.current;
+    const scroller = gamesScrollRef.current;
+    if (!state.dragging || !scroller || event.pointerId !== state.pointerId) return;
+    const delta = event.clientX - state.startX;
+    if (Math.abs(delta) > 4) state.didMove = true;
+    scroller.scrollLeft = state.scrollLeft - delta;
+    event.preventDefault();
+  }
+
+  function endGamesDrag(event: ReactPointerEvent<HTMLElement>) {
+    const state = gamesDragRef.current;
+    if (!state.dragging || event.pointerId !== state.pointerId) return;
+    state.dragging = false;
+    event.currentTarget.classList.remove("dragging");
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (!state.didMove && state.gameID) {
+      selectGameCard(state.gameID, { ignoreDrag: true });
+    }
+    window.setTimeout(() => {
+      gamesDragRef.current.didMove = false;
+      gamesDragRef.current.gameID = "";
+    }, 0);
+  }
+
+  function selectGameCard(gameID: string, options?: { ignoreDrag?: boolean }) {
+    if (!options?.ignoreDrag && gamesDragRef.current.didMove) return;
+    const game = games.find((candidate) => candidate.id === gameID);
+    setMenu((current) => ({ ...current, selectedGame: gameID }));
+    if (game && isAmbientCard(game) && !game.disabled && availableGames.has(engineGameID(game))) {
+      void launch(game.id);
+    }
+  }
+
+  function narrationArmedFor(game: GameCard, state = menu): boolean {
+    if (!supportsNarration(game)) return false;
+    return state.narrationArmed[game.id] ?? true;
+  }
+
+  function setNarrationArmed(game: GameCard, armed: boolean) {
     setMenu((current) => ({
       ...current,
-      players: current.players.map((player) => {
-        if (player.id !== id) return player;
-        const index = playerColors.indexOf(player.color);
-        return { ...player, color: playerColors[(index + 1) % playerColors.length] };
-      }),
+      narrationArmed: {
+        ...current.narrationArmed,
+        [game.id]: armed,
+      },
     }));
+    setMessage(armed ? "Narración activada para la próxima partida" : "Narración desactivada");
   }
 
   async function launch(gameID = selectedGame.id) {
     const game = games.find((candidate) => candidate.id === gameID);
-    if (!game || game.disabled || !availableGames.has(game.id)) return;
+    if (!game || game.disabled || !availableGames.has(engineGameID(game))) return;
     const nextMenu = ensurePlayers({ ...menu, selectedGame: game.id });
+    const playNarration = narrationArmedFor(game, nextMenu);
     setMenu(nextMenu);
-    setMessage("Starting");
+    setMessage("Iniciando");
     setError("");
     try {
-      const nextStatus = await selectGame({ game: game.id, playerCount: Math.max(1, nextMenu.players.filter((player) => player.active).length) });
+      const nextStatus = await selectGame({
+        game: engineGameID(game),
+        playerCount: Math.max(1, nextMenu.players.filter((player) => player.active).length),
+        difficulty: nextMenu.difficulty,
+        narrationEnabled: supportsNarration(game) ? playNarration : false,
+      });
       setStatus(nextStatus);
-      setMessage("Running");
+      setMessage("En curso");
+      setLaunchedGameID(game.id);
+      if (supportsNarration(game) && playNarration) {
+        setMenu((current) => ({
+          ...current,
+          narrationArmed: {
+            ...current.narrationArmed,
+            [game.id]: false,
+          },
+        }));
+      }
+      syncPlayTiming(nextStatus, game);
+      setTeamOpen(false);
+      setKeyboardTarget(null);
+      setScreenMode(isAmbientCard(game) ? "browse" : "game");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start game");
+      setError(err instanceof Error ? err.message : "No se pudo iniciar el juego");
     }
   }
 
+  async function restartLaunchedGame() {
+    await launch(launchedGame.id);
+    setMessage("Reiniciando");
+  }
+
+  async function sendGameControl(action: "pause" | "resume" | "restart" | "exit" | "narration" | "mute" | "unmute" | "toggle_mute") {
+    setError("");
+    try {
+      const nextStatus = await controlGame(action);
+      setStatus(nextStatus);
+      if (action === "restart") {
+        syncPlayTiming(nextStatus, launchedGame);
+        setMessage("Reiniciando");
+      } else if (action === "exit") {
+        setScreenMode("browse");
+        setMessage("Juego finalizado");
+      } else if (action === "narration") {
+        setMessage("Narración");
+      } else if (action === "toggle_mute" || action === "mute" || action === "unmute") {
+        setMessage(nextStatus.audioMuted ? "Audio silenciado" : "Audio activo");
+      } else {
+        setMessage(action === "pause" ? "Pausado" : "En curso");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo controlar el juego");
+    }
+  }
+
+  function syncPlayTiming(nextStatus: EngineStatus, game: GameCard) {
+    const now = Date.now();
+    if (isAmbientCard(game)) {
+      setIntroUntil(now);
+      setCountdownUntil(now);
+      setNowMs(now);
+      return;
+    }
+    const introMillis = Math.max(0, nextStatus.introRemainingMillis || 0);
+    const countdownMillis = Math.max(0, nextStatus.countdownRemainingMillis || 3000);
+    setIntroUntil(now + introMillis);
+    setCountdownUntil(now + introMillis + countdownMillis);
+    setNowMs(now);
+  }
+
+  const introActive = screenMode === "game" && introUntil > nowMs;
+  const countdownValue = screenMode === "game" && !introActive ? Math.max(0, Math.ceil((countdownUntil - nowMs) / 1000)) : 0;
+
   return (
-    <main className={`app ${keyboardTarget ? "keyboard-open" : ""}`}>
+    <main className={`app ${keyboardTarget ? "keyboard-open" : ""} ${screenMode === "game" ? "playing" : ""}`}>
       <header className="topbar">
         <div className="brand">
           <div className="brand-mark">
@@ -198,7 +389,7 @@ export default function App() {
           </div>
           <div className="brand-copy">
             <b>Motion Levels</b>
-            <span>Player kiosk</span>
+            <span>Quiosco</span>
           </div>
         </div>
         <div className="title-stack">
@@ -206,26 +397,67 @@ export default function App() {
           <h1>{activeCategory.title}</h1>
         </div>
         <div className="status-capsules">
-          <div className="capsule">
+          <div className="capsule status-dot">
             <span className={`live-dot ${status && !error ? "on" : ""}`} />
-            <strong>{error ? "Offline" : "Connected"}</strong>
+            <strong>{error ? "Sin conexión" : "Conectado"}</strong>
           </div>
-          <button className="capsule" type="button" onClick={() => window.open(`${window.location.protocol}//${window.location.hostname}:8081/live`, "_blank", "noreferrer")}>
-            <strong>Open Floor</strong>
+          <button
+            className={`capsule audio-btn ${status?.audioMuted ? "muted" : ""}`}
+            type="button"
+            onClick={() => sendGameControl("toggle_mute")}
+            disabled={!status?.audioEnabled}
+            aria-label={status?.audioMuted ? "Activar audio" : "Silenciar audio"}
+          >
+            {status?.audioMuted ? <VolumeMutedIcon /> : <VolumeIcon />}
+            <strong>{status?.audioMuted ? "Mute" : "Audio"}</strong>
+          </button>
+          <button className="capsule equipo-btn" type="button" onClick={() => setTeamOpen(true)} aria-label="Abrir equipo">
+            <span className="mini-avatars">
+              {activePlayers.slice(0, 6).map((player) => (
+                <span key={player.id} style={{ "--pc": player.color } as CSSProperties} />
+              ))}
+            </span>
+            <strong>Equipo</strong>
           </button>
         </div>
       </header>
 
+      {screenMode === "game" ? (
+        <GameControlScreen
+          game={launchedGame}
+          status={status}
+          players={activePlayers}
+          allPlayers={menu.players}
+          difficulty={selectedDifficulty.label}
+          ambient={isAmbientCard(launchedGame)}
+          introActive={introActive}
+          countdownValue={countdownValue}
+          error={error}
+          onPauseToggle={() => sendGameControl(status?.paused ? "resume" : "pause")}
+          onRestart={() => restartLaunchedGame()}
+          narrationSupported={supportsNarration(launchedGame)}
+          narrationArmed={narrationArmedFor(launchedGame)}
+          onNarrationToggle={() => setNarrationArmed(launchedGame, !narrationArmedFor(launchedGame))}
+          onExit={() => sendGameControl("exit")}
+        />
+      ) : (
       <section className="layout">
-        <aside className="panel team-panel" aria-label="Team setup">
+        <div className={`drawer-backdrop ${teamOpen ? "open" : ""}`} onClick={() => setTeamOpen(false)} />
+        <aside className={`panel team-panel team-drawer ${teamOpen ? "open" : ""}`} aria-label="Configuración del equipo" aria-hidden={!teamOpen}>
+          <div className="drawer-head">
+            <strong>Equipo</strong>
+            <button className="icon-button" type="button" aria-label="Cerrar equipo" onClick={() => setTeamOpen(false)}>
+              <CloseIcon />
+            </button>
+          </div>
           <section className="team-name">
-            <div className="micro">Team</div>
+            <div className="micro">Equipo</div>
             <input
               value={menu.teamName}
               maxLength={20}
               autoComplete="off"
               spellCheck={false}
-              placeholder="Team name"
+              placeholder="Nombre del equipo"
               inputMode="none"
               onFocus={() => setKeyboardTarget({ kind: "team" })}
               onClick={() => setKeyboardTarget({ kind: "team" })}
@@ -234,7 +466,7 @@ export default function App() {
           </section>
 
           <section>
-            <div className="micro difficulty-label">Difficulty</div>
+            <div className="micro difficulty-label">Dificultad</div>
             <div className="difficulty">
               {difficulties.map((difficulty) => (
                 <button
@@ -250,30 +482,36 @@ export default function App() {
             </div>
           </section>
 
-          <section className="roster" aria-label="Players">
-            {menu.players.length === 0 ? <div className="message">Add a player or use quick start.</div> : null}
-            {menu.players.map((player) => (
+          <section className="roster" aria-label="Jugadores">
+            {menu.players.length === 0 ? <div className="message">Añade un jugador o usa el inicio rápido.</div> : null}
+            {menu.players.map((player, index) => (
               <article key={player.id} className={`player ${player.active ? "" : "off"}`} style={{ "--pc": player.color } as CSSProperties}>
-                <button className="avatar" type="button" onClick={() => cycleColor(player.id)} aria-label={`Change ${player.name} color`}>
-                  {initials(player.name)}
+                <button className="avatar" type="button" onClick={() => setColorPickerFor(player.id)} aria-label={`Elegir color de ${playerLabel(menu.players, player)}`}>
+                  {avatarLabel(menu.players, player)}
                 </button>
                 <input
                   value={player.name}
                   maxLength={12}
-                  aria-label="Player name"
+                  aria-label="Nombre del jugador"
                   autoComplete="off"
                   spellCheck={false}
                   inputMode="none"
-                  placeholder="Player"
+                  placeholder={`Jugador ${index + 1}`}
                   onFocus={() => setKeyboardTarget({ kind: "player", id: player.id })}
                   onClick={() => setKeyboardTarget({ kind: "player", id: player.id })}
                   onChange={(event) => updatePlayer(player.id, { name: event.target.value })}
                 />
                 <div className="player-actions">
-                  <button className="icon-button" type="button" title={player.active ? "Bench" : "Activate"} onClick={() => updatePlayer(player.id, { active: !player.active })}>
-                    {player.active ? <CheckIcon /> : <BenchIcon />}
+                  <button
+                    className="icon-button"
+                    type="button"
+                    title={player.active ? "Descansar" : "Activar"}
+                    aria-label={player.active ? `Poner a descansar a ${playerLabel(menu.players, player)}` : `Activar a ${playerLabel(menu.players, player)}`}
+                    onClick={() => updatePlayer(player.id, { active: !player.active })}
+                  >
+                    {player.active ? <PauseIcon /> : <PlayIcon />}
                   </button>
-                  <button className="icon-button" type="button" title="Remove" onClick={() => setMenu((current) => ({ ...current, players: current.players.filter((candidate) => candidate.id !== player.id) }))}>
+                  <button className="icon-button danger" type="button" title="Quitar" aria-label={`Quitar a ${playerLabel(menu.players, player)}`} onClick={() => setConfirmRemove(player.id)}>
                     <CloseIcon />
                   </button>
                 </div>
@@ -282,17 +520,24 @@ export default function App() {
           </section>
 
           <section className="team-actions">
-            <button className="btn" type="button" onClick={addPlayer}>
-              Add
+            <button className="btn" type="button" onClick={addPlayer} disabled={menu.players.length >= maxPlayers}>
+              <PlusIcon />
+              Añadir jugador
             </button>
             <button className="btn" type="button" onClick={() => launch("whack-a-mole")}>
-              Quick
+              <BoltIcon />
+              Inicio rápido
             </button>
           </section>
+
+          <button className="btn primary drawer-done" type="button" onClick={() => setTeamOpen(false)}>
+            <CheckIcon />
+            Listo
+          </button>
         </aside>
 
         <section className="main-panel">
-          <nav className="category-tabs" aria-label="Game categories">
+          <nav className="category-tabs" aria-label="Categorías de juegos">
             {categories.map((category) => (
               <button
                 key={category.id}
@@ -304,36 +549,46 @@ export default function App() {
                   setMenu((current) => ({ ...current, category: category.id, selectedGame: first?.id || current.selectedGame }));
                 }}
               >
-                <CategoryIcon id={category.id} />
                 {category.label}
               </button>
             ))}
           </nav>
 
-          <section className={`games ${visibleGames.length === 1 ? "single" : ""}`} aria-label="Games">
-            {visibleGames.map((game) => {
-              const playable = availableGames.has(game.id) && !game.disabled;
-              const active = status?.currentGame === game.id;
+          <section
+            key={menu.category}
+            ref={gamesScrollRef}
+            className={`games game-carousel ${visibleGames.length === 1 ? "single" : ""}`}
+            aria-label="Juegos"
+            onPointerDown={beginGamesDrag}
+            onPointerMove={moveGamesDrag}
+            onPointerUp={endGamesDrag}
+            onPointerCancel={endGamesDrag}
+          >
+            {visibleGames.map((game, index) => {
+              const future = Boolean(game.disabled);
+              const engineAvailable = availableGames.has(engineGameID(game));
+              const selected = menu.selectedGame === game.id;
+              const active = selected && status?.currentGame === engineGameID(game);
               return (
                 <button
                   key={game.id}
-                  className={`card game-card ${playable ? "" : "disabled"} ${active ? "active" : ""}`}
-                  style={{ "--c": game.color, "--crgb": hexToRGB(game.color) } as CSSProperties}
+                  className={`card game-card ${future ? "disabled" : ""} ${!future && !engineAvailable ? "unavailable" : ""} ${selected ? "selected" : ""} ${active ? "active" : ""}`}
+                  style={{ "--c": game.color, "--crgb": hexToRGB(game.color), "--i": index } as CSSProperties}
                   type="button"
-                  disabled={!playable}
-                  onClick={() => setMenu((current) => ({ ...current, selectedGame: game.id }))}
+                  disabled={future}
+                  data-game-id={game.id}
+                  aria-pressed={selected}
                 >
-                  <Preview gameID={game.id} color={game.color} />
+                  <Preview animationID={previewAnimationID(game)} />
                   <div className="game-body">
                     <h3>{game.label}</h3>
                     <p>{game.description}</p>
                     <div className="tags">
-                      <span className="tag accent">
-                        <UsersIcon />
-                        {game.players}
-                      </span>
+                      <span className="tag accent">{game.players === "Todos" ? "Todos los jugadores" : `${game.players} jugadores`}</span>
                       <span className="tag">{game.difficulty}</span>
-                      {!playable ? <span className="tag">Coming soon</span> : null}
+                      {selected ? <span className="tag selected">Seleccionado</span> : null}
+                      {future ? <span className="tag soon">Próximamente</span> : null}
+                      {!future && !engineAvailable ? <span className="tag soon">{error ? "Sin conexión" : "No disponible"}</span> : null}
                     </div>
                   </div>
                 </button>
@@ -341,29 +596,82 @@ export default function App() {
             })}
           </section>
 
-          <section className="panel launch-bar" aria-label="Launch summary">
+          <section className="panel launch-bar" aria-label="Resumen de inicio">
             <div className="launch-copy">
               {activePlayers.length
                 ? activePlayers.slice(0, 6).map((player) => (
                     <span key={player.id} className="player-pill" style={{ "--pc": player.color } as CSSProperties}>
                       <span />
-                      <span>{player.name}</span>
+                      <span>{playerLabel(menu.players, player)}</span>
                     </span>
                   ))
-                : <span className="message">No active players</span>}
-              <span className={`message ${error ? "error" : ""}`}>{error || message || `${selectedGame.label} · ${activePlayers.length || 1} player${activePlayers.length === 1 ? "" : "s"} · ${selectedDifficulty.label}`}</span>
+                : <span className="message">Sin jugadores activos</span>}
+              <span className={`message ${error ? "error" : ""}`}>
+                {error || message || (isAmbientCard(selectedGame) ? `${selectedGame.label} · Ambiente` : `${selectedGame.label} · ${activePlayers.length || 1} ${activePlayers.length === 1 ? "jugador" : "jugadores"} · ${selectedDifficulty.label}`)}
+              </span>
             </div>
-            <button className="btn primary" type="button" disabled={selectedGame.disabled || !availableGames.has(selectedGame.id)} onClick={() => launch()}>
-              {selectedGame.disabled || !availableGames.has(selectedGame.id) ? "Coming Soon" : "Start"}
-            </button>
+            {(() => {
+              const engineAvailable = availableGames.has(engineGameID(selectedGame));
+              const blocked = selectedGame.disabled || !engineAvailable;
+              const blockedLabel = selectedGame.disabled ? "Próximamente" : error ? "Sin conexión" : "No disponible";
+              return (
+                <div className="launch-actions">
+                  {supportsNarration(selectedGame) ? (
+                    <button
+                      className={`btn narration-toggle ${narrationArmedFor(selectedGame) ? "active" : ""}`}
+                      type="button"
+                      aria-pressed={narrationArmedFor(selectedGame)}
+                      onClick={() => setNarrationArmed(selectedGame, !narrationArmedFor(selectedGame))}
+                    >
+                      <BoltIcon />
+                      {narrationArmedFor(selectedGame) ? "Narración ON" : "Narración OFF"}
+                    </button>
+                  ) : null}
+                  <button className="btn primary play" type="button" disabled={blocked} onClick={() => launch()}>
+                    {blocked ? (
+                      blockedLabel
+                    ) : (
+                      <>
+                        <PlayIcon />
+                        {isAmbientCard(selectedGame) ? "Reproducir" : "Empezar"}
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })()}
           </section>
         </section>
       </section>
+      )}
+
+      {pickerPlayer ? (
+        <ColorPicker
+          player={pickerPlayer}
+          onPick={(color) => {
+            updatePlayer(pickerPlayer.id, { color });
+            setColorPickerFor(null);
+          }}
+          onClose={() => setColorPickerFor(null)}
+        />
+      ) : null}
+
+      {removePlayer ? (
+        <ConfirmDialog
+          title="¿Quitar jugador?"
+          body={`Se quitará a ${playerLabel(menu.players, removePlayer)} del equipo.`}
+          confirmLabel="Quitar"
+          cancelLabel="Cancelar"
+          onConfirm={() => deletePlayer(removePlayer.id)}
+          onCancel={() => setConfirmRemove(null)}
+        />
+      ) : null}
 
       {keyboardTarget ? (
         <TouchKeyboard
           title={keyboardTitle()}
           value={keyboardValue()}
+          placeholder={keyboardTarget.kind === "team" ? "Nombre del equipo" : "Nombre del jugador"}
           onType={typeKey}
           onBackspace={() => setKeyboardValue(keyboardValue().slice(0, -1))}
           onClear={() => setKeyboardValue("")}
@@ -375,9 +683,182 @@ export default function App() {
   );
 }
 
+function ColorPicker({ player, onPick, onClose }: { player: Player; onPick: (color: string) => void; onClose: () => void }) {
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Elegir color" onClick={onClose}>
+      <div className="modal" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <strong>Elige un color</strong>
+          <button className="icon-button" type="button" aria-label="Cerrar" onClick={onClose}>
+            <CloseIcon />
+          </button>
+        </div>
+        <div className="swatch-grid">
+          {playerColors.map((color, index) => {
+            const selected = color.toLowerCase() === player.color.toLowerCase();
+            return (
+              <button
+                key={color}
+                className={`swatch ${selected ? "selected" : ""}`}
+                style={{ "--pc": color } as CSSProperties}
+                type="button"
+                aria-label={playerColorNames[index]}
+                aria-pressed={selected}
+                onClick={() => onPick(color)}
+              >
+                {selected ? <CheckIcon /> : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmDialog({
+  title,
+  body,
+  confirmLabel,
+  cancelLabel,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={title} onClick={onCancel}>
+      <div className="modal" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <strong>{title}</strong>
+        </div>
+        <p className="modal-body">{body}</p>
+        <div className="modal-actions">
+          <button className="btn" type="button" onClick={onCancel}>
+            {cancelLabel}
+          </button>
+          <button className="btn danger" type="button" onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GameControlScreen({
+  game,
+  status,
+  players,
+  allPlayers,
+  difficulty,
+  ambient,
+  introActive,
+  countdownValue,
+  error,
+  onPauseToggle,
+  onRestart,
+  narrationSupported,
+  narrationArmed,
+  onNarrationToggle,
+  onExit,
+}: {
+  game: GameCard;
+  status: EngineStatus | null;
+  players: Player[];
+  allPlayers: Player[];
+  difficulty: string;
+  ambient: boolean;
+  introActive: boolean;
+  countdownValue: number;
+  error: string;
+  onPauseToggle: () => void;
+  onRestart: () => void;
+  narrationSupported: boolean;
+  narrationArmed: boolean;
+  onNarrationToggle: () => void;
+  onExit: () => void;
+}) {
+  const paused = Boolean(status?.paused);
+  return (
+    <section className="game-control-screen" style={{ "--c": game.color, "--crgb": hexToRGB(game.color) } as CSSProperties}>
+      <div className="game-control-main">
+        <div className="game-control-preview">
+          <Preview animationID={previewAnimationID(game)} />
+          {introActive ? (
+            <div className="countdown-overlay narration" aria-live="polite">
+              <span>Narración</span>
+            </div>
+          ) : countdownValue > 0 ? (
+            <div className="countdown-overlay" aria-live="polite">
+              <span>{countdownValue}</span>
+            </div>
+          ) : paused ? (
+            <div className="countdown-overlay paused" aria-live="polite">
+              <span>Pausa</span>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="game-control-copy">
+          <span className="micro">{ambient ? "Ambiente activo" : "Juego activo"}</span>
+          <h2>{game.label}</h2>
+          <p>{ambient ? "Animación en curso" : introActive ? "Narración inicial" : countdownValue > 0 ? "Preparando una salida segura" : paused ? "El juego está pausado" : "Ronda en curso"}</p>
+          <div className="control-meta">
+            <span>{ambient ? "Todos los jugadores" : `${players.length || 1} ${players.length === 1 ? "jugador" : "jugadores"}`}</span>
+            <span>{ambient ? "Ambiente" : difficulty}</span>
+            <span>{status?.currentGame || engineGameID(game)}</span>
+          </div>
+          {!ambient ? <div className="control-roster">
+            {players.slice(0, 6).map((player) => (
+              <span key={player.id} className="player-pill" style={{ "--pc": player.color } as CSSProperties}>
+                <span />
+                <span>{playerLabel(allPlayers, player)}</span>
+              </span>
+            ))}
+          </div> : null}
+          {error ? <div className="message error">{error}</div> : null}
+        </div>
+      </div>
+
+      <div className="game-control-actions">
+        <button className="btn control-action" type="button" onClick={onPauseToggle}>
+          {paused ? <PlayIcon /> : <PauseIcon />}
+          {paused ? "Reanudar" : "Pausar"}
+        </button>
+        <button className="btn control-action" type="button" onClick={onRestart}>
+          <RestartIcon />
+          Reiniciar
+        </button>
+        {narrationSupported ? (
+          <button
+            className={`btn control-action narration-toggle ${narrationArmed ? "active" : ""}`}
+            type="button"
+            aria-pressed={narrationArmed}
+            onClick={onNarrationToggle}
+          >
+            <BoltIcon />
+            {narrationArmed ? "Narración ON" : "Narración OFF"}
+          </button>
+        ) : null}
+        <button className="btn control-action danger" type="button" onClick={onExit}>
+          <CloseIcon />
+          Salir
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function TouchKeyboard({
   title,
   value,
+  placeholder,
   onType,
   onBackspace,
   onClear,
@@ -386,6 +867,7 @@ function TouchKeyboard({
 }: {
   title: string;
   value: string;
+  placeholder: string;
   onType: (key: string) => void;
   onBackspace: () => void;
   onClear: () => void;
@@ -393,14 +875,17 @@ function TouchKeyboard({
   onDone: () => void;
 }) {
   return (
-    <section className="touch-keyboard" aria-label="Touch keyboard" onMouseDown={(event) => event.preventDefault()}>
-      <div className="keyboard-head">
-        <div>
+    <section className="touch-keyboard" aria-label="Teclado táctil" onMouseDown={(event) => event.preventDefault()}>
+      <div className="kb-display">
+        <div className="kb-field">
           <span className="micro">{title}</span>
-          <strong>{value || "Tap keys below"}</strong>
+          <div className="kb-value">
+            {value ? <span>{value}</span> : <span className="kb-placeholder">{placeholder}</span>}
+            <span className="kb-caret" />
+          </div>
         </div>
-        <button className="key done" type="button" onClick={onDone}>
-          Done
+        <button className="kb-clear" type="button" onClick={onClear} disabled={!value}>
+          Borrar todo
         </button>
       </div>
       <div className="keyboard-rows">
@@ -414,14 +899,14 @@ function TouchKeyboard({
           </div>
         ))}
         <div className="keyboard-row keyboard-tools">
-          <button className="key utility" type="button" onClick={onClear}>
-            Clear
+          <button className="key utility" type="button" aria-label="Borrar" onClick={onBackspace}>
+            <BackspaceIcon />
           </button>
           <button className="key space" type="button" onClick={onSpace}>
-            Space
+            Espacio
           </button>
-          <button className="key utility" type="button" onClick={onBackspace}>
-            Delete
+          <button className="key done" type="button" onClick={onDone}>
+            Listo
           </button>
         </div>
       </div>
@@ -429,21 +914,11 @@ function TouchKeyboard({
   );
 }
 
-function Preview({ gameID, color }: { gameID: string; color: string }) {
-  const cells = [];
-  for (let y = 0; y < 32; y++) {
-    for (let x = 0; x < 16; x++) {
-      const pulse = 0.32 + 0.34 * Math.sin((x * 0.7 + y * 0.32 + gameID.length) * 0.9);
-      cells.push(<span key={`${x}-${y}`} style={{ background: mix("#06101a", color, Math.max(0.05, pulse)) }} />);
-    }
-  }
-  const iconName = games.find((game) => game.id === gameID)?.icon || "loop";
+function Preview({ animationID }: { animationID: string }) {
+  const anim = floorAnimations[animationID] || defaultFloorAnim;
   return (
     <div className="preview">
-      <div className="preview-grid">{cells}</div>
-      <span className="glyph">
-        <GameIcon name={iconName} />
-      </span>
+      <FloorPreview anim={anim} orientation="landscape" />
     </div>
   );
 }

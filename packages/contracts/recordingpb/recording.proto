@@ -10,6 +10,11 @@ message FrameRecord {
   uint32 width = 3;
   uint32 height = 4;
   repeated TileState tiles = 5;
+  string session_id = 6;
+  uint64 game_frame_sequence = 7;
+  int64 game_unix_nanos = 8;
+  int64 controller_received_unix_nanos = 9;
+  int64 controller_presented_unix_nanos = 10;
 }
 
 message TileState {
