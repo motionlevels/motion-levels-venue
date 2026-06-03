@@ -53,6 +53,42 @@ export function playerLabelES(label: string): string {
   return colorNamesES[label.trim().toLowerCase()] || label;
 }
 
+// Spanish display titles per game id; falls back to the engine-provided label.
+const gameTitlesES: Record<string, string> = {
+  "whack-a-mole": "Atrapa al topo",
+  lava: "El suelo es lava",
+  loop: "Arcoíris",
+  "ambient-comet": "Cometas",
+  "ambient-pulse": "Pulso",
+  "ambient-spark": "Chispas",
+};
+
+export function gameTitleES(currentGame: string, label: string): string {
+  return gameTitlesES[currentGame] || label;
+}
+
+// Some engine event messages are still English; translate the known ones while preserving
+// already-localized, informative messages (e.g. lava's "Plataforma nueva · 3").
+const eventMessagesES: Record<string, string> = {
+  start: "¡A jugar!",
+  starting: "¡A jugar!",
+  miss: "Fallo",
+  "time up": "¡Tiempo!",
+  win: "¡Tiempo!",
+  finished: "¡Tiempo!",
+};
+
+export function eventMessageES(cue: string, message: string): string {
+  const text = (message || "").trim();
+  if (!text) return cue ? eventMessagesES[cue.toLowerCase()] || "" : "";
+  const direct = eventMessagesES[text.toLowerCase()];
+  if (direct) return direct;
+  // "<Color> +N" score events: translate the color word, keep the delta.
+  const hit = text.match(/^(\p{L}+)\s*(\+\d+)$/u);
+  if (hit) return `${playerLabelES(hit[1])} ${hit[2]}`;
+  return text;
+}
+
 export function difficultyLabelES(difficulty: string): string {
   switch (difficulty) {
     case "easy":

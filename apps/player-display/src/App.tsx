@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./api";
-import { colorCSS, colorRGB, difficultyLabelES, formatClock, phaseLabel, playerLabelES } from "./utils";
+import { colorCSS, colorRGB, difficultyLabelES, eventMessageES, formatClock, gameTitleES, phaseLabel, playerLabelES } from "./utils";
 
 const emptyStatus: DisplayStatus = {
   currentGame: "loop",
@@ -89,7 +89,7 @@ export default function App() {
         </div>
         <div className="game-title">
           <span>{phaseLabel(status.phase)}</span>
-          <h1>{status.label}</h1>
+          <h1>{gameTitleES(status.currentGame, status.label)}</h1>
         </div>
         <div className="connection">
           <strong>{connected ? "En directo" : "Sin conexión"}</strong>
@@ -141,7 +141,7 @@ export default function App() {
           <strong>{status.activeTargets}</strong>
         </div>
         <div className={`event-strip ${status.lastEventCue ? "active" : ""}`}>
-          <span>{status.lastEventMessage || "Listo"}</span>
+          <span>{eventMessageES(status.lastEventCue, status.lastEventMessage) || "Listo"}</span>
         </div>
         <div className="mini-stat">
           <span>Dificultad</span>
