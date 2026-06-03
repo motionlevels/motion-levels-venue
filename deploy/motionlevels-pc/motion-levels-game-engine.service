@@ -1,0 +1,31 @@
+[Unit]
+Description=Motion Levels game engine
+After=network-online.target sound.target motion-levels-floor-controller.service
+Wants=network-online.target sound.target motion-levels-floor-controller.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/motion-levels/rebuild
+EnvironmentFile=-/etc/motion-levels/platform.env
+ExecStart=/opt/motion-levels/rebuild/bin/game-engine \
+  -http :8082 \
+  -controller 127.0.0.1:9090 \
+  -pressure-events 127.0.0.1:9091 \
+  -game loop \
+  -fps 20 \
+  -brightness 80 \
+  -audio=true \
+  -audio-player aplay-raw \
+  -audio-assets /opt/motion-levels/rebuild/content/audio \
+  -record-sessions /opt/motion-levels/rebuild/var/game-engine/sessions \
+  -session-segment-bytes 268435456 \
+  -display-snapshot-fps 4 \
+  -platform-url https://platform.motionlevels.obis.dev \
+  -platform-sync-interval 1s \
+  -controller-id-file /opt/motion-levels/rebuild/var/floor-controller/controller-id
+Restart=always
+RestartSec=2
+Environment=GOMAXPROCS=2
+
+[Install]
+WantedBy=multi-user.target

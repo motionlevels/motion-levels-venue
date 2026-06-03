@@ -12,7 +12,14 @@ type selectGameRequest struct {
 	Game             string `json:"game"`
 	PlayerCount      int    `json:"playerCount"`
 	Difficulty       string `json:"difficulty"`
+	Level            string `json:"level"`
 	NarrationEnabled *bool  `json:"narrationEnabled"`
+	TeamName         string `json:"teamName"`
+	Players          []struct {
+		Index int          `json:"index"`
+		Label string       `json:"label"`
+		Color displayColor `json:"color"`
+	} `json:"players"`
 }
 
 type controlGameRequest struct {
@@ -62,7 +69,20 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		runtime.SelectGameWithOptions(request.Game, request.PlayerCount, request.Difficulty, request.NarrationEnabled)
+		players := make([]playerConfig, 0, len(request.Players))
+		for _, player := range request.Players {
+			color := player.Color
+			players = append(players, playerConfig{
+				Index: player.Index,
+				Label: player.Label,
+				Color: &color,
+			})
+		}
+		if err := validatePlayerRoster(players, request.PlayerCount); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		runtime.SelectGameWithMetadata(request.Game, request.PlayerCount, request.Difficulty, request.Level, request.NarrationEnabled, request.TeamName, players)
 		writeJSON(w, runtime.Status())
 	})
 	mux.HandleFunc("/api/control", func(w http.ResponseWriter, r *http.Request) {

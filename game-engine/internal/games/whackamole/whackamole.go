@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/rand"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -68,6 +69,11 @@ type PlayerSnapshot struct {
 	Score int
 }
 
+type PlayerConfig struct {
+	Label string
+	Color RGB
+}
+
 type Snapshot struct {
 	Phase           string
 	Players         []PlayerSnapshot
@@ -85,6 +91,7 @@ type Game struct {
 	mu sync.Mutex
 
 	players []playerState
+	roster  []playerInfo
 	targets []target
 	hits    map[Point]int
 
@@ -108,18 +115,21 @@ type playerState struct {
 	catchUpBonus time.Duration
 }
 
+type playerInfo struct {
+	label string
+	rgb   RGB
+}
+
 type target struct {
 	player   int
+	tint     RGB
 	origin   Point
 	born     time.Time
 	deadline time.Time
 	active   bool
 }
 
-var playerColors = []struct {
-	label string
-	rgb   RGB
-}{
+var defaultPlayerColors = []playerInfo{
 	{label: "Blue", rgb: RGB{R: 0, G: 65, B: 255}},
 	{label: "Green", rgb: RGB{R: 0, G: 255, B: 60}},
 	{label: "Pink", rgb: RGB{R: 255, G: 0, B: 212}},
@@ -133,16 +143,21 @@ func New(playerCount int, now time.Time) *Game {
 }
 
 func NewWithSeed(playerCount int, now time.Time, seed int64) *Game {
-	playerCount = clampInt(playerCount, 1, len(playerColors))
+	return NewWithSeedAndPlayers(defaultPlayerConfig(playerCount), now, seed)
+}
+
+func NewWithSeedAndPlayers(players []PlayerConfig, now time.Time, seed int64) *Game {
+	roster := normalizePlayerConfig(players)
 	game := &Game{
-		players:         make([]playerState, playerCount),
-		startPadPresses: make([]map[Point]bool, playerCount),
-		startPadHold:    make([]time.Time, playerCount),
+		players:         make([]playerState, len(roster)),
+		roster:          roster,
+		startPadPresses: make([]map[Point]bool, len(roster)),
+		startPadHold:    make([]time.Time, len(roster)),
 		hits:            make(map[Point]int),
 		lastTick:        now,
 		rng:             rand.New(rand.NewSource(seed)),
 	}
-	game.startPadOrigins = game.shuffledStartPadOrigins(playerCount)
+	game.startPadOrigins = game.shuffledStartPadOrigins(len(roster))
 	for i := range game.startPadPresses {
 		game.startPadPresses[i] = map[Point]bool{}
 	}
@@ -181,7 +196,7 @@ func (g *Game) Press(event PressEvent, now time.Time) []Event {
 	for i, target := range g.targets {
 		if target.active && target.contains(pt) && now.Before(target.deadline) {
 			points, player := g.hitTargetLocked(i, now)
-			return []Event{{Cue: CueHit, Message: playerColors[player].label + " +" + strconv.Itoa(points)}}
+			return []Event{{Cue: CueHit, Message: g.playerLabel(player) + " +" + strconv.Itoa(points)}}
 		}
 	}
 	return []Event{{Cue: CueMiss, Message: "miss"}}
@@ -214,16 +229,10 @@ func (g *Game) Snapshot(now time.Time) Snapshot {
 
 	players := make([]PlayerSnapshot, 0, len(g.players))
 	for i, player := range g.players {
-		color := RGB{}
-		label := "Player " + strconv.Itoa(i+1)
-		if i >= 0 && i < len(playerColors) {
-			color = playerColors[i].rgb
-			label = playerColors[i].label
-		}
 		players = append(players, PlayerSnapshot{
 			Index: i,
-			Label: label,
-			Color: color,
+			Label: g.playerLabel(i),
+			Color: g.playerColor(i),
 			Score: player.score,
 		})
 	}
@@ -387,7 +396,7 @@ func (g *Game) startPadColorLocked(pt Point, now time.Time) RGB {
 	blinkVisible := g.awaitingPlayers() || setupBlinkVisible(g.setupStarted, now)
 	for player := range g.players {
 		if g.startPadContains(player, pt) {
-			color := playerColors[player].rgb
+			color := g.playerColor(player)
 			if g.startPadOccupiedLocked(player, now) {
 				return saturatedRGB(color)
 			}
@@ -539,6 +548,7 @@ func (g *Game) spawnTarget(player int, now time.Time) {
 	state.hasLastSpawn = true
 	g.targets = append(g.targets, target{
 		player:   player,
+		tint:     g.playerColor(player),
 		origin:   origin,
 		born:     now,
 		deadline: now.Add(life),
@@ -663,10 +673,10 @@ func (t target) score(now time.Time) int {
 
 func (t target) color(now time.Time) RGB {
 	ratio := t.ratio(now)
-	if ratio <= 0 || t.player < 0 || t.player >= len(playerColors) {
+	if ratio <= 0 {
 		return RGB{}
 	}
-	base := playerColors[t.player].rgb
+	base := t.tint
 	brightness := math.Pow(ratio, 1.35)
 	if remaining := t.deadline.Sub(now); remaining < time.Second {
 		brightness *= clamp01(float64(remaining) / float64(time.Second))
@@ -701,6 +711,57 @@ func scaleRGB(color RGB, scale float64) RGB {
 		G: clampByte(int(math.Round(float64(color.G) * scale))),
 		B: clampByte(int(math.Round(float64(color.B) * scale))),
 	}
+}
+
+func defaultPlayerConfig(playerCount int) []PlayerConfig {
+	playerCount = clampInt(playerCount, 1, len(defaultPlayerColors))
+	players := make([]PlayerConfig, playerCount)
+	for i := range players {
+		players[i] = PlayerConfig{
+			Label: defaultPlayerColors[i].label,
+			Color: defaultPlayerColors[i].rgb,
+		}
+	}
+	return players
+}
+
+func normalizePlayerConfig(players []PlayerConfig) []playerInfo {
+	count := clampInt(len(players), 1, len(defaultPlayerColors))
+	normalized := make([]playerInfo, count)
+	for i := 0; i < count; i++ {
+		fallback := defaultPlayerColors[i]
+		config := PlayerConfig{}
+		if i < len(players) {
+			config = players[i]
+		}
+		label := strings.TrimSpace(config.Label)
+		if label == "" {
+			label = fallback.label
+		}
+		color := config.Color
+		if color == (RGB{}) {
+			color = fallback.rgb
+		}
+		normalized[i] = playerInfo{label: label, rgb: color}
+	}
+	return normalized
+}
+
+func (g *Game) playerLabel(player int) string {
+	if player >= 0 && player < len(g.roster) && strings.TrimSpace(g.roster[player].label) != "" {
+		return g.roster[player].label
+	}
+	return "Player " + strconv.Itoa(player+1)
+}
+
+func (g *Game) playerColor(player int) RGB {
+	if player >= 0 && player < len(g.roster) && g.roster[player].rgb != (RGB{}) {
+		return g.roster[player].rgb
+	}
+	if player >= 0 && player < len(defaultPlayerColors) {
+		return defaultPlayerColors[player].rgb
+	}
+	return RGB{}
 }
 
 func clampByte(value int) byte {

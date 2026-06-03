@@ -35,10 +35,18 @@ export type DisplayStatus = {
   lastEventMessage: string;
 };
 
-const fallbackEngineURL = "http://127.0.0.1:8082";
+const enginePort = "8082";
+const localEngineURL = `http://127.0.0.1:${enginePort}`;
+
+function inferEngineURL(): string {
+  if (typeof window === "undefined" || !window.location.hostname || window.location.protocol === "file:") {
+    return localEngineURL;
+  }
+  return `${window.location.protocol}//${window.location.hostname}:${enginePort}`;
+}
 
 export function engineBaseURL(): string {
-  return import.meta.env.VITE_GAME_ENGINE_URL || fallbackEngineURL;
+  return import.meta.env.VITE_GAME_ENGINE_URL || inferEngineURL();
 }
 
 export async function fetchDisplayStatus(): Promise<DisplayStatus> {

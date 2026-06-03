@@ -1,0 +1,40 @@
+[Unit]
+Description=Motion Levels floor controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/motion-levels/rebuild
+EnvironmentFile=-/etc/motion-levels/platform.env
+ExecStart=/opt/motion-levels/rebuild/bin/floor-controller \
+  -http :8080 \
+  -frames :9090 \
+  -input-events :9091 \
+  -recv-port 7800 \
+  -broadcast-ip 255.255.255.255 \
+  -broadcast-port 4626 \
+  -controller-id-file /opt/motion-levels/rebuild/var/floor-controller/controller-id \
+  -record-frames /opt/motion-levels/rebuild/var/floor-controller/recordings \
+  -record-compression none \
+  -record-post-compression zstd \
+  -record-segment-bytes 268435456 \
+  -record-segment-duration 10m \
+  -record-delete-raw-after 1h \
+  -record-max-pending-raw-bytes 4294967296 \
+  -record-upload-platform-url https://platform.motionlevels.obis.dev \
+  -record-upload-queue-size 256 \
+  -record-upload-timeout 5m \
+  -zstd-path /usr/bin/zstd \
+  -refresh-fps 30 \
+  -engine-fade-delay 2s \
+  -engine-fade-duration 3s
+Restart=always
+RestartSec=2
+Nice=-5
+CPUWeight=1000
+LimitNOFILE=65536
+Environment=GOMAXPROCS=2
+
+[Install]
+WantedBy=multi-user.target

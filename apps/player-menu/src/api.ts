@@ -8,12 +8,15 @@ export type EngineGame = {
   maxPlayers: number;
   difficulty: boolean;
   volume: number;
+  levels?: Array<{ id: string; label: string; description: string }>;
 };
 
 export type EngineStatus = {
   currentGame: string;
   label: string;
   difficulty: string;
+  level?: string;
+  teamName: string;
   playerCount: number;
   music: string;
   musicVolume: number;
@@ -31,13 +34,28 @@ export type SelectGameRequest = {
   game: string;
   playerCount: number;
   difficulty?: string;
+  level?: string;
   narrationEnabled?: boolean;
+  teamName?: string;
+  players?: Array<{
+    index: number;
+    label: string;
+    color: { r: number; g: number; b: number };
+  }>;
 };
 
-const fallbackEngineURL = "http://127.0.0.1:8082";
+const enginePort = "8082";
+const localEngineURL = `http://127.0.0.1:${enginePort}`;
+
+function inferEngineURL(): string {
+  if (typeof window === "undefined" || !window.location.hostname || window.location.protocol === "file:") {
+    return localEngineURL;
+  }
+  return `${window.location.protocol}//${window.location.hostname}:${enginePort}`;
+}
 
 export function engineBaseURL(): string {
-  return import.meta.env.VITE_GAME_ENGINE_URL || fallbackEngineURL;
+  return import.meta.env.VITE_GAME_ENGINE_URL || inferEngineURL();
 }
 
 export async function fetchEngineStatus(): Promise<EngineStatus> {

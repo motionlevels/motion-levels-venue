@@ -93,6 +93,9 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 	if mole.MusicRef != "Motion/canciones/Musica8.mp3" {
 		t.Fatalf("mole music = %q, want Musica8", mole.MusicRef)
 	}
+	if mole.NarrationCueRef != "Motion/narraciones/atrapa-topos-intro.mp3" {
+		t.Fatalf("mole narration = %q, want atrapa-topos intro", mole.NarrationCueRef)
+	}
 
 	lava := configForSelection(base, "el-suelo-es-lava", 3)
 	if lava.Game != "lava" || lava.PlayerCount != 3 {
@@ -106,6 +109,14 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 	}
 	if lava.NarrationCueRef != "Motion/narraciones/lava-intro.mp3" {
 		t.Fatalf("lava narration = %q, want lava intro", lava.NarrationCueRef)
+	}
+
+	parkour := configForSelection(base, "jump", 4)
+	if parkour.Game != "parkour" || parkour.PlayerCount != 1 || parkour.Level != "starter" {
+		t.Fatalf("parkour selection = %+v", parkour)
+	}
+	if parkour.MusicRef != "Motion/canciones/Background07.mp3" {
+		t.Fatalf("parkour music = %q, want Background07", parkour.MusicRef)
 	}
 
 	loop := configForSelection(base, "loop", 6)
@@ -143,8 +154,8 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if len(status.Catalog) != 6 {
-		t.Fatalf("catalog = %d entries, want 6", len(status.Catalog))
+	if len(status.Catalog) != 7 {
+		t.Fatalf("catalog = %d entries, want 7", len(status.Catalog))
 	}
 
 	body := bytes.NewBufferString(`{"game":"lava","playerCount":3,"difficulty":"expert"}`)
@@ -161,6 +172,106 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	}
 	if status.CurrentGame != "lava" || status.PlayerCount != 3 || status.Difficulty != "expert" {
 		t.Fatalf("selected status = %+v", status)
+	}
+
+	body = bytes.NewBufferString(`{"game":"parkour","playerCount":3,"level":"classic"}`)
+	response, err = http.Post(server.URL+"/api/select", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("parkour select response = %d", response.StatusCode)
+	}
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status.CurrentGame != "parkour" || status.PlayerCount != 1 || status.Level != "classic" {
+		t.Fatalf("selected parkour status = %+v", status)
+	}
+}
+
+func TestGameAPIRejectsDuplicatePlayerNames(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
+	server := httptest.NewServer(gameAPIHandler(runtime))
+	defer server.Close()
+
+	body := bytes.NewBufferString(`{"game":"lava","playerCount":2,"players":[{"index":0,"label":"Nora","color":{"r":10,"g":20,"b":30}},{"index":1,"label":" nora ","color":{"r":40,"g":50,"b":60}}]}`)
+	response, err := http.Post(server.URL+"/api/select", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("select response = %d, want %d", response.StatusCode, http.StatusBadRequest)
+	}
+	if runtime.Status().CurrentGame == "lava" {
+		t.Fatal("duplicate roster should not select lava")
+	}
+}
+
+func TestGameAPIRejectsDuplicatePlayerColors(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
+	server := httptest.NewServer(gameAPIHandler(runtime))
+	defer server.Close()
+
+	body := bytes.NewBufferString(`{"game":"lava","playerCount":2,"players":[{"index":0,"label":"Nora","color":{"r":10,"g":20,"b":30}},{"index":1,"label":"Leo","color":{"r":10,"g":20,"b":30}}]}`)
+	response, err := http.Post(server.URL+"/api/select", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("select response = %d, want %d", response.StatusCode, http.StatusBadRequest)
+	}
+	if runtime.Status().CurrentGame == "lava" {
+		t.Fatal("duplicate roster should not select lava")
+	}
+}
+
+func TestPlatformSyncPostsSessionSnapshot(t *testing.T) {
+	var auth string
+	var payload platformSessionPayload
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = r.Header.Get("authorization")
+		if r.URL.Path != "/api/ingest/session" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer server.Close()
+
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 2, Game: "lava", Difficulty: "hard"}, nil, nil)
+	syncer, err := newPlatformSyncer(runtime, config{
+		PlatformURL:          server.URL,
+		PlatformToken:        "test-token",
+		ControllerID:         "controller-1",
+		PlatformSyncInterval: time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syncer.syncOnce(time.Unix(100, 0)); err != nil {
+		t.Fatal(err)
+	}
+
+	if auth != "Bearer test-token" {
+		t.Fatalf("authorization = %q", auth)
+	}
+	if payload.ControllerID != "controller-1" || payload.Game != "lava" || payload.Label != "El suelo es lava" {
+		t.Fatalf("payload metadata = %+v", payload)
+	}
+	if payload.SessionID == "" || payload.Status != "open" || payload.StartedAt == "" {
+		t.Fatalf("payload session fields = %+v", payload)
+	}
+	if len(payload.Players) != 2 {
+		t.Fatalf("players = %d, want 2", len(payload.Players))
+	}
+	if len(payload.DisplaySnapshots) != 1 || payload.DisplaySnapshots[0].SnapshotKey == "" {
+		t.Fatalf("snapshots = %+v", payload.DisplaySnapshots)
 	}
 }
 
@@ -413,6 +524,49 @@ func TestFirstNarrationHoldsLavaCountdown(t *testing.T) {
 		t.Fatalf("second launch status = %+v, want no intro hold", status)
 	}
 	backend.waitForCount(t, countdownPath, 2)
+}
+
+func TestWhackAMoleCountdownPlaysAfterPlayersAreReady(t *testing.T) {
+	dir := t.TempDir()
+	countdownRef := "Motion/narraciones/countdown.wav"
+	countdownPath := filepath.Join(dir, filepath.FromSlash(countdownRef))
+	if err := os.MkdirAll(filepath.Dir(countdownPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSilentWAV(countdownPath, 300*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+
+	backend := &recordingBackend{}
+	player := audio.NewPlayer(dir, backend)
+	runtime := newGameRuntime(config{
+		Brightness:      80,
+		PlayerCount:     1,
+		Game:            "loop",
+		CountdownCueRef: countdownRef,
+		StartCueRef:     "",
+		MusicRef:        "",
+	}, player, nil)
+
+	skip := false
+	runtime.SelectGameWithOptions("whack-a-mole", 1, "", &skip)
+	time.Sleep(20 * time.Millisecond)
+	if got := backend.count(countdownPath); got != 0 {
+		t.Fatalf("countdown before ready = %d, want 0", got)
+	}
+
+	now := time.Now()
+	for y := 0; y < animation.GridHeight; y++ {
+		for x := 0; x < animation.GridWidth; x++ {
+			runtime.HandlePressure(&inputpb.PressureEvent{
+				X:         uint32(x),
+				Y:         uint32(y),
+				Pressed:   true,
+				UnixNanos: now.UnixNano(),
+			}, now)
+		}
+	}
+	backend.waitForCount(t, countdownPath, 1)
 }
 
 type recordingBackend struct {

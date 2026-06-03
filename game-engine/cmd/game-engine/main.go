@@ -7,11 +7,13 @@ import (
 	"log"
 	"math"
 	"net"
+	"os"
 	"time"
 
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
 	"github.com/lobis/motion-levels/game-engine/internal/games/lava"
+	"github.com/lobis/motion-levels/game-engine/internal/games/parkour"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
 	"github.com/lobis/motion-levels/packages/contracts/inputpb"
@@ -25,7 +27,10 @@ type config struct {
 	PressureAddr             string
 	Game                     string
 	Difficulty               string
+	Level                    string
 	PlayerCount              int
+	TeamName                 string
+	Players                  []playerConfig
 	FPS                      int
 	Brightness               int
 	AudioEnabled             bool
@@ -46,6 +51,11 @@ type config struct {
 	SessionRecordingPath     string
 	SessionRecordingMaxBytes int64
 	DisplaySnapshotFPS       int
+	PlatformURL              string
+	PlatformToken            string
+	PlatformSyncInterval     time.Duration
+	ControllerID             string
+	ControllerIDFile         string
 }
 
 type floorGame interface {
@@ -58,8 +68,9 @@ func main() {
 	flag.StringVar(&cfg.HTTPAddr, "http", ":8082", "HTTP address for the game-engine API; empty disables")
 	flag.StringVar(&cfg.ControllerAddr, "controller", "127.0.0.1:9090", "floor-controller frame stream address")
 	flag.StringVar(&cfg.PressureAddr, "pressure-events", "127.0.0.1:9091", "floor-controller pressure event stream address")
-	flag.StringVar(&cfg.Game, "game", "loop", "game to run: loop, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, or lava")
+	flag.StringVar(&cfg.Game, "game", "loop", "game to run: loop, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, or parkour")
 	flag.StringVar(&cfg.Difficulty, "difficulty", "easy", "difficulty for games that support it: easy, medium, hard, expert")
+	flag.StringVar(&cfg.Level, "level", "starter", "level for games that support level selection")
 	flag.IntVar(&cfg.PlayerCount, "players", 1, "number of players for focused games")
 	flag.IntVar(&cfg.FPS, "fps", 20, "frames per second")
 	flag.IntVar(&cfg.Brightness, "brightness", 80, "brightness percentage, 1-100")
@@ -81,6 +92,11 @@ func main() {
 	flag.StringVar(&cfg.SessionRecordingPath, "record-sessions", "game-recordings", "directory or .game.pbstream path for game session recordings; empty disables")
 	flag.Int64Var(&cfg.SessionRecordingMaxBytes, "session-segment-bytes", 256<<20, "maximum bytes per game session recording segment")
 	flag.IntVar(&cfg.DisplaySnapshotFPS, "display-snapshot-fps", 4, "display snapshots per second to write into game session recordings")
+	flag.StringVar(&cfg.PlatformURL, "platform-url", os.Getenv("MOTION_LEVELS_PLATFORM_URL"), "platform base URL for session ingest; empty disables")
+	flag.StringVar(&cfg.PlatformToken, "platform-token", os.Getenv("MOTION_LEVELS_PLATFORM_TOKEN"), "platform bearer token for session ingest; can also use MOTION_LEVELS_PLATFORM_TOKEN")
+	flag.DurationVar(&cfg.PlatformSyncInterval, "platform-sync-interval", time.Second, "how often to publish session state to the platform")
+	flag.StringVar(&cfg.ControllerID, "controller-id", "", "stable controller UUID to attach platform session records to")
+	flag.StringVar(&cfg.ControllerIDFile, "controller-id-file", "", "file containing the stable controller UUID")
 	flag.Parse()
 
 	cfg.normalize()
@@ -113,6 +129,7 @@ func main() {
 
 	runtime := newGameRuntime(cfg, audioPlayer, sessionRecorder)
 	runtime.StartDisplaySnapshotRecording(displaySnapshotInterval(cfg.DisplaySnapshotFPS))
+	startPlatformSync(runtime, cfg)
 	go serveGameAPI(cfg.HTTPAddr, runtime)
 	for {
 		if err := run(cfg, runtime); err != nil {
@@ -125,6 +142,12 @@ func main() {
 func (c *config) normalize() {
 	c.Game = normalizeGame(c.Game)
 	c.Difficulty = normalizeDifficulty(c.Difficulty)
+	if c.Game == "parkour" {
+		c.Level = parkour.NormalizeLevel(c.Level)
+		c.PlayerCount = 1
+	} else {
+		c.Level = ""
+	}
 	if c.PlayerCount < 1 {
 		c.PlayerCount = 1
 	}
@@ -154,6 +177,10 @@ func (c *config) normalize() {
 	if c.Game == "lava" && c.MusicRef == "Motion/canciones/Background01.mp3" {
 		c.MusicRef = lava.DefaultMusicRef
 		c.MusicVolume = lava.DefaultMusicVolume
+	}
+	if c.Game == "parkour" && c.MusicRef == "Motion/canciones/Background01.mp3" {
+		c.MusicRef = parkour.DefaultMusicRef
+		c.MusicVolume = parkour.DefaultMusicVolume
 	}
 	if c.NarrationCueRef == "" {
 		c.NarrationCueRef = defaultNarrationRef(c.Game)
@@ -341,6 +368,8 @@ func normalizeGame(value string) string {
 		return "whack-a-mole"
 	case "lava", "floor-is-lava", "el-suelo-es-lava":
 		return "lava"
+	case "parkour", "jump", "salto", "salamandra":
+		return "parkour"
 	case "loop", "ambient-comet", "ambient-pulse", "ambient-spark":
 		return value
 	default:

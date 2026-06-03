@@ -173,6 +173,38 @@ const lava: FloorAnim = (x, y, cols, rows, t) => {
   return [255 * flicker, (45 + 150 * heat) * flicker, 8 * heat * flicker];
 };
 
+// Parkour: blue current platform, travelling green target, and red lava underneath.
+const parkour: FloorAnim = (x, y, cols, rows, t) => {
+  const current = { x: Math.floor(cols / 2), y: 4 };
+  const path = [
+    { x: 4, y: 12 },
+    { x: 11, y: 16 },
+    { x: 5, y: 23 },
+    { x: 12, y: 27 },
+  ];
+  const step = Math.floor(t / 1.7);
+  const target = path[step % path.length];
+  const previous = path[(step + path.length - 1) % path.length];
+  const phase = (t / 1.7) % 1;
+  const visual = {
+    x: Math.round(previous.x + (target.x - previous.x) * phase),
+    y: Math.round(previous.y + (target.y - previous.y) * phase),
+  };
+
+  const onPlatform = (center: { x: number; y: number }) => Math.abs(x - center.x) <= 1 && Math.abs(y - center.y) <= 1;
+  if (onPlatform(current)) {
+    const pulse = 0.74 + 0.26 * Math.sin(t * 4.4);
+    return [0, 150 * pulse, 255 * pulse];
+  }
+  if (onPlatform(visual)) {
+    const pulse = 0.72 + 0.28 * Math.sin(t * 5.1);
+    return [60 * pulse, 255 * pulse, 48 * pulse];
+  }
+  const f1 = 0.5 + 0.5 * Math.sin(x * 0.75 + y * 0.22 + t * 1.9);
+  const f2 = 0.5 + 0.5 * Math.sin(y * 0.55 - t * 2.7);
+  return [115 + 85 * f1, 4 + 40 * f2, 0];
+};
+
 // Duel: two territories push a glowing clash line back and forth across the floor.
 const duel: FloorAnim = (x, y, cols, rows, t) => {
   const blue: RGB = [0, 90, 255];
@@ -199,5 +231,6 @@ export const floorAnimations: Record<string, FloorAnim> = {
   "ambient-pulse": ambientPulse,
   "ambient-spark": ambientSpark,
   lava,
+  parkour,
   duel,
 };

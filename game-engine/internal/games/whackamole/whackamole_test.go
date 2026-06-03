@@ -102,6 +102,37 @@ func TestStartPadBeginsCountdownAndReturnsStartCue(t *testing.T) {
 	}
 }
 
+func TestConfiguredPlayersDriveSnapshotAndTargetColors(t *testing.T) {
+	now := time.Now()
+	customColor := RGB{R: 255, G: 59, B: 48}
+	game := NewWithSeedAndPlayers([]PlayerConfig{{Label: "Ana", Color: customColor}}, now, 42)
+
+	snapshot := game.Snapshot(now)
+	if len(snapshot.Players) != 1 {
+		t.Fatalf("players = %d, want 1", len(snapshot.Players))
+	}
+	if snapshot.Players[0].Label != "Ana" || snapshot.Players[0].Color != customColor {
+		t.Fatalf("snapshot player = %+v, want Ana/%+v", snapshot.Players[0], customColor)
+	}
+
+	game.setupStarted = now.Add(-4 * time.Second)
+	game.setupUntil = now.Add(-time.Second)
+	game.started = game.setupUntil
+	game.endAt = now.Add(time.Minute)
+	game.spawnTarget(0, now)
+	if len(game.targets) != 1 {
+		t.Fatalf("targets = %d, want 1", len(game.targets))
+	}
+	if game.targets[0].tint != customColor {
+		t.Fatalf("target color = %+v, want %+v", game.targets[0].tint, customColor)
+	}
+
+	events := game.Press(PressEvent{X: game.targets[0].origin.X, Y: game.targets[0].origin.Y, Pressed: true}, now.Add(200*time.Millisecond))
+	if len(events) != 1 || events[0].Cue != CueHit || events[0].Message[:3] != "Ana" {
+		t.Fatalf("events = %+v, want Ana hit", events)
+	}
+}
+
 func TestHitSpawnsReplacementAndReturnsHitCue(t *testing.T) {
 	now := time.Now()
 	game := &Game{

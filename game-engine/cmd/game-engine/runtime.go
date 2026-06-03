@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
 	"github.com/lobis/motion-levels/game-engine/internal/games/lava"
+	"github.com/lobis/motion-levels/game-engine/internal/games/parkour"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
 	"github.com/lobis/motion-levels/packages/contracts/gamepb"
@@ -62,15 +64,22 @@ const (
 )
 
 type gameCatalogEntry struct {
-	Game        string  `json:"game"`
-	Label       string  `json:"label"`
-	Description string  `json:"description"`
-	Music       string  `json:"music"`
-	Players     bool    `json:"players"`
-	MinPlayers  int     `json:"minPlayers"`
-	MaxPlayers  int     `json:"maxPlayers"`
-	Difficulty  bool    `json:"difficulty"`
-	Volume      float64 `json:"volume"`
+	Game        string           `json:"game"`
+	Label       string           `json:"label"`
+	Description string           `json:"description"`
+	Music       string           `json:"music"`
+	Players     bool             `json:"players"`
+	MinPlayers  int              `json:"minPlayers"`
+	MaxPlayers  int              `json:"maxPlayers"`
+	Difficulty  bool             `json:"difficulty"`
+	Volume      float64          `json:"volume"`
+	Levels      []gameLevelEntry `json:"levels,omitempty"`
+}
+
+type gameLevelEntry struct {
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	Description string `json:"description"`
 }
 
 type displayColor struct {
@@ -87,11 +96,19 @@ type displayPlayer struct {
 	Lives int          `json:"lives"`
 }
 
+type playerConfig struct {
+	Index int
+	Label string
+	Color *displayColor
+}
+
 type displayStatus struct {
 	CurrentGame              string          `json:"currentGame"`
 	Label                    string          `json:"label"`
 	Phase                    string          `json:"phase"`
 	Difficulty               string          `json:"difficulty"`
+	Level                    string          `json:"level,omitempty"`
+	TeamName                 string          `json:"teamName"`
 	PlayerCount              int             `json:"playerCount"`
 	Players                  []displayPlayer `json:"players"`
 	Score                    int             `json:"score"`
@@ -114,6 +131,8 @@ type runtimeStatus struct {
 	CurrentGame              string                 `json:"currentGame"`
 	Label                    string                 `json:"label"`
 	Difficulty               string                 `json:"difficulty"`
+	Level                    string                 `json:"level,omitempty"`
+	TeamName                 string                 `json:"teamName"`
 	PlayerCount              int                    `json:"playerCount"`
 	Music                    string                 `json:"music"`
 	MusicVolume              float64                `json:"musicVolume"`
@@ -150,6 +169,10 @@ func (r *gameRuntime) SelectGameWithDifficulty(game string, players int, difficu
 }
 
 func (r *gameRuntime) SelectGameWithOptions(game string, players int, difficulty string, narrationEnabled *bool) {
+	r.SelectGameWithMetadata(game, players, difficulty, "", narrationEnabled, "", nil)
+}
+
+func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficulty string, level string, narrationEnabled *bool, teamName string, roster []playerConfig) {
 	if r == nil {
 		return
 	}
@@ -157,6 +180,11 @@ func (r *gameRuntime) SelectGameWithOptions(game string, players int, difficulty
 	if difficulty != "" {
 		cfg.Difficulty = normalizeDifficulty(difficulty)
 	}
+	if level != "" {
+		cfg.Level = level
+	}
+	cfg.TeamName = strings.TrimSpace(teamName)
+	cfg.Players = normalizePlayerRoster(roster, cfg.PlayerCount)
 	mode := narrationAuto
 	if narrationEnabled != nil {
 		if *narrationEnabled {
@@ -271,6 +299,9 @@ func (r *gameRuntime) HandlePressure(event *inputpb.PressureEvent, fallbackStart
 		for _, gameEvent := range game.Press(whackamole.PressEvent{X: int(event.X), Y: int(event.Y), Pressed: event.Pressed}, gameNow) {
 			r.recordGameEvent(gameEvent.Cue, gameEvent.Message, gameNow)
 			r.playCue(cfg, audioPlayer, gameEvent.Cue, cueRef(cfg, gameEvent.Cue), gameNow)
+			if cfg.Game == "whack-a-mole" && gameEvent.Cue == whackamole.CueStart {
+				r.playCountdownCue(cfg, audioPlayer, gameNow)
+			}
 		}
 		return
 	}
@@ -305,8 +336,10 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		Label:              gameLabel(cfg.Game),
 		Phase:              "idle",
 		Difficulty:         cfg.Difficulty,
+		Level:              cfg.Level,
+		TeamName:           cfg.TeamName,
 		PlayerCount:        cfg.PlayerCount,
-		Players:            defaultDisplayPlayers(cfg.PlayerCount),
+		Players:            defaultDisplayPlayers(cfg),
 		Lives:              -1,
 		StartedUnix:        started.Unix(),
 		AudioEnabled:       audioEnabled,
@@ -332,8 +365,8 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			for _, player := range snapshot.Players {
 				status.Players = append(status.Players, displayPlayer{
 					Index: player.Index,
-					Label: player.Label,
-					Color: displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)},
+					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
+					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
 					Score: player.Score,
 					Lives: snapshot.Lives,
 				})
@@ -362,14 +395,44 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			for _, player := range snapshot.Players {
 				status.Players = append(status.Players, displayPlayer{
 					Index: player.Index,
-					Label: player.Label,
-					Color: displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)},
+					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
+					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
 					Score: player.Score,
 					Lives: snapshot.Lives,
 				})
 			}
 		}
 		r.applyIntroStatus(&status, gameNow, introUntil)
+		if paused && status.Phase != "finished" {
+			status.Phase = "paused"
+		}
+		return status
+	}
+
+	if cfg.Game == "parkour" {
+		if parkourGame, ok := game.(*parkour.Game); ok {
+			snapshot := parkourGame.Snapshot(gameNow)
+			status.Phase = snapshot.Phase
+			status.Score = snapshot.Score
+			status.StartedUnix = snapshot.StartedUnix
+			status.EndsUnix = snapshot.EndsUnix
+			status.ElapsedMillis = snapshot.ElapsedMillis
+			status.RemainingMillis = snapshot.RemainingMillis
+			status.CountdownRemainingMillis = snapshot.CountdownMillis
+			status.ActiveTargets = snapshot.ActiveTargets
+			status.Lives = snapshot.Lives
+			status.Level = snapshot.Level
+			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
+			for _, player := range snapshot.Players {
+				status.Players = append(status.Players, displayPlayer{
+					Index: player.Index,
+					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
+					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
+					Score: player.Score,
+					Lives: snapshot.Lives,
+				})
+			}
+		}
 		if paused && status.Phase != "finished" {
 			status.Phase = "paused"
 		}
@@ -405,6 +468,8 @@ func (r *gameRuntime) Status() runtimeStatus {
 		CurrentGame:              cfg.Game,
 		Label:                    gameLabel(cfg.Game),
 		Difficulty:               cfg.Difficulty,
+		Level:                    cfg.Level,
+		TeamName:                 cfg.TeamName,
 		PlayerCount:              cfg.PlayerCount,
 		Music:                    cfg.MusicRef,
 		MusicVolume:              cfg.MusicVolume,
@@ -593,7 +658,7 @@ func (r *gameRuntime) playCountdownLocked(cfg config, now time.Time) {
 
 func shouldPlayCountdownCue(cfg config) bool {
 	switch cfg.Game {
-	case "lava":
+	case "lava", "parkour":
 		return true
 	default:
 		return false
@@ -656,6 +721,23 @@ func (r *gameRuntime) playCue(cfg config, audioPlayer *audio.Player, cue string,
 	}
 	r.mu.Lock()
 	r.recordAudioCueLocked(cue, ref, cfg.CueVolume, now)
+	r.mu.Unlock()
+}
+
+func (r *gameRuntime) playCountdownCue(cfg config, audioPlayer *audio.Player, now time.Time) {
+	if cfg.CountdownCueRef == "" {
+		return
+	}
+	r.mu.RLock()
+	muted := r.audioMuted
+	r.mu.RUnlock()
+	if audioPlayer != nil && !muted {
+		if err := audioPlayer.PlayCue(cfg.CountdownCueRef, cfg.CountdownVolume); err != nil {
+			log.Printf("countdown cue: %v", err)
+		}
+	}
+	r.mu.Lock()
+	r.recordAudioCueLocked("countdown", cfg.CountdownCueRef, cfg.CountdownVolume, now)
 	r.mu.Unlock()
 }
 
@@ -843,14 +925,40 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 	switch cfg.Game {
 	case "whack-a-mole":
 		log.Printf("game: whack-a-mole players=%d", cfg.PlayerCount)
-		return whackamole.NewWithSeed(cfg.PlayerCount, now, seed)
+		return whackamole.NewWithSeedAndPlayers(whackPlayersFromConfig(cfg), now, seed)
 	case "lava":
 		log.Printf("game: lava players=%d difficulty=%s", cfg.PlayerCount, cfg.Difficulty)
 		return lava.NewWithSeed(cfg.PlayerCount, now, seed, cfg.Difficulty)
+	case "parkour":
+		log.Printf("game: parkour level=%s", cfg.Level)
+		return parkour.NewWithSeed(now, seed, cfg.Level)
 	default:
 		log.Printf("game: %s", cfg.Game)
 		return nil
 	}
+}
+
+func whackPlayersFromConfig(cfg config) []whackamole.PlayerConfig {
+	playerCount := normalizeRosterPlayerCount(cfg.PlayerCount)
+	players := make([]whackamole.PlayerConfig, playerCount)
+	for i := 0; i < playerCount; i++ {
+		color := configuredPlayerColor(cfg, i, displayColor{})
+		players[i] = whackamole.PlayerConfig{
+			Label: configuredPlayerLabel(cfg, i, fmt.Sprintf("Player %d", i+1)),
+			Color: animation.RGB{R: byte(clampColorByte(color.R)), G: byte(clampColorByte(color.G)), B: byte(clampColorByte(color.B))},
+		}
+	}
+	return players
+}
+
+func clampColorByte(value int) int {
+	if value < 0 {
+		return 0
+	}
+	if value > 255 {
+		return 255
+	}
+	return value
 }
 
 const (
@@ -991,6 +1099,11 @@ func configForSelection(base config, game string, players int) config {
 	case "lava":
 		cfg.MusicRef = lava.DefaultMusicRef
 		cfg.MusicVolume = lava.DefaultMusicVolume
+	case "parkour":
+		cfg.PlayerCount = 1
+		cfg.Level = parkour.NormalizeLevel(cfg.Level)
+		cfg.MusicRef = parkour.DefaultMusicRef
+		cfg.MusicVolume = parkour.DefaultMusicVolume
 	default:
 		cfg.MusicRef = loopMusicRef
 		cfg.MusicVolume = 0.10
@@ -1003,6 +1116,8 @@ func defaultNarrationRef(game string) string {
 	switch normalizeGame(game) {
 	case "lava":
 		return "Motion/narraciones/lava-intro.mp3"
+	case "whack-a-mole":
+		return "Motion/narraciones/atrapa-topos-intro.mp3"
 	default:
 		return ""
 	}
@@ -1012,8 +1127,8 @@ func gameCatalog() []gameCatalogEntry {
 	return []gameCatalogEntry{
 		{
 			Game:        "whack-a-mole",
-			Label:       "Whack-a-mole",
-			Description: "Colored 2x2 targets with instant hit and miss sounds.",
+			Label:       "Atrapa al topo",
+			Description: "Step onto your color, wait for the countdown, then hit your team's 2x2 targets.",
 			Music:       whackamole.DefaultMusicRef,
 			Players:     true,
 			MinPlayers:  1,
@@ -1031,6 +1146,18 @@ func gameCatalog() []gameCatalogEntry {
 			MaxPlayers:  6,
 			Difficulty:  true,
 			Volume:      lava.DefaultMusicVolume,
+		},
+		{
+			Game:        "parkour",
+			Label:       "Parkour",
+			Description: "Salta desde la plataforma azul hacia la plataforma verde y evita pisar lava.",
+			Music:       parkour.DefaultMusicRef,
+			Players:     true,
+			MinPlayers:  1,
+			MaxPlayers:  1,
+			Difficulty:  false,
+			Volume:      parkour.DefaultMusicVolume,
+			Levels:      parkourCatalogLevels(),
 		},
 		{
 			Game:        "loop",
@@ -1079,6 +1206,19 @@ func gameCatalog() []gameCatalogEntry {
 	}
 }
 
+func parkourCatalogLevels() []gameLevelEntry {
+	levels := parkour.Levels()
+	out := make([]gameLevelEntry, 0, len(levels))
+	for _, level := range levels {
+		out = append(out, gameLevelEntry{
+			ID:          level.ID,
+			Label:       level.Label,
+			Description: level.Description,
+		})
+	}
+	return out
+}
+
 func gameLabel(game string) string {
 	for _, entry := range gameCatalog() {
 		if entry.Game == game {
@@ -1088,7 +1228,8 @@ func gameLabel(game string) string {
 	return "Animation loop"
 }
 
-func defaultDisplayPlayers(playerCount int) []displayPlayer {
+func defaultDisplayPlayers(cfg config) []displayPlayer {
+	playerCount := cfg.PlayerCount
 	if playerCount < 1 {
 		playerCount = 1
 	}
@@ -1107,12 +1248,131 @@ func defaultDisplayPlayers(playerCount int) []displayPlayer {
 	for i := 0; i < playerCount; i++ {
 		players = append(players, displayPlayer{
 			Index: i,
-			Label: "Player " + string(rune('1'+i)),
-			Color: colors[i%len(colors)],
+			Label: configuredPlayerLabel(cfg, i, "Player "+string(rune('1'+i))),
+			Color: configuredPlayerColor(cfg, i, colors[i%len(colors)]),
 			Lives: -1,
 		})
 	}
 	return players
+}
+
+func normalizePlayerRoster(players []playerConfig, playerCount int) []playerConfig {
+	playerCount = normalizeRosterPlayerCount(playerCount)
+	normalized := make([]playerConfig, 0, playerCount)
+	indexes := map[int]struct{}{}
+	labels := map[string]struct{}{}
+	colors := map[string]struct{}{}
+	for fallbackIndex, player := range players {
+		if len(normalized) >= playerCount {
+			break
+		}
+		index := player.Index
+		if index < 0 || index >= playerCount {
+			index = fallbackIndex
+		}
+		if index < 0 || index >= playerCount {
+			continue
+		}
+		if _, exists := indexes[index]; exists {
+			continue
+		}
+		label := strings.TrimSpace(player.Label)
+		if labelKey := normalizedRosterLabel(label); labelKey != "" {
+			if _, exists := labels[labelKey]; exists {
+				continue
+			}
+			labels[labelKey] = struct{}{}
+		}
+		color := player.Color
+		if color != nil {
+			copied := *color
+			if colorKey := playerColorKey(copied); colorKey != "" {
+				if _, exists := colors[colorKey]; exists {
+					continue
+				}
+				colors[colorKey] = struct{}{}
+			}
+			color = &copied
+		}
+		indexes[index] = struct{}{}
+		normalized = append(normalized, playerConfig{Index: index, Label: label, Color: color})
+	}
+	return normalized
+}
+
+func validatePlayerRoster(players []playerConfig, playerCount int) error {
+	playerCount = normalizeRosterPlayerCount(playerCount)
+	indexes := map[int]struct{}{}
+	labels := map[string]string{}
+	colors := map[string]struct{}{}
+	for fallbackIndex, player := range players {
+		if fallbackIndex >= playerCount {
+			break
+		}
+		index := player.Index
+		if index < 0 || index >= playerCount {
+			index = fallbackIndex
+		}
+		if index < 0 || index >= playerCount {
+			continue
+		}
+		if _, exists := indexes[index]; exists {
+			continue
+		}
+		indexes[index] = struct{}{}
+
+		label := strings.TrimSpace(player.Label)
+		if labelKey := normalizedRosterLabel(label); labelKey != "" {
+			if previous, exists := labels[labelKey]; exists {
+				return fmt.Errorf("duplicate player name %q", previous)
+			}
+			labels[labelKey] = label
+		}
+		if player.Color != nil {
+			key := playerColorKey(*player.Color)
+			if _, exists := colors[key]; exists {
+				return fmt.Errorf("duplicate player color %s", key)
+			}
+			colors[key] = struct{}{}
+		}
+	}
+	return nil
+}
+
+func normalizeRosterPlayerCount(playerCount int) int {
+	if playerCount < 1 {
+		return 1
+	}
+	if playerCount > 6 {
+		return 6
+	}
+	return playerCount
+}
+
+func normalizedRosterLabel(label string) string {
+	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(label)), " "))
+}
+
+func playerColorKey(color displayColor) string {
+	return fmt.Sprintf("%d:%d:%d", color.R, color.G, color.B)
+}
+
+func configuredPlayerLabel(cfg config, index int, fallback string) string {
+	for _, player := range cfg.Players {
+		if player.Index == index && strings.TrimSpace(player.Label) != "" {
+			return strings.TrimSpace(player.Label)
+		}
+	}
+	return fallback
+}
+
+func configuredPlayerColor(cfg config, index int, fallback displayColor) displayColor {
+	for _, player := range cfg.Players {
+		if player.Index == index && player.Color != nil {
+			return *player.Color
+		}
+	}
+	return fallback
 }
 
 func preloadAudioRefs(cfg config) []string {
@@ -1120,6 +1380,7 @@ func preloadAudioRefs(cfg config) []string {
 		loopMusicRef,
 		whackamole.DefaultMusicRef,
 		lava.DefaultMusicRef,
+		parkour.DefaultMusicRef,
 		cfg.MusicRef,
 		cfg.StartCueRef,
 		cfg.CoinCueRef,

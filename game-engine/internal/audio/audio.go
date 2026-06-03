@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ebitengine/oto/v3"
 	"github.com/hajimehoshi/go-mp3"
 )
 
@@ -54,6 +53,13 @@ func NewPlayer(assetsDir string, backend Backend) *Player {
 
 func NewSystemPlayer(assetsDir, preferredPlayer string) (*Player, error) {
 	preferredPlayer = strings.TrimSpace(preferredPlayer)
+	if preferredPlayer == "aplay-raw" {
+		backend, err := NewRawAplayBackend()
+		if err != nil {
+			return nil, err
+		}
+		return NewPlayer(assetsDir, backend), nil
+	}
 	if preferredPlayer == "" || preferredPlayer == "native" {
 		backend, err := NewNativeBackend()
 		if err == nil {
@@ -63,6 +69,13 @@ func NewSystemPlayer(assetsDir, preferredPlayer string) (*Player, error) {
 			return nil, err
 		}
 		log.Printf("native audio unavailable, falling back to command player: %v", err)
+	}
+	if preferredPlayer == "" && runtime.GOOS == "linux" {
+		backend, err := NewRawAplayBackend()
+		if err == nil {
+			return NewPlayer(assetsDir, backend), nil
+		}
+		log.Printf("raw aplay audio unavailable, falling back to generic command player: %v", err)
 	}
 	backend, err := NewCommandBackend(preferredPlayer)
 	if err != nil {
@@ -264,91 +277,6 @@ func normalizeVolume(value, fallback float64) float64 {
 	return value
 }
 
-type NativeBackend struct {
-	ctx *oto.Context
-
-	mu    sync.Mutex
-	cache map[string]decodedAudio
-}
-
-type decodedAudio struct {
-	pcm []byte
-}
-
-func NewNativeBackend() (*NativeBackend, error) {
-	ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
-		SampleRate:   nativeSampleRate,
-		ChannelCount: 2,
-		Format:       oto.FormatSignedInt16LE,
-		BufferSize:   10 * time.Millisecond,
-	})
-	if err != nil {
-		return nil, err
-	}
-	<-ready
-	return &NativeBackend{
-		ctx:   ctx,
-		cache: make(map[string]decodedAudio),
-	}, nil
-}
-
-func (b *NativeBackend) Preload(path string) error {
-	_, err := b.load(path)
-	return err
-}
-
-func (b *NativeBackend) Play(ctx context.Context, path string, volume float64) error {
-	if b == nil || b.ctx == nil {
-		return nil
-	}
-	decoded, err := b.load(path)
-	if err != nil {
-		return err
-	}
-	player := b.ctx.NewPlayer(bytes.NewReader(decoded.pcm))
-	player.SetBufferSize(nativeSampleRate * 2 * 2 / 100)
-	player.SetVolume(normalizeVolume(volume, 1))
-	player.Play()
-	defer player.Close()
-
-	ticker := time.NewTicker(5 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		if ctx.Err() != nil {
-			player.Pause()
-			return context.Canceled
-		}
-		if err := player.Err(); err != nil {
-			return err
-		}
-		if !player.IsPlaying() {
-			return nil
-		}
-		<-ticker.C
-	}
-}
-
-func (b *NativeBackend) load(path string) (decodedAudio, error) {
-	b.mu.Lock()
-	if decoded, ok := b.cache[path]; ok {
-		b.mu.Unlock()
-		return decoded, nil
-	}
-	b.mu.Unlock()
-
-	pcm, sampleRate, channels, err := decodeAudioFile(path)
-	if err != nil {
-		return decodedAudio{}, err
-	}
-	pcm = normalizePCM(pcm, sampleRate, channels, nativeSampleRate)
-	decoded := decodedAudio{pcm: pcm}
-
-	b.mu.Lock()
-	b.cache[path] = decoded
-	b.mu.Unlock()
-	return decoded, nil
-}
-
 func decodeAudioFile(path string) ([]byte, int, int, error) {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".mp3":
@@ -499,6 +427,99 @@ func ensureStereoPCM16(pcm []byte, channels int) []byte {
 func sampleAt(pcm []byte, frame int, channel int) int16 {
 	offset := frame*4 + channel*2
 	return int16(binary.LittleEndian.Uint16(pcm[offset : offset+2]))
+}
+
+type RawAplayBackend struct {
+	player string
+
+	mu    sync.Mutex
+	cache map[string][]byte
+}
+
+func NewRawAplayBackend() (*RawAplayBackend, error) {
+	player, err := exec.LookPath("aplay")
+	if err != nil {
+		return nil, err
+	}
+	return &RawAplayBackend{
+		player: player,
+		cache:  make(map[string][]byte),
+	}, nil
+}
+
+func (b *RawAplayBackend) Preload(path string) error {
+	_, err := b.load(path)
+	return err
+}
+
+func (b *RawAplayBackend) Play(ctx context.Context, path string, volume float64) error {
+	if b == nil || b.player == "" {
+		return nil
+	}
+	pcm, err := b.load(path)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, b.player, "-q", "-t", "raw", "-f", "S16_LE", "-c", "2", "-r", fmt.Sprintf("%d", nativeSampleRate), "-")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	output := bytes.Buffer{}
+	cmd.Stderr = &output
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	_, writeErr := stdin.Write(scalePCM16(pcm, normalizeVolume(volume, 1)))
+	closeErr := stdin.Close()
+	waitErr := cmd.Wait()
+	if ctx.Err() != nil {
+		return context.Canceled
+	}
+	if writeErr != nil {
+		return writeErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if waitErr != nil {
+		return fmt.Errorf("%s raw playback: %w: %s", b.player, waitErr, strings.TrimSpace(output.String()))
+	}
+	return nil
+}
+
+func (b *RawAplayBackend) load(path string) ([]byte, error) {
+	b.mu.Lock()
+	if pcm, ok := b.cache[path]; ok {
+		b.mu.Unlock()
+		return pcm, nil
+	}
+	b.mu.Unlock()
+
+	pcm, sampleRate, channels, err := decodeAudioFile(path)
+	if err != nil {
+		return nil, err
+	}
+	pcm = normalizePCM(pcm, sampleRate, channels, nativeSampleRate)
+
+	b.mu.Lock()
+	b.cache[path] = pcm
+	b.mu.Unlock()
+	return pcm, nil
+}
+
+func scalePCM16(pcm []byte, volume float64) []byte {
+	volume = normalizeVolume(volume, 1)
+	if volume >= 0.999 {
+		return pcm
+	}
+	out := make([]byte, len(pcm))
+	for i := 0; i+1 < len(pcm); i += 2 {
+		sample := int16(binary.LittleEndian.Uint16(pcm[i : i+2]))
+		scaled := int16(math.Round(float64(sample) * volume))
+		binary.LittleEndian.PutUint16(out[i:i+2], uint16(scaled))
+	}
+	return out
 }
 
 type CommandBackend struct {

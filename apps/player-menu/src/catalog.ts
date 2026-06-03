@@ -23,7 +23,7 @@ export const playerColors = [
 export const playerColorNames = ["Rojo", "Naranja", "Amarillo", "Verde", "Cian", "Azul", "Morado", "Rosa"];
 export const nameHints = playerColorNames;
 
-export type CategoryID = "featured" | "team" | "versus" | "attract";
+export type CategoryID = "featured" | "individual" | "team" | "versus" | "attract";
 
 export type Category = {
   id: CategoryID;
@@ -34,6 +34,7 @@ export type Category = {
 
 export const categories: Category[] = [
   { id: "featured", label: "Destacados", title: "Listos para jugar", color: colors.cyan },
+  { id: "individual", label: "Individual", title: "Retos individuales", color: colors.orange },
   { id: "team", label: "Equipo", title: "Jugad en equipo", color: colors.green },
   { id: "versus", label: "Versus", title: "Cara a cara", color: colors.red },
   { id: "attract", label: "Ambiente", title: "Modos ambiente", color: colors.violet },
@@ -66,9 +67,16 @@ export type GameCard = {
   audio: string;
   description: string;
   rules: string[];
+  levels?: GameLevel[];
   engineGame?: string;
   previewAnimation?: string;
   disabled?: boolean;
+};
+
+export type GameLevel = {
+  id: string;
+  label: string;
+  description: string;
 };
 
 export const games: GameCard[] = [
@@ -81,7 +89,7 @@ export const games: GameCard[] = [
     difficulty: "Fácil-Media",
     duration: "60s",
     mode: "Precisión",
-    audio: "Música + efectos",
+    audio: "Narración + música",
     description: "Pisa los objetivos 2×2 antes de que se apaguen. Rápido, claro y muy físico.",
     rules: ["Pisa solo las zonas iluminadas.", "Los aciertos suman puntos.", "Los fallos rompen la racha."],
   },
@@ -144,6 +152,38 @@ export const games: GameCard[] = [
     rules: ["Reproduce una animación continua.", "No requiere jugadores.", "Ideal para espera y demostración."],
     engineGame: "loop",
     previewAnimation: "loop",
+  },
+  {
+    id: "parkour",
+    label: "Parkour",
+    category: "individual",
+    color: colors.orange,
+    players: "1",
+    difficulty: "Niveles",
+    duration: "60s",
+    mode: "Saltos",
+    audio: "Música + efectos",
+    description: "Salta de la plataforma azul a la verde sin tocar la lava. Cada salto correcto suma un punto.",
+    rules: ["Empieza sobre la plataforma azul.", "Salta a la plataforma verde cuando aparezca.", "Cualquier baldosa roja termina la partida."],
+    engineGame: "parkour",
+    previewAnimation: "parkour",
+    levels: [
+      {
+        id: "starter",
+        label: "Nivel 1",
+        description: "Saltos cercanos y objetivo más lento para aprender el recorrido.",
+      },
+      {
+        id: "classic",
+        label: "Nivel 2",
+        description: "Distancia clásica, buen ritmo para una partida normal.",
+      },
+      {
+        id: "expert",
+        label: "Nivel 3",
+        description: "Objetivo más rápido y saltos largos para jugadores seguros.",
+      },
+    ],
   },
   {
     id: "ambient-comet",

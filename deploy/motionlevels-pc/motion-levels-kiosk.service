@@ -1,0 +1,24 @@
+[Unit]
+Description=Motion Levels HDMI kiosk browser
+After=network-online.target sound.target motion-levels-player-display.service motion-levels-game-engine.service
+Wants=network-online.target sound.target motion-levels-player-display.service motion-levels-game-engine.service
+Conflicts=getty@tty7.service display-manager.service motion-levels-player-tv.service
+
+[Service]
+Type=simple
+Environment=MOTION_LEVELS_PLAYER_URL=http://127.0.0.1:5175/
+Environment=MOTION_LEVELS_PLAYER_PROFILE=/var/lib/motion-levels/rebuild-player-chromium
+Environment=MOTION_LEVELS_PLAYER_WINDOW_SIZE=auto
+Environment=MOTION_LEVELS_HDMI_ALSA_DEVICE=plughw:0,5
+Environment=MOTION_LEVELS_XRANDR_MODE=1920x1080
+Environment=MOTION_LEVELS_XRANDR_RATE=60
+Environment=MOTION_LEVELS_FORCE_ALSA_OUTPUT=1
+Environment=DISPLAY=:0
+Environment=XDG_RUNTIME_DIR=/run/user/0
+WorkingDirectory=/var/lib/motion-levels
+ExecStart=/usr/bin/xinit /usr/local/bin/motion-levels-player-kiosk -- :0 vt7 -nolisten tcp -s 0 -dpms
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
