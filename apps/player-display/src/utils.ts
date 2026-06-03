@@ -19,18 +19,51 @@ export function formatClock(ms: number): string {
 export function phaseLabel(phase: string): string {
   switch (phase) {
     case "intro":
-      return "Intro";
+      return "Introducción";
     case "ready":
-      return "Step on start";
+      return "Pisa para empezar";
     case "countdown":
-      return "Get ready";
+      return "Preparados";
     case "running":
-      return "Live round";
+      return "Ronda en directo";
     case "finished":
-      return "Round complete";
+      return "Ronda completada";
     case "ambient":
-      return "Ambient mode";
+      return "Modo ambiente";
     default:
-      return "Waiting";
+      return "En espera";
+  }
+}
+
+const colorNamesES: Record<string, string> = {
+  red: "Rojo",
+  orange: "Naranja",
+  yellow: "Amarillo",
+  green: "Verde",
+  cyan: "Cian",
+  blue: "Azul",
+  pink: "Rosa",
+  purple: "Morado",
+  violet: "Morado",
+  magenta: "Rosa",
+};
+
+// Engine sends color-based player labels in English (e.g. "Blue"); show them in Spanish.
+export function playerLabelES(label: string): string {
+  return colorNamesES[label.trim().toLowerCase()] || label;
+}
+
+export function difficultyLabelES(difficulty: string): string {
+  switch (difficulty) {
+    case "easy":
+      return "Fácil";
+    case "medium":
+      return "Media";
+    case "hard":
+      return "Difícil";
+    case "expert":
+      return "Experto";
+    default:
+      return difficulty || "—";
   }
 }

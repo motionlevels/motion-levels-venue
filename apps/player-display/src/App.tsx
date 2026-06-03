@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./api";
-import { colorCSS, colorRGB, formatClock, phaseLabel } from "./utils";
+import { colorCSS, colorRGB, difficultyLabelES, formatClock, phaseLabel, playerLabelES } from "./utils";
 
 const emptyStatus: DisplayStatus = {
   currentGame: "loop",
@@ -43,7 +43,7 @@ export default function App() {
       .catch((err) => {
         if (cancelled) return;
         setConnected(false);
-        setError(err instanceof Error ? err.message : "Display stream offline");
+        setError(err instanceof Error ? err.message : "Sin conexión con el motor");
       });
 
     const source = displayEventSource();
@@ -54,7 +54,7 @@ export default function App() {
     });
     source.onerror = () => {
       setConnected(false);
-      setError("Display stream offline");
+      setError("Sin conexión con el motor");
     };
     return () => {
       cancelled = true;
@@ -92,22 +92,22 @@ export default function App() {
           <h1>{status.label}</h1>
         </div>
         <div className="connection">
-          <strong>{connected ? "Live" : "Offline"}</strong>
-          <span>{error || (!status.audioEnabled ? "Audio unavailable" : status.audioMuted ? "Audio muted" : "Audio ready")}</span>
+          <strong>{connected ? "En directo" : "Sin conexión"}</strong>
+          <span>{error || (!status.audioEnabled ? "Audio no disponible" : status.audioMuted ? "Audio silenciado" : "Audio listo")}</span>
         </div>
       </header>
 
       <section className="hero-stats">
         <article className="stat clock">
-          <span>Time</span>
+          <span>Tiempo</span>
           <strong>{clock}</strong>
         </article>
         <article className="stat total-score">
-          <span>Score</span>
+          <span>Puntos</span>
           <strong>{status.score}</strong>
         </article>
         <article className="stat lives">
-          <span>Lives</span>
+          <span>Vidas</span>
           <strong>{status.lives < 0 ? "∞" : status.lives}</strong>
         </article>
       </section>
@@ -121,31 +121,31 @@ export default function App() {
               style={{ "--player": colorCSS(player.color), "--player-rgb": colorRGB(player.color) } as CSSProperties}
             >
               <div className="player-name">
-                <span>{player.label}</span>
-                {leader?.index === player.index ? <b>Leading</b> : null}
+                <span>{playerLabelES(player.label)}</span>
+                {leader?.index === player.index ? <b>Líder</b> : null}
               </div>
               <strong>{player.score}</strong>
-              <small>{player.lives < 0 ? "Unlimited lives" : `${player.lives} lives`}</small>
+              <small>{player.lives < 0 ? "Vidas ilimitadas" : `${player.lives} ${player.lives === 1 ? "vida" : "vidas"}`}</small>
             </article>
           ))
         ) : (
           <article className="empty-player">
-            <span>Waiting for game data</span>
+            <span>Esperando datos del juego</span>
           </article>
         )}
       </section>
 
       <footer className="display-bottom">
         <div className="mini-stat">
-          <span>Targets</span>
+          <span>Objetivos</span>
           <strong>{status.activeTargets}</strong>
         </div>
         <div className={`event-strip ${status.lastEventCue ? "active" : ""}`}>
-          <span>{status.lastEventMessage || "Ready"}</span>
+          <span>{status.lastEventMessage || "Listo"}</span>
         </div>
         <div className="mini-stat">
-          <span>Mode</span>
-          <strong>{status.currentGame}</strong>
+          <span>Dificultad</span>
+          <strong>{difficultyLabelES(status.difficulty)}</strong>
         </div>
       </footer>
     </main>
