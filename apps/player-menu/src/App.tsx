@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import { controlGame, fetchEngineStatus, selectGame, type EngineStatus } from "./api";
 import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
 import { BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, LogoIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
@@ -29,8 +29,8 @@ type ScreenMode = "browse" | "game";
 
 const storageKey = "ml-player-menu-state-v1";
 const maxPlayers = 6;
-// Spanish QWERTY with Ñ.
-const keyboardRows = ["1234567890", "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM"];
+// Spanish QWERTY with Ñ and an accent row for proper names.
+const keyboardRows = ["1234567890", "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM", "ÁÉÍÓÚÜ"];
 const defaultPlayers: Player[] = [{ id: 1, name: "", color: playerColors[0], active: true }];
 
 function engineGameID(game: GameCard): string {
@@ -114,8 +114,6 @@ export default function App() {
   const [introUntil, setIntroUntil] = useState(0);
   const [countdownUntil, setCountdownUntil] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const gamesScrollRef = useRef<HTMLElement | null>(null);
-  const gamesDragRef = useRef({ dragging: false, didMove: false, pointerId: 0, startX: 0, scrollLeft: 0, gameID: "" });
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(menu));
@@ -146,6 +144,19 @@ export default function App() {
     const id = window.setInterval(() => setNowMs(Date.now()), 100);
     return () => window.clearInterval(id);
   }, [screenMode]);
+
+  // Esc closes the topmost overlay (keyboard first, then dialogs, then the team drawer).
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      if (keyboardTarget) setKeyboardTarget(null);
+      else if (colorPickerFor !== null) setColorPickerFor(null);
+      else if (confirmRemove !== null) setConfirmRemove(null);
+      else if (teamOpen) setTeamOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [keyboardTarget, colorPickerFor, confirmRemove, teamOpen]);
 
   const availableGames = useMemo(() => new Set((status?.catalog || []).map((entry) => entry.game)), [status]);
   const activePlayers = menu.players.filter((player) => player.active);
@@ -230,54 +241,17 @@ export default function App() {
   }
 
   function typeKey(key: string) {
-    setKeyboardValue(`${keyboardValue()}${key}`);
-  }
-
-  function beginGamesDrag(event: ReactPointerEvent<HTMLElement>) {
-    const scroller = gamesScrollRef.current;
-    if (!scroller || event.button !== 0) return;
-    const card = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-game-id]");
-    gamesDragRef.current = {
-      dragging: true,
-      didMove: false,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      scrollLeft: scroller.scrollLeft,
-      gameID: card?.dataset.gameId || "",
-    };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    event.currentTarget.classList.add("dragging");
-  }
-
-  function moveGamesDrag(event: ReactPointerEvent<HTMLElement>) {
-    const state = gamesDragRef.current;
-    const scroller = gamesScrollRef.current;
-    if (!state.dragging || !scroller || event.pointerId !== state.pointerId) return;
-    const delta = event.clientX - state.startX;
-    if (Math.abs(delta) > 4) state.didMove = true;
-    scroller.scrollLeft = state.scrollLeft - delta;
-    event.preventDefault();
-  }
-
-  function endGamesDrag(event: ReactPointerEvent<HTMLElement>) {
-    const state = gamesDragRef.current;
-    if (!state.dragging || event.pointerId !== state.pointerId) return;
-    state.dragging = false;
-    event.currentTarget.classList.remove("dragging");
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    const current = keyboardValue();
+    let ch = key;
+    // Title-case as you type so names read "José" instead of "JOSÉ".
+    if (key !== " " && /\p{L}/u.test(key)) {
+      const atWordStart = current.length === 0 || current.endsWith(" ");
+      ch = atWordStart ? key.toUpperCase() : key.toLowerCase();
     }
-    if (!state.didMove && state.gameID) {
-      selectGameCard(state.gameID, { ignoreDrag: true });
-    }
-    window.setTimeout(() => {
-      gamesDragRef.current.didMove = false;
-      gamesDragRef.current.gameID = "";
-    }, 0);
+    setKeyboardValue(`${current}${ch}`);
   }
 
-  function selectGameCard(gameID: string, options?: { ignoreDrag?: boolean }) {
-    if (!options?.ignoreDrag && gamesDragRef.current.didMove) return;
+  function selectGameCard(gameID: string) {
     const game = games.find((candidate) => candidate.id === gameID);
     setMenu((current) => ({ ...current, selectedGame: gameID }));
     if (game && isAmbientCard(game) && !game.disabled && availableGames.has(engineGameID(game))) {
@@ -531,10 +505,6 @@ export default function App() {
               <PlusIcon />
               Añadir jugador
             </button>
-            <button className="btn" type="button" onClick={() => launch("whack-a-mole")}>
-              <BoltIcon />
-              Inicio rápido
-            </button>
           </section>
 
           <button className="btn primary drawer-done" type="button" onClick={() => setTeamOpen(false)}>
@@ -553,7 +523,7 @@ export default function App() {
                 </div>
                 <span className="grid-count">{visibleGames.length} modos</span>
               </div>
-              <section key={menu.category} ref={gamesScrollRef} className="games game-grid" aria-label="Juegos">
+              <section key={menu.category} className="games game-grid" aria-label="Juegos">
                 {visibleGames.map((game, index) => {
                   const future = Boolean(game.disabled);
                   const engineAvailable = availableGames.has(engineGameID(game));
@@ -907,10 +877,10 @@ function TouchKeyboard({
         </button>
       </div>
       <div className="keyboard-rows">
-        {keyboardRows.map((row) => (
-          <div className="keyboard-row" key={row}>
+        {keyboardRows.map((row, index) => (
+          <div className={`keyboard-row ${index === keyboardRows.length - 1 ? "accents" : ""}`} key={row}>
             {row.split("").map((key) => (
-              <button className="key" key={key} type="button" onClick={() => onType(key)}>
+              <button className={`key ${index === keyboardRows.length - 1 ? "accent" : ""}`} key={key} type="button" onClick={() => onType(key)}>
                 {key}
               </button>
             ))}
