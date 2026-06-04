@@ -108,10 +108,11 @@ body {
   position: relative;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 72px;
-  padding: 64px 80px;
+  gap: clamp(36px, 4vw, 64px) clamp(48px, 5vw, 88px);
+  padding: 56px clamp(56px, 5vw, 96px) 64px;
   overflow: hidden;
 }
 
@@ -177,10 +178,10 @@ body {
 .welcome-copy h1 {
   margin: 0;
   color: #f7fbff;
-  font-size: clamp(72px, 9.5vw, 132px);
+  font-size: clamp(64px, 7.6vw, 112px);
   font-weight: 950;
-  line-height: 0.9;
-  letter-spacing: -0.01em;
+  line-height: 0.92;
+  letter-spacing: -0.015em;
   text-transform: uppercase;
   text-wrap: balance;
   text-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
@@ -196,63 +197,64 @@ body {
 }
 
 .welcome-start {
+  grid-column: 1 / -1;
   width: 100%;
-  max-width: 560px;
-  min-height: 116px;
-  margin-top: 18px;
-  border-radius: 28px;
-  font-size: 44px;
-  gap: 20px;
+  min-height: 140px;
+  margin-top: 0;
+  border-radius: 32px;
+  font-size: 56px;
+  gap: 28px;
   box-shadow:
-    0 28px 70px -26px rgba(var(--accent-rgb), 0.95),
+    0 32px 80px -26px rgba(var(--accent-rgb), 0.95),
     inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .welcome-start svg {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
 }
 
 .welcome-visual {
   display: grid;
-  align-items: center;
-  height: 100%;
+  place-items: center;
 }
 
 .welcome-floor {
   display: grid;
-  place-items: center;
+  place-items: stretch;
   width: 100%;
-  aspect-ratio: 16 / 9;
-  max-height: 100%;
-  padding: clamp(24px, 3.4%, 48px);
-  border: 1px solid rgba(var(--accent-rgb), 0.24);
-  border-radius: 34px;
+  padding: clamp(20px, 2.4vw, 40px);
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
+  border-radius: 32px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.02)),
-    rgba(7, 13, 20, 0.78);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)),
+    rgba(7, 13, 20, 0.82);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 34px 90px -52px rgba(var(--accent-rgb), 0.7);
+    0 40px 100px -54px rgba(var(--accent-rgb), 0.75);
 }
 
 .welcome-floor .preview {
   width: 100%;
-  height: 100%;
+  aspect-ratio: 2 / 1;
+  min-height: 0;
+  padding: 0;
   border: 0;
-  border-radius: 22px;
-  overflow: visible;
+  border-radius: 18px;
+  overflow: hidden;
   background:
-    radial-gradient(90% 78% at 50% 44%, rgba(var(--accent-rgb), 0.18), transparent 68%),
+    radial-gradient(80% 80% at 50% 44%, rgba(var(--accent-rgb), 0.18), transparent 70%),
     linear-gradient(180deg, #07101b, #030609);
 }
 
 .welcome-floor .floor-canvas,
 .welcome-floor .preview-media {
+  width: 100%;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
-  transform: rotateX(8deg) rotateZ(0.2deg) scale(0.99);
-  transform-origin: center center;
+  object-fit: contain;
+  transform: none;
 }
 
 /* ---------- Top bar ---------- */
@@ -816,17 +818,16 @@ button.capsule:disabled,
 
 .btn.primary.welcome-start {
   width: 100%;
-  max-width: 560px;
-  min-height: 116px;
-  padding: 0 48px;
-  border-radius: 28px;
-  font-size: 44px;
-  gap: 20px;
+  min-height: 140px;
+  padding: 0 56px;
+  border-radius: 32px;
+  font-size: 56px;
+  gap: 28px;
 }
 
 .btn.primary.welcome-start svg {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
 }
 
 /* The launch button: big, unmistakable call to action. */

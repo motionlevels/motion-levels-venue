@@ -1590,19 +1590,18 @@ function WelcomeScreen({
           <button className="welcome-mark" type="button" aria-label="Entrar en pantalla completa" onClick={onFullscreen}>
             <LogoIcon />
           </button>
-          <span className="welcome-eyebrow">Quiosco interactivo</span>
           <h1>Motion Levels</h1>
           <p>Preparad el equipo, elegid un reto y jugad sobre el suelo LED.</p>
-          <button className="btn primary welcome-start" type="button" onClick={onStart}>
-            <PlayIcon />
-            Comenzar
-          </button>
         </div>
         <div className="welcome-visual" aria-hidden="true">
           <div className="welcome-floor" style={{ "--crgb": welcomeGame ? hexToRGB(welcomeGame.color) : "47, 216, 108" } as CSSProperties}>
             <Preview src={welcomePreviewSrc} animationID="temporada1" />
           </div>
         </div>
+        <button className="btn primary welcome-start" type="button" onClick={onStart}>
+          <PlayIcon />
+          Comenzar
+        </button>
       </section>
     </main>
   );
