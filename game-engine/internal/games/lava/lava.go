@@ -67,6 +67,9 @@ type Game struct {
 	lives            int
 	score            int
 	speed            float64
+	platformWidth    int
+	platformHeight   int
+	platformSpacing  int
 	started          time.Time
 	gameOver         bool
 	lastTick         time.Time
@@ -76,20 +79,35 @@ type Game struct {
 }
 
 type claimedPlatform struct {
-	phaseA float64
-	phaseB float64
+	spawn          int
+	width          int
+	height         int
+	motionPerSec   float64
+	initialSeconds float64
+	initialY       float64
+}
+
+type movingPlatform struct {
+	spawn        int
+	x            int
+	y            int
+	width        int
+	height       int
+	motionPerSec float64
+	seconds      float64
+	yFloat       float64
 }
 
 var playerColors = []struct {
 	label string
 	rgb   RGB
 }{
-	{label: "Blue", rgb: RGB{R: 0, G: 65, B: 255}},
-	{label: "Green", rgb: RGB{R: 0, G: 255, B: 60}},
-	{label: "Pink", rgb: RGB{R: 255, G: 0, B: 212}},
-	{label: "Yellow", rgb: RGB{R: 255, G: 212, B: 0}},
-	{label: "Orange", rgb: RGB{R: 255, G: 90, B: 0}},
-	{label: "Cyan", rgb: RGB{R: 0, G: 229, B: 255}},
+	{label: "Red", rgb: RGB{R: 255, G: 0, B: 0}},
+	{label: "Cyan", rgb: RGB{R: 0, G: 255, B: 255}},
+	{label: "Green", rgb: RGB{R: 0, G: 255, B: 0}},
+	{label: "Pink", rgb: RGB{R: 255, G: 0, B: 255}},
+	{label: "Blue", rgb: RGB{R: 0, G: 0, B: 255}},
+	{label: "Yellow", rgb: RGB{R: 255, G: 255, B: 0}},
 }
 
 func New(playerCount int, now time.Time, difficulty string) *Game {
@@ -100,12 +118,15 @@ func NewWithSeed(playerCount int, now time.Time, _ int64, difficulty string) *Ga
 	playerCount = clampInt(playerCount, 1, len(playerColors))
 	settings := settingsForDifficulty(difficulty)
 	return &Game{
-		playerCount: playerCount,
-		difficulty:  settings.difficulty,
-		lives:       settings.lives,
-		speed:       settings.speed,
-		started:     now.Add(countdownDuration),
-		lastTick:    now,
+		playerCount:     playerCount,
+		difficulty:      settings.difficulty,
+		lives:           settings.lives,
+		speed:           settings.speed,
+		platformWidth:   settings.platformWidth,
+		platformHeight:  settings.platformHeight,
+		platformSpacing: settings.platformSpacing,
+		started:         now.Add(countdownDuration),
+		lastTick:        now,
 	}
 }
 
@@ -128,16 +149,17 @@ func (g *Game) Press(event whackamole.PressEvent, now time.Time) []whackamole.Ev
 	}
 
 	pt := Point{X: event.X, Y: event.Y}
-	if lavaAt(pt, g.patternSeconds(now)) {
+	platform, onPlatform := g.platformAt(pt, g.patternSeconds(now))
+	if !onPlatform {
 		g.lives--
 		g.immuneUntil = now.Add(globalImmunity)
 		g.damageFlashUntil = now.Add(damageFlash)
 		if g.lives <= 0 {
 			g.lives = 0
 			g.gameOver = true
-			return []whackamole.Event{{Cue: whackamole.CueMiss, Message: "Sin vidas"}}
+			return []whackamole.Event{{Cue: whackamole.CueDamage, Message: "Sin vidas"}}
 		}
-		return []whackamole.Event{{Cue: whackamole.CueMiss, Message: "Vida perdida · " + strconv.Itoa(g.lives)}}
+		return []whackamole.Event{{Cue: whackamole.CueDamage, Message: "Vida perdida · " + strconv.Itoa(g.lives)}}
 	}
 
 	claimed := g.claimedMask(g.patternSeconds(now))
@@ -145,9 +167,9 @@ func (g *Game) Press(event whackamole.PressEvent, now time.Time) []whackamole.Ev
 		return nil
 	}
 
-	g.claimedPlatforms = append(g.claimedPlatforms, newClaimedPlatform(pt, g.patternSeconds(now)))
+	g.claimedPlatforms = append(g.claimedPlatforms, newClaimedPlatform(platform))
 	g.score = len(g.claimedPlatforms)
-	return []whackamole.Event{{Cue: whackamole.CueHit, Message: "Plataforma nueva · " + strconv.Itoa(g.score)}}
+	return []whackamole.Event{{Cue: whackamole.CueCoin, Message: "Plataforma nueva · " + strconv.Itoa(g.score)}}
 }
 
 func (g *Game) Render(now time.Time) []RGB {
@@ -161,7 +183,7 @@ func (g *Game) Render(now time.Time) []RGB {
 	for y := 0; y < GridHeight; y++ {
 		for x := 0; x < GridWidth; x++ {
 			pt := Point{X: x, Y: y}
-			color := colorAt(pt, seconds)
+			color := g.colorAt(pt, seconds)
 			if claimed[pointIndex(pt)] && !g.inCountdown(now) && !g.gameOver {
 				color = claimedColor(color, now)
 			}
@@ -233,7 +255,7 @@ func (g *Game) Snapshot(now time.Time) Snapshot {
 		ElapsedMillis:   elapsed,
 		RemainingMillis: 0,
 		CountdownMillis: countdown,
-		ActiveTargets:   lavaTileCount(g.patternSeconds(now)),
+		ActiveTargets:   activeSafeTileCount(g, g.patternSeconds(now)),
 		Lives:           g.lives,
 		ImmuneMillis:    immune,
 		Difficulty:      string(g.difficulty),
@@ -262,127 +284,137 @@ func (g *Game) inCountdown(now time.Time) bool {
 }
 
 type difficultySettings struct {
-	difficulty Difficulty
-	lives      int
-	speed      float64
+	difficulty      Difficulty
+	lives           int
+	speed           float64
+	platformWidth   int
+	platformHeight  int
+	platformSpacing int
 }
 
 func settingsForDifficulty(value string) difficultySettings {
 	switch Difficulty(value) {
 	case DifficultyExpert:
-		return difficultySettings{difficulty: DifficultyExpert, lives: 2, speed: 1.55}
+		return difficultySettings{difficulty: DifficultyExpert, lives: 4, speed: 0.48, platformWidth: 3, platformHeight: 2, platformSpacing: 5}
 	case DifficultyHard:
-		return difficultySettings{difficulty: DifficultyHard, lives: 3, speed: 1.28}
+		return difficultySettings{difficulty: DifficultyHard, lives: 5, speed: 0.34, platformWidth: 4, platformHeight: 2, platformSpacing: 6}
 	case DifficultyMedium:
-		return difficultySettings{difficulty: DifficultyMedium, lives: 4, speed: 1.0}
+		return difficultySettings{difficulty: DifficultyMedium, lives: 6, speed: 0.24, platformWidth: 5, platformHeight: 3, platformSpacing: 7}
 	default:
-		return difficultySettings{difficulty: DifficultyEasy, lives: 5, speed: 0.72}
+		return difficultySettings{difficulty: DifficultyEasy, lives: 8, speed: 0.14, platformWidth: 6, platformHeight: 4, platformSpacing: 8}
 	}
 }
 
-func lavaAt(pt Point, seconds float64) bool {
-	return heatField(pt, seconds) >= 0.34
+func (g *Game) lavaAt(pt Point, seconds float64) bool {
+	_, ok := g.platformAt(pt, seconds)
+	return !ok
 }
 
-func newClaimedPlatform(pt Point, seconds float64) claimedPlatform {
-	phaseA, phaseB := platformPhase(pt, seconds)
+func newClaimedPlatform(platform movingPlatform) claimedPlatform {
 	return claimedPlatform{
-		phaseA: phaseA,
-		phaseB: phaseB,
+		spawn:          platform.spawn,
+		width:          platform.width,
+		height:         platform.height,
+		motionPerSec:   platform.motionPerSec,
+		initialSeconds: platform.seconds,
+		initialY:       platform.yFloat,
 	}
 }
 
 func (g *Game) claimedMask(seconds float64) []bool {
 	mask := make([]bool, GridWidth*GridHeight)
 	for index := range g.claimedPlatforms {
-		seed, ok := g.claimedPlatforms[index].currentSeed(seconds)
+		platform, ok := g.claimedPlatforms[index].currentPlatform(seconds)
 		if !ok {
 			continue
 		}
-		safeSeed, ok := nearestSafeTile(seed, seconds)
-		if !ok {
-			continue
-		}
-		markSafeComponent(mask, safeSeed, seconds)
+		markPlatform(mask, platform)
 	}
 	return mask
 }
 
-func (platform claimedPlatform) currentSeed(seconds float64) (Point, bool) {
-	x, y := solvePlatformPosition(platform.phaseA, platform.phaseB, seconds)
-	if x < -6 || x > float64(GridWidth+5) || y < -6 || y > float64(GridHeight+5) {
-		return Point{}, false
+func (platform claimedPlatform) currentPlatform(seconds float64) (movingPlatform, bool) {
+	yFloat := platform.initialY - (seconds-platform.initialSeconds)*platform.motionPerSec
+	y := int(math.Round(yFloat))
+	if y+platform.height <= 0 || y >= GridHeight {
+		return movingPlatform{}, false
 	}
-	return Point{X: int(math.Round(x)), Y: int(math.Round(y))}, true
+	x := platformX(platform.spawn, platform.width)
+	return movingPlatform{
+		spawn:        platform.spawn,
+		x:            x,
+		y:            y,
+		width:        platform.width,
+		height:       platform.height,
+		motionPerSec: platform.motionPerSec,
+		seconds:      seconds,
+		yFloat:       yFloat,
+	}, true
 }
 
-func platformPhase(pt Point, seconds float64) (float64, float64) {
-	nx := float64(pt.X) / float64(GridWidth)
-	ny := float64(pt.Y) / float64(GridHeight)
-	return 3.0*nx + 1.6*ny + seconds*0.7, 2.2*nx - 3.2*ny - seconds*0.5
-}
-
-func solvePlatformPosition(phaseA, phaseB, seconds float64) (float64, float64) {
-	rhsA := phaseA - seconds*0.7
-	rhsB := phaseB + seconds*0.5
-	const determinant = -13.12
-	nx := (rhsA*(-3.2) - 1.6*rhsB) / determinant
-	ny := (3.0*rhsB - 2.2*rhsA) / determinant
-	return nx * float64(GridWidth), ny * float64(GridHeight)
-}
-
-func nearestSafeTile(seed Point, seconds float64) (Point, bool) {
-	if inBounds(seed.X, seed.Y) && !lavaAt(seed, seconds) {
-		return seed, true
+func (g *Game) platformAt(pt Point, seconds float64) (movingPlatform, bool) {
+	if !inBounds(pt.X, pt.Y) {
+		return movingPlatform{}, false
 	}
-	best := Point{}
-	bestDistance := math.MaxFloat64
-	found := false
-	for radius := 1; radius <= 6; radius++ {
-		for y := seed.Y - radius; y <= seed.Y+radius; y++ {
-			for x := seed.X - radius; x <= seed.X+radius; x++ {
-				if !inBounds(x, y) {
-					continue
-				}
-				pt := Point{X: x, Y: y}
-				if lavaAt(pt, seconds) {
-					continue
-				}
-				distance := math.Hypot(float64(x-seed.X), float64(y-seed.Y))
-				if distance < bestDistance {
-					best = pt
-					bestDistance = distance
-					found = true
-				}
+	for _, platform := range g.visiblePlatforms(seconds) {
+		if pointInPlatform(pt, platform) {
+			return platform, true
+		}
+	}
+	return movingPlatform{}, false
+}
+
+func (g *Game) visiblePlatforms(seconds float64) []movingPlatform {
+	motionPerSec := 5.5
+	platforms := make([]movingPlatform, 0, 8)
+	height := g.platformHeight
+	spacing := g.platformSpacing
+	if height <= 0 || spacing <= height {
+		return platforms
+	}
+	firstSpawn := int(math.Floor((seconds*motionPerSec-float64(height))/float64(spacing))) - 1
+	lastSpawn := int(math.Ceil((seconds*motionPerSec+float64(GridHeight+height))/float64(spacing))) + 1
+	for spawn := firstSpawn; spawn <= lastSpawn; spawn++ {
+		yFloat := float64(spawn*spacing) - seconds*motionPerSec - float64(height)
+		y := int(math.Round(yFloat))
+		if y+height <= 0 || y >= GridHeight {
+			continue
+		}
+		platforms = append(platforms, movingPlatform{
+			spawn:        spawn,
+			x:            platformX(spawn, g.platformWidth),
+			y:            y,
+			width:        g.platformWidth,
+			height:       height,
+			motionPerSec: motionPerSec,
+			seconds:      seconds,
+			yFloat:       yFloat,
+		})
+	}
+	return platforms
+}
+
+func platformX(spawn int, width int) int {
+	maxX := GridWidth - width
+	if maxX <= 0 {
+		return 0
+	}
+	value := positiveMod(spawn*7+spawn*spawn*3+5, maxX+1)
+	return value
+}
+
+func markPlatform(mask []bool, platform movingPlatform) {
+	for y := platform.y; y < platform.y+platform.height; y++ {
+		for x := platform.x; x < platform.x+platform.width; x++ {
+			if inBounds(x, y) {
+				mask[pointIndex(Point{X: x, Y: y})] = true
 			}
 		}
-		if found {
-			return best, true
-		}
 	}
-	return Point{}, false
 }
 
-func markSafeComponent(mask []bool, seed Point, seconds float64) {
-	if !inBounds(seed.X, seed.Y) || lavaAt(seed, seconds) {
-		return
-	}
-	queue := []Point{seed}
-	seen := make([]bool, GridWidth*GridHeight)
-	seen[pointIndex(seed)] = true
-	for len(queue) > 0 {
-		pt := queue[0]
-		queue = queue[1:]
-		mask[pointIndex(pt)] = true
-		for _, next := range neighbors(pt) {
-			index := pointIndex(next)
-			if seen[index] || lavaAt(next, seconds) {
-				continue
-			}
-			seen[index] = true
-			queue = append(queue, next)
-		}
-	}
+func pointInPlatform(pt Point, platform movingPlatform) bool {
+	return pt.X >= platform.x && pt.X < platform.x+platform.width && pt.Y >= platform.y && pt.Y < platform.y+platform.height
 }
 
 func neighbors(pt Point) []Point {
@@ -401,12 +433,12 @@ func neighbors(pt Point) []Point {
 	return out
 }
 
-func colorAt(pt Point, seconds float64) RGB {
-	field := heatField(pt, seconds)
-	if field < 0.34 {
+func (g *Game) colorAt(pt Point, seconds float64) RGB {
+	if _, ok := g.platformAt(pt, seconds); ok {
 		return RGB{R: 4, G: 9, B: 18}
 	}
-	heat := clamp01((field - 0.34) / 0.66)
+	field := heatField(pt, seconds)
+	heat := clamp01(field)
 	flicker := 0.82 + 0.18*math.Sin((float64(pt.X)*1.3+float64(pt.Y)*0.7+seconds*6)*math.Pi)
 	return RGB{
 		R: clampByte(math.Round(255 * flicker)),
@@ -450,11 +482,11 @@ func gameOverColor(now time.Time) RGB {
 	return RGB{R: value, G: 2, B: 4}
 }
 
-func lavaTileCount(seconds float64) int {
+func activeSafeTileCount(game *Game, seconds float64) int {
 	count := 0
 	for y := 0; y < GridHeight; y++ {
 		for x := 0; x < GridWidth; x++ {
-			if lavaAt(Point{X: x, Y: y}, seconds) {
+			if _, ok := game.platformAt(Point{X: x, Y: y}, seconds); ok {
 				count++
 			}
 		}
@@ -496,6 +528,14 @@ func clampInt(value, min, max int) int {
 		return max
 	}
 	return value
+}
+
+func positiveMod(value, modulus int) int {
+	out := value % modulus
+	if out < 0 {
+		out += modulus
+	}
+	return out
 }
 
 func clamp01(value float64) float64 {

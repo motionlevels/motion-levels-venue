@@ -48,7 +48,7 @@ func TestLandingScoresAndMovesCurrent(t *testing.T) {
 	target := game.Target(playAt)
 
 	events := game.Press(whackamole.PressEvent{X: target.X, Y: target.Y, Pressed: true}, playAt)
-	if len(events) != 1 || events[0].Cue != whackamole.CueHit {
+	if len(events) != 1 || events[0].Cue != whackamole.CueCoin {
 		t.Fatalf("events = %+v, want hit", events)
 	}
 	if game.Snapshot(playAt).Score != 1 {
@@ -64,7 +64,7 @@ func TestLavaPressFails(t *testing.T) {
 	game := NewWithSeed(now, 42, "classic")
 	playAt := now.Add(countdownDuration + time.Second)
 	events := game.Press(whackamole.PressEvent{X: 1, Y: GridHeight - 2, Pressed: true}, playAt)
-	if len(events) != 1 || events[0].Cue != whackamole.CueMiss {
+	if len(events) != 1 || events[0].Cue != whackamole.CueDamage {
 		t.Fatalf("events = %+v, want miss", events)
 	}
 	if snapshot := game.Snapshot(playAt); snapshot.Phase != "finished" || snapshot.Lives != 0 {

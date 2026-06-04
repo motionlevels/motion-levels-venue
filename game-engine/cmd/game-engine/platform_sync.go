@@ -28,6 +28,7 @@ type platformSyncer struct {
 
 type platformSessionPayload struct {
 	SessionID        string                    `json:"sessionId"`
+	VenueSessionID   string                    `json:"venueSessionId,omitempty"`
 	ControllerID     string                    `json:"controllerId,omitempty"`
 	ControllerLabel  string                    `json:"controllerLabel,omitempty"`
 	Game             string                    `json:"game"`
@@ -254,6 +255,7 @@ func (s *platformSyncer) payload(status runtimeStatus, display displayStatus, no
 
 	payload := platformSessionPayload{
 		SessionID:        status.SessionID,
+		VenueSessionID:   status.VenueSessionID,
 		ControllerID:     s.controllerID,
 		Game:             display.CurrentGame,
 		Label:            display.Label,

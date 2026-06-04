@@ -7,6 +7,7 @@ import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
 import { defaultFloorAnim, floorAnimations } from "./floor";
 import { hexToColor, hexToRGB, initials } from "./utils";
+import { captureMenuEvent } from "./analytics";
 
 type Player = {
   id: number;
@@ -16,6 +17,9 @@ type Player = {
 };
 
 type MenuState = {
+  sessionActive: boolean;
+  sessionId: string;
+  sessionStartedUnix: number;
   teamName: string;
   players: Player[];
   category: CategoryID;
@@ -30,17 +34,46 @@ type MenuState = {
 type LevelProgress = {
   unlockedThrough: number;
   bestByLevel: Record<string, DifficultyID>;
+  bestTimeByLevel: Record<string, number>;
 };
 
+type FinishedLevelAttempt = NonNullable<EngineStatus["finishedLevelAttempts"]>[number];
 type KeyboardTarget = { kind: "team" } | { kind: "player"; id: number };
 type ScreenMode = "browse" | "game";
 type RosterIssue = { message: string; playerIds: Set<number> };
 
 const storageKey = "ml-player-menu-state-v1";
 const maxPlayers = 6;
+const noPressureSessionLimitMillis = 60 * 60 * 1000;
+const devUnlockLevels = import.meta.env.DEV || import.meta.env.VITE_UNLOCK_LEVELS === "1";
 // Spanish QWERTY with Ñ and an accent row for proper names.
 const keyboardRows = ["1234567890", "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM", "ÁÉÍÓÚÜ"];
 const defaultPlayers: Player[] = [{ id: 1, name: "", color: playerColors[0], active: true }];
+
+function newVenueSessionID(date = new Date()): string {
+  const stamp = date
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}Z$/, "Z");
+  const random = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Math.random().toString(16).slice(2);
+  return `venue-${stamp}-${random}`;
+}
+
+function defaultTeamName(date = new Date()): string {
+  const stamp = new Intl.DateTimeFormat("es-ES", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  })
+    .format(date)
+    .replace(/\//g, "-")
+    .replace(/,?\s+/g, " ");
+  return `Equipo ${stamp}`;
+}
 
 function engineGameID(game: GameCard): string {
   return game.engineGame || game.id;
@@ -54,12 +87,34 @@ function levelPreviewAnimationID(game: GameCard, level?: NonNullable<GameCard["l
   return level?.previewAnimation || previewAnimationID(game);
 }
 
+function levelPreviewSrc(game: GameCard, level: NonNullable<GameCard["levels"]>[number] | undefined, difficulty: DifficultyID): string | undefined {
+  return level?.previewByDifficulty?.[difficulty] || level?.previewSrc || game.previewSrc;
+}
+
 function isAmbientCard(game: GameCard): boolean {
   return game.category === "attract";
 }
 
+function animationIsIdleLoop(currentGame: string, phase: string): boolean {
+  return currentGame === "loop" && (phase === "idle" || phase === "ambient");
+}
+
+function gameForEngineStatus(engineGame: string, currentMenuGameID: string): GameCard | undefined {
+  const matches = games.filter((game) => engineGameID(game) === engineGame);
+  if (matches.length === 0) return undefined;
+  return matches.find((game) => game.id === currentMenuGameID) || matches.find((game) => !game.id.startsWith("featured-")) || matches[0];
+}
+
 function isIndividualCard(game: GameCard): boolean {
   return game.category === "individual";
+}
+
+function isDuelCard(game: GameCard): boolean {
+  return engineGameID(game) === "duel";
+}
+
+function isMemoryCard(game: GameCard): boolean {
+  return engineGameID(game) === "memory";
 }
 
 function usesDifficulty(game: GameCard): boolean {
@@ -67,7 +122,7 @@ function usesDifficulty(game: GameCard): boolean {
 }
 
 function supportsNarration(game: GameCard): boolean {
-  return engineGameID(game) === "lava" || engineGameID(game) === "whack-a-mole";
+  return !isAmbientCard(game);
 }
 
 function defaultLevelID(game: GameCard): string {
@@ -83,22 +138,107 @@ function difficultyRank(difficulty: DifficultyID): number {
   return difficulties.findIndex((candidate) => candidate.id === difficulty);
 }
 
+function allDifficultyIDs(): DifficultyID[] {
+  return difficulties.map((difficulty) => difficulty.id);
+}
+
+function supportedDifficultiesFor(game: GameCard, level?: NonNullable<GameCard["levels"]>[number]): DifficultyID[] {
+  if (!usesDifficulty(game)) return allDifficultyIDs();
+  return level?.difficulties?.length ? level.difficulties : allDifficultyIDs();
+}
+
+function closestSupportedDifficulty(requested: DifficultyID, supported: DifficultyID[]): DifficultyID {
+  if (supported.includes(requested)) return requested;
+  const fallback = supported[0] || difficulties[0].id;
+  return supported.reduce((best, candidate) => {
+    const bestDistance = Math.abs(difficultyRank(best) - difficultyRank(requested));
+    const candidateDistance = Math.abs(difficultyRank(candidate) - difficultyRank(requested));
+    if (candidateDistance !== bestDistance) return candidateDistance < bestDistance ? candidate : best;
+    return difficultyRank(candidate) > difficultyRank(best) ? candidate : best;
+  }, fallback);
+}
+
 function higherDifficulty(a: DifficultyID | undefined, b: DifficultyID): DifficultyID {
   if (!a) return b;
   return difficultyRank(b) > difficultyRank(a) ? b : a;
 }
 
 function progressFor(game: GameCard, state: MenuState): LevelProgress {
-  return state.levelProgress[game.id] || { unlockedThrough: 1, bestByLevel: {} };
+  const progress = state.levelProgress[game.id];
+  return { unlockedThrough: progress?.unlockedThrough || 1, bestByLevel: progress?.bestByLevel || {}, bestTimeByLevel: progress?.bestTimeByLevel || {} };
 }
 
 function isLevelUnlocked(game: GameCard, levelID: string, state: MenuState): boolean {
   if (!game.levels?.length) return true;
+  if (devUnlockLevels) return true;
   return levelNumber(levelID) <= progressFor(game, state).unlockedThrough;
 }
 
 function difficultyColor(difficulty?: DifficultyID): string {
   return difficulties.find((candidate) => candidate.id === difficulty)?.color || colors.green;
+}
+
+function formatBestTime(ms?: number): string {
+  if (!ms || ms <= 0) return "Sin marca";
+  const totalTenths = Math.round(ms / 100);
+  const minutes = Math.floor(totalTenths / 600);
+  const seconds = Math.floor((totalTenths % 600) / 10);
+  const tenths = totalTenths % 10;
+  return minutes > 0 ? `${minutes}:${String(seconds).padStart(2, "0")}.${tenths}` : `${seconds}.${tenths}s`;
+}
+
+function starCountForDifficulty(difficulty?: DifficultyID): number {
+  if (!difficulty) return 0;
+  return Math.max(0, difficultyRank(difficulty) + 1);
+}
+
+function StarRating({ difficulty, label = "Dificultad", muted = false }: { difficulty?: DifficultyID; label?: string; muted?: boolean }) {
+  const count = starCountForDifficulty(difficulty);
+  return (
+    <span className={`star-rating ${muted ? "muted" : ""}`} aria-label={difficulty ? `${label}: ${count} de 4` : `${label}: sin superar`}>
+      {[0, 1, 2, 3].map((index) => (
+        <span key={index} aria-hidden="true" className={index < count ? "filled" : ""}>
+          {index < count ? "★" : "☆"}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function difficultyFromEngine(value: string | undefined, fallback: DifficultyID): DifficultyID {
+  return difficulties.some((candidate) => candidate.id === value) ? (value as DifficultyID) : fallback;
+}
+
+function recordLevelCompletion(
+  state: MenuState,
+  game: GameCard,
+  levelID: string,
+  success: boolean,
+  difficulty: DifficultyID,
+  elapsedMillis: number,
+): MenuState {
+  if (!game.levels?.length || !levelID) return state;
+  const finishedNumber = levelNumber(levelID);
+  const previous = progressFor(game, state);
+  const nextBest = { ...previous.bestByLevel };
+  const nextBestTime = { ...previous.bestTimeByLevel };
+  if (success) {
+    nextBest[levelID] = higherDifficulty(nextBest[levelID], difficulty);
+    if (elapsedMillis > 0 && (!nextBestTime[levelID] || elapsedMillis < nextBestTime[levelID])) {
+      nextBestTime[levelID] = elapsedMillis;
+    }
+  }
+  return {
+    ...state,
+    levelProgress: {
+      ...state.levelProgress,
+      [game.id]: {
+        unlockedThrough: Math.min(game.levels.length, Math.max(previous.unlockedThrough || 1, finishedNumber + 1)),
+        bestByLevel: nextBest,
+        bestTimeByLevel: nextBestTime,
+      },
+    },
+  };
 }
 
 function loadMenuState(): MenuState {
@@ -121,6 +261,9 @@ function loadMenuState(): MenuState {
         teamName: "",
         difficulty: "easy",
         ...saved,
+        sessionActive: Boolean(saved.sessionActive),
+        sessionId: typeof saved.sessionId === "string" ? saved.sessionId : "",
+        sessionStartedUnix: Number(saved.sessionStartedUnix) || 0,
         category: saved.selectedGame === "whack-a-mole" && wasOldUntouchedDefault ? "team" : saved.category || "team",
         selectedGame: saved.selectedGame === "whack-a-mole" && wasOldUntouchedDefault ? "lava" : saved.selectedGame || "lava",
         selectedLevels,
@@ -134,6 +277,9 @@ function loadMenuState(): MenuState {
     // Ignore broken local storage and return the default kiosk state.
   }
   return {
+    sessionActive: false,
+    sessionId: "",
+    sessionStartedUnix: 0,
     teamName: "",
     players: defaultPlayers,
     category: "team",
@@ -162,9 +308,49 @@ function normalizeRosterName(name: string): string {
   return name.trim().replace(/\s+/g, " ").toLocaleLowerCase("es-ES");
 }
 
+function colorChannels(color: string): [number, number, number] {
+  const normalized = color.trim().replace(/^#/, "");
+  if (normalized.length !== 6) return [0, 0, 0];
+  return [Number.parseInt(normalized.slice(0, 2), 16), Number.parseInt(normalized.slice(2, 4), 16), Number.parseInt(normalized.slice(4, 6), 16)];
+}
+
+function channelToHex(value: number): string {
+  return Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, "0");
+}
+
+function rgbToHex(color: { r: number; g: number; b: number }): string {
+  return `#${channelToHex(color.r)}${channelToHex(color.g)}${channelToHex(color.b)}`;
+}
+
+function colorDistanceSquared(a: string, b: string): number {
+  const [ar, ag, ab] = colorChannels(a);
+  const [br, bg, bb] = colorChannels(b);
+  return (ar - br) ** 2 + (ag - bg) ** 2 + (ab - bb) ** 2;
+}
+
+function statusPlayersForDisplay(status: EngineStatus | null): Player[] {
+  if (!status?.players?.length) return [];
+  return status.players.map((player) => ({
+    id: player.index + 1,
+    name: player.label,
+    color: rgbToHex(player.color),
+    active: true,
+  }));
+}
+
 function firstAvailableColor(players: Player[], ignoredID?: number): string {
   const used = new Set(players.filter((player) => player.active && player.id !== ignoredID).map((player) => player.color.toLowerCase()));
-  return playerColors.find((color) => !used.has(color.toLowerCase())) || playerColors[0];
+  const available = playerColors.filter((color) => !used.has(color.toLowerCase()));
+  if (available.length === 0) return playerColors[0];
+
+  const activeColors = players.filter((player) => player.active && player.id !== ignoredID).map((player) => player.color);
+  if (activeColors.length === 0) return available[0];
+
+  return available.reduce((best, color) => {
+    const colorScore = Math.min(...activeColors.map((activeColor) => colorDistanceSquared(color, activeColor)));
+    const bestScore = Math.min(...activeColors.map((activeColor) => colorDistanceSquared(best, activeColor)));
+    return colorScore > bestScore ? color : best;
+  }, available[0]);
 }
 
 function activeRosterIssue(players: Player[]): RosterIssue | null {
@@ -202,6 +388,19 @@ function activeRosterIssue(players: Player[]): RosterIssue | null {
   return null;
 }
 
+function gameRosterIssue(game: GameCard, players: Player[]): RosterIssue | null {
+  const duplicateIssue = activeRosterIssue(players);
+  if (duplicateIssue) return duplicateIssue;
+  const active = players.filter((player) => player.active);
+  if (isDuelCard(game) && active.length < 2) {
+    return {
+      message: "Duelo necesita al menos 2 jugadores",
+      playerIds: new Set(active.map((player) => player.id)),
+    };
+  }
+  return null;
+}
+
 export default function App() {
   const [menu, setMenu] = useState<MenuState>(() => loadMenuState());
   const [status, setStatus] = useState<EngineStatus | null>(null);
@@ -210,6 +409,7 @@ export default function App() {
   const [keyboardTarget, setKeyboardTarget] = useState<KeyboardTarget | null>(null);
   const [colorPickerFor, setColorPickerFor] = useState<number | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<number | null>(null);
+  const [confirmResetSession, setConfirmResetSession] = useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
   const [screenMode, setScreenMode] = useState<ScreenMode>("browse");
   const [launchedGameID, setLaunchedGameID] = useState(menu.selectedGame);
@@ -218,6 +418,7 @@ export default function App() {
   const [countdownUntil, setCountdownUntil] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const processedFinishedSessions = useRef(new Set<string>());
+  const syncedEngineSession = useRef("");
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(menu));
@@ -250,76 +451,211 @@ export default function App() {
   }, [screenMode]);
 
   useEffect(() => {
-    if (!status || status.phase !== "finished" || !status.sessionId) return;
-    const game = games.find((candidate) => engineGameID(candidate) === status.currentGame);
-    if (!game?.levels?.length) return;
-    if (processedFinishedSessions.current.has(status.sessionId)) return;
-    processedFinishedSessions.current.add(status.sessionId);
-    const finishedLevel = status.level || selectedLevelFor(game);
-    const finishedNumber = levelNumber(finishedLevel);
+    if (!menu.sessionActive) return;
+    const latestActivityUnix = Math.max(menu.sessionStartedUnix || 0, status?.lastPressureUnix || 0);
+    if (!latestActivityUnix) return;
+    const idleMillis = Date.now() - latestActivityUnix * 1000;
+    if (idleMillis < noPressureSessionLimitMillis) return;
+    void closeSession("no_pressure_1h");
+  }, [menu.sessionActive, menu.sessionStartedUnix, status?.lastPressureUnix]);
+
+  useEffect(() => {
+    if (!status) return;
+    const engineGame = gameForEngineStatus(status.currentGame, menu.selectedGame);
+    if (!engineGame) return;
+
+    const engineIsAmbient = isAmbientCard(engineGame);
+    const engineIsIdleLoop = animationIsIdleLoop(status.currentGame, status.phase);
+    const syncKey = `${status.sessionId}:${status.currentGame}:${status.level || ""}:${status.phase}`;
+
+    if (engineIsIdleLoop) {
+      syncedEngineSession.current = syncKey;
+      if (screenMode === "game") {
+        setScreenMode("browse");
+        setMessage("Juego finalizado");
+      }
+      return;
+    }
+
+    if (!menu.sessionActive) {
+      setMenu((current) => ({
+        ...current,
+        sessionActive: true,
+        sessionId: current.sessionId || status.venueSessionId || newVenueSessionID(),
+        sessionStartedUnix: current.sessionStartedUnix || status.startedUnix || Math.floor(Date.now() / 1000),
+        teamName: current.teamName || status.teamName || defaultTeamName(),
+      }));
+    }
+
     setMenu((current) => {
-      const previous = progressFor(game, current);
-      const nextBest = { ...previous.bestByLevel };
-      if (status.success) {
-        nextBest[finishedLevel] = higherDifficulty(nextBest[finishedLevel], current.difficulty);
+      const selectedLevels = engineGame.levels?.length && status.level && current.selectedLevels[engineGame.id] !== status.level ? { ...current.selectedLevels, [engineGame.id]: status.level } : current.selectedLevels;
+      const progress = progressFor(engineGame, current);
+      const syncedLevelNumber = status.level ? levelNumber(status.level) : 0;
+      const levelProgress =
+        engineGame.levels?.length && status.level && progress.unlockedThrough < syncedLevelNumber
+          ? {
+              ...current.levelProgress,
+              [engineGame.id]: {
+                ...progress,
+                unlockedThrough: syncedLevelNumber,
+              },
+            }
+          : current.levelProgress;
+      const level = engineGame.levels?.find((candidate) => candidate.id === (status.level || selectedLevels[engineGame.id] || defaultLevelID(engineGame)));
+      const difficulty = usesDifficulty(engineGame) ? closestSupportedDifficulty(difficultyFromEngine(status.difficulty, current.difficulty), supportedDifficultiesFor(engineGame, level)) : current.difficulty;
+      if (
+        current.selectedGame === engineGame.id &&
+        current.category === engineGame.category &&
+        current.difficulty === difficulty &&
+        current.selectedLevels === selectedLevels &&
+        current.levelProgress === levelProgress
+      ) {
+        return current;
       }
       return {
         ...current,
-        levelProgress: {
-          ...current.levelProgress,
-          [game.id]: {
-            unlockedThrough: Math.min(game.levels?.length || finishedNumber, Math.max(previous.unlockedThrough || 1, finishedNumber + 1)),
-            bestByLevel: nextBest,
-          },
-        },
+        category: engineGame.category,
+        selectedGame: engineGame.id,
+        selectedLevels,
+        levelProgress,
+        difficulty,
       };
     });
-  }, [status?.sessionId, status?.phase, status?.success, status?.level, status?.currentGame]);
+    setLaunchedGameID(engineGame.id);
+    setLevelBrowserGameID(null);
+    setTeamOpen(false);
+    setKeyboardTarget(null);
+
+    if (engineIsAmbient) {
+      if (screenMode === "game") setScreenMode("browse");
+      syncedEngineSession.current = syncKey;
+      return;
+    }
+
+    if (screenMode !== "game") {
+      setScreenMode("game");
+      setMessage("En curso");
+    }
+    if (syncedEngineSession.current !== syncKey) {
+      syncPlayTiming(status, engineGame);
+      syncedEngineSession.current = syncKey;
+    }
+  }, [status, menu.selectedGame, screenMode]);
+
+  useEffect(() => {
+    if (screenMode !== "game") return;
+    setTeamOpen(false);
+    setKeyboardTarget(null);
+    setColorPickerFor(null);
+    setConfirmRemove(null);
+    setConfirmResetSession(false);
+  }, [screenMode]);
+
+  useEffect(() => {
+    if (!status?.sessionId) return;
+    const attempts: FinishedLevelAttempt[] = [...(status.finishedLevelAttempts || [])];
+    if (status.phase === "finished") {
+      const game = games.find((candidate) => engineGameID(candidate) === status.currentGame);
+      const finishedLevel = status.level || (game ? selectedLevelFor(game) : "");
+      const alreadyHasAttempt = attempts.some((attempt) => attempt.game === status.currentGame && attempt.level === finishedLevel);
+      if (game?.levels?.length && finishedLevel && !alreadyHasAttempt) {
+        attempts.push({
+          attemptId: `${status.sessionId}:${status.currentGame}:${finishedLevel}:${status.success ? "success" : "failed"}:${status.elapsedMillis || 0}`,
+          game: status.currentGame,
+          level: finishedLevel,
+          levelNumber: levelNumber(finishedLevel),
+          difficulty: status.difficulty,
+          result: status.success ? "success" : "failed",
+          success: status.success,
+          elapsedMillis: status.elapsedMillis || 0,
+          endedUnixNanos: 0,
+        });
+      }
+    }
+
+    const pending = attempts
+      .map((attempt) => ({ attempt, game: games.find((candidate) => engineGameID(candidate) === attempt.game) }))
+      .filter(({ attempt, game }) => game?.levels?.length && attempt.level && !processedFinishedSessions.current.has(attempt.attemptId));
+    if (pending.length === 0) return;
+
+    for (const { attempt } of pending) {
+      processedFinishedSessions.current.add(attempt.attemptId);
+    }
+    setMenu((current) =>
+      pending.reduce((next, { attempt, game }) => {
+        if (!game?.levels?.length) return next;
+        return recordLevelCompletion(next, game, attempt.level, attempt.success, difficultyFromEngine(attempt.difficulty, next.difficulty), attempt.elapsedMillis || 0);
+      }, current),
+    );
+  }, [status]);
 
   // Esc closes the topmost overlay (keyboard first, then dialogs, then the team drawer).
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Enter" && keyboardTarget) {
+        event.preventDefault();
+        setKeyboardTarget(null);
+        return;
+      }
       if (event.key !== "Escape") return;
       if (keyboardTarget) setKeyboardTarget(null);
       else if (colorPickerFor !== null) setColorPickerFor(null);
       else if (confirmRemove !== null) setConfirmRemove(null);
+      else if (confirmResetSession) setConfirmResetSession(false);
       else if (teamOpen) setTeamOpen(false);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [keyboardTarget, colorPickerFor, confirmRemove, teamOpen]);
+  }, [keyboardTarget, colorPickerFor, confirmRemove, confirmResetSession, teamOpen]);
 
   const availableGames = useMemo(() => new Set((status?.catalog || []).map((entry) => entry.game)), [status]);
   const activePlayers = menu.players.filter((player) => player.active);
+  const enginePlayers = statusPlayersForDisplay(status);
   const activeCategory = categories.find((category) => category.id === menu.category) || categories[0];
   const selectedGame = games.find((game) => game.id === menu.selectedGame) || games[0];
   const launchedGame = games.find((game) => game.id === launchedGameID) || selectedGame;
   const levelBrowserGame = games.find((game) => game.id === levelBrowserGameID && game.category === menu.category && game.levels?.length) || null;
   const browsingLevels = Boolean(levelBrowserGame);
   const visibleGames = games.filter((game) => game.category === menu.category);
-  const selectedDifficulty = difficulties.find((difficulty) => difficulty.id === menu.difficulty) || difficulties[0];
   const selectedLevel = selectedGame.levels?.find((level) => level.id === selectedLevelFor(selectedGame));
+  const selectedSupportedDifficulties = supportedDifficultiesFor(selectedGame, selectedLevel);
+  const effectiveDifficulty = closestSupportedDifficulty(menu.difficulty, selectedSupportedDifficulties);
+  const selectedDifficulty = difficulties.find((difficulty) => difficulty.id === effectiveDifficulty) || difficulties[0];
   const selectedLevelProgress = progressFor(selectedGame, menu);
   const selectedLevelIndex = selectedLevel ? levelNumber(selectedLevel.id) : 0;
   const selectedLevelBest = selectedLevel ? selectedLevelProgress.bestByLevel[selectedLevel.id] : undefined;
-  const selectedLevelBestLabel = selectedLevelBest ? difficulties.find((difficulty) => difficulty.id === selectedLevelBest)?.label || selectedLevelBest : "Sin superar";
+  const selectedLevelBestTime = selectedLevel ? selectedLevelProgress.bestTimeByLevel[selectedLevel.id] : undefined;
+  const selectedLevelBestLabel = selectedLevelBestTime ? formatBestTime(selectedLevelBestTime) : selectedLevelBest ? difficulties.find((difficulty) => difficulty.id === selectedLevelBest)?.label || selectedLevelBest : "Sin superar";
   const levelDetail = Boolean(selectedGame.levels?.length && selectedLevel);
-  const launchedPlayers = isIndividualCard(launchedGame) ? activePlayers.slice(0, 1) : activePlayers;
+  const gameActive = screenMode === "game";
+  const launchedPlayers = isIndividualCard(launchedGame) ? activePlayers.slice(0, 1) : isDuelCard(launchedGame) || isMemoryCard(launchedGame) ? activePlayers.slice(0, 4) : activePlayers;
+  const displayPlayers = gameActive && enginePlayers.length > 0 ? enginePlayers : launchedPlayers;
+  const headerPlayers = gameActive && enginePlayers.length > 0 ? enginePlayers : activePlayers;
   const launchedLevel = launchedGame.levels?.find((level) => level.id === (status?.level || selectedLevelFor(launchedGame)));
   const launchedModeLabel = isAmbientCard(launchedGame) ? "Ambiente" : launchedLevel?.label || selectedDifficulty.label;
   const pickerPlayer = menu.players.find((player) => player.id === colorPickerFor) || null;
   const removePlayer = menu.players.find((player) => player.id === confirmRemove) || null;
   const connectionState = error ? "connection-off" : status ? "connection-on" : "connection-pending";
-  const playerCount = activePlayers.length || 1;
-  const playerCountLabel = `${playerCount} ${playerCount === 1 ? "jugador" : "jugadores"}`;
-  const rosterIssue = useMemo(() => activeRosterIssue(menu.players), [menu.players]);
+  const menuPlayerCount = activePlayers.length || 1;
+  const headerPlayerCount = headerPlayers.length || 1;
+  const playerCountLabel = `${headerPlayerCount} ${headerPlayerCount === 1 ? "jugador" : "jugadores"}`;
+  const selectedGamePlayerCount = isIndividualCard(selectedGame) ? 1 : isDuelCard(selectedGame) || isMemoryCard(selectedGame) ? Math.min(menuPlayerCount, 4) : menuPlayerCount;
+  const selectedGamePlayerCountLabel = `${selectedGamePlayerCount} ${selectedGamePlayerCount === 1 ? "jugador" : "jugadores"}`;
+  const rosterIssue = useMemo(() => gameRosterIssue(selectedGame, menu.players), [selectedGame, menu.players]);
 
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", colors.green);
     document.documentElement.style.setProperty("--accent-rgb", hexToRGB(colors.green));
   }, []);
 
+  useEffect(() => {
+    if (menu.difficulty !== effectiveDifficulty) {
+      setMenu((current) => ({ ...current, difficulty: effectiveDifficulty }));
+    }
+  }, [effectiveDifficulty, menu.difficulty]);
+
   function addPlayer() {
+    const previousPlayerCount = activePlayers.length;
     setMenu((current) => {
       if (current.players.length >= maxPlayers) return current;
       return {
@@ -336,6 +672,12 @@ export default function App() {
         nextPlayerId: current.nextPlayerId + 1,
       };
     });
+    if (menu.players.length < maxPlayers) {
+      captureMenuEvent("player_added", {
+        previous_player_count: previousPlayerCount,
+        next_player_count: previousPlayerCount + 1,
+      });
+    }
   }
 
   function ensurePlayers(current: MenuState): MenuState {
@@ -348,6 +690,18 @@ export default function App() {
   }
 
   function updatePlayer(id: number, patch: Partial<Player>) {
+    if (typeof patch.active === "boolean") {
+      captureMenuEvent("player_active_toggled", {
+        active: patch.active,
+        player_count: activePlayers.length,
+      });
+    }
+    if (patch.color) {
+      captureMenuEvent("player_color_changed", {
+        color: patch.color,
+        player_count: activePlayers.length,
+      });
+    }
     setMenu((current) => {
       let nextPatch = patch;
       if (patch.color && current.players.some((player) => player.id !== id && player.active && player.color.toLowerCase() === patch.color?.toLowerCase())) {
@@ -367,8 +721,86 @@ export default function App() {
   }
 
   function deletePlayer(id: number) {
+    captureMenuEvent("player_removed", {
+      player_count: menu.players.filter((player) => player.active).length,
+    });
     setMenu((current) => ({ ...current, players: current.players.filter((player) => player.id !== id) }));
     setConfirmRemove(null);
+  }
+
+  function beginSession() {
+    const nextTeamName = defaultTeamName();
+    const nextSessionID = newVenueSessionID();
+    const nowUnix = Math.floor(Date.now() / 1000);
+    captureMenuEvent("session_started", {
+      default_team_name: true,
+      venue_session_id: nextSessionID,
+    });
+    setMenu((current) => ({
+      ...current,
+      sessionActive: true,
+      sessionId: nextSessionID,
+      sessionStartedUnix: nowUnix,
+      teamName: nextTeamName,
+      players: defaultPlayers,
+      category: "team",
+      selectedGame: "lava",
+      difficulty: "easy",
+      selectedLevels: {},
+      levelProgress: {},
+      nextPlayerId: 1,
+      narrationArmed: {},
+    }));
+    setMessage("");
+    setError("");
+    setScreenMode("browse");
+    setLevelBrowserGameID(null);
+    setTeamOpen(true);
+    setKeyboardTarget(null);
+    setColorPickerFor(null);
+    setConfirmRemove(null);
+    setConfirmResetSession(false);
+  }
+
+  async function closeSession(reason = "manual") {
+    captureMenuEvent("session_closed", {
+      category: menu.category,
+      reason,
+      venue_session_id: menu.sessionId,
+      player_count: activePlayers.length,
+      selected_game: selectedGame.id,
+    });
+    setMenu((current) => ({
+      ...current,
+      sessionActive: false,
+      sessionId: "",
+      sessionStartedUnix: 0,
+      teamName: "",
+      players: defaultPlayers,
+      category: "team",
+      selectedGame: "lava",
+      difficulty: "easy",
+      selectedLevels: {},
+      levelProgress: {},
+      nextPlayerId: 1,
+      narrationArmed: {},
+    }));
+    setKeyboardTarget(null);
+    setColorPickerFor(null);
+    setConfirmRemove(null);
+    setConfirmResetSession(false);
+    setTeamOpen(false);
+    setLevelBrowserGameID(null);
+    setScreenMode("browse");
+    setMessage("");
+    setError("");
+    if (status?.currentGame && !animationIsIdleLoop(status.currentGame, status.phase)) {
+      try {
+        setStatus(await controlGame("exit"));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "No se pudo cerrar la sesión");
+      }
+    }
   }
 
   function keyboardValue() {
@@ -407,11 +839,26 @@ export default function App() {
 
   function selectGameCard(gameID: string) {
     const game = games.find((candidate) => candidate.id === gameID);
-    setMenu((current) => ({
-      ...current,
-      selectedGame: gameID,
-      selectedLevels: game?.levels?.length && !current.selectedLevels[gameID] ? { ...current.selectedLevels, [gameID]: defaultLevelID(game) } : current.selectedLevels,
-    }));
+    if (game) {
+      captureMenuEvent("game_selected", {
+        category: game.category,
+        engine_game: engineGameID(game),
+        game: game.id,
+        has_levels: Boolean(game.levels?.length),
+        player_count: activePlayers.length,
+      });
+    }
+    setMenu((current) => {
+      const selectedLevels = game?.levels?.length && !current.selectedLevels[gameID] ? { ...current.selectedLevels, [gameID]: defaultLevelID(game) } : current.selectedLevels;
+      const levelID = game?.levels?.length ? selectedLevels[gameID] || defaultLevelID(game) : "";
+      const level = game?.levels?.find((candidate) => candidate.id === levelID);
+      return {
+        ...current,
+        difficulty: game ? closestSupportedDifficulty(current.difficulty, supportedDifficultiesFor(game, level)) : current.difficulty,
+        selectedGame: gameID,
+        selectedLevels,
+      };
+    });
     setLevelBrowserGameID(game?.levels?.length ? game.id : null);
     if (game && isAmbientCard(game) && !game.disabled && availableGames.has(engineGameID(game))) {
       void launch(game.id);
@@ -425,9 +872,26 @@ export default function App() {
   }
 
   function setSelectedLevel(game: GameCard, levelID: string) {
-    if (!isLevelUnlocked(game, levelID, menu)) return;
+    if (!isLevelUnlocked(game, levelID, menu)) {
+      captureMenuEvent("locked_level_tapped", {
+        engine_game: engineGameID(game),
+        game: game.id,
+        level: levelID,
+        level_number: levelNumber(levelID),
+      });
+      return;
+    }
+    const level = game.levels?.find((candidate) => candidate.id === levelID);
+    captureMenuEvent("level_selected", {
+      difficulty: closestSupportedDifficulty(menu.difficulty, supportedDifficultiesFor(game, level)),
+      engine_game: engineGameID(game),
+      game: game.id,
+      level: levelID,
+      level_number: levelNumber(levelID),
+    });
     setMenu((current) => ({
       ...current,
+      difficulty: closestSupportedDifficulty(current.difficulty, supportedDifficultiesFor(game, level)),
       selectedLevels: {
         ...current.selectedLevels,
         [game.id]: levelID,
@@ -440,6 +904,7 @@ export default function App() {
     const progress = progressFor(game, menu);
     const bestDifficulty = progress.bestByLevel[level.id];
     const locked = !isLevelUnlocked(game, level.id, menu);
+    const previewDifficulty = closestSupportedDifficulty(menu.difficulty, supportedDifficultiesFor(game, level));
     return (
       <button
         key={level.id}
@@ -452,9 +917,15 @@ export default function App() {
         aria-disabled={locked}
         onClick={() => setSelectedLevel(game, level.id)}
       >
-        <Preview src={level.previewSrc} animationID={levelPreviewAnimationID(game, level)} compact />
+        <Preview src={levelPreviewSrc(game, level, previewDifficulty)} animationID={levelPreviewAnimationID(game, level)} compact />
         <strong>{level.label}</strong>
-        <span>{locked ? "Bloqueado" : bestDifficulty ? `Superado en ${difficulties.find((difficulty) => difficulty.id === bestDifficulty)?.label}` : level.description}</span>
+        {locked ? (
+          <span className="level-state locked-label">Bloqueado</span>
+        ) : (
+          <span className={`level-state ${bestDifficulty ? "rated" : "unrated"}`}>
+            <StarRating difficulty={bestDifficulty} label="Mejor dificultad" muted={!bestDifficulty} />
+          </span>
+        )}
       </button>
     );
   }
@@ -465,6 +936,11 @@ export default function App() {
   }
 
   function setNarrationArmed(game: GameCard, armed: boolean) {
+    captureMenuEvent("narration_toggled", {
+      engine_game: engineGameID(game),
+      game: game.id,
+      narration_enabled: armed,
+    });
     setMenu((current) => ({
       ...current,
       narrationArmed: {
@@ -477,10 +953,31 @@ export default function App() {
 
   async function launch(gameID = selectedGame.id) {
     const game = games.find((candidate) => candidate.id === gameID);
-    if (!game || game.disabled || !availableGames.has(engineGameID(game))) return;
-    const nextMenu = ensurePlayers({ ...menu, selectedGame: game.id });
-    const nextRosterIssue = activeRosterIssue(nextMenu.players);
+    if (!game || game.disabled || !availableGames.has(engineGameID(game))) {
+      captureMenuEvent("start_blocked", {
+        engine_game: game ? engineGameID(game) : gameID,
+        game: game?.id || gameID,
+        reason: !game ? "missing" : game.disabled ? "disabled" : "engine_unavailable",
+      });
+      return;
+    }
+    let nextMenu = ensurePlayers({ ...menu, selectedGame: game.id });
+    if (!nextMenu.sessionId) {
+      nextMenu = {
+        ...nextMenu,
+        sessionActive: true,
+        sessionId: newVenueSessionID(),
+        sessionStartedUnix: nextMenu.sessionStartedUnix || Math.floor(Date.now() / 1000),
+      };
+    }
+    const nextRosterIssue = gameRosterIssue(game, nextMenu.players);
     if (!isAmbientCard(game) && nextRosterIssue) {
+      captureMenuEvent("start_blocked", {
+        engine_game: engineGameID(game),
+        game: game.id,
+        player_count: nextMenu.players.filter((player) => player.active).length,
+        reason: "roster_issue",
+      });
       setMenu(nextMenu);
       setMessage("");
       setError(nextRosterIssue.message);
@@ -489,9 +986,21 @@ export default function App() {
     }
     const playNarration = narrationArmedFor(game, nextMenu);
     const launchPlayers = nextMenu.players.filter((player) => player.active);
-    const rosterForGame = isIndividualCard(game) ? launchPlayers.slice(0, 1) : launchPlayers;
-    const selectedLevel = selectedLevelFor(game, nextMenu);
-    if (selectedLevel && !isLevelUnlocked(game, selectedLevel, nextMenu)) {
+    const rosterForGame = isIndividualCard(game) ? launchPlayers.slice(0, 1) : isDuelCard(game) || isMemoryCard(game) ? launchPlayers.slice(0, 4) : launchPlayers;
+    const selectedLevelID = selectedLevelFor(game, nextMenu);
+    const launchLevel = game.levels?.find((level) => level.id === selectedLevelID);
+    const launchDifficulty = usesDifficulty(game) ? closestSupportedDifficulty(nextMenu.difficulty, supportedDifficultiesFor(game, launchLevel)) : undefined;
+    if (launchDifficulty && nextMenu.difficulty !== launchDifficulty) {
+      nextMenu = { ...nextMenu, difficulty: launchDifficulty };
+    }
+    if (selectedLevelID && !isLevelUnlocked(game, selectedLevelID, nextMenu)) {
+      captureMenuEvent("start_blocked", {
+        engine_game: engineGameID(game),
+        game: game.id,
+        level: selectedLevelID,
+        level_number: levelNumber(selectedLevelID),
+        reason: "level_locked",
+      });
       setMenu(nextMenu);
       setMessage("");
       setError("Nivel bloqueado");
@@ -500,12 +1009,25 @@ export default function App() {
     setMenu(nextMenu);
     setMessage("Iniciando");
     setError("");
+    captureMenuEvent("game_started", {
+      ambient: isAmbientCard(game),
+      category: game.category,
+      difficulty: launchDifficulty,
+      engine_game: engineGameID(game),
+      game: game.id,
+      level: selectedLevelID || undefined,
+      level_number: selectedLevelID ? levelNumber(selectedLevelID) : undefined,
+      narration_enabled: supportsNarration(game) ? playNarration : false,
+      player_count: rosterForGame.length,
+      venue_session_id: nextMenu.sessionId,
+    });
     try {
       const nextStatus = await selectGame({
         game: engineGameID(game),
+        venueSessionId: nextMenu.sessionId,
         playerCount: Math.max(1, rosterForGame.length),
-        difficulty: usesDifficulty(game) ? nextMenu.difficulty : undefined,
-        level: selectedLevel || undefined,
+        difficulty: launchDifficulty,
+        level: selectedLevelID || undefined,
         narrationEnabled: supportsNarration(game) ? playNarration : false,
         teamName: nextMenu.teamName.trim(),
         players: rosterForGame.map((player, index) => ({
@@ -531,17 +1053,34 @@ export default function App() {
       setKeyboardTarget(null);
       setScreenMode(isAmbientCard(game) ? "browse" : "game");
     } catch (err) {
+      captureMenuEvent("start_failed", {
+        engine_game: engineGameID(game),
+        error: err instanceof Error ? err.message : "unknown",
+        game: game.id,
+      });
       setError(err instanceof Error ? err.message : "No se pudo iniciar el juego");
     }
   }
 
   async function restartLaunchedGame() {
+    captureMenuEvent("game_restarted", {
+      engine_game: engineGameID(launchedGame),
+      game: launchedGame.id,
+      level: status?.level || selectedLevelFor(launchedGame) || undefined,
+    });
     await launch(launchedGame.id);
     setMessage("Reiniciando");
   }
 
   async function sendGameControl(action: "pause" | "resume" | "restart" | "exit" | "narration" | "mute" | "unmute" | "toggle_mute") {
     setError("");
+    captureMenuEvent("control_used", {
+      action,
+      engine_game: engineGameID(launchedGame),
+      game: launchedGame.id,
+      level: status?.level || undefined,
+      phase: status?.phase,
+    });
     try {
       const nextStatus = await controlGame(action);
       setStatus(nextStatus);
@@ -588,9 +1127,14 @@ export default function App() {
     const root = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
     const requestFullscreen = root.requestFullscreen?.bind(root) || root.webkitRequestFullscreen?.bind(root);
     if (!requestFullscreen) return;
+    captureMenuEvent("fullscreen_requested");
     Promise.resolve(requestFullscreen()).catch((err) => {
       console.warn("Fullscreen request failed", err);
     });
+  }
+
+  if (!menu.sessionActive && screenMode !== "game") {
+    return <WelcomeScreen connectionState={connectionState} onStart={beginSession} onFullscreen={enterBrowserFullscreen} />;
   }
 
   return (
@@ -611,10 +1155,29 @@ export default function App() {
               key={category.id}
               className={`tab ${menu.category === category.id ? "active" : ""}`}
               type="button"
+              disabled={gameActive}
               aria-pressed={menu.category === category.id}
               onClick={() => {
+                if (gameActive) return;
                 const first = games.find((game) => game.category === category.id);
-                setMenu((current) => ({ ...current, category: category.id, selectedGame: first?.id || current.selectedGame }));
+                captureMenuEvent("category_selected", {
+                  category: category.id,
+                  game_count: games.filter((game) => game.category === category.id).length,
+                  selected_game: first?.id,
+                });
+                setMenu((current) => {
+                  const selectedGameID = first?.id || current.selectedGame;
+                  const selectedLevels = first?.levels?.length && !current.selectedLevels[selectedGameID] ? { ...current.selectedLevels, [selectedGameID]: defaultLevelID(first) } : current.selectedLevels;
+                  const levelID = first?.levels?.length ? selectedLevels[selectedGameID] || defaultLevelID(first) : "";
+                  const level = first?.levels?.find((candidate) => candidate.id === levelID);
+                  return {
+                    ...current,
+                    category: category.id,
+                    difficulty: first ? closestSupportedDifficulty(current.difficulty, supportedDifficultiesFor(first, level)) : current.difficulty,
+                    selectedGame: selectedGameID,
+                    selectedLevels,
+                  };
+                });
                 setLevelBrowserGameID(null);
               }}
             >
@@ -633,9 +1196,23 @@ export default function App() {
             {status?.audioMuted ? <VolumeMutedIcon /> : <VolumeIcon />}
             <strong>{status?.audioMuted ? "Mute" : "Audio"}</strong>
           </button>
-          <button className={`capsule equipo-btn ${rosterIssue ? "invalid" : ""}`} type="button" onClick={() => setTeamOpen(true)} aria-label="Abrir equipo">
+          <button
+            className={`capsule equipo-btn ${rosterIssue ? "invalid" : ""}`}
+            type="button"
+            onClick={() => {
+              if (gameActive) return;
+              captureMenuEvent("team_opened", {
+                player_count: activePlayers.length,
+                selected_game: selectedGame.id,
+              });
+              setTeamOpen(true);
+            }}
+            disabled={gameActive}
+            aria-label={gameActive ? "Equipo no disponible durante la partida" : "Abrir equipo"}
+            title={gameActive ? "Sal de la partida para cambiar el equipo" : undefined}
+          >
             <span className="mini-avatars">
-              {activePlayers.slice(0, 6).map((player) => (
+              {headerPlayers.slice(0, 6).map((player) => (
                 <span key={player.id} style={{ "--pc": player.color } as CSSProperties} />
               ))}
             </span>
@@ -648,8 +1225,8 @@ export default function App() {
         <GameControlScreen
           game={launchedGame}
           status={status}
-          players={launchedPlayers}
-          allPlayers={menu.players}
+          players={displayPlayers}
+          allPlayers={displayPlayers.length > 0 ? displayPlayers : menu.players}
           modeLabel={launchedModeLabel}
           ambient={isAmbientCard(launchedGame)}
           introActive={introActive}
@@ -678,6 +1255,7 @@ export default function App() {
           <section className="team-name">
             <div className="micro">Equipo</div>
             <input
+              className="ph-no-capture"
               value={menu.teamName}
               maxLength={20}
               autoComplete="off"
@@ -700,6 +1278,7 @@ export default function App() {
                     {avatarLabel(menu.players, player)}
                   </button>
                   <input
+                    className="ph-no-capture"
                     value={player.name}
                     maxLength={12}
                     aria-label="Nombre del jugador"
@@ -736,6 +1315,10 @@ export default function App() {
               <PlusIcon />
               Añadir jugador
             </button>
+            <button className="btn session-reset" type="button" onClick={() => setConfirmResetSession(true)}>
+              <CloseIcon />
+              Cerrar sesión
+            </button>
           </section>
 
           <button className="btn primary drawer-done" type="button" onClick={() => setTeamOpen(false)}>
@@ -753,10 +1336,13 @@ export default function App() {
                   <h2 id="games-heading">{levelBrowserGame?.label || activeCategory.label}</h2>
                 </div>
                 {browsingLevels ? (
-                  <button className="btn compact back-to-games" type="button" onClick={() => setLevelBrowserGameID(null)}>
-                    <ArrowLeftIcon />
-                    Juegos
-                  </button>
+                  <div className="level-browser-actions">
+                    {devUnlockLevels ? <span className="dev-unlock-pill">Dev: niveles abiertos</span> : null}
+                    <button className="btn compact back-to-games" type="button" onClick={() => setLevelBrowserGameID(null)}>
+                      <ArrowLeftIcon />
+                      Juegos
+                    </button>
+                  </div>
                 ) : (
                   <span className="grid-count">{visibleGames.length} modos</span>
                 )}
@@ -783,7 +1369,7 @@ export default function App() {
                         aria-pressed={selected}
                         onClick={() => selectGameCard(game.id)}
                       >
-                        <Preview animationID={previewAnimationID(game)} />
+                        <Preview src={game.previewSrc} animationID={previewAnimationID(game)} />
                         <div className="game-body">
                           <h3>{game.label}</h3>
                         </div>
@@ -796,7 +1382,7 @@ export default function App() {
 
             <aside className={`panel detail-panel ${levelDetail ? "level-detail-panel" : ""}`} style={{ "--c": selectedGame.color, "--crgb": hexToRGB(selectedGame.color) } as CSSProperties} aria-label="Juego seleccionado">
               <div className="detail-preview">
-                <Preview src={selectedLevel?.previewSrc} animationID={levelPreviewAnimationID(selectedGame, selectedLevel)} />
+                <Preview src={levelPreviewSrc(selectedGame, selectedLevel, effectiveDifficulty)} animationID={levelPreviewAnimationID(selectedGame, selectedLevel)} />
               </div>
               <div className="detail-copy">
                 {levelDetail && selectedLevel ? (
@@ -811,27 +1397,24 @@ export default function App() {
                       </div>
                       <p>{selectedGame.description}</p>
                     </section>
-                    <section className="season-level-card" aria-label="Nivel seleccionado">
+                    <section className="season-level-row" aria-label="Nivel seleccionado">
+                      <span className="micro">Nivel</span>
                       <div>
-                        <span className="micro">Nivel seleccionado</span>
                         <strong>{selectedLevel.label}</strong>
                         <p>{selectedLevel.description}</p>
                       </div>
-                      <button className="btn compact level-change-button" type="button" onClick={() => setLevelBrowserGameID(selectedGame.id)}>
-                        Cambiar nivel
-                      </button>
                     </section>
                     <section className="season-facts" aria-label="Resumen de partida">
                       <div>
-                        <span>Equipo</span>
-                        <strong>{playerCountLabel}</strong>
+                        <span>{isIndividualCard(selectedGame) ? "Jugador" : "Equipo"}</span>
+                        <strong>{selectedGamePlayerCountLabel}</strong>
                       </div>
                       <div>
                         <span>Dificultad</span>
                         <strong>{selectedDifficulty.label}</strong>
                       </div>
                       <div>
-                        <span>Mejor marca</span>
+                        <span>Mejor</span>
                         <strong>{selectedLevelBestLabel}</strong>
                       </div>
                     </section>
@@ -869,16 +1452,34 @@ export default function App() {
               {usesDifficulty(selectedGame) ? (
                 <div className="launch-difficulty" role="group" aria-label="Dificultad">
                   {difficulties.map((difficulty) => (
-                    <button
-                      key={difficulty.id}
-                      className={`launch-difficulty-button ${menu.difficulty === difficulty.id ? "active" : ""}`}
-                      style={{ "--accent": difficulty.color, "--accent-rgb": hexToRGB(difficulty.color) } as CSSProperties}
-                      type="button"
-                      aria-pressed={menu.difficulty === difficulty.id}
-                      onClick={() => setMenu((current) => ({ ...current, difficulty: difficulty.id }))}
-                    >
-                      {difficulty.label}
-                    </button>
+                    (() => {
+                      const supported = selectedSupportedDifficulties.includes(difficulty.id);
+                      return (
+                        <button
+                          key={difficulty.id}
+                          className={`launch-difficulty-button ${effectiveDifficulty === difficulty.id ? "active" : ""} ${supported ? "" : "unavailable"}`}
+                          style={{ "--accent": difficulty.color, "--accent-rgb": hexToRGB(difficulty.color) } as CSSProperties}
+                          type="button"
+                          disabled={!supported}
+                          aria-pressed={effectiveDifficulty === difficulty.id}
+                          aria-disabled={!supported}
+                          title={supported ? undefined : "No disponible en este nivel"}
+                          onClick={() => {
+                            if (!supported) return;
+                            captureMenuEvent("difficulty_changed", {
+                              difficulty: difficulty.id,
+                              engine_game: engineGameID(selectedGame),
+                              game: selectedGame.id,
+                              level: selectedLevel?.id || undefined,
+                            });
+                            setMenu((current) => ({ ...current, difficulty: difficulty.id }));
+                          }}
+                        >
+                          <span className="difficulty-label">{difficulty.label}</span>
+                          <StarRating difficulty={difficulty.id} label={difficulty.label} />
+                        </button>
+                      );
+                    })()
                   ))}
                 </div>
               ) : null}
@@ -943,6 +1544,17 @@ export default function App() {
         />
       ) : null}
 
+      {confirmResetSession ? (
+        <ConfirmDialog
+          title="¿Cerrar sesión?"
+          body="Se cerrará el equipo actual, se limpiará el progreso local de la sesión y volveremos a la pantalla de inicio."
+          confirmLabel="Cerrar sesión"
+          cancelLabel="Cancelar"
+          onConfirm={() => void closeSession("manual")}
+          onCancel={() => setConfirmResetSession(false)}
+        />
+      ) : null}
+
       {keyboardTarget ? (
         <TouchKeyboard
           title={keyboardTitle()}
@@ -955,6 +1567,43 @@ export default function App() {
           onDone={() => setKeyboardTarget(null)}
         />
       ) : null}
+    </main>
+  );
+}
+
+function WelcomeScreen({
+  connectionState,
+  onStart,
+  onFullscreen,
+}: {
+  connectionState: string;
+  onStart: () => void;
+  onFullscreen: () => void;
+}) {
+  const welcomeGame = games.find((game) => game.id === "temporada1");
+  const welcomeLevel = welcomeGame?.levels?.[0];
+  const welcomePreviewSrc = welcomeGame ? levelPreviewSrc(welcomeGame, welcomeLevel, "easy") : undefined;
+  return (
+    <main className={`app welcome-app ${connectionState}`}>
+      <section className="welcome-screen" aria-label="Inicio">
+        <div className="welcome-copy">
+          <button className="welcome-mark" type="button" aria-label="Entrar en pantalla completa" onClick={onFullscreen}>
+            <LogoIcon />
+          </button>
+          <span className="welcome-eyebrow">Quiosco interactivo</span>
+          <h1>Motion Levels</h1>
+          <p>Preparad el equipo, elegid un reto y jugad sobre el suelo LED.</p>
+          <button className="btn primary welcome-start" type="button" onClick={onStart}>
+            <PlayIcon />
+            Comenzar
+          </button>
+        </div>
+        <div className="welcome-visual" aria-hidden="true">
+          <div className="welcome-floor" style={{ "--crgb": welcomeGame ? hexToRGB(welcomeGame.color) : "47, 216, 108" } as CSSProperties}>
+            <Preview src={welcomePreviewSrc} animationID="temporada1" />
+          </div>
+        </div>
+      </section>
     </main>
   );
 }
@@ -1167,7 +1816,7 @@ function TouchKeyboard({
       <div className="kb-display">
         <div className="kb-field">
           <span className="micro">{title}</span>
-          <div className="kb-value">
+          <div className="kb-value ph-mask">
             {value ? <span>{value}</span> : <span className="kb-placeholder">{placeholder}</span>}
             <span className="kb-caret" />
           </div>

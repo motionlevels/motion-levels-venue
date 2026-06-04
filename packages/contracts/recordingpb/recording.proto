@@ -15,6 +15,7 @@ message FrameRecord {
   int64 game_unix_nanos = 8;
   int64 controller_received_unix_nanos = 9;
   int64 controller_presented_unix_nanos = 10;
+  string venue_session_id = 11;
 }
 
 message TileState {

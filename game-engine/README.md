@@ -83,6 +83,9 @@ The session log records:
 - game events such as start, hit, miss, and win
 - audio cue intents triggered by the engine
 - periodic player-display snapshots
+- semantic level attempt start/finish records for multi-level games such as
+  `temporada1`; these include level id/number, difficulty, timestamps, result,
+  score, lives, elapsed time, and active target counts
 
 Important flags:
 

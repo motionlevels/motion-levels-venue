@@ -13,11 +13,19 @@ export type EngineGame = {
 
 export type EngineStatus = {
   currentGame: string;
+  venueSessionId: string;
   label: string;
   difficulty: string;
   level?: string;
   teamName: string;
   playerCount: number;
+  players?: Array<{
+    index: number;
+    label: string;
+    color: { r: number; g: number; b: number };
+    score: number;
+    lives: number;
+  }>;
   music: string;
   musicVolume: number;
   audioEnabled: boolean;
@@ -28,12 +36,26 @@ export type EngineStatus = {
   introRemainingMillis: number;
   countdownRemainingMillis: number;
   startedUnix: number;
+  elapsedMillis: number;
   sessionId: string;
+  lastPressureUnix: number;
+  finishedLevelAttempts?: Array<{
+    attemptId: string;
+    game: string;
+    level: string;
+    levelNumber: number;
+    difficulty: string;
+    result: string;
+    success: boolean;
+    elapsedMillis: number;
+    endedUnixNanos: number;
+  }>;
   catalog: EngineGame[];
 };
 
 export type SelectGameRequest = {
   game: string;
+  venueSessionId?: string;
   playerCount: number;
   difficulty?: string;
   level?: string;

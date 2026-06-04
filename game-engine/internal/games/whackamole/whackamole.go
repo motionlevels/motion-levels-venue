@@ -38,10 +38,13 @@ const (
 )
 
 const (
-	CueStart = "start"
-	CueHit   = "hit"
-	CueMiss  = "miss"
-	CueWin   = "win"
+	CueStart      = "start"
+	CueHit        = "hit"
+	CueMiss       = "miss"
+	CueWin        = "win"
+	CueCoin       = "coin"
+	CueDoubleCoin = "double_coin"
+	CueDamage     = "damage"
 )
 
 type RGB = animation.RGB
@@ -130,12 +133,12 @@ type target struct {
 }
 
 var defaultPlayerColors = []playerInfo{
-	{label: "Blue", rgb: RGB{R: 0, G: 65, B: 255}},
-	{label: "Green", rgb: RGB{R: 0, G: 255, B: 60}},
-	{label: "Pink", rgb: RGB{R: 255, G: 0, B: 212}},
-	{label: "Yellow", rgb: RGB{R: 255, G: 212, B: 0}},
-	{label: "Orange", rgb: RGB{R: 255, G: 90, B: 0}},
-	{label: "Cyan", rgb: RGB{R: 0, G: 229, B: 255}},
+	{label: "Red", rgb: RGB{R: 255, G: 0, B: 0}},
+	{label: "Cyan", rgb: RGB{R: 0, G: 255, B: 255}},
+	{label: "Green", rgb: RGB{R: 0, G: 255, B: 0}},
+	{label: "Pink", rgb: RGB{R: 255, G: 0, B: 255}},
+	{label: "Blue", rgb: RGB{R: 0, G: 0, B: 255}},
+	{label: "Yellow", rgb: RGB{R: 255, G: 255, B: 0}},
 }
 
 func New(playerCount int, now time.Time) *Game {

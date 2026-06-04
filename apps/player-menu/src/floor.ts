@@ -15,14 +15,16 @@ export const FLOOR_ROWS = 32;
 export type RGB = [number, number, number];
 export type FloorAnim = (x: number, y: number, cols: number, rows: number, t: number) => RGB;
 
-// Engine player colors (game-engine/internal/games/whackamole playerColors).
+// Engine player colors.
 const playerColors: RGB[] = [
-  [0, 65, 255], // blue
-  [0, 255, 60], // green
-  [255, 0, 212], // pink
-  [255, 212, 0], // yellow
-  [255, 90, 0], // orange
-  [0, 229, 255], // cyan
+  [255, 0, 0], // red
+  [0, 255, 255], // cyan
+  [0, 255, 0], // green
+  [255, 0, 255], // pink
+  [0, 0, 255], // blue
+  [255, 255, 0], // yellow
+  [255, 128, 0], // orange
+  [128, 0, 255], // purple
 ];
 
 function clamp01(value: number): number {
@@ -147,7 +149,7 @@ const whackAMole: FloorAnim = (x, y, cols, rows, t) => {
     if (x < ox || x >= ox + 2 || y < oy || y >= oy + 2) continue;
     const age = t - k * stride;
     if (age < 0 || age > life) continue;
-    const color = playerColors[seed % playerColors.length];
+    const color = playerColors[mod(seed, playerColors.length)] || playerColors[0];
     const rise = age < 0.1 ? age / 0.1 : 1;
     const ratio = clamp01(1 - age / life);
     const bright = rise * Math.pow(ratio, 1.1);
@@ -163,12 +165,12 @@ const lava: FloorAnim = (x, y, cols, rows, t) => {
   const field =
     0.5 +
     0.5 *
-      Math.sin((nx * 3.0 + ny * 1.6 + t * 0.7) * Math.PI) *
-      Math.cos((nx * 2.2 - ny * 3.2 - t * 0.5) * Math.PI);
-  if (field < 0.34) {
+      Math.sin((nx * 3.0 + ny * 1.6 + t * 0.34) * Math.PI) *
+      Math.cos((nx * 2.2 - ny * 3.2 - t * 0.24) * Math.PI);
+  if (field < 0.48) {
     return [4, 9, 18]; // safe tile
   }
-  const heat = clamp01((field - 0.34) / 0.66);
+  const heat = clamp01((field - 0.48) / 0.52);
   const flicker = 0.82 + 0.18 * Math.sin((x * 1.3 + y * 0.7 + t * 6) * Math.PI);
   return [255 * flicker, (45 + 150 * heat) * flicker, 8 * heat * flicker];
 };
@@ -183,8 +185,8 @@ const saltos: FloorAnim = (x, y, cols, rows, t) => {
     { x: 12, y: 27 },
   ];
   const step = Math.floor(t / 1.7);
-  const target = path[step % path.length];
-  const previous = path[(step + path.length - 1) % path.length];
+  const target = path[mod(step, path.length)];
+  const previous = path[mod(step - 1, path.length)];
   const phase = (t / 1.7) % 1;
   const visual = {
     x: Math.round(previous.x + (target.x - previous.x) * phase),
@@ -205,22 +207,299 @@ const saltos: FloorAnim = (x, y, cols, rows, t) => {
   return [115 + 85 * f1, 4 + 40 * f2, 0];
 };
 
-// Duel: two territories push a glowing clash line back and forth across the floor.
+// Duel: balanced but organic color regions like the real versus arena.
 const duel: FloorAnim = (x, y, cols, rows, t) => {
-  const blue: RGB = [0, 90, 255];
-  const red: RGB = [255, 40, 64];
-  const boundary = cols / 2 + Math.sin(t * 0.9) * cols * 0.2;
-  const edge = Math.abs(x + 0.5 - boundary);
-  if (edge < 0.7) {
-    const p = 0.6 + 0.4 * Math.sin((t * 8 + y) * 0.6);
-    return [255 * p, 255 * p, 255 * p];
-  }
-  const base = x + 0.5 < boundary ? blue : red;
-  const front = clamp01(1 - edge / (cols / 2));
-  const bright = 0.32 + 0.68 * front;
-  const sparkle = 0.85 + 0.15 * Math.sin((x * 0.9 + y * 1.7 - t * 4) * Math.PI);
-  return [base[0] * bright * sparkle, base[1] * bright * sparkle, base[2] * bright * sparkle];
+  const previewPlayers = 4;
+  const fine = hash(x * 97 + y * 193 + 41);
+  const coarse = hash(Math.floor(x / 2) * 271 + Math.floor(y / 2) * 379 + 17);
+  const drift = hash(Math.floor((x + Math.sin(t * 0.35) * 2) / 4) * 811 + Math.floor(y / 4) * 431 + 53);
+  const owner = mod((fine % previewPlayers) + (coarse % previewPlayers) + (drift % previewPlayers), previewPlayers);
+  const color = playerColors[owner] || playerColors[0];
+  const claimedWave = mod(Math.floor(t * 3) + y, rows);
+  const claimed = y < claimedWave && hash(x * 43 + y * 89) % 5 === 0;
+  const flash = claimed && Math.floor(t * 12 + x + y) % 6 === 0;
+  if (flash) return [255, 255, 255];
+  const brightness = claimed ? 0.18 : 0.72 + 0.28 * Math.sin(t * 2.4 + x * 0.4 + y * 0.11);
+  return [color[0] * brightness, color[1] * brightness, color[2] * brightness];
 };
+
+// Memory challenge: player lanes reveal a route, then the route fades into lava.
+const memory: FloorAnim = (x, y, cols, rows, t) => {
+  const laneWidth = Math.floor(cols / 4);
+  const lane = Math.min(3, Math.floor(x / laneWidth));
+  const laneX = lane * laneWidth;
+  const localX = x - laneX;
+  const color = playerColors[lane] || playerColors[0];
+  const cycle = mod(t, 5.8);
+  const reveal = cycle < 2.2;
+  const fade = clamp01(1 - (cycle - 2.2) / 1.5);
+  const runProgress = clamp01((cycle - 3.0) / 2.0);
+  const pathX = 1 + mod(Math.floor((y - 2) / 5) + lane, Math.max(1, laneWidth - 1));
+  const onStart = y < 2 && localX >= 0 && localX < laneWidth;
+  const onPath = y >= 2 && localX === pathX;
+
+  if (onStart) {
+    const pulse = 0.66 + 0.28 * Math.sin(t * 4.2 + x * 0.4);
+    return [color[0] * pulse, color[1] * pulse, color[2] * pulse];
+  }
+
+  const f1 = 0.5 + 0.5 * Math.sin(x * 0.85 + y * 0.32 + t * 2.0);
+  const f2 = 0.5 + 0.5 * Math.sin(y * 0.5 - t * 1.5);
+  const f3 = 0.5 + 0.5 * Math.sin((x + y) * 0.41 + t * 3.7);
+  const lavaBase: RGB = [18 + 54 * f1 + 16 * f3, 2 + 16 * f2 + 6 * f3, 1 + 4 * (1 - f1)];
+
+  if (!onPath) return lavaBase;
+  const indexRatio = clamp01((y - 2) / (rows - 3));
+  const claimed = indexRatio < runProgress;
+  const visible = reveal ? 1 : fade;
+  const playerGlow = claimed ? 0.92 : 0.22 + 0.78 * visible;
+  const sparkle = claimed && Math.floor(t * 12 + y) % 9 === 0 ? 1 : 0;
+  return [
+    lavaBase[0] * (1 - playerGlow) + color[0] * playerGlow + sparkle * 90,
+    lavaBase[1] * (1 - playerGlow) + color[1] * playerGlow + sparkle * 90,
+    lavaBase[2] * (1 - playerGlow) + color[2] * playerGlow + sparkle * 90,
+  ];
+};
+
+// Patrones: black central canvas with bright blue target shapes and green safe border.
+const patrones: FloorAnim = (x, y, cols, rows, t) => {
+  const canvas = { x: 3, y: 8, w: 10, h: 16 };
+  const onCanvas = onRect(x, y, canvas.x, canvas.y, canvas.w, canvas.h);
+  if (!onCanvas) {
+    const pulse = 0.82 + 0.18 * Math.sin(t * 3.2 + x * 0.31 + y * 0.09);
+    return [0, 255 * pulse, 0];
+  }
+
+  const cx = canvas.x + Math.floor(canvas.w / 2);
+  const cy = canvas.y + Math.floor(canvas.h / 2);
+  const variant = Math.floor(t / 3.5) % 5;
+  const points = new Set<string>();
+  const add = (px: number, py: number) => points.add(`${Math.max(canvas.x + 1, Math.min(canvas.x + canvas.w - 2, px))},${Math.max(canvas.y + 1, Math.min(canvas.y + canvas.h - 2, py))}`);
+  const radius = 3;
+  if (variant === 1) {
+    for (let i = -radius; i <= radius; i++) {
+      add(cx + i, cy + i);
+      add(cx + i, cy - i);
+    }
+  } else if (variant === 2) {
+    for (let i = -radius; i <= radius; i++) {
+      add(cx + i, cy - radius);
+      add(cx + i, cy + radius);
+      add(cx - radius, cy + i);
+      add(cx + radius, cy + i);
+    }
+  } else if (variant === 3) {
+    for (let i = 0; i <= radius * 2; i++) {
+      add(cx - radius + i, cy + radius - i);
+      if (i % 2 === 0) add(cx - radius + i, cy + radius - i - 1);
+    }
+  } else {
+    for (let i = -radius; i <= radius; i++) {
+      add(cx + i, cy);
+      add(cx, cy + i);
+    }
+    if (variant === 4) {
+      add(cx - radius, cy - radius);
+      add(cx + radius, cy - radius);
+      add(cx - radius, cy + radius);
+      add(cx + radius, cy + radius);
+    }
+  }
+
+  if (!points.has(`${x},${y}`)) return [0, 0, 0];
+  const order = [...points].sort().findIndex((key) => key === `${x},${y}`);
+  const progress = Math.floor(mod(t, 3.5) / 3.5 * (points.size + 1));
+  if (order >= 0 && order < progress) return [0, 255, 0];
+  const pulse = 0.78 + 0.22 * Math.sin(t * 4.4 + order * 0.5);
+  return [20 * pulse, 104 * pulse, 255 * pulse];
+};
+
+function onRect(x: number, y: number, rx: number, ry: number, rw: number, rh: number): boolean {
+  return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
+}
+
+function coinAt(x: number, y: number, points: Array<[number, number]>, t: number): RGB | undefined {
+	for (let i = 0; i < points.length; i++) {
+		const [cx, cy] = points[i];
+    if (x !== cx || y !== cy) continue;
+    const pulse = 0.62 + 0.38 * Math.sin(t * 5.4 + i * 0.7);
+    return [25 * pulse, 106 * pulse, 255 * pulse];
+  }
+	return undefined;
+}
+
+function purpleCoinAt(x: number, y: number, points: Array<[number, number]>, t: number): RGB | undefined {
+  for (let i = 0; i < points.length; i++) {
+    const [cx, cy] = points[i];
+    if (x !== cx || y !== cy) continue;
+    const pulse = 0.62 + 0.38 * Math.sin(t * 5.4 + i * 0.7);
+    return [205 * pulse, 42 * pulse, 255 * pulse];
+  }
+  return undefined;
+}
+
+function pingPong(step: number, max: number): number {
+  const period = max * 2;
+  const value = mod(step, period);
+  return value > max ? period - value : value;
+}
+
+function temporada2Preview(level: number): FloorAnim {
+  return (x, y, cols, rows, t) => {
+    const tick = Math.floor(t * 10);
+    let safe = false;
+    let hazard = false;
+    let brightHazard = false;
+    let coins: Array<[number, number]> = [];
+    let purpleCoins: Array<[number, number]> = [];
+
+    if (level === 1) {
+      safe =
+        onRect(x, y, 5, 12, 6, 8) ||
+        onRect(x, y, 2, 2, 3, 4) ||
+        onRect(x, y, 11, 2, 3, 4) ||
+        onRect(x, y, 2, 26, 3, 4) ||
+        onRect(x, y, 11, 26, 3, 4);
+      coins = [
+        [1, 7],
+        [4, 6],
+        [11, 6],
+        [14, 7],
+        [2, 15],
+        [13, 15],
+        [4, 24],
+        [11, 24],
+        [7, 27],
+        [8, 27],
+      ];
+      const left = 1 + pingPong(Math.floor(tick / 3), 5);
+      const right = 14 - pingPong(Math.floor((tick + 9) / 3), 5);
+      hazard = x === left || x === right;
+    } else if (level === 2) {
+      safe = y < 4 || y >= 28;
+      coins = [
+        [2, 3],
+        [13, 3],
+        [5, 8],
+        [10, 8],
+        [2, 13],
+        [14, 13],
+        [6, 18],
+        [11, 18],
+        [3, 23],
+        [13, 23],
+        [7, 29],
+        [10, 29],
+      ];
+      purpleCoins = [
+        [7, 3],
+        [8, 13],
+        [4, 18],
+        [11, 23],
+      ];
+      for (let band = 0; band < 5; band++) {
+        const row = 5 + band * 5;
+        const inBand = y === row || y === row + 1;
+        if (!inBand) continue;
+        brightHazard = true;
+        const gateA = 1 + pingPong(Math.floor((tick + band * 9) / 5), 11);
+        const gateB = 13 - pingPong(Math.floor((tick + band * 7 + 18) / 6), 10);
+        safe = safe || onRect(x, y, gateA, row, 3, 2) || onRect(x, y, gateB, row + 1, 2, 1);
+      }
+    } else if (level === 3) {
+      safe = onRect(x, y, 5, 13, 6, 6);
+      coins = [
+        [7, 3],
+        [8, 3],
+        [2, 8],
+        [13, 8],
+        [4, 15],
+        [11, 15],
+        [2, 23],
+        [13, 23],
+        [7, 28],
+        [8, 28],
+        [5, 20],
+        [10, 11],
+      ];
+      const cx = 7.5;
+      const cy = 15.5;
+      const angle = Math.floor(t * 1.45) % 4;
+      const dirs: Array<[number, number]> = [
+        [0, -1],
+        [1, 0],
+        [0, 1],
+        [-1, 0],
+      ];
+      for (const offset of [0, 2]) {
+        const [dx, dy] = dirs[(angle + offset) % dirs.length];
+        for (let distance = 2; distance < 15; distance++) {
+          const hx = Math.round(cx + dx * distance);
+          const hy = Math.round(cy + dy * distance);
+          hazard = hazard || (x === hx && y === hy) || (dx === 0 ? x === hx - 1 && y === hy : x === hx && y === hy - 1);
+        }
+      }
+    } else if (level === 4) {
+      safe = y % 5 <= 1;
+      coins = [
+        [1, 2],
+        [14, 3],
+        [3, 7],
+        [12, 8],
+        [6, 13],
+        [9, 18],
+        [3, 23],
+        [12, 24],
+        [1, 29],
+        [14, 29],
+        [7, 30],
+        [8, 30],
+      ];
+      for (let gate = 0; gate < 5; gate++) {
+        const row = 4 + gate * 5;
+        const open = (Math.floor(tick / 10) + gate * 2) % 4;
+        hazard = hazard || ((y === row || y === row + 1) && Math.floor(x / 4) !== open);
+      }
+    } else {
+      safe = onRect(x, y, 6, 13, 4, 6) || onRect(x, y, 0, 0, 3, 3) || onRect(x, y, 13, 0, 3, 3) || onRect(x, y, 0, 29, 3, 3) || onRect(x, y, 13, 29, 3, 3);
+      coins = [
+        [2, 4],
+        [5, 4],
+        [10, 4],
+        [13, 4],
+        [3, 10],
+        [7, 10],
+        [11, 10],
+        [5, 16],
+        [10, 16],
+        [3, 22],
+        [7, 22],
+        [12, 22],
+        [2, 28],
+        [6, 28],
+        [10, 28],
+        [14, 28],
+      ];
+      for (let diagonal = -rows; diagonal < cols; diagonal += 6) {
+        const offset = diagonal + Math.floor(tick / 3);
+        const hx = offset + Math.floor(y / 2);
+        hazard = hazard || x === hx || x === hx - 1;
+      }
+    }
+
+    if (safe) return [0, 232, 62];
+    if (hazard || brightHazard) {
+      const heat = 0.82 + 0.18 * Math.sin(t * 8.5 + x * 0.45 + y * 0.21);
+      return [255 * heat, 34 * heat, 24 * heat];
+    }
+    const coin = coinAt(x, y, coins, t);
+    if (coin) return coin;
+    const purpleCoin = purpleCoinAt(x, y, purpleCoins, t);
+    if (purpleCoin) return purpleCoin;
+    const ember = 0.08 + 0.05 * Math.sin(t * 1.8 + x * 0.4 + y * 0.17);
+    return [30 * ember, 70 * ember, 95 * ember];
+  };
+}
 
 export const defaultFloorAnim = loop;
 
@@ -233,4 +512,16 @@ export const floorAnimations: Record<string, FloorAnim> = {
   lava,
   saltos,
   duel,
+  memory,
+  patrones,
+  "temporada2-level-1": temporada2Preview(1),
+  "temporada2-level-2": temporada2Preview(2),
+  "temporada2-level-3": temporada2Preview(3),
+  "temporada2-level-4": temporada2Preview(4),
+  "temporada2-level-5": temporada2Preview(5),
+  temporada2: temporada2Preview(1),
 };
+
+for (let level = 6; level <= 30; level++) {
+  floorAnimations[`temporada2-level-${level}`] = temporada2Preview(level);
+}

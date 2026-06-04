@@ -21,6 +21,7 @@ const (
 	GridHeight = animation.GridHeight
 
 	countdownDuration  = 3 * time.Second
+	transitionDuration = 1800 * time.Millisecond
 	tickDuration       = 25 * time.Millisecond
 	damageCooldown     = 1 * time.Second
 	DefaultMusicRef    = "Motion/canciones/Background07.mp3"
@@ -56,20 +57,24 @@ type PlayerSnapshot struct {
 }
 
 type Snapshot struct {
-	Phase           string
-	Difficulty      string
-	Level           string
-	LevelNumber     int
-	Players         []PlayerSnapshot
-	Score           int
-	StartedUnix     int64
-	EndsUnix        int64
-	ElapsedMillis   int64
-	RemainingMillis int64
-	CountdownMillis int64
-	ActiveTargets   int
-	Lives           int
-	Success         bool
+	Phase            string
+	Difficulty       string
+	Level            string
+	LevelNumber      int
+	Players          []PlayerSnapshot
+	Score            int
+	StartedUnix      int64
+	CreatedUnixNanos int64
+	StartedUnixNanos int64
+	EndedUnixNanos   int64
+	EndsUnix         int64
+	ElapsedMillis    int64
+	RemainingMillis  int64
+	CountdownMillis  int64
+	ActiveTargets    int
+	LivesStart       int
+	Lives            int
+	Success          bool
 }
 
 type Point struct {
@@ -87,6 +92,7 @@ type Game struct {
 	createdAt time.Time
 	startedAt time.Time
 	endedAt   time.Time
+	restartAt time.Time
 
 	score        int
 	lives        int
@@ -98,6 +104,8 @@ type Game struct {
 	pressed      map[Point]bool
 	lastDamageAt time.Time
 	hitFlash     map[Point]time.Time
+	transitionID int
+	seed         int64
 }
 
 type compiledLevel struct {
@@ -233,7 +241,7 @@ func New(now time.Time, playerCount int, difficulty string, level string) *Game 
 	return NewWithSeed(now, 0, playerCount, difficulty, level)
 }
 
-func NewWithSeed(now time.Time, _ int64, playerCount int, difficulty string, level string) *Game {
+func NewWithSeed(now time.Time, seed int64, playerCount int, difficulty string, level string) *Game {
 	_ = load()
 	diff := NormalizeDifficulty(difficulty)
 	selected := levelFor(diff, level)
@@ -259,6 +267,8 @@ func NewWithSeed(now time.Time, _ int64, playerCount int, difficulty string, lev
 		purplePrimed: map[string]bool{},
 		pressed:      map[Point]bool{},
 		hitFlash:     map[Point]time.Time{},
+		transitionID: transitionIDFromSeed(seed, selected.id, now),
+		seed:         seed,
 	}
 }
 
@@ -293,9 +303,6 @@ func (g *Game) Render(now time.Time) []RGB {
 		for x := 0; x < GridWidth; x++ {
 			pt := Point{X: x, Y: y}
 			color := g.colorAtLocked(pt, now)
-			if now.Before(g.startedAt) {
-				color = scale(color, countdownFade(now, g.createdAt, g.startedAt))
-			}
 			frame[y*GridWidth+x] = color
 		}
 	}
@@ -330,30 +337,50 @@ func (g *Game) Snapshot(now time.Time) Snapshot {
 		countdown = g.startedAt.Sub(now).Milliseconds()
 	}
 	return Snapshot{
-		Phase:           phase,
-		Difficulty:      string(g.difficulty),
-		Level:           g.level.id,
-		LevelNumber:     levelNumber(g.level.id),
-		Players:         g.playersLocked(),
-		Score:           g.score,
-		StartedUnix:     g.startedAt.Unix(),
-		EndsUnix:        g.endsUnixLocked(),
-		ElapsedMillis:   elapsed,
-		RemainingMillis: remaining,
-		CountdownMillis: countdown,
-		ActiveTargets:   len(g.level.scoreUniqs) - len(g.removed),
-		Lives:           g.lives,
-		Success:         g.success,
+		Phase:            phase,
+		Difficulty:       string(g.difficulty),
+		Level:            g.level.id,
+		LevelNumber:      levelNumber(g.level.id),
+		Players:          g.playersLocked(),
+		Score:            g.score,
+		StartedUnix:      g.startedAt.Unix(),
+		CreatedUnixNanos: g.createdAt.UnixNano(),
+		StartedUnixNanos: g.startedAt.UnixNano(),
+		EndedUnixNanos:   g.endedAt.UnixNano(),
+		EndsUnix:         g.endsUnixLocked(),
+		ElapsedMillis:    elapsed,
+		RemainingMillis:  remaining,
+		CountdownMillis:  countdown,
+		ActiveTargets:    len(g.level.scoreUniqs) - len(g.removed),
+		LivesStart:       g.startingLivesLocked(),
+		Lives:            g.lives,
+		Success:          g.success,
 	}
 }
 
+func (g *Game) startingLivesLocked() int {
+	lives := g.level.lives
+	if lives < 1 {
+		return 5
+	}
+	return lives
+}
+
 func (g *Game) tickLocked(now time.Time) {
-	if g.ended || now.Before(g.startedAt) {
+	if g.ended {
+		if g.success && !g.endedAt.IsZero() && !now.Before(g.endedAt.Add(transitionDuration)) {
+			g.advanceSuccessLevelLocked(now)
+		}
+		if !g.success && !g.restartAt.IsZero() && !now.Before(g.restartAt) {
+			g.restartFailedLevelLocked(now)
+		}
+		return
+	}
+	if now.Before(g.startedAt) {
 		return
 	}
 	if g.level.timeLimit > 0 && now.Sub(g.startedAt) >= g.level.timeLimit {
-		g.ended = true
-		g.endedAt = now
+		g.finishFailureLocked(now)
 		return
 	}
 	for pt := range g.pressed {
@@ -380,15 +407,16 @@ func (g *Game) applyPointLocked(point tilePoint, pt Point, now time.Time) []whac
 			delete(g.purpleHeld, point.uniq)
 			delete(g.purplePrimed, point.uniq)
 			g.score++
-			return []whackamole.Event{{Cue: whackamole.CueHit, Message: "Temporada 1 punto " + strconv.Itoa(g.score)}}
+			return []whackamole.Event{{Cue: whackamole.CueCoin, Message: "Temporada 1 punto " + strconv.Itoa(g.score)}}
 		}
 	case 3:
 		if point.uniq != "" && !g.removed[point.uniq] && !g.purplePrimed[point.uniq] {
 			g.purpleHeld[point.uniq] = true
+			return []whackamole.Event{{Cue: whackamole.CueDoubleCoin, Message: "Temporada 1 doble toque"}}
 		}
 	case 2:
 		if g.damageLocked(pt, now) {
-			return []whackamole.Event{{Cue: whackamole.CueMiss, Message: "Temporada 1 daño"}}
+			return []whackamole.Event{{Cue: whackamole.CueDamage, Message: "Temporada 1 daño"}}
 		}
 	}
 	return nil
@@ -418,24 +446,76 @@ func (g *Game) damageLocked(pt Point, now time.Time) bool {
 		g.lives--
 	}
 	if g.lives <= 0 {
-		g.ended = true
-		g.endedAt = now
+		g.finishFailureLocked(now)
 	}
 	return true
+}
+
+func (g *Game) finishFailureLocked(now time.Time) {
+	g.ended = true
+	g.success = false
+	g.endedAt = now
+	g.restartAt = now.Add(3 * time.Second)
+}
+
+func (g *Game) restartFailedLevelLocked(now time.Time) {
+	lives := g.level.lives
+	if lives < 1 {
+		lives = 5
+	}
+	g.createdAt = now
+	g.startedAt = now
+	g.endedAt = time.Time{}
+	g.restartAt = time.Time{}
+	g.score = 0
+	g.lives = lives
+	g.success = false
+	g.ended = false
+	g.removed = map[string]bool{}
+	g.purpleHeld = map[string]bool{}
+	g.purplePrimed = map[string]bool{}
+	g.lastDamageAt = time.Time{}
+	g.hitFlash = map[Point]time.Time{}
+}
+
+func (g *Game) advanceSuccessLevelLocked(now time.Time) {
+	next, ok := nextLevel(g.difficulty, g.level.id)
+	if !ok {
+		return
+	}
+	g.level = next
+	g.createdAt = now
+	g.startedAt = now.Add(countdownDuration)
+	g.endedAt = time.Time{}
+	g.restartAt = time.Time{}
+	g.score = 0
+	lives := g.level.lives
+	if lives < 1 {
+		lives = 5
+	}
+	g.lives = lives
+	g.success = false
+	g.ended = false
+	g.removed = map[string]bool{}
+	g.purpleHeld = map[string]bool{}
+	g.purplePrimed = map[string]bool{}
+	g.lastDamageAt = time.Time{}
+	g.hitFlash = map[Point]time.Time{}
+	g.transitionID = transitionIDFromSeed(g.seed, g.level.id, now)
 }
 
 func (g *Game) colorAtLocked(pt Point, now time.Time) RGB {
 	if g.ended {
 		if g.success {
-			return successColor(pt, now)
+			return successTransitionColor(g.transitionID, pt, now, g.endedAt)
 		}
-		return failColor(pt, now)
+		return g.failureRestartColorAtLocked(pt, now)
 	}
 	if until, ok := g.hitFlash[pt]; ok && now.Before(until) {
 		return RGB{R: 255, G: 236, B: 82}
 	}
 	if now.Before(g.startedAt) {
-		return colorForCountdownPoint(g.countdownPointAtLocked(pt))
+		return g.countdownColorAtLocked(pt, now)
 	}
 	return colorForPoint(g.pointAtLocked(pt, now))
 }
@@ -462,6 +542,24 @@ func (g *Game) rawPointAtLocked(pt Point, now time.Time) tilePoint {
 	return frame.points[pt.Y][pt.X]
 }
 
+func (g *Game) failureRestartColorAtLocked(pt Point, now time.Time) RGB {
+	frameTime := g.endedAt
+	if frameTime.IsZero() {
+		frameTime = now
+	}
+	frame := g.frameAtLocked(frameTime)
+	if frame != nil {
+		point := frame.points[pt.Y][pt.X]
+		if point.present && point.kind == 0 {
+			return colorForPoint(point)
+		}
+	}
+	if int(now.Sub(frameTime)/(120*time.Millisecond))%2 == 0 {
+		return RGB{R: 255, G: 22, B: 34}
+	}
+	return RGB{}
+}
+
 func (g *Game) countdownPointAtLocked(pt Point) tilePoint {
 	if len(g.level.frames) == 0 {
 		return tilePoint{}
@@ -471,6 +569,28 @@ func (g *Game) countdownPointAtLocked(pt Point) tilePoint {
 		return tilePoint{}
 	}
 	return point
+}
+
+func (g *Game) countdownColorAtLocked(pt Point, now time.Time) RGB {
+	return g.safeZoneCountdownColorAtLocked(pt, now)
+}
+
+func (g *Game) safeZoneCountdownColorAtLocked(pt Point, now time.Time) RGB {
+	if len(g.level.frames) == 0 {
+		return RGB{}
+	}
+	progress := countdownProgress(now, g.createdAt, g.startedAt)
+	safeTiles := countdownSafeTiles(&g.level.frames[0])
+	for order, target := range safeTiles {
+		tileProgress := countdownTileProgress(progress, order, len(safeTiles))
+		if tileProgress < 0 {
+			continue
+		}
+		if target.X == pt.X && countdownFallingY(target.Y, tileProgress) == pt.Y {
+			return countdownPulseGreen(target, now, g.createdAt)
+		}
+	}
+	return RGB{}
 }
 
 func (g *Game) frameAtLocked(now time.Time) *compiledFrame {
@@ -594,13 +714,7 @@ func compileLevels(raw []rawLevel) ([]compiledLevel, error) {
 }
 
 func levelFor(diff Difficulty, level string) compiledLevel {
-	if err := load(); err != nil {
-		panic(err)
-	}
-	levels := compiled[diff]
-	if len(levels) == 0 {
-		levels = compiled[DifficultyEasy]
-	}
+	levels := levelsFor(diff)
 	id := NormalizeLevel(level)
 	for _, candidate := range levels {
 		if candidate.id == id {
@@ -608,6 +722,27 @@ func levelFor(diff Difficulty, level string) compiledLevel {
 		}
 	}
 	return levels[0]
+}
+
+func nextLevel(diff Difficulty, currentID string) (compiledLevel, bool) {
+	levels := levelsFor(diff)
+	for index, candidate := range levels {
+		if candidate.id == currentID && index+1 < len(levels) {
+			return levels[index+1], true
+		}
+	}
+	return compiledLevel{}, false
+}
+
+func levelsFor(diff Difficulty) []compiledLevel {
+	if err := load(); err != nil {
+		panic(err)
+	}
+	levels := compiled[diff]
+	if len(levels) == 0 {
+		levels = compiled[DifficultyEasy]
+	}
+	return levels
 }
 
 func difficultyForGameID(id int) (Difficulty, bool) {
@@ -664,52 +799,292 @@ func colorForPoint(point tilePoint) RGB {
 	}
 }
 
-func colorForCountdownPoint(point tilePoint) RGB {
-	if !point.present || point.kind != 0 {
-		return RGB{}
+func transitionIDFromSeed(seed int64, levelID string, now time.Time) int {
+	if seed == 0 {
+		seed = now.UnixNano()
 	}
-	return RGB{R: 0, G: 210, B: 70}
+	value := seed
+	for _, char := range levelID {
+		value = value*31 + int64(char)
+	}
+	if value < 0 {
+		value = -value
+	}
+	return int(value % int64(transitionCount()))
 }
 
-func successColor(pt Point, now time.Time) RGB {
-	pulse := 0.68 + 0.32*math.Sin(now.Sub(time.Unix(0, 0)).Seconds()*5+float64(pt.X+pt.Y)*0.2)
+func transitionCount() int {
+	return 5
+}
+
+func successTransitionColor(id int, pt Point, now time.Time, startedAt time.Time) RGB {
+	if startedAt.IsZero() {
+		startedAt = now
+	}
+	progress := clampFloat(float64(now.Sub(startedAt)) / float64(transitionDuration))
+	if progress >= 1 {
+		return successSettleColor(pt, now)
+	}
+	switch id % transitionCount() {
+	case 0:
+		return portalWipeColor(pt, progress, now)
+	case 1:
+		return coinBurstColor(pt, progress, now)
+	case 2:
+		return scannerSweepColor(pt, progress, now)
+	case 3:
+		return spiralGateColor(pt, progress, now)
+	default:
+		return elevatorRiseColor(pt, progress, now)
+	}
+}
+
+func successSettleColor(pt Point, now time.Time) RGB {
+	pulse := 0.72 + 0.28*math.Sin(now.Sub(time.Unix(0, 0)).Seconds()*5+float64(pt.X+pt.Y)*0.2)
 	return RGB{R: byte(20 * pulse), G: byte(255 * pulse), B: byte(80 * pulse)}
 }
 
-func failColor(pt Point, now time.Time) RGB {
-	pulse := 0.55 + 0.45*math.Sin(now.Sub(time.Unix(0, 0)).Seconds()*8+float64(pt.X)*0.3)
-	return RGB{R: byte(255 * pulse), G: byte(18 * pulse), B: byte(32 * pulse)}
+func portalWipeColor(pt Point, progress float64, now time.Time) RGB {
+	centerX, centerY := 7.5, 15.5
+	d := distanceFloat(float64(pt.X), float64(pt.Y), centerX, centerY)
+	maxD := distanceFloat(0, 0, centerX, centerY)
+	ring := math.Abs(d/maxD - easeInOut(progress))
+	if progress < 0.2 {
+		if checker(pt, now, 5) {
+			return RGB{R: 0, G: 84, B: 32}
+		}
+		return idleTransitionColor()
+	}
+	if ring < 0.045 {
+		return RGB{R: 245, G: 250, B: 255}
+	}
+	if ring < 0.11 {
+		return RGB{R: 112, G: 255, B: 92}
+	}
+	if d/maxD < easeInOut(progress)-0.05 {
+		return RGB{R: 50, G: 212, B: 255}
+	}
+	if checker(pt, now, 7) {
+		return RGB{R: 10, G: 38, B: 96}
+	}
+	return idleTransitionColor()
+}
+
+func coinBurstColor(pt Point, progress float64, now time.Time) RGB {
+	centerX, centerY := 7.5, 15.5
+	d := distanceFloat(float64(pt.X), float64(pt.Y), centerX, centerY)
+	maxD := distanceFloat(0, 0, centerX, centerY)
+	wave := progress * maxD * 1.15
+	if math.Abs(d-wave) < 0.55 {
+		return RGB{R: 255, G: 232, B: 72}
+	}
+	if math.Abs(d-wave+1.2) < 0.45 {
+		return RGB{R: 255, G: 142, B: 34}
+	}
+	if sparkle(pt, now) && progress > 0.18 && progress < 0.85 {
+		colors := []RGB{
+			{R: 20, G: 92, B: 255},
+			{R: 50, G: 212, B: 255},
+			{R: 255, G: 232, B: 72},
+			{R: 245, G: 38, B: 255},
+		}
+		return colors[(pt.X+pt.Y+transitionFrame(now))%len(colors)]
+	}
+	if d < 2.4 && progress < 0.25 {
+		return RGB{R: 112, G: 255, B: 92}
+	}
+	if d < wave-1.6 {
+		return RGB{R: 0, G: 84, B: 32}
+	}
+	return idleTransitionColor()
+}
+
+func scannerSweepColor(pt Point, progress float64, now time.Time) RGB {
+	sweep := easeInOut(progress)*float64(GridHeight+8) - 4
+	if math.Abs(float64(pt.Y)-sweep) < 0.55 {
+		return RGB{R: 245, G: 250, B: 255}
+	}
+	if math.Abs(float64(pt.Y)-sweep) < 1.6 {
+		return RGB{R: 50, G: 212, B: 255}
+	}
+	if float64(pt.Y) < sweep {
+		if (pt.X+pt.Y+transitionFrame(now)/3)%7 == 0 {
+			return RGB{R: 0, G: 230, B: 62}
+		}
+		return RGB{R: 10, G: 38, B: 96}
+	}
+	if checker(pt, now, 9) {
+		return RGB{R: 0, G: 84, B: 32}
+	}
+	return idleTransitionColor()
+}
+
+func spiralGateColor(pt Point, progress float64, now time.Time) RGB {
+	centerX, centerY := 7.5, 15.5
+	dx := float64(pt.X) - centerX
+	dy := float64(pt.Y) - centerY
+	angle := math.Atan2(dy, dx)
+	if angle < 0 {
+		angle += math.Pi * 2
+	}
+	radius := math.Sqrt(dx*dx+dy*dy) / distanceFloat(0, 0, centerX, centerY)
+	spiral := math.Mod(angle/(math.Pi*2)+radius*1.25-progress*1.55+1, 1)
+	if spiral < 0.055 {
+		return RGB{R: 245, G: 250, B: 255}
+	}
+	if spiral < 0.13 {
+		return RGB{R: 150, G: 54, B: 255}
+	}
+	if radius < easeInOut(progress)*0.95 && spiral < 0.28 {
+		return RGB{R: 0, G: 230, B: 62}
+	}
+	if progress > 0.78 && radius < (progress-0.78)*4.2 {
+		return RGB{R: 112, G: 255, B: 92}
+	}
+	return idleTransitionColor()
+}
+
+func elevatorRiseColor(pt Point, progress float64, now time.Time) RGB {
+	columnDelay := float64((pt.Y*3+pt.X)%GridHeight) / float64(GridHeight) * 0.32
+	p := clampFloat((progress - columnDelay) / 0.62)
+	top := int(math.Round(float64(GridWidth) * (1 - easeOutBack(p))))
+	if pt.X >= top {
+		if pt.X == top || pt.X == top+1 {
+			return RGB{R: 245, G: 250, B: 255}
+		}
+		if (pt.X+pt.Y+transitionFrame(now)/2)%5 == 0 {
+			return RGB{R: 50, G: 212, B: 255}
+		}
+		return RGB{R: 0, G: 230, B: 62}
+	}
+	if p > 0.75 && checker(pt, now, 6) {
+		return RGB{R: 0, G: 84, B: 32}
+	}
+	return idleTransitionColor()
+}
+
+func idleTransitionColor() RGB {
+	return RGB{R: 13, G: 19, B: 30}
+}
+
+func transitionFrame(now time.Time) int {
+	return int(now.Sub(time.Unix(0, 0)) / (30 * time.Millisecond))
+}
+
+func checker(pt Point, now time.Time, modulo int) bool {
+	return (pt.X*11+pt.Y*7+transitionFrame(now))%modulo == 0
+}
+
+func sparkle(pt Point, now time.Time) bool {
+	value := (pt.X*37 + pt.Y*19 + transitionFrame(now)*11) % 47
+	return value == 0 || value == 5
+}
+
+func distanceFloat(x1, y1, x2, y2 float64) float64 {
+	return math.Hypot(x1-x2, y1-y2)
+}
+
+func clampFloat(value float64) float64 {
+	if value < 0 {
+		return 0
+	}
+	if value > 1 {
+		return 1
+	}
+	return value
+}
+
+func easeInOut(t float64) float64 {
+	t = clampFloat(t)
+	return t * t * (3 - 2*t)
+}
+
+func easeOutBack(t float64) float64 {
+	t = clampFloat(t) - 1
+	return 1 + 2.2*t*t*t + 1.2*t*t
 }
 
 func playerColor(index int) RGB {
 	palette := []RGB{
-		{R: 255, G: 59, B: 48},
-		{R: 52, G: 199, B: 89},
-		{R: 10, G: 132, B: 255},
-		{R: 255, G: 214, B: 10},
-		{R: 191, G: 90, B: 242},
-		{R: 50, G: 212, B: 255},
+		{R: 255, G: 0, B: 0},
+		{R: 0, G: 255, B: 255},
+		{R: 0, G: 255, B: 0},
+		{R: 255, G: 0, B: 255},
+		{R: 0, G: 0, B: 255},
+		{R: 255, G: 255, B: 0},
 	}
 	return palette[index%len(palette)]
 }
 
-func countdownFade(now, createdAt, startedAt time.Time) float64 {
+func countdownProgress(now, createdAt, startedAt time.Time) float64 {
 	total := startedAt.Sub(createdAt)
 	if total <= 0 {
 		return 1
 	}
-	progress := 1 - float64(startedAt.Sub(now))/float64(total)
+	progress := float64(now.Sub(createdAt)) / float64(total)
 	if progress < 0 {
-		progress = 0
+		return 0
 	}
 	if progress > 1 {
-		progress = 1
+		return 1
 	}
-	return 0.16 + progress*0.36
+	return progress
 }
 
-func scale(color RGB, factor float64) RGB {
-	return RGB{R: byte(float64(color.R) * factor), G: byte(float64(color.G) * factor), B: byte(float64(color.B) * factor)}
+func countdownTileProgress(countdownProgress float64, order int, total int) float64 {
+	if total <= 1 {
+		return countdownProgress
+	}
+	// Spread the starts across the countdown, but leave a final beat where all tiles are settled.
+	delay := float64(order) / float64(total-1) * 0.68
+	fallDuration := 0.24
+	progress := (countdownProgress - delay) / fallDuration
+	if progress < 0 {
+		return -1
+	}
+	if progress > 1 {
+		return 1
+	}
+	return progress
+}
+
+func countdownFallingY(targetY int, tileProgress float64) int {
+	if tileProgress < 0 {
+		tileProgress = 0
+	}
+	if tileProgress > 1 {
+		tileProgress = 1
+	}
+	eased := 1 - math.Pow(1-tileProgress, 3)
+	startY := targetY - GridHeight
+	y := float64(startY) + float64(targetY-startY)*eased
+	return int(math.Round(y))
+}
+
+func countdownSafeTiles(frame *compiledFrame) []Point {
+	if frame == nil {
+		return nil
+	}
+	tiles := []Point{}
+	for y := GridHeight - 1; y >= 0; y-- {
+		for x := 0; x < GridWidth; x++ {
+			point := frame.points[y][x]
+			if point.present && point.kind == 0 {
+				tiles = append(tiles, Point{X: x, Y: y})
+			}
+		}
+	}
+	return tiles
+}
+
+func countdownPulseGreen(pt Point, now time.Time, createdAt time.Time) RGB {
+	phase := now.Sub(createdAt).Seconds()*math.Pi*4 + float64(pt.X+pt.Y)*0.22
+	pulse := 0.5 + 0.5*math.Sin(phase)
+	return RGB{
+		R: 0,
+		G: byte(232 + 23*pulse),
+		B: byte(68 + 18*pulse),
+	}
 }
 
 func inBounds(x, y int) bool {

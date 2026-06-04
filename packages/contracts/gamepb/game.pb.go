@@ -22,10 +22,11 @@ const (
 )
 
 type GameSessionRecord struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Sequence  uint64                 `protobuf:"varint,2,opt,name=sequence,proto3" json:"sequence,omitempty"`
-	UnixNanos int64                  `protobuf:"varint,3,opt,name=unix_nanos,json=unixNanos,proto3" json:"unix_nanos,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	SessionId      string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Sequence       uint64                 `protobuf:"varint,2,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	UnixNanos      int64                  `protobuf:"varint,3,opt,name=unix_nanos,json=unixNanos,proto3" json:"unix_nanos,omitempty"`
+	VenueSessionId string                 `protobuf:"bytes,4,opt,name=venue_session_id,json=venueSessionId,proto3" json:"venue_session_id,omitempty"`
 	// Types that are valid to be assigned to Payload:
 	//
 	//	*GameSessionRecord_SessionStarted
@@ -36,6 +37,8 @@ type GameSessionRecord struct {
 	//	*GameSessionRecord_GameEvent
 	//	*GameSessionRecord_AudioCue
 	//	*GameSessionRecord_DisplaySnapshot
+	//	*GameSessionRecord_LevelAttemptStarted
+	//	*GameSessionRecord_LevelAttemptFinished
 	Payload       isGameSessionRecord_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -90,6 +93,13 @@ func (x *GameSessionRecord) GetUnixNanos() int64 {
 		return x.UnixNanos
 	}
 	return 0
+}
+
+func (x *GameSessionRecord) GetVenueSessionId() string {
+	if x != nil {
+		return x.VenueSessionId
+	}
+	return ""
 }
 
 func (x *GameSessionRecord) GetPayload() isGameSessionRecord_Payload {
@@ -171,6 +181,24 @@ func (x *GameSessionRecord) GetDisplaySnapshot() *DisplaySnapshot {
 	return nil
 }
 
+func (x *GameSessionRecord) GetLevelAttemptStarted() *LevelAttemptStarted {
+	if x != nil {
+		if x, ok := x.Payload.(*GameSessionRecord_LevelAttemptStarted); ok {
+			return x.LevelAttemptStarted
+		}
+	}
+	return nil
+}
+
+func (x *GameSessionRecord) GetLevelAttemptFinished() *LevelAttemptFinished {
+	if x != nil {
+		if x, ok := x.Payload.(*GameSessionRecord_LevelAttemptFinished); ok {
+			return x.LevelAttemptFinished
+		}
+	}
+	return nil
+}
+
 type isGameSessionRecord_Payload interface {
 	isGameSessionRecord_Payload()
 }
@@ -207,6 +235,14 @@ type GameSessionRecord_DisplaySnapshot struct {
 	DisplaySnapshot *DisplaySnapshot `protobuf:"bytes,17,opt,name=display_snapshot,json=displaySnapshot,proto3,oneof"`
 }
 
+type GameSessionRecord_LevelAttemptStarted struct {
+	LevelAttemptStarted *LevelAttemptStarted `protobuf:"bytes,18,opt,name=level_attempt_started,json=levelAttemptStarted,proto3,oneof"`
+}
+
+type GameSessionRecord_LevelAttemptFinished struct {
+	LevelAttemptFinished *LevelAttemptFinished `protobuf:"bytes,19,opt,name=level_attempt_finished,json=levelAttemptFinished,proto3,oneof"`
+}
+
 func (*GameSessionRecord_SessionStarted) isGameSessionRecord_Payload() {}
 
 func (*GameSessionRecord_SessionEnded) isGameSessionRecord_Payload() {}
@@ -223,6 +259,10 @@ func (*GameSessionRecord_AudioCue) isGameSessionRecord_Payload() {}
 
 func (*GameSessionRecord_DisplaySnapshot) isGameSessionRecord_Payload() {}
 
+func (*GameSessionRecord_LevelAttemptStarted) isGameSessionRecord_Payload() {}
+
+func (*GameSessionRecord_LevelAttemptFinished) isGameSessionRecord_Payload() {}
+
 type SessionStarted struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Game             string                 `protobuf:"bytes,1,opt,name=game,proto3" json:"game,omitempty"`
@@ -230,6 +270,11 @@ type SessionStarted struct {
 	PlayerCount      uint32                 `protobuf:"varint,3,opt,name=player_count,json=playerCount,proto3" json:"player_count,omitempty"`
 	RngSeed          int64                  `protobuf:"varint,4,opt,name=rng_seed,json=rngSeed,proto3" json:"rng_seed,omitempty"`
 	StartedUnixNanos int64                  `protobuf:"varint,5,opt,name=started_unix_nanos,json=startedUnixNanos,proto3" json:"started_unix_nanos,omitempty"`
+	Difficulty       string                 `protobuf:"bytes,6,opt,name=difficulty,proto3" json:"difficulty,omitempty"`
+	Level            string                 `protobuf:"bytes,7,opt,name=level,proto3" json:"level,omitempty"`
+	TeamName         string                 `protobuf:"bytes,8,opt,name=team_name,json=teamName,proto3" json:"team_name,omitempty"`
+	Players          []*DisplayPlayer       `protobuf:"bytes,9,rep,name=players,proto3" json:"players,omitempty"`
+	VenueSessionId   string                 `protobuf:"bytes,10,opt,name=venue_session_id,json=venueSessionId,proto3" json:"venue_session_id,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -297,6 +342,41 @@ func (x *SessionStarted) GetStartedUnixNanos() int64 {
 		return x.StartedUnixNanos
 	}
 	return 0
+}
+
+func (x *SessionStarted) GetDifficulty() string {
+	if x != nil {
+		return x.Difficulty
+	}
+	return ""
+}
+
+func (x *SessionStarted) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+func (x *SessionStarted) GetTeamName() string {
+	if x != nil {
+		return x.TeamName
+	}
+	return ""
+}
+
+func (x *SessionStarted) GetPlayers() []*DisplayPlayer {
+	if x != nil {
+		return x.Players
+	}
+	return nil
+}
+
+func (x *SessionStarted) GetVenueSessionId() string {
+	if x != nil {
+		return x.VenueSessionId
+	}
+	return ""
 }
 
 type SessionEnded struct {
@@ -731,6 +811,294 @@ func (x *AudioCue) GetUnixNanos() int64 {
 	return 0
 }
 
+type LevelAttemptStarted struct {
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	AttemptId                string                 `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	Game                     string                 `protobuf:"bytes,2,opt,name=game,proto3" json:"game,omitempty"`
+	LevelId                  string                 `protobuf:"bytes,3,opt,name=level_id,json=levelId,proto3" json:"level_id,omitempty"`
+	LevelNumber              uint32                 `protobuf:"varint,4,opt,name=level_number,json=levelNumber,proto3" json:"level_number,omitempty"`
+	Difficulty               string                 `protobuf:"bytes,5,opt,name=difficulty,proto3" json:"difficulty,omitempty"`
+	PlayerCount              uint32                 `protobuf:"varint,6,opt,name=player_count,json=playerCount,proto3" json:"player_count,omitempty"`
+	LivesStart               int32                  `protobuf:"varint,7,opt,name=lives_start,json=livesStart,proto3" json:"lives_start,omitempty"`
+	ScoreStart               int32                  `protobuf:"varint,8,opt,name=score_start,json=scoreStart,proto3" json:"score_start,omitempty"`
+	ActiveTargetsStart       uint32                 `protobuf:"varint,9,opt,name=active_targets_start,json=activeTargetsStart,proto3" json:"active_targets_start,omitempty"`
+	StartedUnixNanos         int64                  `protobuf:"varint,10,opt,name=started_unix_nanos,json=startedUnixNanos,proto3" json:"started_unix_nanos,omitempty"`
+	GameplayStartedUnixNanos int64                  `protobuf:"varint,11,opt,name=gameplay_started_unix_nanos,json=gameplayStartedUnixNanos,proto3" json:"gameplay_started_unix_nanos,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *LevelAttemptStarted) Reset() {
+	*x = LevelAttemptStarted{}
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LevelAttemptStarted) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LevelAttemptStarted) ProtoMessage() {}
+
+func (x *LevelAttemptStarted) ProtoReflect() protoreflect.Message {
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LevelAttemptStarted.ProtoReflect.Descriptor instead.
+func (*LevelAttemptStarted) Descriptor() ([]byte, []int) {
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *LevelAttemptStarted) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
+	}
+	return ""
+}
+
+func (x *LevelAttemptStarted) GetGame() string {
+	if x != nil {
+		return x.Game
+	}
+	return ""
+}
+
+func (x *LevelAttemptStarted) GetLevelId() string {
+	if x != nil {
+		return x.LevelId
+	}
+	return ""
+}
+
+func (x *LevelAttemptStarted) GetLevelNumber() uint32 {
+	if x != nil {
+		return x.LevelNumber
+	}
+	return 0
+}
+
+func (x *LevelAttemptStarted) GetDifficulty() string {
+	if x != nil {
+		return x.Difficulty
+	}
+	return ""
+}
+
+func (x *LevelAttemptStarted) GetPlayerCount() uint32 {
+	if x != nil {
+		return x.PlayerCount
+	}
+	return 0
+}
+
+func (x *LevelAttemptStarted) GetLivesStart() int32 {
+	if x != nil {
+		return x.LivesStart
+	}
+	return 0
+}
+
+func (x *LevelAttemptStarted) GetScoreStart() int32 {
+	if x != nil {
+		return x.ScoreStart
+	}
+	return 0
+}
+
+func (x *LevelAttemptStarted) GetActiveTargetsStart() uint32 {
+	if x != nil {
+		return x.ActiveTargetsStart
+	}
+	return 0
+}
+
+func (x *LevelAttemptStarted) GetStartedUnixNanos() int64 {
+	if x != nil {
+		return x.StartedUnixNanos
+	}
+	return 0
+}
+
+func (x *LevelAttemptStarted) GetGameplayStartedUnixNanos() int64 {
+	if x != nil {
+		return x.GameplayStartedUnixNanos
+	}
+	return 0
+}
+
+type LevelAttemptFinished struct {
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	AttemptId                string                 `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	Game                     string                 `protobuf:"bytes,2,opt,name=game,proto3" json:"game,omitempty"`
+	LevelId                  string                 `protobuf:"bytes,3,opt,name=level_id,json=levelId,proto3" json:"level_id,omitempty"`
+	LevelNumber              uint32                 `protobuf:"varint,4,opt,name=level_number,json=levelNumber,proto3" json:"level_number,omitempty"`
+	Difficulty               string                 `protobuf:"bytes,5,opt,name=difficulty,proto3" json:"difficulty,omitempty"`
+	Result                   string                 `protobuf:"bytes,6,opt,name=result,proto3" json:"result,omitempty"`
+	ScoreStart               int32                  `protobuf:"varint,7,opt,name=score_start,json=scoreStart,proto3" json:"score_start,omitempty"`
+	ScoreEnd                 int32                  `protobuf:"varint,8,opt,name=score_end,json=scoreEnd,proto3" json:"score_end,omitempty"`
+	LivesStart               int32                  `protobuf:"varint,9,opt,name=lives_start,json=livesStart,proto3" json:"lives_start,omitempty"`
+	LivesEnd                 int32                  `protobuf:"varint,10,opt,name=lives_end,json=livesEnd,proto3" json:"lives_end,omitempty"`
+	ActiveTargetsStart       uint32                 `protobuf:"varint,11,opt,name=active_targets_start,json=activeTargetsStart,proto3" json:"active_targets_start,omitempty"`
+	ActiveTargetsEnd         uint32                 `protobuf:"varint,12,opt,name=active_targets_end,json=activeTargetsEnd,proto3" json:"active_targets_end,omitempty"`
+	StartedUnixNanos         int64                  `protobuf:"varint,13,opt,name=started_unix_nanos,json=startedUnixNanos,proto3" json:"started_unix_nanos,omitempty"`
+	GameplayStartedUnixNanos int64                  `protobuf:"varint,14,opt,name=gameplay_started_unix_nanos,json=gameplayStartedUnixNanos,proto3" json:"gameplay_started_unix_nanos,omitempty"`
+	EndedUnixNanos           int64                  `protobuf:"varint,15,opt,name=ended_unix_nanos,json=endedUnixNanos,proto3" json:"ended_unix_nanos,omitempty"`
+	ElapsedMillis            int64                  `protobuf:"varint,16,opt,name=elapsed_millis,json=elapsedMillis,proto3" json:"elapsed_millis,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *LevelAttemptFinished) Reset() {
+	*x = LevelAttemptFinished{}
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LevelAttemptFinished) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LevelAttemptFinished) ProtoMessage() {}
+
+func (x *LevelAttemptFinished) ProtoReflect() protoreflect.Message {
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LevelAttemptFinished.ProtoReflect.Descriptor instead.
+func (*LevelAttemptFinished) Descriptor() ([]byte, []int) {
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *LevelAttemptFinished) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
+	}
+	return ""
+}
+
+func (x *LevelAttemptFinished) GetGame() string {
+	if x != nil {
+		return x.Game
+	}
+	return ""
+}
+
+func (x *LevelAttemptFinished) GetLevelId() string {
+	if x != nil {
+		return x.LevelId
+	}
+	return ""
+}
+
+func (x *LevelAttemptFinished) GetLevelNumber() uint32 {
+	if x != nil {
+		return x.LevelNumber
+	}
+	return 0
+}
+
+func (x *LevelAttemptFinished) GetDifficulty() string {
+	if x != nil {
+		return x.Difficulty
+	}
+	return ""
+}
+
+func (x *LevelAttemptFinished) GetResult() string {
+	if x != nil {
+		return x.Result
+	}
+	return ""
+}
+
+func (x *LevelAttemptFinished) GetScoreStart() int32 {
+	if x != nil {
+		return x.ScoreStart
+	}
+	return 0
+}
+
+func (x *LevelAttemptFinished) GetScoreEnd() int32 {
+	if x != nil {
+		return x.ScoreEnd
+	}
+	return 0
+}
+
+func (x *LevelAttemptFinished) GetLivesStart() int32 {
+	if x != nil {
+		return x.LivesStart
+	}
+	return 0
+}
+
+func (x *LevelAttemptFinished) GetLivesEnd() int32 {
+	if x != nil {
+		return x.LivesEnd
+	}
+	return 0
+}
+
+func (x *LevelAttemptFinished) GetActiveTargetsStart() uint32 {
+	if x != nil {
+		return x.ActiveTargetsStart
+	}
+	return 0
+}
+
+func (x *LevelAttemptFinished) GetActiveTargetsEnd() uint32 {
+	if x != nil {
+		return x.ActiveTargetsEnd
+	}
+	return 0
+}
+
+func (x *LevelAttemptFinished) GetStartedUnixNanos() int64 {
+	if x != nil {
+		return x.StartedUnixNanos
+	}
+	return 0
+}
+
+func (x *LevelAttemptFinished) GetGameplayStartedUnixNanos() int64 {
+	if x != nil {
+		return x.GameplayStartedUnixNanos
+	}
+	return 0
+}
+
+func (x *LevelAttemptFinished) GetEndedUnixNanos() int64 {
+	if x != nil {
+		return x.EndedUnixNanos
+	}
+	return 0
+}
+
+func (x *LevelAttemptFinished) GetElapsedMillis() int64 {
+	if x != nil {
+		return x.ElapsedMillis
+	}
+	return 0
+}
+
 type DisplaySnapshot struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
 	CurrentGame              string                 `protobuf:"bytes,1,opt,name=current_game,json=currentGame,proto3" json:"current_game,omitempty"`
@@ -752,13 +1120,16 @@ type DisplaySnapshot struct {
 	IntroRemainingMillis     int64                  `protobuf:"varint,17,opt,name=intro_remaining_millis,json=introRemainingMillis,proto3" json:"intro_remaining_millis,omitempty"`
 	CountdownRemainingMillis int64                  `protobuf:"varint,18,opt,name=countdown_remaining_millis,json=countdownRemainingMillis,proto3" json:"countdown_remaining_millis,omitempty"`
 	AudioMuted               bool                   `protobuf:"varint,19,opt,name=audio_muted,json=audioMuted,proto3" json:"audio_muted,omitempty"`
+	Level                    string                 `protobuf:"bytes,20,opt,name=level,proto3" json:"level,omitempty"`
+	Difficulty               string                 `protobuf:"bytes,21,opt,name=difficulty,proto3" json:"difficulty,omitempty"`
+	Success                  bool                   `protobuf:"varint,22,opt,name=success,proto3" json:"success,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
 
 func (x *DisplaySnapshot) Reset() {
 	*x = DisplaySnapshot{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[8]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -770,7 +1141,7 @@ func (x *DisplaySnapshot) String() string {
 func (*DisplaySnapshot) ProtoMessage() {}
 
 func (x *DisplaySnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[8]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -783,7 +1154,7 @@ func (x *DisplaySnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisplaySnapshot.ProtoReflect.Descriptor instead.
 func (*DisplaySnapshot) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{8}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *DisplaySnapshot) GetCurrentGame() string {
@@ -919,6 +1290,27 @@ func (x *DisplaySnapshot) GetAudioMuted() bool {
 	return false
 }
 
+func (x *DisplaySnapshot) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+func (x *DisplaySnapshot) GetDifficulty() string {
+	if x != nil {
+		return x.Difficulty
+	}
+	return ""
+}
+
+func (x *DisplaySnapshot) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
 type DisplayPlayer struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Index         uint32                 `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
@@ -932,7 +1324,7 @@ type DisplayPlayer struct {
 
 func (x *DisplayPlayer) Reset() {
 	*x = DisplayPlayer{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[9]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -944,7 +1336,7 @@ func (x *DisplayPlayer) String() string {
 func (*DisplayPlayer) ProtoMessage() {}
 
 func (x *DisplayPlayer) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[9]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -957,7 +1349,7 @@ func (x *DisplayPlayer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisplayPlayer.ProtoReflect.Descriptor instead.
 func (*DisplayPlayer) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{9}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DisplayPlayer) GetIndex() uint32 {
@@ -1006,7 +1398,7 @@ type Color struct {
 
 func (x *Color) Reset() {
 	*x = Color{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[10]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1018,7 +1410,7 @@ func (x *Color) String() string {
 func (*Color) ProtoMessage() {}
 
 func (x *Color) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[10]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1031,7 +1423,7 @@ func (x *Color) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Color.ProtoReflect.Descriptor instead.
 func (*Color) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{10}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Color) GetR() uint32 {
@@ -1059,13 +1451,14 @@ var File_packages_contracts_gamepb_game_proto protoreflect.FileDescriptor
 
 const file_packages_contracts_gamepb_game_proto_rawDesc = "" +
 	"\n" +
-	"$packages/contracts/gamepb/game.proto\x12\x1bmotionlevels.engine.game.v1\"\x88\x06\n" +
+	"$packages/contracts/gamepb/game.proto\x12\x1bmotionlevels.engine.game.v1\"\x85\b\n" +
 	"\x11GameSessionRecord\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1a\n" +
 	"\bsequence\x18\x02 \x01(\x04R\bsequence\x12\x1d\n" +
 	"\n" +
-	"unix_nanos\x18\x03 \x01(\x03R\tunixNanos\x12V\n" +
+	"unix_nanos\x18\x03 \x01(\x03R\tunixNanos\x12(\n" +
+	"\x10venue_session_id\x18\x04 \x01(\tR\x0evenueSessionId\x12V\n" +
 	"\x0fsession_started\x18\n" +
 	" \x01(\v2+.motionlevels.engine.game.v1.SessionStartedH\x00R\x0esessionStarted\x12P\n" +
 	"\rsession_ended\x18\v \x01(\v2).motionlevels.engine.game.v1.SessionEndedH\x00R\fsessionEnded\x12V\n" +
@@ -1075,14 +1468,24 @@ const file_packages_contracts_gamepb_game_proto_rawDesc = "" +
 	"\n" +
 	"game_event\x18\x0f \x01(\v2&.motionlevels.engine.game.v1.GameEventH\x00R\tgameEvent\x12D\n" +
 	"\taudio_cue\x18\x10 \x01(\v2%.motionlevels.engine.game.v1.AudioCueH\x00R\baudioCue\x12Y\n" +
-	"\x10display_snapshot\x18\x11 \x01(\v2,.motionlevels.engine.game.v1.DisplaySnapshotH\x00R\x0fdisplaySnapshotB\t\n" +
-	"\apayload\"\xa6\x01\n" +
+	"\x10display_snapshot\x18\x11 \x01(\v2,.motionlevels.engine.game.v1.DisplaySnapshotH\x00R\x0fdisplaySnapshot\x12f\n" +
+	"\x15level_attempt_started\x18\x12 \x01(\v20.motionlevels.engine.game.v1.LevelAttemptStartedH\x00R\x13levelAttemptStarted\x12i\n" +
+	"\x16level_attempt_finished\x18\x13 \x01(\v21.motionlevels.engine.game.v1.LevelAttemptFinishedH\x00R\x14levelAttemptFinishedB\t\n" +
+	"\apayload\"\xe9\x02\n" +
 	"\x0eSessionStarted\x12\x12\n" +
 	"\x04game\x18\x01 \x01(\tR\x04game\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12!\n" +
 	"\fplayer_count\x18\x03 \x01(\rR\vplayerCount\x12\x19\n" +
 	"\brng_seed\x18\x04 \x01(\x03R\arngSeed\x12,\n" +
-	"\x12started_unix_nanos\x18\x05 \x01(\x03R\x10startedUnixNanos\"P\n" +
+	"\x12started_unix_nanos\x18\x05 \x01(\x03R\x10startedUnixNanos\x12\x1e\n" +
+	"\n" +
+	"difficulty\x18\x06 \x01(\tR\n" +
+	"difficulty\x12\x14\n" +
+	"\x05level\x18\a \x01(\tR\x05level\x12\x1b\n" +
+	"\tteam_name\x18\b \x01(\tR\bteamName\x12D\n" +
+	"\aplayers\x18\t \x03(\v2*.motionlevels.engine.game.v1.DisplayPlayerR\aplayers\x12(\n" +
+	"\x10venue_session_id\x18\n" +
+	" \x01(\tR\x0evenueSessionId\"P\n" +
 	"\fSessionEnded\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12(\n" +
 	"\x10ended_unix_nanos\x18\x02 \x01(\x03R\x0eendedUnixNanos\"\x94\x01\n" +
@@ -1123,7 +1526,48 @@ const file_packages_contracts_gamepb_game_proto_rawDesc = "" +
 	"\x03cue\x18\x02 \x01(\tR\x03cue\x12\x16\n" +
 	"\x06volume\x18\x03 \x01(\x01R\x06volume\x12\x1d\n" +
 	"\n" +
-	"unix_nanos\x18\x04 \x01(\x03R\tunixNanos\"\xef\x05\n" +
+	"unix_nanos\x18\x04 \x01(\x03R\tunixNanos\"\xaa\x03\n" +
+	"\x13LevelAttemptStarted\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\x01 \x01(\tR\tattemptId\x12\x12\n" +
+	"\x04game\x18\x02 \x01(\tR\x04game\x12\x19\n" +
+	"\blevel_id\x18\x03 \x01(\tR\alevelId\x12!\n" +
+	"\flevel_number\x18\x04 \x01(\rR\vlevelNumber\x12\x1e\n" +
+	"\n" +
+	"difficulty\x18\x05 \x01(\tR\n" +
+	"difficulty\x12!\n" +
+	"\fplayer_count\x18\x06 \x01(\rR\vplayerCount\x12\x1f\n" +
+	"\vlives_start\x18\a \x01(\x05R\n" +
+	"livesStart\x12\x1f\n" +
+	"\vscore_start\x18\b \x01(\x05R\n" +
+	"scoreStart\x120\n" +
+	"\x14active_targets_start\x18\t \x01(\rR\x12activeTargetsStart\x12,\n" +
+	"\x12started_unix_nanos\x18\n" +
+	" \x01(\x03R\x10startedUnixNanos\x12=\n" +
+	"\x1bgameplay_started_unix_nanos\x18\v \x01(\x03R\x18gameplayStartedUnixNanos\"\xd9\x04\n" +
+	"\x14LevelAttemptFinished\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\x01 \x01(\tR\tattemptId\x12\x12\n" +
+	"\x04game\x18\x02 \x01(\tR\x04game\x12\x19\n" +
+	"\blevel_id\x18\x03 \x01(\tR\alevelId\x12!\n" +
+	"\flevel_number\x18\x04 \x01(\rR\vlevelNumber\x12\x1e\n" +
+	"\n" +
+	"difficulty\x18\x05 \x01(\tR\n" +
+	"difficulty\x12\x16\n" +
+	"\x06result\x18\x06 \x01(\tR\x06result\x12\x1f\n" +
+	"\vscore_start\x18\a \x01(\x05R\n" +
+	"scoreStart\x12\x1b\n" +
+	"\tscore_end\x18\b \x01(\x05R\bscoreEnd\x12\x1f\n" +
+	"\vlives_start\x18\t \x01(\x05R\n" +
+	"livesStart\x12\x1b\n" +
+	"\tlives_end\x18\n" +
+	" \x01(\x05R\blivesEnd\x120\n" +
+	"\x14active_targets_start\x18\v \x01(\rR\x12activeTargetsStart\x12,\n" +
+	"\x12active_targets_end\x18\f \x01(\rR\x10activeTargetsEnd\x12,\n" +
+	"\x12started_unix_nanos\x18\r \x01(\x03R\x10startedUnixNanos\x12=\n" +
+	"\x1bgameplay_started_unix_nanos\x18\x0e \x01(\x03R\x18gameplayStartedUnixNanos\x12(\n" +
+	"\x10ended_unix_nanos\x18\x0f \x01(\x03R\x0eendedUnixNanos\x12%\n" +
+	"\x0eelapsed_millis\x18\x10 \x01(\x03R\relapsedMillis\"\xbf\x06\n" +
 	"\x0fDisplaySnapshot\x12!\n" +
 	"\fcurrent_game\x18\x01 \x01(\tR\vcurrentGame\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
@@ -1145,7 +1589,12 @@ const file_packages_contracts_gamepb_game_proto_rawDesc = "" +
 	"\x16intro_remaining_millis\x18\x11 \x01(\x03R\x14introRemainingMillis\x12<\n" +
 	"\x1acountdown_remaining_millis\x18\x12 \x01(\x03R\x18countdownRemainingMillis\x12\x1f\n" +
 	"\vaudio_muted\x18\x13 \x01(\bR\n" +
-	"audioMuted\"\xa1\x01\n" +
+	"audioMuted\x12\x14\n" +
+	"\x05level\x18\x14 \x01(\tR\x05level\x12\x1e\n" +
+	"\n" +
+	"difficulty\x18\x15 \x01(\tR\n" +
+	"difficulty\x12\x18\n" +
+	"\asuccess\x18\x16 \x01(\bR\asuccess\"\xa1\x01\n" +
 	"\rDisplayPlayer\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\rR\x05index\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x128\n" +
@@ -1169,19 +1618,21 @@ func file_packages_contracts_gamepb_game_proto_rawDescGZIP() []byte {
 	return file_packages_contracts_gamepb_game_proto_rawDescData
 }
 
-var file_packages_contracts_gamepb_game_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_packages_contracts_gamepb_game_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_packages_contracts_gamepb_game_proto_goTypes = []any{
-	(*GameSessionRecord)(nil), // 0: motionlevels.engine.game.v1.GameSessionRecord
-	(*SessionStarted)(nil),    // 1: motionlevels.engine.game.v1.SessionStarted
-	(*SessionEnded)(nil),      // 2: motionlevels.engine.game.v1.SessionEnded
-	(*ApiInteraction)(nil),    // 3: motionlevels.engine.game.v1.ApiInteraction
-	(*MenuCommand)(nil),       // 4: motionlevels.engine.game.v1.MenuCommand
-	(*PressureInput)(nil),     // 5: motionlevels.engine.game.v1.PressureInput
-	(*GameEvent)(nil),         // 6: motionlevels.engine.game.v1.GameEvent
-	(*AudioCue)(nil),          // 7: motionlevels.engine.game.v1.AudioCue
-	(*DisplaySnapshot)(nil),   // 8: motionlevels.engine.game.v1.DisplaySnapshot
-	(*DisplayPlayer)(nil),     // 9: motionlevels.engine.game.v1.DisplayPlayer
-	(*Color)(nil),             // 10: motionlevels.engine.game.v1.Color
+	(*GameSessionRecord)(nil),    // 0: motionlevels.engine.game.v1.GameSessionRecord
+	(*SessionStarted)(nil),       // 1: motionlevels.engine.game.v1.SessionStarted
+	(*SessionEnded)(nil),         // 2: motionlevels.engine.game.v1.SessionEnded
+	(*ApiInteraction)(nil),       // 3: motionlevels.engine.game.v1.ApiInteraction
+	(*MenuCommand)(nil),          // 4: motionlevels.engine.game.v1.MenuCommand
+	(*PressureInput)(nil),        // 5: motionlevels.engine.game.v1.PressureInput
+	(*GameEvent)(nil),            // 6: motionlevels.engine.game.v1.GameEvent
+	(*AudioCue)(nil),             // 7: motionlevels.engine.game.v1.AudioCue
+	(*LevelAttemptStarted)(nil),  // 8: motionlevels.engine.game.v1.LevelAttemptStarted
+	(*LevelAttemptFinished)(nil), // 9: motionlevels.engine.game.v1.LevelAttemptFinished
+	(*DisplaySnapshot)(nil),      // 10: motionlevels.engine.game.v1.DisplaySnapshot
+	(*DisplayPlayer)(nil),        // 11: motionlevels.engine.game.v1.DisplayPlayer
+	(*Color)(nil),                // 12: motionlevels.engine.game.v1.Color
 }
 var file_packages_contracts_gamepb_game_proto_depIdxs = []int32{
 	1,  // 0: motionlevels.engine.game.v1.GameSessionRecord.session_started:type_name -> motionlevels.engine.game.v1.SessionStarted
@@ -1191,14 +1642,17 @@ var file_packages_contracts_gamepb_game_proto_depIdxs = []int32{
 	5,  // 4: motionlevels.engine.game.v1.GameSessionRecord.pressure_input:type_name -> motionlevels.engine.game.v1.PressureInput
 	6,  // 5: motionlevels.engine.game.v1.GameSessionRecord.game_event:type_name -> motionlevels.engine.game.v1.GameEvent
 	7,  // 6: motionlevels.engine.game.v1.GameSessionRecord.audio_cue:type_name -> motionlevels.engine.game.v1.AudioCue
-	8,  // 7: motionlevels.engine.game.v1.GameSessionRecord.display_snapshot:type_name -> motionlevels.engine.game.v1.DisplaySnapshot
-	9,  // 8: motionlevels.engine.game.v1.DisplaySnapshot.players:type_name -> motionlevels.engine.game.v1.DisplayPlayer
-	10, // 9: motionlevels.engine.game.v1.DisplayPlayer.color:type_name -> motionlevels.engine.game.v1.Color
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	10, // 7: motionlevels.engine.game.v1.GameSessionRecord.display_snapshot:type_name -> motionlevels.engine.game.v1.DisplaySnapshot
+	8,  // 8: motionlevels.engine.game.v1.GameSessionRecord.level_attempt_started:type_name -> motionlevels.engine.game.v1.LevelAttemptStarted
+	9,  // 9: motionlevels.engine.game.v1.GameSessionRecord.level_attempt_finished:type_name -> motionlevels.engine.game.v1.LevelAttemptFinished
+	11, // 10: motionlevels.engine.game.v1.SessionStarted.players:type_name -> motionlevels.engine.game.v1.DisplayPlayer
+	11, // 11: motionlevels.engine.game.v1.DisplaySnapshot.players:type_name -> motionlevels.engine.game.v1.DisplayPlayer
+	12, // 12: motionlevels.engine.game.v1.DisplayPlayer.color:type_name -> motionlevels.engine.game.v1.Color
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_packages_contracts_gamepb_game_proto_init() }
@@ -1215,6 +1669,8 @@ func file_packages_contracts_gamepb_game_proto_init() {
 		(*GameSessionRecord_GameEvent)(nil),
 		(*GameSessionRecord_AudioCue)(nil),
 		(*GameSessionRecord_DisplaySnapshot)(nil),
+		(*GameSessionRecord_LevelAttemptStarted)(nil),
+		(*GameSessionRecord_LevelAttemptFinished)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1222,7 +1678,7 @@ func file_packages_contracts_gamepb_game_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_packages_contracts_gamepb_game_proto_rawDesc), len(file_packages_contracts_gamepb_game_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

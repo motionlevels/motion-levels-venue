@@ -33,6 +33,7 @@ type FrameRecord struct {
 	GameUnixNanos                int64                  `protobuf:"varint,8,opt,name=game_unix_nanos,json=gameUnixNanos,proto3" json:"game_unix_nanos,omitempty"`
 	ControllerReceivedUnixNanos  int64                  `protobuf:"varint,9,opt,name=controller_received_unix_nanos,json=controllerReceivedUnixNanos,proto3" json:"controller_received_unix_nanos,omitempty"`
 	ControllerPresentedUnixNanos int64                  `protobuf:"varint,10,opt,name=controller_presented_unix_nanos,json=controllerPresentedUnixNanos,proto3" json:"controller_presented_unix_nanos,omitempty"`
+	VenueSessionId               string                 `protobuf:"bytes,11,opt,name=venue_session_id,json=venueSessionId,proto3" json:"venue_session_id,omitempty"`
 	unknownFields                protoimpl.UnknownFields
 	sizeCache                    protoimpl.SizeCache
 }
@@ -137,6 +138,13 @@ func (x *FrameRecord) GetControllerPresentedUnixNanos() int64 {
 	return 0
 }
 
+func (x *FrameRecord) GetVenueSessionId() string {
+	if x != nil {
+		return x.VenueSessionId
+	}
+	return ""
+}
+
 type TileState struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	X             uint32                 `protobuf:"varint,1,opt,name=x,proto3" json:"x,omitempty"`
@@ -225,7 +233,7 @@ var File_packages_contracts_recordingpb_recording_proto protoreflect.FileDescrip
 
 const file_packages_contracts_recordingpb_recording_proto_rawDesc = "" +
 	"\n" +
-	".packages/contracts/recordingpb/recording.proto\x12 motionlevels.engine.recording.v1\"\xbc\x03\n" +
+	".packages/contracts/recordingpb/recording.proto\x12 motionlevels.engine.recording.v1\"\xe6\x03\n" +
 	"\vFrameRecord\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12\x1d\n" +
 	"\n" +
@@ -239,7 +247,8 @@ const file_packages_contracts_recordingpb_recording_proto_rawDesc = "" +
 	"\x0fgame_unix_nanos\x18\b \x01(\x03R\rgameUnixNanos\x12C\n" +
 	"\x1econtroller_received_unix_nanos\x18\t \x01(\x03R\x1bcontrollerReceivedUnixNanos\x12E\n" +
 	"\x1fcontroller_presented_unix_nanos\x18\n" +
-	" \x01(\x03R\x1ccontrollerPresentedUnixNanos\"k\n" +
+	" \x01(\x03R\x1ccontrollerPresentedUnixNanos\x12(\n" +
+	"\x10venue_session_id\x18\v \x01(\tR\x0evenueSessionId\"k\n" +
 	"\tTileState\x12\f\n" +
 	"\x01x\x18\x01 \x01(\rR\x01x\x12\f\n" +
 	"\x01y\x18\x02 \x01(\rR\x01y\x12\f\n" +

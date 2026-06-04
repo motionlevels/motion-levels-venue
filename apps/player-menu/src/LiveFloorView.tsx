@@ -24,9 +24,10 @@ function controllerWebSocketURL(): string {
     url.search = "";
     return url.toString();
   }
+  const controllerPort = import.meta.env.VITE_FLOOR_CONTROLLER_PORT || "8081";
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const host = window.location.hostname || "127.0.0.1";
-  return `${protocol}://${host}:8080/ws`;
+  return `${protocol}://${host}:${controllerPort}/ws`;
 }
 
 export function LiveFloorView() {

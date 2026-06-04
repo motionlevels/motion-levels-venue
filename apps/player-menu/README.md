@@ -26,6 +26,23 @@ the game-engine:
 VITE_GAME_ENGINE_URL=http://192.168.1.137:8082 npm run dev
 ```
 
+Analytics are sent to the dedicated PostHog menu project in production builds.
+Development mode keeps analytics off unless explicitly enabled:
+
+```sh
+VITE_POSTHOG_ENABLED=true npm run dev
+```
+
+Optional kiosk identity values:
+
+```sh
+VITE_VENUE_ID=motion-levels-main
+VITE_KIOSK_ID=kiosk-1
+```
+
+The player menu records game/category/level/difficulty actions, team size, and
+kiosk controls. It intentionally does not send team or player names.
+
 Electron development shell:
 
 ```sh

@@ -8,6 +8,7 @@ message GameSessionRecord {
   string session_id = 1;
   uint64 sequence = 2;
   int64 unix_nanos = 3;
+  string venue_session_id = 4;
 
   oneof payload {
     SessionStarted session_started = 10;
@@ -18,6 +19,8 @@ message GameSessionRecord {
     GameEvent game_event = 15;
     AudioCue audio_cue = 16;
     DisplaySnapshot display_snapshot = 17;
+    LevelAttemptStarted level_attempt_started = 18;
+    LevelAttemptFinished level_attempt_finished = 19;
   }
 }
 
@@ -27,6 +30,11 @@ message SessionStarted {
   uint32 player_count = 3;
   int64 rng_seed = 4;
   int64 started_unix_nanos = 5;
+  string difficulty = 6;
+  string level = 7;
+  string team_name = 8;
+  repeated DisplayPlayer players = 9;
+  string venue_session_id = 10;
 }
 
 message SessionEnded {
@@ -74,6 +82,39 @@ message AudioCue {
   int64 unix_nanos = 4;
 }
 
+message LevelAttemptStarted {
+  string attempt_id = 1;
+  string game = 2;
+  string level_id = 3;
+  uint32 level_number = 4;
+  string difficulty = 5;
+  uint32 player_count = 6;
+  int32 lives_start = 7;
+  int32 score_start = 8;
+  uint32 active_targets_start = 9;
+  int64 started_unix_nanos = 10;
+  int64 gameplay_started_unix_nanos = 11;
+}
+
+message LevelAttemptFinished {
+  string attempt_id = 1;
+  string game = 2;
+  string level_id = 3;
+  uint32 level_number = 4;
+  string difficulty = 5;
+  string result = 6;
+  int32 score_start = 7;
+  int32 score_end = 8;
+  int32 lives_start = 9;
+  int32 lives_end = 10;
+  uint32 active_targets_start = 11;
+  uint32 active_targets_end = 12;
+  int64 started_unix_nanos = 13;
+  int64 gameplay_started_unix_nanos = 14;
+  int64 ended_unix_nanos = 15;
+  int64 elapsed_millis = 16;
+}
+
 message DisplaySnapshot {
   string current_game = 1;
   string label = 2;
@@ -94,6 +135,9 @@ message DisplaySnapshot {
   int64 intro_remaining_millis = 17;
   int64 countdown_remaining_millis = 18;
   bool audio_muted = 19;
+  string level = 20;
+  string difficulty = 21;
+  bool success = 22;
 }
 
 message DisplayPlayer {

@@ -15,6 +15,10 @@ import (
 
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
+	"github.com/lobis/motion-levels/game-engine/internal/games/memorychallenge"
+	"github.com/lobis/motion-levels/game-engine/internal/games/temporada1"
+	"github.com/lobis/motion-levels/game-engine/internal/games/temporada2"
+	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
 	"github.com/lobis/motion-levels/packages/contracts/gamepb"
 	"github.com/lobis/motion-levels/packages/contracts/inputpb"
@@ -119,12 +123,44 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 		t.Fatalf("saltos music = %q, want Background07", saltos.MusicRef)
 	}
 
+	parkour := configForSelection(base, "parkour", 4)
+	if parkour.Game != "parkour" || parkour.PlayerCount != 1 || parkour.Level != "level-1" {
+		t.Fatalf("parkour selection = %+v", parkour)
+	}
+	if parkour.MusicRef != "Motion/canciones/Background07.mp3" {
+		t.Fatalf("parkour music = %q, want Background07", parkour.MusicRef)
+	}
+
 	season := configForSelection(base, "temporada-1", 4)
 	if season.Game != "temporada1" || season.PlayerCount != 4 || season.Level != "level-1" {
 		t.Fatalf("temporada1 selection = %+v", season)
 	}
 	if season.MusicRef != "Motion/canciones/Background07.mp3" {
 		t.Fatalf("temporada1 music = %q, want Background07", season.MusicRef)
+	}
+
+	season2 := configForSelection(base, "temporada-2", 4)
+	if season2.Game != "temporada2" || season2.PlayerCount != 4 || season2.Level != "level-1" || season2.Difficulty != "easy" {
+		t.Fatalf("temporada2 selection = %+v", season2)
+	}
+	if season2.MusicRef != temporada2.DefaultMusicRef || season2.MusicVolume != temporada2.DefaultMusicVolume {
+		t.Fatalf("temporada2 music = %q %.2f, want %q %.2f", season2.MusicRef, season2.MusicVolume, temporada2.DefaultMusicRef, temporada2.DefaultMusicVolume)
+	}
+
+	duel := configForSelection(base, "duelo", 6)
+	if duel.Game != "duel" || duel.PlayerCount != 4 {
+		t.Fatalf("duel selection = %+v", duel)
+	}
+	if duel.MusicRef != "Motion/canciones/Musica8.mp3" {
+		t.Fatalf("duel music = %q, want Musica8", duel.MusicRef)
+	}
+
+	memory := configForSelection(base, "memoria", 6)
+	if memory.Game != "memory" || memory.PlayerCount != 4 {
+		t.Fatalf("memory selection = %+v", memory)
+	}
+	if memory.MusicRef != memorychallenge.DefaultMusicRef || memory.MusicVolume != memorychallenge.DefaultMusicVolume {
+		t.Fatalf("memory music = %q %.2f, want %q %.2f", memory.MusicRef, memory.MusicVolume, memorychallenge.DefaultMusicRef, memorychallenge.DefaultMusicVolume)
 	}
 
 	loop := configForSelection(base, "loop", 6)
@@ -142,6 +178,51 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 	if comet.MusicRef != "Motion/canciones/Background01.mp3" {
 		t.Fatalf("ambient music = %q, want Background01", comet.MusicRef)
 	}
+}
+
+func TestNormalizeProvidesFocusedGameMusicAndCueFallbacks(t *testing.T) {
+	cfg := config{Game: "temporada1", MusicRef: "", CoinCueRef: "coin.wav"}
+	cfg.normalize()
+	if cfg.MusicRef != temporada1.DefaultMusicRef || cfg.MusicVolume != temporada1.DefaultMusicVolume {
+		t.Fatalf("temporada1 music = %q %.2f, want %q %.2f", cfg.MusicRef, cfg.MusicVolume, temporada1.DefaultMusicRef, temporada1.DefaultMusicVolume)
+	}
+	if cfg.DoubleCoinCueRef != "coin.wav" {
+		t.Fatalf("double coin fallback = %q, want coin.wav", cfg.DoubleCoinCueRef)
+	}
+}
+
+func TestReusableTileCueRefsAndDoubleCoinBurst(t *testing.T) {
+	dir := t.TempDir()
+	coinPath := filepath.Join(dir, "coin.wav")
+	damagePath := filepath.Join(dir, "damage.wav")
+	for _, path := range []string{coinPath, damagePath} {
+		if err := os.WriteFile(path, []byte("audio"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	backend := &recordingBackend{}
+	player := audio.NewPlayer(dir, backend)
+	cfg := config{
+		CueVolume:        0.18,
+		CoinCueRef:       "coin.wav",
+		DoubleCoinCueRef: "coin.wav",
+		DamageCueRef:     "damage.wav",
+	}
+
+	if got := cueRef(cfg, whackamole.CueCoin); got != cfg.CoinCueRef {
+		t.Fatalf("coin cue ref = %q", got)
+	}
+	if got := cueRef(cfg, whackamole.CueDoubleCoin); got != cfg.DoubleCoinCueRef {
+		t.Fatalf("double coin cue ref = %q", got)
+	}
+	if got := cueRef(cfg, whackamole.CueDamage); got != cfg.DamageCueRef {
+		t.Fatalf("damage cue ref = %q", got)
+	}
+
+	for i := 0; i < 3; i++ {
+		playCue(cfg, player, whackamole.CueDoubleCoin, cueRef(cfg, whackamole.CueDoubleCoin))
+	}
+	backend.waitForCount(t, coinPath, 6)
 }
 
 func TestGameAPIStatusAndSelect(t *testing.T) {
@@ -162,8 +243,8 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if len(status.Catalog) != 8 {
-		t.Fatalf("catalog = %d entries, want 8", len(status.Catalog))
+	if len(status.Catalog) != 13 {
+		t.Fatalf("catalog = %d entries, want 13", len(status.Catalog))
 	}
 
 	body := bytes.NewBufferString(`{"game":"lava","playerCount":3,"difficulty":"expert"}`)
@@ -213,6 +294,38 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if status.CurrentGame != "temporada1" || status.PlayerCount != 4 || status.Difficulty != "medium" || status.Level != "level-2" {
 		t.Fatalf("selected temporada1 status = %+v", status)
 	}
+
+	body = bytes.NewBufferString(`{"game":"temporada2","playerCount":4,"difficulty":"expert","level":"level-2"}`)
+	response, err = http.Post(server.URL+"/api/select", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("temporada2 select response = %d", response.StatusCode)
+	}
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status.CurrentGame != "temporada2" || status.PlayerCount != 4 || status.Difficulty != "easy" || status.Level != "level-2" {
+		t.Fatalf("selected temporada2 status = %+v", status)
+	}
+
+	body = bytes.NewBufferString(`{"game":"patrones","playerCount":4,"difficulty":"hard","level":"level-3"}`)
+	response, err = http.Post(server.URL+"/api/select", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("patrones select response = %d", response.StatusCode)
+	}
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status.CurrentGame != "patrones" || status.PlayerCount != 4 || status.Difficulty != "hard" || status.Level != "level-3" || status.Phase != "countdown" {
+		t.Fatalf("selected patrones status = %+v", status)
+	}
 }
 
 func TestGameAPIRejectsDuplicatePlayerNames(t *testing.T) {
@@ -250,6 +363,131 @@ func TestGameAPIRejectsDuplicatePlayerColors(t *testing.T) {
 	}
 	if runtime.Status().CurrentGame == "lava" {
 		t.Fatal("duplicate roster should not select lava")
+	}
+}
+
+func TestSessionRecordingWritesLevelAttemptRecords(t *testing.T) {
+	dir := t.TempDir()
+	recorder, err := sessionrecording.New(dir, time.Date(2026, 6, 4, 8, 0, 0, 0, time.UTC), sessionrecording.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 2, Game: "temporada1", Difficulty: "medium", Level: "level-1"}, nil, recorder)
+	started := time.Date(2026, 6, 4, 8, 1, 0, 0, time.UTC)
+	gameplayStarted := started.Add(3 * time.Second)
+	ended := gameplayStarted.Add(42 * time.Second)
+
+	runtime.RecordDisplaySnapshot(displayStatus{
+		CurrentGame:              "temporada1",
+		Label:                    "Temporada 1",
+		Phase:                    "countdown",
+		Difficulty:               "medium",
+		Level:                    "level-1",
+		LevelNumber:              1,
+		PlayerCount:              2,
+		Score:                    0,
+		Lives:                    5,
+		LivesStart:               5,
+		ActiveTargets:            23,
+		AttemptStartedUnixNanos:  started.UnixNano(),
+		GameplayStartedUnixNanos: gameplayStarted.UnixNano(),
+	}, started)
+	runtime.RecordDisplaySnapshot(displayStatus{
+		CurrentGame:              "temporada1",
+		Label:                    "Temporada 1",
+		Phase:                    "finished",
+		Difficulty:               "medium",
+		Level:                    "level-1",
+		LevelNumber:              1,
+		PlayerCount:              2,
+		Score:                    23,
+		Lives:                    4,
+		LivesStart:               5,
+		ActiveTargets:            0,
+		Success:                  true,
+		ElapsedMillis:            42000,
+		AttemptStartedUnixNanos:  started.UnixNano(),
+		GameplayStartedUnixNanos: gameplayStarted.UnixNano(),
+		AttemptEndedUnixNanos:    ended.UnixNano(),
+	}, ended)
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var startedRecord *gamepb.LevelAttemptStarted
+	var finishedRecord *gamepb.LevelAttemptFinished
+	path := filepath.Join(dir, "20260604T080000Z.game.pbstream")
+	if _, err := sessionrecording.ReadRecoverable(path, func(record *gamepb.GameSessionRecord) error {
+		if payload := record.GetLevelAttemptStarted(); payload != nil {
+			startedRecord = payload
+		}
+		if payload := record.GetLevelAttemptFinished(); payload != nil {
+			finishedRecord = payload
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if startedRecord == nil {
+		t.Fatal("missing level attempt started record")
+	}
+	if finishedRecord == nil {
+		t.Fatal("missing level attempt finished record")
+	}
+	if startedRecord.LevelId != "level-1" || startedRecord.LevelNumber != 1 || startedRecord.LivesStart != 5 || startedRecord.ActiveTargetsStart != 23 {
+		t.Fatalf("started record = %+v", startedRecord)
+	}
+	if finishedRecord.AttemptId != startedRecord.AttemptId || finishedRecord.Result != "success" || finishedRecord.ScoreEnd != 23 || finishedRecord.LivesEnd != 4 || finishedRecord.ElapsedMillis != 42000 {
+		t.Fatalf("finished record = %+v started=%+v", finishedRecord, startedRecord)
+	}
+}
+
+func TestRuntimeStatusExposesRecentFinishedLevelAttempts(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "parkour", Difficulty: "easy", Level: "level-1"}, nil, nil)
+	started := time.Date(2026, 6, 4, 8, 2, 0, 0, time.UTC)
+	gameplayStarted := started.Add(3 * time.Second)
+	ended := gameplayStarted.Add(16*time.Second + 100*time.Millisecond)
+
+	runtime.RecordDisplaySnapshot(displayStatus{
+		CurrentGame:              "parkour",
+		Label:                    "Parkour",
+		Phase:                    "running",
+		Difficulty:               "easy",
+		Level:                    "level-1",
+		LevelNumber:              1,
+		PlayerCount:              1,
+		Lives:                    3,
+		LivesStart:               3,
+		ActiveTargets:            5,
+		AttemptStartedUnixNanos:  started.UnixNano(),
+		GameplayStartedUnixNanos: gameplayStarted.UnixNano(),
+	}, gameplayStarted)
+	runtime.RecordDisplaySnapshot(displayStatus{
+		CurrentGame:              "parkour",
+		Label:                    "Parkour",
+		Phase:                    "finished",
+		Difficulty:               "easy",
+		Level:                    "level-1",
+		LevelNumber:              1,
+		PlayerCount:              1,
+		Score:                    5,
+		Lives:                    3,
+		LivesStart:               3,
+		ActiveTargets:            0,
+		Success:                  true,
+		ElapsedMillis:            16100,
+		AttemptStartedUnixNanos:  started.UnixNano(),
+		GameplayStartedUnixNanos: gameplayStarted.UnixNano(),
+		AttemptEndedUnixNanos:    ended.UnixNano(),
+	}, ended)
+
+	status := runtime.Status()
+	if len(status.FinishedLevelAttempts) != 1 {
+		t.Fatalf("finished attempts = %d, want 1: %+v", len(status.FinishedLevelAttempts), status.FinishedLevelAttempts)
+	}
+	attempt := status.FinishedLevelAttempts[0]
+	if attempt.Game != "parkour" || attempt.Level != "level-1" || attempt.Result != "success" || !attempt.Success || attempt.ElapsedMillis != 16100 {
+		t.Fatalf("finished attempt = %+v", attempt)
 	}
 }
 
@@ -423,6 +661,64 @@ func TestGameAPIControlPauseRestartAndExit(t *testing.T) {
 	_ = response.Body.Close()
 	if runtime.Status().CurrentGame != "loop" {
 		t.Fatalf("exit game = %q, want loop", runtime.Status().CurrentGame)
+	}
+}
+
+func TestRuntimeStopsNonAmbientGameAfterFiveMinutesWithoutPressure(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
+	runtime.SelectGameWithDifficulty("lava", 1, "easy")
+	runtime.mu.Lock()
+	runtime.lastPressure = time.Now().Add(-noPressureGameLimit - time.Second)
+	runtime.mu.Unlock()
+
+	status := runtime.Status()
+	if status.CurrentGame != "loop" {
+		t.Fatalf("game after no-pressure timeout = %q, want loop", status.CurrentGame)
+	}
+}
+
+func TestRuntimeDoesNotStopAmbientAfterFiveMinutesWithoutPressure(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
+	runtime.SelectGameWithDifficulty("ambient-spark", 1, "")
+	runtime.mu.Lock()
+	runtime.lastPressure = time.Now().Add(-noPressureGameLimit - time.Second)
+	runtime.mu.Unlock()
+
+	status := runtime.Status()
+	if status.CurrentGame != "ambient-spark" {
+		t.Fatalf("ambient game after no-pressure timeout = %q, want ambient-spark", status.CurrentGame)
+	}
+}
+
+func TestRuntimePressureInputPreventsNoPressureTimeout(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
+	runtime.SelectGameWithDifficulty("lava", 1, "easy")
+	now := time.Now()
+	runtime.mu.Lock()
+	runtime.lastPressure = now.Add(-noPressureGameLimit - time.Second)
+	runtime.mu.Unlock()
+
+	runtime.HandlePressure(&inputpb.PressureEvent{X: 0, Y: 0, Pressed: true, UnixNanos: now.UnixNano()}, now)
+
+	status := runtime.Status()
+	if status.CurrentGame != "lava" {
+		t.Fatalf("game after pressure input = %q, want lava", status.CurrentGame)
+	}
+}
+
+func TestRuntimeStatusExposesLastRealPressureInput(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
+	runtime.SelectGameWithDifficulty("lava", 1, "easy")
+
+	if got := runtime.Status().LastPressureUnix; got != 0 {
+		t.Fatalf("last pressure before input = %d, want 0", got)
+	}
+
+	now := time.Now().Truncate(time.Second)
+	runtime.HandlePressure(&inputpb.PressureEvent{X: 2, Y: 3, Pressed: false, UnixNanos: now.UnixNano()}, now)
+
+	if got := runtime.Status().LastPressureUnix; got != now.Unix() {
+		t.Fatalf("last pressure after input = %d, want %d", got, now.Unix())
 	}
 }
 
@@ -684,7 +980,7 @@ func TestGameAPIDisplayStatus(t *testing.T) {
 func TestRuntimeRecordsSessionAPIAndDisplayData(t *testing.T) {
 	dir := t.TempDir()
 	startedAt := time.Date(2026, 6, 3, 13, 0, 0, 0, time.UTC)
-	recorder, err := sessionrecording.New(dir, startedAt, sessionrecording.Options{MaxSegmentDuration: 24 * time.Hour})
+	recorder, err := sessionrecording.New(dir, startedAt, sessionrecording.Options{MaxSegmentDuration: 7 * 24 * time.Hour})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -692,7 +988,8 @@ func TestRuntimeRecordsSessionAPIAndDisplayData(t *testing.T) {
 	server := httptest.NewServer(gameAPIHandler(runtime))
 	defer server.Close()
 
-	response, err := http.Post(server.URL+"/api/select", "application/json", bytes.NewBufferString(`{"game":"whack-a-mole","playerCount":2}`))
+	const venueSessionID = "venue-20260604T120000Z-test"
+	response, err := http.Post(server.URL+"/api/select", "application/json", bytes.NewBufferString(`{"game":"whack-a-mole","playerCount":2,"venueSessionId":"`+venueSessionID+`"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -700,6 +997,7 @@ func TestRuntimeRecordsSessionAPIAndDisplayData(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("select response = %d", response.StatusCode)
 	}
+	selectedSessionID := runtime.SessionID()
 	runtime.RecordDisplaySnapshot(runtime.DisplayStatus(time.Now()), time.Now())
 	if err := recorder.Close(); err != nil {
 		t.Fatal(err)
@@ -707,9 +1005,18 @@ func TestRuntimeRecordsSessionAPIAndDisplayData(t *testing.T) {
 
 	var sawSessionStarted, sawMenuCommand, sawAPIInteraction, sawDisplay bool
 	_, err = sessionrecording.ReadRecoverable(filepath.Join(dir, "20260603T130000Z.game.pbstream"), func(record *gamepb.GameSessionRecord) error {
+		if record.GetSessionId() != selectedSessionID {
+			return nil
+		}
+		if record.GetVenueSessionId() != venueSessionID {
+			t.Fatalf("record venue session id = %q, want %q", record.GetVenueSessionId(), venueSessionID)
+		}
 		switch record.Payload.(type) {
 		case *gamepb.GameSessionRecord_SessionStarted:
 			sawSessionStarted = true
+			if record.GetSessionStarted().GetVenueSessionId() != venueSessionID {
+				t.Fatalf("session started venue session id = %q, want %q", record.GetSessionStarted().GetVenueSessionId(), venueSessionID)
+			}
 		case *gamepb.GameSessionRecord_MenuCommand:
 			sawMenuCommand = true
 		case *gamepb.GameSessionRecord_ApiInteraction:

@@ -6,48 +6,87 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
+	"github.com/lobis/motion-levels/game-engine/internal/games/duel"
 	"github.com/lobis/motion-levels/game-engine/internal/games/lava"
+	"github.com/lobis/motion-levels/game-engine/internal/games/memorychallenge"
+	"github.com/lobis/motion-levels/game-engine/internal/games/parkour"
+	"github.com/lobis/motion-levels/game-engine/internal/games/patrones"
 	"github.com/lobis/motion-levels/game-engine/internal/games/saltos"
 	"github.com/lobis/motion-levels/game-engine/internal/games/temporada1"
+	"github.com/lobis/motion-levels/game-engine/internal/games/temporada2"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
 	"github.com/lobis/motion-levels/packages/contracts/gamepb"
 	"github.com/lobis/motion-levels/packages/contracts/inputpb"
 )
 
-const loopMusicRef = "Motion/canciones/Background01.mp3"
+const (
+	loopMusicRef        = "Motion/canciones/Background01.mp3"
+	noPressureGameLimit = 5 * time.Minute
+)
 
 type gameRuntime struct {
-	mu             sync.RWMutex
-	base           config
-	current        config
-	game           floorGame
-	audio          *audio.Player
-	started        time.Time
-	lastEvent      displayEvent
-	recorder       *sessionrecording.Recorder
-	sessionID      string
-	sessionSeq     uint64
-	rngSeed        int64
-	paused         bool
-	pausedAt       time.Time
-	pauseTotal     time.Duration
-	narrated       map[string]bool
-	introUntil     time.Time
-	audioMuted     bool
-	ambientTouches []ambientTouch
+	mu                sync.RWMutex
+	base              config
+	current           config
+	game              floorGame
+	audio             *audio.Player
+	started           time.Time
+	lastEvent         displayEvent
+	recorder          *sessionrecording.Recorder
+	sessionID         string
+	sessionSeq        uint64
+	rngSeed           int64
+	paused            bool
+	pausedAt          time.Time
+	pauseTotal        time.Duration
+	lastPressure      time.Time
+	lastPressureInput time.Time
+	narrated          map[string]bool
+	introUntil        time.Time
+	audioMuted        bool
+	ambientTouches    []ambientTouch
+	levelAttempt      *levelAttemptTracker
+	recentAttempts    []finishedLevelAttemptStatus
 }
 
 type ambientTouch struct {
 	x       int
 	y       int
 	started time.Time
+}
+
+type levelAttemptTracker struct {
+	AttemptID                string
+	Game                     string
+	Level                    string
+	LevelNumber              int
+	Difficulty               string
+	PlayerCount              int
+	LivesStart               int
+	ScoreStart               int
+	ActiveTargetsStart       int
+	StartedUnixNanos         int64
+	GameplayStartedUnixNanos int64
+}
+
+type finishedLevelAttemptStatus struct {
+	AttemptID      string `json:"attemptId"`
+	Game           string `json:"game"`
+	Level          string `json:"level"`
+	LevelNumber    int    `json:"levelNumber"`
+	Difficulty     string `json:"difficulty"`
+	Result         string `json:"result"`
+	Success        bool   `json:"success"`
+	ElapsedMillis  int64  `json:"elapsedMillis"`
+	EndedUnixNanos int64  `json:"endedUnixNanos"`
 }
 
 type displayEvent struct {
@@ -105,6 +144,7 @@ type playerConfig struct {
 
 type displayStatus struct {
 	CurrentGame              string          `json:"currentGame"`
+	VenueSessionID           string          `json:"venueSessionId"`
 	Label                    string          `json:"label"`
 	Phase                    string          `json:"phase"`
 	Difficulty               string          `json:"difficulty"`
@@ -127,29 +167,46 @@ type displayStatus struct {
 	LastEventUnixNanos       int64           `json:"lastEventUnixNanos"`
 	LastEventCue             string          `json:"lastEventCue"`
 	LastEventMessage         string          `json:"lastEventMessage"`
+	LevelNumber              int             `json:"levelNumber,omitempty"`
+	AttemptStartedUnixNanos  int64           `json:"attemptStartedUnixNanos,omitempty"`
+	GameplayStartedUnixNanos int64           `json:"gameplayStartedUnixNanos,omitempty"`
+	AttemptEndedUnixNanos    int64           `json:"attemptEndedUnixNanos,omitempty"`
+	LivesStart               int             `json:"livesStart,omitempty"`
 }
 
 type runtimeStatus struct {
-	CurrentGame              string                 `json:"currentGame"`
-	Label                    string                 `json:"label"`
-	Difficulty               string                 `json:"difficulty"`
-	Level                    string                 `json:"level,omitempty"`
-	TeamName                 string                 `json:"teamName"`
-	PlayerCount              int                    `json:"playerCount"`
-	Music                    string                 `json:"music"`
-	MusicVolume              float64                `json:"musicVolume"`
-	AudioEnabled             bool                   `json:"audioEnabled"`
-	AudioMuted               bool                   `json:"audioMuted"`
-	Paused                   bool                   `json:"paused"`
-	Phase                    string                 `json:"phase"`
-	IntroRemainingMillis     int64                  `json:"introRemainingMillis"`
-	CountdownRemainingMillis int64                  `json:"countdownRemainingMillis"`
-	StartedUnix              int64                  `json:"startedUnix"`
-	Success                  bool                   `json:"success"`
-	SessionID                string                 `json:"sessionId"`
-	RNGSeed                  int64                  `json:"rngSeed"`
-	Recorder                 sessionrecording.Stats `json:"recorder"`
-	Catalog                  []gameCatalogEntry     `json:"catalog"`
+	CurrentGame              string                       `json:"currentGame"`
+	VenueSessionID           string                       `json:"venueSessionId"`
+	Label                    string                       `json:"label"`
+	Difficulty               string                       `json:"difficulty"`
+	Level                    string                       `json:"level,omitempty"`
+	TeamName                 string                       `json:"teamName"`
+	PlayerCount              int                          `json:"playerCount"`
+	Players                  []displayPlayer              `json:"players"`
+	Music                    string                       `json:"music"`
+	MusicVolume              float64                      `json:"musicVolume"`
+	AudioEnabled             bool                         `json:"audioEnabled"`
+	AudioMuted               bool                         `json:"audioMuted"`
+	Paused                   bool                         `json:"paused"`
+	Phase                    string                       `json:"phase"`
+	IntroRemainingMillis     int64                        `json:"introRemainingMillis"`
+	CountdownRemainingMillis int64                        `json:"countdownRemainingMillis"`
+	StartedUnix              int64                        `json:"startedUnix"`
+	ElapsedMillis            int64                        `json:"elapsedMillis"`
+	Success                  bool                         `json:"success"`
+	SessionID                string                       `json:"sessionId"`
+	LastPressureUnix         int64                        `json:"lastPressureUnix"`
+	RNGSeed                  int64                        `json:"rngSeed"`
+	Recorder                 sessionrecording.Stats       `json:"recorder"`
+	FinishedLevelAttempts    []finishedLevelAttemptStatus `json:"finishedLevelAttempts,omitempty"`
+	Catalog                  []gameCatalogEntry           `json:"catalog"`
+}
+
+func unixOrZero(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
 }
 
 func newGameRuntime(cfg config, audioPlayer *audio.Player, recorder *sessionrecording.Recorder) *gameRuntime {
@@ -172,10 +229,10 @@ func (r *gameRuntime) SelectGameWithDifficulty(game string, players int, difficu
 }
 
 func (r *gameRuntime) SelectGameWithOptions(game string, players int, difficulty string, narrationEnabled *bool) {
-	r.SelectGameWithMetadata(game, players, difficulty, "", narrationEnabled, "", nil)
+	r.SelectGameWithMetadata(game, players, difficulty, "", narrationEnabled, "", "", nil)
 }
 
-func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficulty string, level string, narrationEnabled *bool, teamName string, roster []playerConfig) {
+func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficulty string, level string, narrationEnabled *bool, teamName string, venueSessionID string, roster []playerConfig) {
 	if r == nil {
 		return
 	}
@@ -187,6 +244,7 @@ func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficult
 		cfg.Level = level
 	}
 	cfg.TeamName = strings.TrimSpace(teamName)
+	cfg.VenueSessionID = strings.TrimSpace(venueSessionID)
 	cfg.Players = normalizePlayerRoster(roster, cfg.PlayerCount)
 	mode := narrationAuto
 	if narrationEnabled != nil {
@@ -260,6 +318,7 @@ func (r *gameRuntime) Render(now time.Time) (int, []animation.RGB) {
 	if r == nil {
 		return 80, nil
 	}
+	r.enforceNoPressureTimeout(now)
 	r.mu.RLock()
 	brightness := r.current.Brightness
 	gameID := r.current.Game
@@ -285,6 +344,7 @@ func (r *gameRuntime) HandlePressure(event *inputpb.PressureEvent, fallbackStart
 	if event.UnixNanos > 0 {
 		now = time.Unix(0, event.UnixNanos)
 	}
+	r.recordPressureActivity(now, event.Pressed)
 
 	r.mu.RLock()
 	cfg := r.current
@@ -302,7 +362,7 @@ func (r *gameRuntime) HandlePressure(event *inputpb.PressureEvent, fallbackStart
 		for _, gameEvent := range game.Press(whackamole.PressEvent{X: int(event.X), Y: int(event.Y), Pressed: event.Pressed}, gameNow) {
 			r.recordGameEvent(gameEvent.Cue, gameEvent.Message, gameNow)
 			r.playCue(cfg, audioPlayer, gameEvent.Cue, cueRef(cfg, gameEvent.Cue), gameNow)
-			if cfg.Game == "whack-a-mole" && gameEvent.Cue == whackamole.CueStart {
+			if gameEvent.Cue == whackamole.CueStart && shouldPlayCountdownAfterReadyCue(cfg) {
 				r.playCountdownCue(cfg, audioPlayer, gameNow)
 			}
 		}
@@ -316,12 +376,14 @@ func (r *gameRuntime) HandlePressure(event *inputpb.PressureEvent, fallbackStart
 func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 	if r == nil {
 		return displayStatus{
-			CurrentGame: "loop",
-			Label:       gameLabel("loop"),
-			Phase:       "idle",
-			Lives:       -1,
+			CurrentGame:    "loop",
+			VenueSessionID: "",
+			Label:          gameLabel("loop"),
+			Phase:          "idle",
+			Lives:          -1,
 		}
 	}
+	r.enforceNoPressureTimeout(now)
 	r.mu.RLock()
 	cfg := r.current
 	game := r.game
@@ -336,6 +398,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 
 	status := displayStatus{
 		CurrentGame:        cfg.Game,
+		VenueSessionID:     cfg.VenueSessionID,
 		Label:              gameLabel(cfg.Game),
 		Phase:              "idle",
 		Difficulty:         cfg.Difficulty,
@@ -412,6 +475,103 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		return status
 	}
 
+	if cfg.Game == "duel" {
+		if duelGame, ok := game.(*duel.Game); ok {
+			snapshot := duelGame.Snapshot(gameNow)
+			status.Phase = snapshot.Phase
+			status.Score = snapshot.Score
+			status.StartedUnix = snapshot.StartedUnix
+			status.EndsUnix = snapshot.EndsUnix
+			status.ElapsedMillis = snapshot.ElapsedMillis
+			status.RemainingMillis = snapshot.RemainingMillis
+			status.CountdownRemainingMillis = snapshot.CountdownMillis
+			status.ActiveTargets = snapshot.ActiveTargets
+			status.Lives = snapshot.Lives
+			status.Success = snapshot.Success
+			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
+			for _, player := range snapshot.Players {
+				status.Players = append(status.Players, displayPlayer{
+					Index: player.Index,
+					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
+					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
+					Score: player.Score,
+					Lives: player.Lives,
+				})
+			}
+		}
+		if paused && status.Phase != "finished" {
+			status.Phase = "paused"
+		}
+		return status
+	}
+
+	if cfg.Game == "memory" {
+		if memoryGame, ok := game.(*memorychallenge.Game); ok {
+			snapshot := memoryGame.Snapshot(gameNow)
+			status.Phase = snapshot.Phase
+			status.Score = snapshot.Score
+			status.StartedUnix = snapshot.StartedUnix
+			status.EndsUnix = snapshot.EndsUnix
+			status.ElapsedMillis = snapshot.ElapsedMillis
+			status.RemainingMillis = snapshot.RemainingMillis
+			status.CountdownRemainingMillis = snapshot.CountdownMillis
+			status.ActiveTargets = snapshot.ActiveTargets
+			status.Lives = snapshot.Lives
+			status.Success = snapshot.Success
+			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
+			for _, player := range snapshot.Players {
+				status.Players = append(status.Players, displayPlayer{
+					Index: player.Index,
+					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
+					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
+					Score: player.Score,
+					Lives: player.Lives,
+				})
+			}
+		}
+		if paused && status.Phase != "finished" {
+			status.Phase = "paused"
+		}
+		return status
+	}
+
+	if cfg.Game == "patrones" {
+		if patronesGame, ok := game.(*patrones.Game); ok {
+			snapshot := patronesGame.Snapshot(gameNow)
+			status.Phase = snapshot.Phase
+			status.Score = snapshot.Score
+			status.StartedUnix = snapshot.StartedUnix
+			status.EndsUnix = snapshot.EndsUnix
+			status.ElapsedMillis = snapshot.ElapsedMillis
+			status.RemainingMillis = snapshot.RemainingMillis
+			status.CountdownRemainingMillis = snapshot.CountdownMillis
+			status.ActiveTargets = snapshot.ActiveTargets
+			status.Lives = snapshot.Lives
+			status.LivesStart = snapshot.LivesStart
+			status.Difficulty = snapshot.Difficulty
+			status.Level = snapshot.Level
+			status.LevelNumber = snapshot.LevelNumber
+			status.AttemptStartedUnixNanos = snapshot.CreatedUnixNanos
+			status.GameplayStartedUnixNanos = snapshot.StartedUnixNanos
+			status.AttemptEndedUnixNanos = snapshot.EndedUnixNanos
+			status.Success = snapshot.Success
+			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
+			for _, player := range snapshot.Players {
+				status.Players = append(status.Players, displayPlayer{
+					Index: player.Index,
+					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
+					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
+					Score: player.Score,
+					Lives: player.Lives,
+				})
+			}
+		}
+		if paused && status.Phase != "finished" {
+			status.Phase = "paused"
+		}
+		return status
+	}
+
 	if cfg.Game == "saltos" {
 		if saltosGame, ok := game.(*saltos.Game); ok {
 			snapshot := saltosGame.Snapshot(gameNow)
@@ -442,7 +602,44 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		return status
 	}
 
-	if cfg.Game == "temporada1" {
+	if cfg.Game == "parkour" {
+		if parkourGame, ok := game.(*parkour.Game); ok {
+			snapshot := parkourGame.Snapshot(gameNow)
+			status.Phase = snapshot.Phase
+			status.Score = snapshot.Score
+			status.StartedUnix = snapshot.StartedUnix
+			status.EndsUnix = snapshot.EndsUnix
+			status.ElapsedMillis = snapshot.ElapsedMillis
+			status.RemainingMillis = snapshot.RemainingMillis
+			status.CountdownRemainingMillis = snapshot.CountdownMillis
+			status.ActiveTargets = snapshot.ActiveTargets
+			status.Lives = snapshot.Lives
+			status.LivesStart = snapshot.LivesStart
+			status.Difficulty = snapshot.Difficulty
+			status.Level = snapshot.Level
+			status.LevelNumber = snapshot.LevelNumber
+			status.AttemptStartedUnixNanos = snapshot.CreatedUnixNanos
+			status.GameplayStartedUnixNanos = snapshot.StartedUnixNanos
+			status.AttemptEndedUnixNanos = snapshot.EndedUnixNanos
+			status.Success = snapshot.Success
+			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
+			for _, player := range snapshot.Players {
+				status.Players = append(status.Players, displayPlayer{
+					Index: player.Index,
+					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
+					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
+					Score: player.Score,
+					Lives: player.Lives,
+				})
+			}
+		}
+		if paused && status.Phase != "finished" {
+			status.Phase = "paused"
+		}
+		return status
+	}
+
+	if cfg.Game == "temporada1" || cfg.Game == "temporada2" {
 		if temporadaGame, ok := game.(*temporada1.Game); ok {
 			snapshot := temporadaGame.Snapshot(gameNow)
 			status.Phase = snapshot.Phase
@@ -454,8 +651,42 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.CountdownRemainingMillis = snapshot.CountdownMillis
 			status.ActiveTargets = snapshot.ActiveTargets
 			status.Lives = snapshot.Lives
+			status.LivesStart = snapshot.LivesStart
 			status.Difficulty = snapshot.Difficulty
 			status.Level = snapshot.Level
+			status.LevelNumber = snapshot.LevelNumber
+			status.AttemptStartedUnixNanos = snapshot.CreatedUnixNanos
+			status.GameplayStartedUnixNanos = snapshot.StartedUnixNanos
+			status.AttemptEndedUnixNanos = snapshot.EndedUnixNanos
+			status.Success = snapshot.Success
+			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
+			for _, player := range snapshot.Players {
+				status.Players = append(status.Players, displayPlayer{
+					Index: player.Index,
+					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
+					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
+					Score: player.Score,
+					Lives: player.Lives,
+				})
+			}
+		} else if temporadaGame, ok := game.(*temporada2.Game); ok {
+			snapshot := temporadaGame.Snapshot(gameNow)
+			status.Phase = snapshot.Phase
+			status.Score = snapshot.Score
+			status.StartedUnix = snapshot.StartedUnix
+			status.EndsUnix = snapshot.EndsUnix
+			status.ElapsedMillis = snapshot.ElapsedMillis
+			status.RemainingMillis = snapshot.RemainingMillis
+			status.CountdownRemainingMillis = snapshot.CountdownMillis
+			status.ActiveTargets = snapshot.ActiveTargets
+			status.Lives = snapshot.Lives
+			status.LivesStart = snapshot.LivesStart
+			status.Difficulty = snapshot.Difficulty
+			status.Level = snapshot.Level
+			status.LevelNumber = snapshot.LevelNumber
+			status.AttemptStartedUnixNanos = snapshot.CreatedUnixNanos
+			status.GameplayStartedUnixNanos = snapshot.StartedUnixNanos
+			status.AttemptEndedUnixNanos = snapshot.EndedUnixNanos
 			status.Success = snapshot.Success
 			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
 			for _, player := range snapshot.Players {
@@ -488,24 +719,33 @@ func (r *gameRuntime) Status() runtimeStatus {
 	if r == nil {
 		return runtimeStatus{Catalog: gameCatalog()}
 	}
+	now := time.Now()
+	r.enforceNoPressureTimeout(now)
 	r.mu.RLock()
 	cfg := r.current
 	started := r.started
 	audioEnabled := r.audio != nil
 	audioMuted := r.audioMuted
 	sessionID := r.sessionID
+	lastPressureInput := r.lastPressureInput
 	rngSeed := r.rngSeed
 	paused := r.paused
 	recorderStats := r.recorder.Stats()
 	r.mu.RUnlock()
-	display := r.DisplayStatus(time.Now())
+	display := r.DisplayStatus(now)
+	r.ObserveDisplayStatus(display, now)
+	r.mu.RLock()
+	recentAttempts := append([]finishedLevelAttemptStatus(nil), r.recentAttempts...)
+	r.mu.RUnlock()
 	return runtimeStatus{
 		CurrentGame:              cfg.Game,
+		VenueSessionID:           cfg.VenueSessionID,
 		Label:                    gameLabel(cfg.Game),
-		Difficulty:               cfg.Difficulty,
-		Level:                    cfg.Level,
+		Difficulty:               display.Difficulty,
+		Level:                    display.Level,
 		TeamName:                 cfg.TeamName,
 		PlayerCount:              cfg.PlayerCount,
+		Players:                  display.Players,
 		Music:                    cfg.MusicRef,
 		MusicVolume:              cfg.MusicVolume,
 		AudioEnabled:             audioEnabled,
@@ -514,11 +754,14 @@ func (r *gameRuntime) Status() runtimeStatus {
 		Phase:                    display.Phase,
 		IntroRemainingMillis:     display.IntroRemainingMillis,
 		CountdownRemainingMillis: display.CountdownRemainingMillis,
-		StartedUnix:              started.Unix(),
+		StartedUnix:              unixOrZero(started),
+		ElapsedMillis:            display.ElapsedMillis,
 		Success:                  display.Success,
 		SessionID:                sessionID,
+		LastPressureUnix:         unixOrZero(lastPressureInput),
 		RNGSeed:                  rngSeed,
 		Recorder:                 recorderStats,
+		FinishedLevelAttempts:    recentAttempts,
 		Catalog:                  gameCatalog(),
 	}
 }
@@ -530,6 +773,15 @@ func (r *gameRuntime) SessionID() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.sessionID
+}
+
+func (r *gameRuntime) VenueSessionID() string {
+	if r == nil {
+		return ""
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.current.VenueSessionID
 }
 
 func (r *gameRuntime) effectiveNowLocked(now time.Time) time.Time {
@@ -550,11 +802,19 @@ func (r *gameRuntime) applyLocked(cfg config, playAudio bool) {
 }
 
 func (r *gameRuntime) applyLockedWithNarration(cfg config, playAudio bool, mode narrationMode) {
+	r.applyLockedWithNarrationReason(cfg, playAudio, mode, "game changed")
+}
+
+func (r *gameRuntime) applyLockedWithNarrationReason(cfg config, playAudio bool, mode narrationMode, endReason string) {
 	now := time.Now()
 	if r.sessionID != "" {
+		r.finishActiveLevelAttemptLocked("abandoned", displayStatus{}, now)
+		if endReason == "" {
+			endReason = "game changed"
+		}
 		r.recordLocked(now, func(record *gamepb.GameSessionRecord) {
 			record.Payload = &gamepb.GameSessionRecord_SessionEnded{SessionEnded: &gamepb.SessionEnded{
-				Reason:         "game changed",
+				Reason:         endReason,
 				EndedUnixNanos: now.UnixNano(),
 			}}
 		})
@@ -573,9 +833,11 @@ func (r *gameRuntime) applyLockedWithNarration(cfg config, playAudio bool, mode 
 	r.game = makeGame(cfg, r.rngSeed, gameNow)
 	r.lastEvent = displayEvent{}
 	r.ambientTouches = nil
+	r.levelAttempt = nil
 	r.paused = false
 	r.pausedAt = time.Time{}
 	r.pauseTotal = 0
+	r.lastPressure = now
 	r.introUntil = time.Time{}
 	if introHold > 0 {
 		r.introUntil = gameNow
@@ -587,11 +849,56 @@ func (r *gameRuntime) applyLockedWithNarration(cfg config, playAudio bool, mode 
 			PlayerCount:      uint32(cfg.PlayerCount),
 			RngSeed:          r.rngSeed,
 			StartedUnixNanos: now.UnixNano(),
+			Difficulty:       cfg.Difficulty,
+			Level:            cfg.Level,
+			TeamName:         cfg.TeamName,
+			Players:          displayPlayersPB(defaultDisplayPlayers(cfg)),
+			VenueSessionId:   cfg.VenueSessionID,
 		}}
 	})
 	if playAudio {
 		r.startAudioLocked(cfg, now, introHold, mode)
 	}
+}
+
+func (r *gameRuntime) recordPressureActivity(now time.Time, pressed bool) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	if now.After(r.lastPressureInput) {
+		r.lastPressureInput = now
+	}
+	if pressed && now.After(r.lastPressure) {
+		r.lastPressure = now
+	}
+	r.mu.Unlock()
+}
+
+func (r *gameRuntime) enforceNoPressureTimeout(now time.Time) {
+	if r == nil {
+		return
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.enforceNoPressureTimeoutLocked(now)
+}
+
+func (r *gameRuntime) enforceNoPressureTimeoutLocked(now time.Time) {
+	if r.sessionID == "" || animation.IsAmbientMode(r.current.Game) {
+		return
+	}
+	if r.lastPressure.IsZero() {
+		r.lastPressure = r.started
+	}
+	if r.lastPressure.IsZero() || now.Sub(r.lastPressure) < noPressureGameLimit {
+		return
+	}
+	log.Printf("game no-pressure timeout: game=%s idle=%s", r.current.Game, now.Sub(r.lastPressure).Round(time.Second))
+	r.applyLockedWithNarrationReason(configForSelection(r.base, "loop", 1), true, narrationAuto, "no pressure timeout")
 }
 
 func (r *gameRuntime) recordEvent(cue, message string, now time.Time) {
@@ -694,7 +1001,16 @@ func (r *gameRuntime) playCountdownLocked(cfg config, now time.Time) {
 
 func shouldPlayCountdownCue(cfg config) bool {
 	switch cfg.Game {
-	case "lava", "saltos", "temporada1":
+	case "lava", "saltos", "parkour", "temporada1", "temporada2":
+		return true
+	default:
+		return false
+	}
+}
+
+func shouldPlayCountdownAfterReadyCue(cfg config) bool {
+	switch cfg.Game {
+	case "whack-a-mole", "duel":
 		return true
 	default:
 		return false
@@ -753,6 +1069,20 @@ func (r *gameRuntime) playCue(cfg config, audioPlayer *audio.Player, cue string,
 	if audioPlayer != nil && !muted {
 		if err := audioPlayer.PlayCue(ref, cfg.CueVolume); err != nil {
 			log.Printf("pressure audio: %v", err)
+		}
+		if cue == whackamole.CueDoubleCoin {
+			go func() {
+				time.Sleep(70 * time.Millisecond)
+				r.mu.RLock()
+				stillMuted := r.audioMuted
+				r.mu.RUnlock()
+				if stillMuted {
+					return
+				}
+				if err := audioPlayer.PlayCue(ref, cfg.CueVolume); err != nil {
+					log.Printf("pressure audio: %v", err)
+				}
+			}()
 		}
 	}
 	r.mu.Lock()
@@ -826,13 +1156,154 @@ func (r *gameRuntime) RecordDisplaySnapshot(status displayStatus, now time.Time)
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.recordLevelAttemptChangesLocked(status, now)
 	r.recordLocked(now, func(record *gamepb.GameSessionRecord) {
 		record.Payload = &gamepb.GameSessionRecord_DisplaySnapshot{DisplaySnapshot: displaySnapshotPB(status)}
 	})
 }
 
+func (r *gameRuntime) ObserveDisplayStatus(status displayStatus, now time.Time) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.recordLevelAttemptChangesLocked(status, now)
+}
+
+func (r *gameRuntime) recordLevelAttemptChangesLocked(status displayStatus, now time.Time) {
+	if !recordsLevelAttempts(status.CurrentGame) || status.Level == "" {
+		r.finishActiveLevelAttemptLocked("abandoned", status, now)
+		return
+	}
+	if status.Phase == "finished" {
+		if r.levelAttempt != nil && r.levelAttempt.Level == status.Level {
+			result := "failed"
+			if status.Success {
+				result = "success"
+			}
+			r.finishActiveLevelAttemptLocked(result, status, now)
+		}
+		return
+	}
+	if status.Phase == "idle" {
+		return
+	}
+	startedUnixNanos := status.AttemptStartedUnixNanos
+	if startedUnixNanos == 0 {
+		startedUnixNanos = now.UnixNano()
+	}
+	if r.levelAttempt != nil {
+		if r.levelAttempt.Level == status.Level && r.levelAttempt.StartedUnixNanos == startedUnixNanos {
+			return
+		}
+		r.finishActiveLevelAttemptLocked("superseded", status, now)
+	}
+	r.startLevelAttemptLocked(status, startedUnixNanos, now)
+}
+
+func (r *gameRuntime) startLevelAttemptLocked(status displayStatus, startedUnixNanos int64, now time.Time) {
+	if r.sessionID == "" {
+		return
+	}
+	gameplayStartedUnixNanos := status.GameplayStartedUnixNanos
+	if gameplayStartedUnixNanos == 0 {
+		gameplayStartedUnixNanos = startedUnixNanos
+	}
+	attempt := &levelAttemptTracker{
+		AttemptID:                fmt.Sprintf("%s:%s:%d", r.sessionID, status.Level, startedUnixNanos),
+		Game:                     status.CurrentGame,
+		Level:                    status.Level,
+		LevelNumber:              status.LevelNumber,
+		Difficulty:               status.Difficulty,
+		PlayerCount:              status.PlayerCount,
+		LivesStart:               status.LivesStart,
+		ScoreStart:               status.Score,
+		ActiveTargetsStart:       status.ActiveTargets,
+		StartedUnixNanos:         startedUnixNanos,
+		GameplayStartedUnixNanos: gameplayStartedUnixNanos,
+	}
+	if attempt.LevelNumber == 0 {
+		attempt.LevelNumber = levelNumberFromID(status.Level)
+	}
+	r.levelAttempt = attempt
+	r.recordLocked(time.Unix(0, startedUnixNanos), func(record *gamepb.GameSessionRecord) {
+		record.Payload = &gamepb.GameSessionRecord_LevelAttemptStarted{LevelAttemptStarted: &gamepb.LevelAttemptStarted{
+			AttemptId:                attempt.AttemptID,
+			Game:                     attempt.Game,
+			LevelId:                  attempt.Level,
+			LevelNumber:              uint32(attempt.LevelNumber),
+			Difficulty:               attempt.Difficulty,
+			PlayerCount:              uint32(attempt.PlayerCount),
+			LivesStart:               int32(attempt.LivesStart),
+			ScoreStart:               int32(attempt.ScoreStart),
+			ActiveTargetsStart:       uint32(attempt.ActiveTargetsStart),
+			StartedUnixNanos:         attempt.StartedUnixNanos,
+			GameplayStartedUnixNanos: attempt.GameplayStartedUnixNanos,
+		}}
+	})
+}
+
+func (r *gameRuntime) finishActiveLevelAttemptLocked(result string, status displayStatus, now time.Time) {
+	attempt := r.levelAttempt
+	if attempt == nil {
+		return
+	}
+	endedUnixNanos := status.AttemptEndedUnixNanos
+	if endedUnixNanos == 0 {
+		endedUnixNanos = now.UnixNano()
+	}
+	if endedUnixNanos < attempt.StartedUnixNanos {
+		endedUnixNanos = now.UnixNano()
+	}
+	elapsedMillis := int64(status.ElapsedMillis)
+	if elapsedMillis == 0 && endedUnixNanos > attempt.GameplayStartedUnixNanos {
+		elapsedMillis = (endedUnixNanos - attempt.GameplayStartedUnixNanos) / int64(time.Millisecond)
+	}
+	scoreEnd := status.Score
+	livesEnd := status.Lives
+	activeTargetsEnd := status.ActiveTargets
+	if result == "success" || result == "failed" {
+		r.recentAttempts = append(r.recentAttempts, finishedLevelAttemptStatus{
+			AttemptID:      attempt.AttemptID,
+			Game:           attempt.Game,
+			Level:          attempt.Level,
+			LevelNumber:    attempt.LevelNumber,
+			Difficulty:     attempt.Difficulty,
+			Result:         result,
+			Success:        result == "success",
+			ElapsedMillis:  elapsedMillis,
+			EndedUnixNanos: endedUnixNanos,
+		})
+		if len(r.recentAttempts) > 64 {
+			r.recentAttempts = r.recentAttempts[len(r.recentAttempts)-64:]
+		}
+	}
+	r.recordLocked(time.Unix(0, endedUnixNanos), func(record *gamepb.GameSessionRecord) {
+		record.Payload = &gamepb.GameSessionRecord_LevelAttemptFinished{LevelAttemptFinished: &gamepb.LevelAttemptFinished{
+			AttemptId:                attempt.AttemptID,
+			Game:                     attempt.Game,
+			LevelId:                  attempt.Level,
+			LevelNumber:              uint32(attempt.LevelNumber),
+			Difficulty:               attempt.Difficulty,
+			Result:                   result,
+			ScoreStart:               int32(attempt.ScoreStart),
+			ScoreEnd:                 int32(scoreEnd),
+			LivesStart:               int32(attempt.LivesStart),
+			LivesEnd:                 int32(livesEnd),
+			ActiveTargetsStart:       uint32(attempt.ActiveTargetsStart),
+			ActiveTargetsEnd:         uint32(activeTargetsEnd),
+			StartedUnixNanos:         attempt.StartedUnixNanos,
+			GameplayStartedUnixNanos: attempt.GameplayStartedUnixNanos,
+			EndedUnixNanos:           endedUnixNanos,
+			ElapsedMillis:            elapsedMillis,
+		}}
+	})
+	r.levelAttempt = nil
+}
+
 func (r *gameRuntime) StartDisplaySnapshotRecording(interval time.Duration) {
-	if r == nil || r.recorder == nil {
+	if r == nil {
 		return
 	}
 	if interval <= 0 {
@@ -845,6 +1316,15 @@ func (r *gameRuntime) StartDisplaySnapshotRecording(interval time.Duration) {
 			r.RecordDisplaySnapshot(r.DisplayStatus(now), now)
 		}
 	}()
+}
+
+func recordsLevelAttempts(game string) bool {
+	switch game {
+	case "parkour", "temporada1", "temporada2":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *gameRuntime) recordPressureInput(event *inputpb.PressureEvent, now time.Time) {
@@ -905,9 +1385,10 @@ func (r *gameRuntime) recordLocked(now time.Time, setPayload func(*gamepb.GameSe
 	}
 	r.sessionSeq++
 	record := &gamepb.GameSessionRecord{
-		SessionId: r.sessionID,
-		Sequence:  r.sessionSeq,
-		UnixNanos: now.UnixNano(),
+		SessionId:      r.sessionID,
+		VenueSessionId: r.current.VenueSessionID,
+		Sequence:       r.sessionSeq,
+		UnixNanos:      now.UnixNano(),
 	}
 	setPayload(record)
 	if err := r.recorder.Record(record); err != nil {
@@ -916,22 +1397,12 @@ func (r *gameRuntime) recordLocked(now time.Time, setPayload func(*gamepb.GameSe
 }
 
 func displaySnapshotPB(status displayStatus) *gamepb.DisplaySnapshot {
-	players := make([]*gamepb.DisplayPlayer, 0, len(status.Players))
-	for _, player := range status.Players {
-		players = append(players, &gamepb.DisplayPlayer{
-			Index: uint32(player.Index),
-			Label: player.Label,
-			Color: &gamepb.Color{R: uint32(player.Color.R), G: uint32(player.Color.G), B: uint32(player.Color.B)},
-			Score: int32(player.Score),
-			Lives: int32(player.Lives),
-		})
-	}
 	return &gamepb.DisplaySnapshot{
 		CurrentGame:              status.CurrentGame,
 		Label:                    status.Label,
 		Phase:                    status.Phase,
 		PlayerCount:              uint32(status.PlayerCount),
-		Players:                  players,
+		Players:                  displayPlayersPB(status.Players),
 		Score:                    int32(status.Score),
 		Lives:                    int32(status.Lives),
 		StartedUnix:              status.StartedUnix,
@@ -946,7 +1417,33 @@ func displaySnapshotPB(status displayStatus) *gamepb.DisplaySnapshot {
 		LastEventUnixNanos:       status.LastEventUnixNanos,
 		LastEventCue:             status.LastEventCue,
 		LastEventMessage:         status.LastEventMessage,
+		Level:                    status.Level,
+		Difficulty:               status.Difficulty,
+		Success:                  status.Success,
 	}
+}
+
+func displayPlayersPB(players []displayPlayer) []*gamepb.DisplayPlayer {
+	out := make([]*gamepb.DisplayPlayer, 0, len(players))
+	for _, player := range players {
+		out = append(out, &gamepb.DisplayPlayer{
+			Index: uint32(player.Index),
+			Label: player.Label,
+			Color: &gamepb.Color{R: uint32(player.Color.R), G: uint32(player.Color.G), B: uint32(player.Color.B)},
+			Score: int32(player.Score),
+			Lives: int32(player.Lives),
+		})
+	}
+	return out
+}
+
+func levelNumberFromID(level string) int {
+	value := strings.TrimPrefix(strings.TrimSpace(strings.ToLower(level)), "level-")
+	n, err := strconv.Atoi(value)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }
 
 func newSessionID(now time.Time) string {
@@ -968,9 +1465,24 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 	case "saltos":
 		log.Printf("game: saltos level=%s", cfg.Level)
 		return saltos.NewWithSeed(now, seed, cfg.Level)
+	case "parkour":
+		log.Printf("game: parkour difficulty=%s level=%s", cfg.Difficulty, cfg.Level)
+		return parkour.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 	case "temporada1":
 		log.Printf("game: temporada1 players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 		return temporada1.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level)
+	case "temporada2":
+		log.Printf("game: temporada2 players=%d level=%s", cfg.PlayerCount, cfg.Level)
+		return temporada2.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level)
+	case "duel":
+		log.Printf("game: duel players=%d", cfg.PlayerCount)
+		return duel.NewWithSeedAndPlayers(whackPlayersFromConfig(cfg), now, seed)
+	case "memory":
+		log.Printf("game: memory players=%d", cfg.PlayerCount)
+		return memorychallenge.NewWithSeedAndPlayers(now, seed, whackPlayersFromConfig(cfg))
+	case "patrones":
+		log.Printf("game: patrones players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
+		return patrones.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 	default:
 		log.Printf("game: %s", cfg.Game)
 		return nil
@@ -1127,6 +1639,16 @@ func clampByte(value float64) byte {
 	return byte(math.Round(value))
 }
 
+func clampInt(value, min, max int) int {
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
+}
+
 func configForSelection(base config, game string, players int) config {
 	cfg := base
 	cfg.Game = normalizeGame(game)
@@ -1143,16 +1665,52 @@ func configForSelection(base config, game string, players int) config {
 		cfg.Level = saltos.NormalizeLevel(cfg.Level)
 		cfg.MusicRef = saltos.DefaultMusicRef
 		cfg.MusicVolume = saltos.DefaultMusicVolume
+	case "parkour":
+		cfg.PlayerCount = 1
+		cfg.Level = parkour.NormalizeLevel(cfg.Level)
+		cfg.MusicRef = parkour.DefaultMusicRef
+		cfg.MusicVolume = parkour.DefaultMusicVolume
 	case "temporada1":
 		cfg.Level = temporada1.NormalizeLevel(cfg.Level)
-		cfg.MusicRef = temporada1.DefaultMusicRef
-		cfg.MusicVolume = temporada1.DefaultMusicVolume
+	case "temporada2":
+		cfg.Level = temporada2.NormalizeLevel(cfg.Level)
+	case "duel":
+		cfg.PlayerCount = clampInt(players, 2, 4)
+	case "memory":
+		cfg.PlayerCount = clampInt(players, 1, 4)
+	case "patrones":
+		cfg.PlayerCount = clampInt(players, 1, 6)
+		cfg.Level = patrones.NormalizeLevel(cfg.Level)
 	default:
-		cfg.MusicRef = loopMusicRef
-		cfg.MusicVolume = 0.10
 	}
+	cfg.MusicRef, cfg.MusicVolume = defaultMusicForGame(cfg.Game)
 	cfg.normalize()
 	return cfg
+}
+
+func defaultMusicForGame(game string) (string, float64) {
+	switch normalizeGame(game) {
+	case "whack-a-mole":
+		return whackamole.DefaultMusicRef, whackamole.DefaultMusicVolume
+	case "lava":
+		return lava.DefaultMusicRef, lava.DefaultMusicVolume
+	case "saltos":
+		return saltos.DefaultMusicRef, saltos.DefaultMusicVolume
+	case "parkour":
+		return parkour.DefaultMusicRef, parkour.DefaultMusicVolume
+	case "temporada1":
+		return temporada1.DefaultMusicRef, temporada1.DefaultMusicVolume
+	case "temporada2":
+		return temporada2.DefaultMusicRef, temporada2.DefaultMusicVolume
+	case "duel":
+		return duel.DefaultMusicRef, duel.DefaultMusicVolume
+	case "memory":
+		return memorychallenge.DefaultMusicRef, memorychallenge.DefaultMusicVolume
+	case "patrones":
+		return patrones.DefaultMusicRef, patrones.DefaultMusicVolume
+	default:
+		return loopMusicRef, 0.10
+	}
 }
 
 func defaultNarrationRef(game string) string {
@@ -1203,6 +1761,18 @@ func gameCatalog() []gameCatalogEntry {
 			Levels:      saltosCatalogLevels(),
 		},
 		{
+			Game:        "parkour",
+			Label:       "Parkour",
+			Description: "Reto individual por niveles: pisa todas las plataformas azules, esquiva la lava y completa el recorrido lo más rápido posible.",
+			Music:       parkour.DefaultMusicRef,
+			Players:     true,
+			MinPlayers:  1,
+			MaxPlayers:  1,
+			Difficulty:  true,
+			Volume:      parkour.DefaultMusicVolume,
+			Levels:      parkourCatalogLevels(),
+		},
+		{
 			Game:        "temporada1",
 			Label:       "Temporada 1",
 			Description: "Superad niveles clásicos de temporada: puntos azules, peligros rojos y retos cooperativos.",
@@ -1213,6 +1783,52 @@ func gameCatalog() []gameCatalogEntry {
 			Difficulty:  true,
 			Volume:      temporada1.DefaultMusicVolume,
 			Levels:      temporada1CatalogLevels(),
+		},
+		{
+			Game:        "temporada2",
+			Label:       "Temporada 2",
+			Description: "Cinco retos cooperativos nuevos con zonas verdes seguras, zonas rojas móviles y monedas azules.",
+			Music:       temporada2.DefaultMusicRef,
+			Players:     true,
+			MinPlayers:  1,
+			MaxPlayers:  6,
+			Difficulty:  true,
+			Volume:      temporada2.DefaultMusicVolume,
+			Levels:      temporada2CatalogLevels(),
+		},
+		{
+			Game:        "duel",
+			Label:       "Duelo",
+			Description: "Cada jugador empieza en su zona 4x4. Al arrancar, el suelo se reparte en colores equilibrados; gana quien reclame primero todas sus baldosas.",
+			Music:       duel.DefaultMusicRef,
+			Players:     true,
+			MinPlayers:  2,
+			MaxPlayers:  4,
+			Difficulty:  false,
+			Volume:      duel.DefaultMusicVolume,
+		},
+		{
+			Game:        "memory",
+			Label:       "Reto de memoria",
+			Description: "Memoriza el camino iluminado, sal de la zona inicial y recorre la ruta sin verla. Si pisas fuera, vuelve al inicio.",
+			Music:       memorychallenge.DefaultMusicRef,
+			Players:     true,
+			MinPlayers:  1,
+			MaxPlayers:  4,
+			Difficulty:  false,
+			Volume:      memorychallenge.DefaultMusicVolume,
+		},
+		{
+			Game:        "patrones",
+			Label:       "Patrones",
+			Description: "Reconstruid patrones azules en el canvas central sin pisar el fondo negro. Las zonas verdes alrededor son seguras.",
+			Music:       patrones.DefaultMusicRef,
+			Players:     true,
+			MinPlayers:  1,
+			MaxPlayers:  6,
+			Difficulty:  true,
+			Volume:      patrones.DefaultMusicVolume,
+			Levels:      patronesCatalogLevels(),
 		},
 		{
 			Game:        "loop",
@@ -1287,6 +1903,45 @@ func temporada1CatalogLevels() []gameLevelEntry {
 	return out
 }
 
+func temporada2CatalogLevels() []gameLevelEntry {
+	levels := temporada2.Levels()
+	out := make([]gameLevelEntry, 0, len(levels))
+	for _, level := range levels {
+		out = append(out, gameLevelEntry{
+			ID:          level.ID,
+			Label:       level.Label,
+			Description: level.Description,
+		})
+	}
+	return out
+}
+
+func parkourCatalogLevels() []gameLevelEntry {
+	levels := parkour.Levels()
+	out := make([]gameLevelEntry, 0, len(levels))
+	for _, level := range levels {
+		out = append(out, gameLevelEntry{
+			ID:          level.ID,
+			Label:       level.Label,
+			Description: level.Description,
+		})
+	}
+	return out
+}
+
+func patronesCatalogLevels() []gameLevelEntry {
+	levels := patrones.Levels()
+	out := make([]gameLevelEntry, 0, len(levels))
+	for _, level := range levels {
+		out = append(out, gameLevelEntry{
+			ID:          level.ID,
+			Label:       level.Label,
+			Description: level.Description,
+		})
+	}
+	return out
+}
+
 func gameLabel(game string) string {
 	for _, entry := range gameCatalog() {
 		if entry.Game == game {
@@ -1305,12 +1960,12 @@ func defaultDisplayPlayers(cfg config) []displayPlayer {
 		playerCount = 6
 	}
 	colors := []displayColor{
-		{R: 0, G: 65, B: 255},
-		{R: 0, G: 255, B: 60},
-		{R: 255, G: 0, B: 212},
-		{R: 255, G: 212, B: 0},
-		{R: 255, G: 90, B: 0},
-		{R: 0, G: 229, B: 255},
+		{R: 255, G: 0, B: 0},
+		{R: 0, G: 255, B: 255},
+		{R: 0, G: 255, B: 0},
+		{R: 255, G: 0, B: 255},
+		{R: 0, G: 0, B: 255},
+		{R: 255, G: 255, B: 0},
 	}
 	players := make([]displayPlayer, 0, playerCount)
 	for i := 0; i < playerCount; i++ {
@@ -1449,10 +2104,15 @@ func preloadAudioRefs(cfg config) []string {
 		whackamole.DefaultMusicRef,
 		lava.DefaultMusicRef,
 		saltos.DefaultMusicRef,
+		parkour.DefaultMusicRef,
 		temporada1.DefaultMusicRef,
+		temporada2.DefaultMusicRef,
+		duel.DefaultMusicRef,
+		memorychallenge.DefaultMusicRef,
 		cfg.MusicRef,
 		cfg.StartCueRef,
 		cfg.CoinCueRef,
+		cfg.DoubleCoinCueRef,
 		cfg.DamageCueRef,
 		cfg.WinCueRef,
 		cfg.NarrationCueRef,

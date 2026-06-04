@@ -189,7 +189,7 @@ func (g *Game) Press(event whackamole.PressEvent, now time.Time) []whackamole.Ev
 		g.targetReadyAt = now.Add(g.targetTravelDuration(g.origin, g.target))
 		g.score++
 		g.pulseUntil = now.Add(260 * time.Millisecond)
-		return []whackamole.Event{{Cue: whackamole.CueHit, Message: "Salto " + strconv.Itoa(g.score)}}
+		return []whackamole.Event{{Cue: whackamole.CueCoin, Message: "Salto " + strconv.Itoa(g.score)}}
 	case inPlatform(pt, g.current):
 		return nil
 	default:
@@ -197,7 +197,7 @@ func (g *Game) Press(event whackamole.PressEvent, now time.Time) []whackamole.Ev
 		g.ended = true
 		g.failPoint = pt
 		g.failStarted = now
-		return []whackamole.Event{{Cue: whackamole.CueMiss, Message: "Has pisado lava"}}
+		return []whackamole.Event{{Cue: whackamole.CueDamage, Message: "Has pisado lava"}}
 	}
 }
 
@@ -262,7 +262,7 @@ func (g *Game) Snapshot(now time.Time) Snapshot {
 	return Snapshot{
 		Phase:           phase,
 		Level:           g.level.ID,
-		Players:         []PlayerSnapshot{{Index: 0, Label: "Jugador 1", Color: RGB{R: 0, G: 65, B: 255}, Score: g.score}},
+		Players:         []PlayerSnapshot{{Index: 0, Label: "Jugador 1", Color: RGB{R: 0, G: 0, B: 255}, Score: g.score}},
 		Score:           g.score,
 		StartedUnix:     g.startedAt.Unix(),
 		EndsUnix:        g.endAt.Unix(),

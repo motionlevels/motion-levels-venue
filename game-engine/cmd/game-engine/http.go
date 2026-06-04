@@ -10,6 +10,7 @@ import (
 
 type selectGameRequest struct {
 	Game             string `json:"game"`
+	VenueSessionID   string `json:"venueSessionId"`
 	PlayerCount      int    `json:"playerCount"`
 	Difficulty       string `json:"difficulty"`
 	Level            string `json:"level"`
@@ -82,7 +83,7 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		runtime.SelectGameWithMetadata(request.Game, request.PlayerCount, request.Difficulty, request.Level, request.NarrationEnabled, request.TeamName, players)
+		runtime.SelectGameWithMetadata(request.Game, request.PlayerCount, request.Difficulty, request.Level, request.NarrationEnabled, request.TeamName, request.VenueSessionID, players)
 		writeJSON(w, runtime.Status())
 	})
 	mux.HandleFunc("/api/control", func(w http.ResponseWriter, r *http.Request) {

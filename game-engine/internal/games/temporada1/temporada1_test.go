@@ -48,7 +48,7 @@ func TestPressingScoreTileAddsScore(t *testing.T) {
 	}
 
 	events := game.Press(whackamole.PressEvent{X: scorePoint.X, Y: scorePoint.Y, Pressed: true}, playAt)
-	if len(events) != 1 || events[0].Cue != whackamole.CueHit {
+	if len(events) != 1 || events[0].Cue != whackamole.CueCoin {
 		t.Fatalf("events = %+v, want hit", events)
 	}
 	if got := game.Snapshot(playAt).Score; got != 1 {
@@ -79,11 +79,115 @@ func TestHazardDamageCanEndLevel(t *testing.T) {
 	}
 
 	events := game.Press(whackamole.PressEvent{X: hazard.X, Y: hazard.Y, Pressed: true}, playAt)
-	if len(events) != 1 || events[0].Cue != whackamole.CueMiss {
+	if len(events) != 1 || events[0].Cue != whackamole.CueDamage {
 		t.Fatalf("events = %+v, want miss", events)
 	}
 	if snapshot := game.Snapshot(playAt); snapshot.Phase != "finished" || snapshot.Success {
 		t.Fatalf("snapshot = %+v, want failed finish", snapshot)
+	}
+}
+
+func TestFailureFlashesRedThenRestartsWithoutCountdown(t *testing.T) {
+	now := time.Unix(100, 0)
+	game := NewWithSeed(now, 1, 1, "hard", "level-1")
+	playAt := now.Add(countdownDuration + tickDuration)
+	game.lives = 1
+	game.tickLocked(playAt)
+	frame := game.frameAtLocked(playAt)
+	hazard := findTileKind(t, frame, 2)
+	safe := findTileKind(t, frame, 0)
+
+	_ = game.Press(whackamole.PressEvent{X: hazard.X, Y: hazard.Y, Pressed: true}, playAt)
+	flashOn := game.Render(playAt)
+	hazardOn := flashOn[hazard.Y*GridWidth+hazard.X]
+	if hazardOn.R < 220 || hazardOn.G > 60 {
+		t.Fatalf("hazard flash on color = %+v, want red", hazardOn)
+	}
+	safeColor := flashOn[safe.Y*GridWidth+safe.X]
+	if safeColor.G < 200 || safeColor.R > 20 {
+		t.Fatalf("safe color during failure = %+v, want green", safeColor)
+	}
+
+	flashOff := game.Render(playAt.Add(130 * time.Millisecond))
+	hazardOff := flashOff[hazard.Y*GridWidth+hazard.X]
+	if hazardOff != (RGB{}) {
+		t.Fatalf("hazard flash off color = %+v, want off", hazardOff)
+	}
+
+	restarted := game.Snapshot(playAt.Add(3*time.Second + time.Millisecond))
+	if restarted.Phase != "running" || restarted.CountdownMillis != 0 {
+		t.Fatalf("restart snapshot = %+v, want running without countdown", restarted)
+	}
+	if restarted.Lives != game.level.lives {
+		t.Fatalf("restart lives = %d, want %d", restarted.Lives, game.level.lives)
+	}
+}
+
+func TestSuccessPlaysSeededTransitionThenSettles(t *testing.T) {
+	now := time.Unix(100, 0)
+	game := NewWithSeed(now, 12345, 2, "easy", "level-24")
+	game.success = true
+	game.ended = true
+	game.endedAt = now
+
+	during := game.Render(now.Add(transitionDuration / 2))
+	colors := uniqueColors(during)
+	if colors < 3 {
+		t.Fatalf("success transition unique colors = %d, want animated multi-color frame", colors)
+	}
+
+	settled := game.Render(now.Add(transitionDuration + time.Second))
+	for _, color := range settled {
+		if color.G < color.R || color.G < color.B {
+			t.Fatalf("settled success color = %+v, want green-dominant", color)
+		}
+	}
+}
+
+func TestSuccessAdvancesToNextLevelAfterTransition(t *testing.T) {
+	now := time.Unix(100, 0)
+	game := NewWithSeed(now, 12345, 2, "easy", "level-1")
+	game.success = true
+	game.ended = true
+	game.endedAt = now
+
+	during := game.Snapshot(now.Add(transitionDuration / 2))
+	if during.Phase != "finished" || during.Level != "level-1" || !during.Success {
+		t.Fatalf("during transition snapshot = %+v, want finished level 1 success", during)
+	}
+
+	after := game.Snapshot(now.Add(transitionDuration + time.Millisecond))
+	if after.Phase != "countdown" || after.Level != "level-2" || after.Success {
+		t.Fatalf("after transition snapshot = %+v, want level 2 countdown", after)
+	}
+	if after.CountdownMillis <= 0 {
+		t.Fatalf("after transition countdown = %d, want positive", after.CountdownMillis)
+	}
+}
+
+func TestFinalLevelSuccessDoesNotAdvancePastSeason(t *testing.T) {
+	now := time.Unix(100, 0)
+	game := NewWithSeed(now, 12345, 2, "easy", "level-24")
+	game.success = true
+	game.ended = true
+	game.endedAt = now
+
+	after := game.Snapshot(now.Add(transitionDuration + time.Second))
+	if after.Phase != "finished" || after.Level != "level-24" || !after.Success {
+		t.Fatalf("final level snapshot = %+v, want finished level 24 success", after)
+	}
+}
+
+func TestSuccessTransitionIsDeterministicBySeedAndLevel(t *testing.T) {
+	now := time.Unix(100, 0)
+	a := NewWithSeed(now, 123, 2, "easy", "level-1")
+	b := NewWithSeed(now, 123, 2, "easy", "level-1")
+	c := NewWithSeed(now, 124, 2, "easy", "level-1")
+	if a.transitionID != b.transitionID {
+		t.Fatalf("same seed transition ids = %d and %d, want same", a.transitionID, b.transitionID)
+	}
+	if a.transitionID == c.transitionID && transitionCount() > 1 {
+		t.Fatalf("nearby seed transition id = %d, want variety", a.transitionID)
 	}
 }
 
@@ -94,8 +198,9 @@ func TestPurpleTileRequiresReleaseBeforeCollecting(t *testing.T) {
 	game.tickLocked(playAt)
 	purple := findTileKind(t, game.frameAtLocked(playAt), 3)
 
-	if events := game.Press(whackamole.PressEvent{X: purple.X, Y: purple.Y, Pressed: true}, playAt); len(events) != 0 {
-		t.Fatalf("first purple press events = %+v, want none", events)
+	events := game.Press(whackamole.PressEvent{X: purple.X, Y: purple.Y, Pressed: true}, playAt)
+	if len(events) != 1 || events[0].Cue != whackamole.CueDoubleCoin {
+		t.Fatalf("first purple press events = %+v, want double coin", events)
 	}
 	if got := game.Snapshot(playAt).Score; got != 0 {
 		t.Fatalf("score after first purple press = %d, want 0", got)
@@ -111,8 +216,8 @@ func TestPurpleTileRequiresReleaseBeforeCollecting(t *testing.T) {
 	if point := game.pointAtLocked(purple, playAt); point.kind != 1 {
 		t.Fatalf("released purple kind = %d, want blue coin kind 1", point.kind)
 	}
-	events := game.Press(whackamole.PressEvent{X: purple.X, Y: purple.Y, Pressed: true}, playAt)
-	if len(events) != 1 || events[0].Cue != whackamole.CueHit {
+	events = game.Press(whackamole.PressEvent{X: purple.X, Y: purple.Y, Pressed: true}, playAt)
+	if len(events) != 1 || events[0].Cue != whackamole.CueCoin {
 		t.Fatalf("primed purple press events = %+v, want hit", events)
 	}
 	if got := game.Snapshot(playAt).Score; got != 1 {
@@ -120,21 +225,42 @@ func TestPurpleTileRequiresReleaseBeforeCollecting(t *testing.T) {
 	}
 }
 
-func TestCountdownShowsInitialSafeGreenZonesOnly(t *testing.T) {
+func TestCountdownDropsSafeZoneIntoPlaceForAllLevels(t *testing.T) {
 	now := time.Unix(100, 0)
-	game := NewWithSeed(now, 1, 2, "easy", "level-1")
-	firstFrame := &game.level.frames[0]
-	safe := findTileKind(t, firstFrame, 0)
-	hazard := findTileKind(t, firstFrame, 2)
+	for _, level := range Levels() {
+		t.Run(level.ID, func(t *testing.T) {
+			game := NewWithSeed(now, 1, 2, "easy", level.ID)
+			firstFrame := &game.level.frames[0]
+			safeTiles := countdownSafeTiles(firstFrame)
+			if len(safeTiles) == 0 {
+				t.Skip("level has no starting safe zone")
+			}
+			for index := 1; index < len(safeTiles); index++ {
+				if safeTiles[index].Y > safeTiles[index-1].Y {
+					t.Fatalf("safe tile order moved toward far side at index %d: before=%+v after=%+v", index, safeTiles[index-1], safeTiles[index])
+				}
+			}
 
-	frame := game.Render(now.Add(time.Second))
-	safeColor := frame[safe.Y*GridWidth+safe.X]
-	if safeColor.G == 0 {
-		t.Fatalf("safe countdown tile color = %+v, want visible green", safeColor)
-	}
-	hazardColor := frame[hazard.Y*GridWidth+hazard.X]
-	if hazardColor != (RGB{}) {
-		t.Fatalf("hazard countdown tile color = %+v, want hidden", hazardColor)
+			early := now.Add(time.Second)
+			frame := game.Render(early)
+			if visibleGreenTiles(frame) == 0 {
+				t.Fatal("early countdown frame has no visible green setup tiles")
+			}
+			if hazard, ok := findTileKindOptional(firstFrame, 2); ok {
+				hazardColor := frame[hazard.Y*GridWidth+hazard.X]
+				if hazardColor != (RGB{}) {
+					t.Fatalf("hazard countdown tile color = %+v, want hidden", hazardColor)
+				}
+			}
+
+			settledFrame := game.Render(game.startedAt.Add(-50 * time.Millisecond))
+			for _, safe := range safeTiles {
+				settledColor := settledFrame[safe.Y*GridWidth+safe.X]
+				if settledColor.G < 220 {
+					t.Fatalf("settled safe tile %+v color = %+v, want bright green", safe, settledColor)
+				}
+			}
+		})
 	}
 }
 
@@ -152,4 +278,36 @@ func findTileKind(t *testing.T, frame *compiledFrame, kind int) Point {
 	}
 	t.Fatalf("frame has no tile kind %d", kind)
 	return Point{}
+}
+
+func visibleGreenTiles(frame []RGB) int {
+	count := 0
+	for _, color := range frame {
+		if color.G >= 220 && color.R < 20 {
+			count++
+		}
+	}
+	return count
+}
+
+func uniqueColors(frame []RGB) int {
+	seen := map[RGB]bool{}
+	for _, color := range frame {
+		seen[color] = true
+	}
+	return len(seen)
+}
+
+func findTileKindOptional(frame *compiledFrame, kind int) (Point, bool) {
+	if frame == nil {
+		return Point{}, false
+	}
+	for y := 0; y < GridHeight; y++ {
+		for x := 0; x < GridWidth; x++ {
+			if frame.points[y][x].present && frame.points[y][x].kind == kind {
+				return Point{X: x, Y: y}, true
+			}
+		}
+	}
+	return Point{}, false
 }

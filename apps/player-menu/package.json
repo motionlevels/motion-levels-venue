@@ -36,6 +36,7 @@
     }
   },
   "dependencies": {
+    "posthog-js": "^1.379.3",
     "react": "^19.2.1",
     "react-dom": "^19.2.1"
   },

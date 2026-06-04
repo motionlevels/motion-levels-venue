@@ -12,9 +12,11 @@ import (
 
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
-	"github.com/lobis/motion-levels/game-engine/internal/games/lava"
+	"github.com/lobis/motion-levels/game-engine/internal/games/parkour"
+	"github.com/lobis/motion-levels/game-engine/internal/games/patrones"
 	"github.com/lobis/motion-levels/game-engine/internal/games/saltos"
 	"github.com/lobis/motion-levels/game-engine/internal/games/temporada1"
+	"github.com/lobis/motion-levels/game-engine/internal/games/temporada2"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
 	"github.com/lobis/motion-levels/packages/contracts/inputpb"
@@ -27,6 +29,7 @@ type config struct {
 	ControllerAddr           string
 	PressureAddr             string
 	Game                     string
+	VenueSessionID           string
 	Difficulty               string
 	Level                    string
 	PlayerCount              int
@@ -42,6 +45,7 @@ type config struct {
 	StartCueRef              string
 	CueVolume                float64
 	CoinCueRef               string
+	DoubleCoinCueRef         string
 	DamageCueRef             string
 	WinCueRef                string
 	NarrationCueRef          string
@@ -69,7 +73,7 @@ func main() {
 	flag.StringVar(&cfg.HTTPAddr, "http", ":8082", "HTTP address for the game-engine API; empty disables")
 	flag.StringVar(&cfg.ControllerAddr, "controller", "127.0.0.1:9090", "floor-controller frame stream address")
 	flag.StringVar(&cfg.PressureAddr, "pressure-events", "127.0.0.1:9091", "floor-controller pressure event stream address")
-	flag.StringVar(&cfg.Game, "game", "loop", "game to run: loop, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, or temporada1")
+	flag.StringVar(&cfg.Game, "game", "loop", "game to run: loop, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, parkour, temporada1, temporada2, duel, memory, or patrones")
 	flag.StringVar(&cfg.Difficulty, "difficulty", "easy", "difficulty for games that support it: easy, medium, hard, expert")
 	flag.StringVar(&cfg.Level, "level", "starter", "level for games that support level selection")
 	flag.IntVar(&cfg.PlayerCount, "players", 1, "number of players for focused games")
@@ -82,6 +86,7 @@ func main() {
 	flag.Float64Var(&cfg.MusicVolume, "music-volume", 0.10, "background music volume, 0.0-1.0")
 	flag.StringVar(&cfg.StartCueRef, "start-cue", "Motion/sonidos/aparecer.mp3", "start cue asset ref, relative to audio-assets or absolute")
 	flag.StringVar(&cfg.CoinCueRef, "coin-cue", "Motion/sonidos/coin.wav", "coin cue asset ref, preloaded for instant press feedback")
+	flag.StringVar(&cfg.DoubleCoinCueRef, "double-coin-cue", "", "double coin cue asset ref; empty reuses coin-cue twice for purple tile feedback")
 	flag.StringVar(&cfg.DamageCueRef, "damage-cue", "Motion/sonidos/fallo.mp3", "damage cue asset ref, preloaded for instant press feedback")
 	flag.StringVar(&cfg.WinCueRef, "win-cue", "Motion/sonidos/victoria.mp3", "win cue asset ref, preloaded for game completion feedback")
 	flag.StringVar(&cfg.NarrationCueRef, "narration-cue", "", "narration asset ref; empty uses the selected game's default narration")
@@ -146,8 +151,21 @@ func (c *config) normalize() {
 	if c.Game == "saltos" {
 		c.Level = saltos.NormalizeLevel(c.Level)
 		c.PlayerCount = 1
+	} else if c.Game == "parkour" {
+		c.Level = parkour.NormalizeLevel(c.Level)
+		c.PlayerCount = 1
 	} else if c.Game == "temporada1" {
 		c.Level = temporada1.NormalizeLevel(c.Level)
+	} else if c.Game == "temporada2" {
+		c.Level = temporada2.NormalizeLevel(c.Level)
+		c.Difficulty = string(temporada2.NormalizeDifficulty(c.Difficulty))
+	} else if c.Game == "duel" {
+		c.PlayerCount = clampInt(c.PlayerCount, 2, 4)
+	} else if c.Game == "memory" {
+		c.PlayerCount = clampInt(c.PlayerCount, 1, 4)
+	} else if c.Game == "patrones" {
+		c.Level = patrones.NormalizeLevel(c.Level)
+		c.PlayerCount = clampInt(c.PlayerCount, 1, 6)
 	} else {
 		c.Level = ""
 	}
@@ -173,21 +191,15 @@ func (c *config) normalize() {
 	c.CueVolume = clamp01(c.CueVolume)
 	c.NarrationVolume = clamp01(c.NarrationVolume)
 	c.CountdownVolume = clamp01(c.CountdownVolume)
-	if c.Game == "whack-a-mole" && c.MusicRef == "Motion/canciones/Background01.mp3" {
-		c.MusicRef = whackamole.DefaultMusicRef
-		c.MusicVolume = whackamole.DefaultMusicVolume
+	if c.MusicRef == "" || c.MusicRef == loopMusicRef {
+		musicRef, musicVolume := defaultMusicForGame(c.Game)
+		c.MusicRef = musicRef
+		if c.Game != "loop" {
+			c.MusicVolume = musicVolume
+		}
 	}
-	if c.Game == "lava" && c.MusicRef == "Motion/canciones/Background01.mp3" {
-		c.MusicRef = lava.DefaultMusicRef
-		c.MusicVolume = lava.DefaultMusicVolume
-	}
-	if c.Game == "saltos" && c.MusicRef == "Motion/canciones/Background01.mp3" {
-		c.MusicRef = saltos.DefaultMusicRef
-		c.MusicVolume = saltos.DefaultMusicVolume
-	}
-	if c.Game == "temporada1" && c.MusicRef == "Motion/canciones/Background01.mp3" {
-		c.MusicRef = temporada1.DefaultMusicRef
-		c.MusicVolume = temporada1.DefaultMusicVolume
+	if c.DoubleCoinCueRef == "" {
+		c.DoubleCoinCueRef = c.CoinCueRef
 	}
 	if c.NarrationCueRef == "" {
 		c.NarrationCueRef = defaultNarrationRef(c.Game)
@@ -220,6 +232,12 @@ func runAudioTest(player *audio.Player, cfg config) error {
 	for i := 0; i < 4; i++ {
 		if cfg.CoinCueRef != "" {
 			if err := player.PlayCue(cfg.CoinCueRef, cfg.CueVolume); err != nil {
+				return err
+			}
+		}
+		time.Sleep(70 * time.Millisecond)
+		if cfg.DoubleCoinCueRef != "" {
+			if err := player.PlayCue(cfg.DoubleCoinCueRef, cfg.CueVolume); err != nil {
 				return err
 			}
 		}
@@ -327,12 +345,12 @@ func handlePressureEvent(cfg config, audioPlayer *audio.Player, game floorGame, 
 	}
 	if game != nil {
 		for _, gameEvent := range game.Press(whackamole.PressEvent{X: int(event.X), Y: int(event.Y), Pressed: event.Pressed}, now) {
-			playCue(cfg, audioPlayer, cueRef(cfg, gameEvent.Cue))
+			playCue(cfg, audioPlayer, gameEvent.Cue, cueRef(cfg, gameEvent.Cue))
 		}
 	}
 }
 
-func playCue(cfg config, audioPlayer *audio.Player, ref string) {
+func playCue(cfg config, audioPlayer *audio.Player, cue string, ref string) {
 	if audioPlayer == nil {
 		return
 	}
@@ -342,15 +360,25 @@ func playCue(cfg config, audioPlayer *audio.Player, ref string) {
 	if err := audioPlayer.PlayCue(ref, cfg.CueVolume); err != nil {
 		log.Printf("pressure audio: %v", err)
 	}
+	if cue == whackamole.CueDoubleCoin {
+		go func() {
+			time.Sleep(70 * time.Millisecond)
+			if err := audioPlayer.PlayCue(ref, cfg.CueVolume); err != nil {
+				log.Printf("pressure audio: %v", err)
+			}
+		}()
+	}
 }
 
 func cueRef(cfg config, cue string) string {
 	switch cue {
 	case whackamole.CueStart:
 		return cfg.StartCueRef
-	case whackamole.CueHit:
+	case whackamole.CueHit, whackamole.CueCoin:
 		return cfg.CoinCueRef
-	case whackamole.CueMiss:
+	case whackamole.CueDoubleCoin:
+		return cfg.DoubleCoinCueRef
+	case whackamole.CueMiss, whackamole.CueDamage:
 		return cfg.DamageCueRef
 	case whackamole.CueWin:
 		return cfg.WinCueRef
@@ -377,8 +405,18 @@ func normalizeGame(value string) string {
 		return "lava"
 	case "saltos", "jump", "salta", "salto":
 		return "saltos"
+	case "parkour", "pk":
+		return "parkour"
 	case "temporada1", "temporada-1", "season1", "season-1":
 		return "temporada1"
+	case "temporada2", "temporada-2", "season2", "season-2":
+		return "temporada2"
+	case "duel", "duelo", "versus-duel":
+		return "duel"
+	case "memory", "memory-challenge", "memoria", "reto-memoria":
+		return "memory"
+	case "patrones", "patterns", "pattern", "reto-patrones":
+		return "patrones"
 	case "loop", "ambient-comet", "ambient-pulse", "ambient-spark":
 		return value
 	default:
@@ -399,9 +437,11 @@ func makeFrame(sequence uint64, now time.Time, seconds float64, runtime *gameRun
 	brightness := 80
 	var gameColors []animation.RGB
 	sessionID := ""
+	venueSessionID := ""
 	if runtime != nil {
 		brightness, gameColors = runtime.Render(now)
 		sessionID = runtime.SessionID()
+		venueSessionID = runtime.VenueSessionID()
 	}
 	scale := float64(brightness) / 100
 	frame := &recordingpb.FrameRecord{
@@ -410,6 +450,7 @@ func makeFrame(sequence uint64, now time.Time, seconds float64, runtime *gameRun
 		Width:             animation.GridWidth,
 		Height:            animation.GridHeight,
 		SessionId:         sessionID,
+		VenueSessionId:    venueSessionID,
 		GameFrameSequence: sequence,
 		GameUnixNanos:     now.UnixNano(),
 		Tiles:             make([]*recordingpb.TileState, 0, animation.GridWidth*animation.GridHeight),
