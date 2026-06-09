@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { StrictMode, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource-variable/inter";
 import App from "./App";
@@ -7,8 +7,54 @@ import "./styles.css";
 
 initMenuAnalytics();
 
+const kioskDesignWidth = 1920;
+const kioskDesignHeight = 1080;
+
+function kioskScale() {
+  const viewport = window.visualViewport;
+  const width = viewport?.width || window.innerWidth || kioskDesignWidth;
+  const height = viewport?.height || window.innerHeight || kioskDesignHeight;
+  return Math.min(width / kioskDesignWidth, height / kioskDesignHeight);
+}
+
+function KioskViewport({ children }: { children: ReactNode }) {
+  const [scale, setScale] = useState(kioskScale);
+
+  useEffect(() => {
+    const update = () => setScale(kioskScale());
+    const viewport = window.visualViewport;
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    viewport?.addEventListener("resize", update);
+    viewport?.addEventListener("scroll", update);
+    update();
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+      viewport?.removeEventListener("resize", update);
+      viewport?.removeEventListener("scroll", update);
+    };
+  }, []);
+
+  const stageStyle = {
+    "--kiosk-scale": scale,
+    "--kiosk-width": `${kioskDesignWidth * scale}px`,
+    "--kiosk-height": `${kioskDesignHeight * scale}px`,
+  } as CSSProperties;
+
+  return (
+    <div className="kiosk-viewport">
+      <div className="kiosk-stage" style={stageStyle}>
+        <div className="kiosk-frame">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <KioskViewport>
+      <App />
+    </KioskViewport>
   </StrictMode>,
 );

@@ -50,6 +50,31 @@ body,
   overflow: hidden;
 }
 
+.kiosk-viewport {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.kiosk-stage {
+  position: relative;
+  width: var(--kiosk-width, 1920px);
+  height: var(--kiosk-height, 1080px);
+  overflow: visible;
+}
+
+.kiosk-frame {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 1920px;
+  height: 1080px;
+  transform: scale(var(--kiosk-scale, 1));
+  transform-origin: top left;
+  will-change: transform;
+}
+
 button,
 input {
   font: inherit;
@@ -72,10 +97,10 @@ body {
 .app {
   --page-signal-rgb: var(--accent-rgb);
   position: relative;
-  width: min(100vw, calc(100vh * 16 / 9));
-  height: min(100vh, calc(100vw * 9 / 16));
-  max-width: 100vw;
-  max-height: 100vh;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
   aspect-ratio: 16 / 9;
   padding: 22px 26px;
   display: grid;
@@ -111,8 +136,8 @@ body {
   grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
   grid-template-rows: minmax(0, 1fr) auto;
   align-items: center;
-  gap: clamp(36px, 4vw, 64px) clamp(48px, 5vw, 88px);
-  padding: 56px clamp(56px, 5vw, 96px) 64px;
+  gap: 64px 88px;
+  padding: 56px 96px 64px;
   overflow: hidden;
 }
 
@@ -178,7 +203,7 @@ body {
 .welcome-copy h1 {
   margin: 0;
   color: #f7fbff;
-  font-size: clamp(64px, 7.6vw, 112px);
+  font-size: 112px;
   font-weight: 950;
   line-height: 0.92;
   letter-spacing: -0.015em;
@@ -191,7 +216,7 @@ body {
   max-width: 30ch;
   margin: 0;
   color: var(--soft);
-  font-size: clamp(20px, 1.8vw, 28px);
+  font-size: 28px;
   font-weight: 700;
   line-height: 1.3;
 }
@@ -223,7 +248,7 @@ body {
   display: grid;
   place-items: stretch;
   width: 100%;
-  padding: clamp(20px, 2.4vw, 40px);
+  padding: 40px;
   border: 1px solid rgba(var(--accent-rgb), 0.22);
   border-radius: 32px;
   background:
@@ -346,7 +371,7 @@ body {
 
 .title-stack h1 {
   margin: 4px 0 0;
-  font-size: clamp(42px, 4.2vw, 62px);
+  font-size: 62px;
   line-height: 0.96;
   letter-spacing: -0.02em;
   background: linear-gradient(180deg, #ffffff, #b9c6d8);
@@ -509,7 +534,7 @@ button.capsule:disabled,
   top: 48px;
   left: 50%;
   z-index: 30;
-  width: min(860px, calc(100vw - 48px));
+  width: 860px;
   max-height: calc(100% - 96px);
   opacity: 0;
   pointer-events: none;
@@ -1930,7 +1955,7 @@ button.capsule:disabled,
 .countdown-overlay span {
   min-width: 0;
   color: #ffffff;
-  font-size: clamp(130px, 16vw, 330px);
+  font-size: 307px;
   font-weight: 950;
   line-height: 0.86;
   text-shadow: 0 18px 70px rgba(0, 0, 0, 0.78), 0 0 46px rgba(var(--crgb), 0.52);
@@ -1938,13 +1963,13 @@ button.capsule:disabled,
 }
 
 .countdown-overlay.paused span {
-  font-size: clamp(72px, 8vw, 150px);
+  font-size: 150px;
   text-transform: uppercase;
 }
 
 .countdown-overlay.narration span {
   max-width: 90%;
-  font-size: clamp(58px, 6.5vw, 132px);
+  font-size: 125px;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -1967,7 +1992,7 @@ button.capsule:disabled,
   margin: 0;
   overflow: hidden;
   color: var(--text);
-  font-size: clamp(46px, 5.2vw, 92px);
+  font-size: 92px;
   line-height: 0.9;
   letter-spacing: 0;
   text-overflow: ellipsis;
@@ -1976,7 +2001,7 @@ button.capsule:disabled,
 .game-control-copy p {
   margin: 0;
   color: var(--soft);
-  font-size: clamp(22px, 2vw, 34px);
+  font-size: 34px;
   font-weight: 800;
   line-height: 1.1;
 }
@@ -2014,7 +2039,7 @@ button.capsule:disabled,
 .control-action {
   min-height: 98px;
   border-radius: var(--r-md);
-  font-size: clamp(22px, 2vw, 34px);
+  font-size: 34px;
   font-weight: 900;
 }
 
@@ -2054,7 +2079,7 @@ button.capsule:disabled,
   left: 50%;
   bottom: 18px;
   z-index: 50;
-  width: min(calc(100vw - 36px), 1160px);
+  width: 1160px;
   padding: 18px;
   transform: translateX(-50%);
   border: 1px solid var(--line-strong);
@@ -2385,9 +2410,9 @@ button.capsule:disabled,
     0 8px 20px -6px color-mix(in srgb, var(--pc) 70%, transparent);
 }
 
-/* ---------- Large kiosk displays ---------- */
+/* ---------- Production 1080p kiosk layout ---------- */
 
-@media (min-width: 1800px) {
+@media (min-width: 0px) {
   .app {
     padding: 38px;
     gap: 30px;
@@ -2439,7 +2464,7 @@ button.capsule:disabled,
 
   .team-drawer {
     top: 64px;
-    width: min(1040px, calc(100vw - 96px));
+    width: 1040px;
     max-height: calc(100% - 128px);
   }
 
@@ -2511,7 +2536,7 @@ button.capsule:disabled,
   }
 
   .game-card {
-    flex-basis: clamp(680px, 36vw, 940px);
+    flex-basis: 692px;
     border-radius: var(--r-xl);
     grid-template-rows: minmax(420px, 1fr) 112px;
   }
@@ -2556,7 +2581,7 @@ button.capsule:disabled,
 
   .touch-keyboard {
     bottom: 22px;
-    width: min(calc(100vw - 96px), 1180px);
+    width: 1180px;
     padding: 16px;
   }
 
@@ -2605,9 +2630,9 @@ button.capsule:disabled,
   }
 }
 
-/* ---------- Tablet ---------- */
+/* ---------- Legacy responsive fallbacks (disabled for fixed 1080p kiosk scaling) ---------- */
 
-@media (max-width: 980px) {
+@media (max-width: 0px) {
   .app {
     min-height: 100%;
   }
@@ -2631,9 +2656,9 @@ button.capsule:disabled,
   }
 }
 
-/* ---------- Phone ---------- */
+/* ---------- Legacy phone fallback (disabled for fixed 1080p kiosk scaling) ---------- */
 
-@media (max-width: 720px) {
+@media (max-width: 0px) {
   .app {
     padding: 14px;
     gap: 16px;
@@ -2877,7 +2902,7 @@ button.capsule:disabled,
   }
 }
 
-@media (min-width: 1800px) {
+@media (min-width: 0px) {
   .app {
     padding: 26px 30px;
     gap: 14px;
@@ -3010,7 +3035,7 @@ button.capsule:disabled,
   }
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 0px) {
   .app {
     padding: 18px;
     gap: 14px;
@@ -3100,7 +3125,7 @@ button.capsule:disabled,
   }
 }
 
-@media (max-width: 980px) {
+@media (max-width: 0px) {
   .app {
     width: 100vw;
     height: 100vh;
@@ -3138,7 +3163,7 @@ button.capsule:disabled,
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 0px) {
   .app {
     width: 100vw;
     height: 100vh;
@@ -3191,8 +3216,10 @@ button.capsule:disabled,
 .app,
 .app.keyboard-open,
 .app.playing {
-  width: min(100vw, calc(100vh * 16 / 9));
-  height: min(100vh, calc(100vw * 9 / 16));
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
   min-height: 0;
   aspect-ratio: 16 / 9;
 }
