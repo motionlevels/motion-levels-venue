@@ -8,7 +8,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "electron:dev": "PLAYER_MENU_URL=http://127.0.0.1:5174 electron electron/main.cjs",
+    "electron:dev": "PLAYER_MENU_URL=http://127.0.0.1:4103 electron electron/main.cjs",
     "electron": "npm run build && electron electron/main.cjs",
     "pack:mac": "npm run build && electron-builder --mac dir",
     "dist:mac": "npm run build && electron-builder --mac dmg"
@@ -36,6 +36,8 @@
     }
   },
   "dependencies": {
+    "@motion-levels/core": "file:../../packages/core",
+    "@motion-levels/design-tokens": "file:../../packages/design-tokens",
     "posthog-js": "^1.379.3",
     "react": "^19.2.1",
     "react-dom": "^19.2.1"

@@ -1,0 +1,50 @@
+/*
+ * Motion Levels — shared design tokens (single source of truth).
+ *
+ * Published as @motion-levels/design-tokens and consumed by every surface that
+ * shares the kiosk/operator identity:
+ *   - apps/player-menu      (Vite, plain CSS)
+ *   - apps/player-display   (Vite, plain CSS)
+ *   - platform/app          (Next, Tailwind v4)
+ * each via:  @import "@motion-levels/design-tokens/tokens.css";
+ *
+ * The marketing site (apps/website) is intentionally a separate brand
+ * (Tektur/Orbitron, volt-green) and does NOT import this file.
+ *
+ * These are plain CSS custom properties, so both Vite and Tailwind v4 consume
+ * them natively. Tailwind apps map them into the framework via `@theme inline`.
+ * Apps may override individual tokens AFTER the import for surface-specific
+ * needs (e.g. the display's translucent panels), but the palette and scale
+ * below are the canonical defaults — don't fork the values.
+ */
+:root {
+  /* Surfaces & text */
+  --bg: #060910;
+  --surface: #0e1623;
+  --surface-2: #131e2d;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --text: #f5f7fb;
+  --muted: #8b99ad;
+  --soft: #c8d2e0;
+
+  /* Accent & signal colors */
+  --accent: #2fd86c;
+  --accent-rgb: 47, 216, 108;
+  --green: var(--accent);
+  --cyan: #36d9ff;
+  --red: #ff5268;
+
+  /* Radii */
+  --r-xs: 10px;
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+
+  /* Elevation & motion */
+  --shadow-card: 0 18px 40px -18px rgba(0, 0, 0, 0.7);
+  --shadow-float: 0 28px 80px -24px rgba(0, 0, 0, 0.8);
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}

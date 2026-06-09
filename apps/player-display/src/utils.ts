@@ -1,12 +1,6 @@
-import type { DisplayColor } from "./api";
-
-export function colorCSS(color: DisplayColor): string {
-  return `rgb(${color.r}, ${color.g}, ${color.b})`;
-}
-
-export function colorRGB(color: DisplayColor): string {
-  return `${color.r}, ${color.g}, ${color.b}`;
-}
+// Color math lives in the shared core package (also used by player-menu).
+// DisplayColor is structurally an RGB, so these accept it directly.
+export { colorCSS, colorRGB } from "@motion-levels/core";
 
 export function formatClock(ms: number): string {
   const safe = Math.max(0, ms);
@@ -58,6 +52,7 @@ const gameTitlesES: Record<string, string> = {
   "whack-a-mole": "Atrapa al topo",
   lava: "El suelo es lava",
   parkour: "Parkour",
+  plataformas: "Plataformas",
   temporada1: "Temporada 1",
   temporada2: "Temporada 2",
   duel: "Duelo",

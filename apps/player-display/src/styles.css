@@ -1,29 +1,14 @@
+/* Canonical palette, radii, shadows shared with the player-menu kiosk. */
+@import "@motion-levels/design-tokens/tokens.css";
+
 :root {
-  /* Shared design tokens with the player-menu for a consistent look. */
-  --bg: #060910;
+  /* Display-specific overrides: translucent panels and a deeper card shadow
+     read better on a large screen composited over the floor video. */
   --surface: rgba(13, 20, 31, 0.82);
-  --line: rgba(255, 255, 255, 0.09);
-  --line-strong: rgba(255, 255, 255, 0.16);
-  --text: #f5f7fb;
-  --muted: #8b99ad;
-  --soft: #c8d2e0;
-  --accent: #8dff6e;
-  --accent-rgb: 141, 255, 110;
-  --cyan: #36d9ff;
-  --green: #8dff6e;
-  --red: #ff5268;
-
-  --r-sm: 14px;
-  --r-md: 18px;
-  --r-lg: 24px;
-  --r-xl: 30px;
-  --r-pill: 999px;
-
   --surface-top: rgba(255, 255, 255, 0.052);
   --surface-bottom: rgba(255, 255, 255, 0.012);
   --shadow-card: 0 22px 54px -26px rgba(0, 0, 0, 0.82);
   --inner-light: inset 0 1px 0 rgba(255, 255, 255, 0.055);
-  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 
   color: var(--text);
   background: var(--bg);

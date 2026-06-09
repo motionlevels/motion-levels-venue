@@ -6,7 +6,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: "0.0.0.0",
-    port: 5175,
+    port: 4104,
     strictPort: true,
+    // Allow importing the shared design tokens from the repo root.
+    fs: {
+      allow: ["../.."],
+    },
   },
 });
