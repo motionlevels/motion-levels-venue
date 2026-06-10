@@ -118,3 +118,39 @@ export async function controlGame(action: ControlGameAction): Promise<EngineStat
   }
   return response.json() as Promise<EngineStatus>;
 }
+
+export type VenueSessionRequest = {
+  action: "start" | "end";
+  venueSessionId: string;
+  teamName?: string;
+  kioskId?: string;
+  reason?: string;
+};
+
+export type MenuEventRequest = {
+  venueSessionId: string;
+  name: string;
+  kioskId?: string;
+  occurredAtUnixMillis?: number;
+  properties?: Record<string, unknown>;
+};
+
+// Visit recording is best-effort: the kiosk must never block or surface errors
+// because the engine is briefly unreachable, so these are fire-and-forget.
+export function postVenueSession(request: VenueSessionRequest) {
+  void fetch(`${engineBaseURL()}/api/venue-session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+export function postMenuEvent(request: MenuEventRequest) {
+  void fetch(`${engineBaseURL()}/api/menu-event`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+    keepalive: true,
+  }).catch(() => {});
+}

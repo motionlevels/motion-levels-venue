@@ -1,0 +1,273 @@
+---
+- name: Build venue assets locally
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    motion_levels_repo_root: "{{ playbook_dir }}/../.."
+    motion_levels_skip_tests: "{{ lookup('env', 'SKIP_TESTS') | default('0', true) }}"
+  tasks:
+    - name: Run repository tests
+      ansible.builtin.command:
+        cmd: go test ./...
+        chdir: "{{ motion_levels_repo_root }}"
+      when: motion_levels_skip_tests != "1"
+      changed_when: false
+
+    - name: Build player menu
+      ansible.builtin.command:
+        cmd: npm run build --prefix apps/player-menu
+        chdir: "{{ motion_levels_repo_root }}"
+      changed_when: true
+
+    - name: Build player display
+      ansible.builtin.command:
+        cmd: npm run build --prefix apps/player-display
+        chdir: "{{ motion_levels_repo_root }}"
+      changed_when: true
+
+- name: Deploy Motion Levels venue stack
+  hosts: motion_levels_venues
+  gather_facts: true
+  vars:
+    motion_levels_repo_root: "{{ playbook_dir }}/../.."
+    motion_levels_services:
+      - motion-levels-floor-controller.service
+      - motion-levels-game-engine.service
+      - motion-levels-player-display.service
+      - motion-levels-player-menu.service
+      - motion-levels-kiosk.service
+    motion_levels_old_services:
+      - motion-levels-player-tv.service
+      - motion-levels-camera-helper.service
+      - motion-levels.service
+    motion_levels_health_urls:
+      - http://127.0.0.1/controller/status
+      - http://127.0.0.1/engine/api/status
+      - http://127.0.0.1/menu/
+      - http://127.0.0.1/display/
+      - http://127.0.0.1:4101/status
+      - http://127.0.0.1:4102/api/status
+      - http://127.0.0.1:4103/
+      - http://127.0.0.1:4104/
+    motion_levels_sync_items:
+      - src: go.mod
+        dest: "{{ motion_levels_remote_src }}/"
+      - src: go.sum
+        dest: "{{ motion_levels_remote_src }}/"
+      - src: game-engine/
+        dest: "{{ motion_levels_remote_src }}/game-engine/"
+      - src: floor-controller/
+        dest: "{{ motion_levels_remote_src }}/floor-controller/"
+      - src: packages/
+        dest: "{{ motion_levels_remote_src }}/packages/"
+      - src: content/
+        dest: "{{ motion_levels_remote_src }}/content/"
+      - src: deploy/
+        dest: "{{ motion_levels_remote_src }}/deploy/"
+      - src: apps/player-menu/
+        dest: "{{ motion_levels_remote_src }}/apps/player-menu/"
+      - src: apps/player-display/
+        dest: "{{ motion_levels_remote_src }}/apps/player-display/"
+      - src: apps/player-menu/dist/
+        dest: "{{ motion_levels_remote_root }}/apps/player-menu/dist/"
+      - src: apps/player-display/dist/
+        dest: "{{ motion_levels_remote_root }}/apps/player-display/dist/"
+    motion_levels_rsync_opts:
+      - --exclude=node_modules
+      - --exclude=release
+      - --exclude=.vite
+      - --exclude=*.tsbuildinfo
+      - --exclude=recordings
+      - --exclude=game-recordings
+      - --exclude=*.pbstream
+      - --exclude=*.pbstream.*
+      - --exclude=.DS_Store
+  tasks:
+    - name: Install runtime packages
+      ansible.builtin.apt:
+        name:
+          - caddy
+          - curl
+          - libasound2-dev
+          - pkg-config
+          - rsync
+          - zstd
+        state: present
+        update_cache: true
+      when: ansible_facts.os_family == "Debian"
+
+    - name: Create deployment directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ motion_levels_remote_src }}"
+        - "{{ motion_levels_remote_root }}/bin"
+        - "{{ motion_levels_remote_root }}/apps/player-menu"
+        - "{{ motion_levels_remote_root }}/apps/player-display"
+        - "{{ motion_levels_remote_root }}/var/floor-controller/recordings"
+        - "{{ motion_levels_remote_root }}/var/game-engine/sessions"
+        - /etc/motion-levels
+        - /etc/caddy
+        - /var/lib/motion-levels
+
+    - name: Check installed Go version
+      ansible.builtin.command:
+        cmd: "{{ motion_levels_go_bin }} version"
+      register: motion_levels_go_check
+      failed_when: false
+      changed_when: false
+
+    - name: Resolve Go architecture
+      ansible.builtin.set_fact:
+        motion_levels_go_arch: "{{ 'arm64' if ansible_facts.architecture in ['aarch64', 'arm64'] else 'amd64' }}"
+
+    - name: Install Go
+      when: "'go' ~ motion_levels_go_version not in motion_levels_go_check.stdout"
+      block:
+        - name: Download Go toolchain
+          ansible.builtin.get_url:
+            url: "https://go.dev/dl/go{{ motion_levels_go_version }}.linux-{{ motion_levels_go_arch }}.tar.gz"
+            dest: "/tmp/go{{ motion_levels_go_version }}.linux-{{ motion_levels_go_arch }}.tar.gz"
+            mode: "0644"
+
+        - name: Remove previous Go toolchain
+          ansible.builtin.file:
+            path: /usr/local/go
+            state: absent
+
+        - name: Extract Go toolchain
+          ansible.builtin.unarchive:
+            src: "/tmp/go{{ motion_levels_go_version }}.linux-{{ motion_levels_go_arch }}.tar.gz"
+            dest: /usr/local
+            remote_src: true
+
+    - name: Sync source and built frontend assets
+      ansible.posix.synchronize:
+        src: "{{ motion_levels_repo_root }}/{{ item.src }}"
+        dest: "{{ item.dest }}"
+        archive: true
+        delete: true
+        rsync_opts: "{{ motion_levels_rsync_opts }}"
+      loop: "{{ motion_levels_sync_items }}"
+
+    - name: Run focused remote Go tests
+      ansible.builtin.command:
+        cmd: "{{ motion_levels_go_bin }} test ./game-engine/cmd/game-engine ./floor-controller/cmd/floor-controller ./game-engine/internal/games/saltos ./game-engine/internal/games/temporada1"
+        chdir: "{{ motion_levels_remote_src }}"
+      changed_when: false
+
+    - name: Build game engine binary
+      ansible.builtin.command:
+        cmd: "{{ motion_levels_go_bin }} build -o {{ motion_levels_remote_root }}/bin/game-engine ./game-engine/cmd/game-engine"
+        chdir: "{{ motion_levels_remote_src }}"
+      changed_when: true
+
+    - name: Build floor controller binary
+      ansible.builtin.command:
+        cmd: "{{ motion_levels_go_bin }} build -o {{ motion_levels_remote_root }}/bin/floor-controller ./floor-controller/cmd/floor-controller"
+        chdir: "{{ motion_levels_remote_src }}"
+      changed_when: true
+
+    - name: Install default motion-levels env if missing
+      ansible.builtin.copy:
+        src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/motion-levels.env"
+        dest: /etc/motion-levels/motion-levels.env
+        mode: "0644"
+        remote_src: true
+        force: false
+
+    - name: Check platform env exists
+      ansible.builtin.stat:
+        path: /etc/motion-levels/platform.env
+      register: motion_levels_platform_env
+
+    - name: Warn when platform env is missing
+      ansible.builtin.debug:
+        msg: "/etc/motion-levels/platform.env is missing; platform sync and recording uploads need MOTION_LEVELS_PLATFORM_TOKEN."
+      when: not motion_levels_platform_env.stat.exists
+
+    - name: Install Caddy config
+      ansible.builtin.copy:
+        src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/Caddyfile"
+        dest: /etc/caddy/Caddyfile
+        mode: "0644"
+        remote_src: true
+      notify: Restart caddy
+
+    - name: Disable old services
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        enabled: false
+        state: stopped
+      loop: "{{ motion_levels_old_services }}"
+      failed_when: false
+
+    - name: Install systemd service units
+      ansible.builtin.copy:
+        src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: "0644"
+        remote_src: true
+      loop: "{{ motion_levels_services }}"
+      notify:
+        - Reload systemd
+        - Restart motion levels services
+
+    - name: Flush unit/config handlers before validation
+      ansible.builtin.meta: flush_handlers
+
+    - name: Enable caddy
+      ansible.builtin.systemd_service:
+        name: caddy
+        enabled: true
+
+    - name: Enable Motion Levels services
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        enabled: true
+      loop: "{{ motion_levels_services }}"
+
+    - name: Validate Caddy config
+      ansible.builtin.command:
+        cmd: caddy validate --config /etc/caddy/Caddyfile
+      changed_when: false
+
+    - name: Ensure caddy is running
+      ansible.builtin.systemd_service:
+        name: caddy
+        state: started
+
+    - name: Ensure Motion Levels services are running
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: started
+      loop: "{{ motion_levels_services }}"
+
+    - name: Wait for local service health
+      ansible.builtin.uri:
+        url: "{{ item }}"
+        status_code: 200
+      register: motion_levels_health
+      until: motion_levels_health.status == 200
+      retries: 80
+      delay: 1
+      loop: "{{ motion_levels_health_urls }}"
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: Restart caddy
+      ansible.builtin.systemd_service:
+        name: caddy
+        state: restarted
+
+    - name: Restart motion levels services
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: restarted
+      loop: "{{ motion_levels_services }}"

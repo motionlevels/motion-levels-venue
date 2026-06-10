@@ -91,6 +91,27 @@ type platformIngestResponse struct {
 	Error string `json:"error"`
 }
 
+type platformVenuePayload struct {
+	VenueSessionID string                      `json:"venueSessionId"`
+	ControllerID   string                      `json:"controllerId,omitempty"`
+	KioskID        string                      `json:"kioskId,omitempty"`
+	TeamName       string                      `json:"teamName,omitempty"`
+	Status         string                      `json:"status"`
+	EndReason      string                      `json:"endReason,omitempty"`
+	StartedAt      string                      `json:"startedAt,omitempty"`
+	EndedAt        string                      `json:"endedAt,omitempty"`
+	Events         []platformVenueEventPayload `json:"events,omitempty"`
+}
+
+type platformVenueEventPayload struct {
+	EventKey   string         `json:"eventKey"`
+	Sequence   string         `json:"sequence,omitempty"`
+	OccurredAt string         `json:"occurredAt"`
+	Type       string         `json:"type"`
+	Name       string         `json:"name"`
+	Payload    map[string]any `json:"payload,omitempty"`
+}
+
 func startPlatformSync(runtime *gameRuntime, cfg config) {
 	syncer, err := newPlatformSyncer(runtime, cfg)
 	if err != nil {
@@ -144,15 +165,20 @@ func resolveControllerID(cfg config) (string, error) {
 }
 
 func (s *platformSyncer) run() {
-	if err := s.syncOnce(time.Now()); err != nil {
-		s.logError(err)
-	}
+	s.syncTick(time.Now())
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
 	for now := range ticker.C {
-		if err := s.syncOnce(now); err != nil {
-			s.logError(err)
-		}
+		s.syncTick(now)
+	}
+}
+
+func (s *platformSyncer) syncTick(now time.Time) {
+	if err := s.syncOnce(now); err != nil {
+		s.logError(err)
+	}
+	if err := s.syncVenueOnce(now); err != nil {
+		s.logError(err)
 	}
 }
 
@@ -170,12 +196,76 @@ func (s *platformSyncer) syncOnce(now time.Time) error {
 		s.lastEventUnixNanos = 0
 		s.displaySnapshotSeq = 0
 	}
-	payload := s.payload(status, display, now)
+	return s.postIngest("/api/ingest/session", s.payload(status, display, now))
+}
+
+const venueSyncBatchLimit = 200
+
+// syncVenueOnce forwards visit lifecycle and kiosk menu events, and sends a
+// heartbeat upsert while a visit is active so the platform can detect stale
+// visits after an engine crash.
+func (s *platformSyncer) syncVenueOnce(now time.Time) error {
+	if s == nil || s.runtime == nil {
+		return nil
+	}
+	events := s.runtime.DrainVenueOutbox(venueSyncBatchLimit)
+	if len(events) == 0 {
+		snapshot, ok := s.runtime.VenueSnapshot()
+		if !ok || snapshot.Status != "active" {
+			return nil
+		}
+		return s.postIngest("/api/ingest/venue-session", s.venuePayload(snapshot, nil))
+	}
+	for start := 0; start < len(events); {
+		end := start + 1
+		for end < len(events) && events[end].VenueID == events[start].VenueID {
+			end++
+		}
+		group := events[start:end]
+		// The newest event carries the freshest venue row state for the upsert.
+		if err := s.postIngest("/api/ingest/venue-session", s.venuePayload(group[len(group)-1].Venue, group)); err != nil {
+			s.runtime.RequeueVenueOutbox(events[start:])
+			return err
+		}
+		start = end
+	}
+	return nil
+}
+
+func (s *platformSyncer) venuePayload(venue venueSnapshot, events []venueOutboxEvent) platformVenuePayload {
+	payload := platformVenuePayload{
+		VenueSessionID: venue.ID,
+		ControllerID:   s.controllerID,
+		KioskID:        venue.KioskID,
+		TeamName:       venue.TeamName,
+		Status:         venue.Status,
+		EndReason:      venue.EndReason,
+	}
+	if !venue.StartedAt.IsZero() {
+		payload.StartedAt = venue.StartedAt.UTC().Format(time.RFC3339Nano)
+	}
+	if !venue.EndedAt.IsZero() {
+		payload.EndedAt = venue.EndedAt.UTC().Format(time.RFC3339Nano)
+	}
+	for _, event := range events {
+		payload.Events = append(payload.Events, platformVenueEventPayload{
+			EventKey:   event.EventKey,
+			Sequence:   fmt.Sprintf("%d", event.Sequence),
+			OccurredAt: event.OccurredAt.UTC().Format(time.RFC3339Nano),
+			Type:       event.Type,
+			Name:       event.Name,
+			Payload:    event.Payload,
+		})
+	}
+	return payload
+}
+
+func (s *platformSyncer) postIngest(path string, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	request, err := http.NewRequest(http.MethodPost, s.platformURL+"/api/ingest/session", bytes.NewReader(body))
+	request, err := http.NewRequest(http.MethodPost, s.platformURL+path, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

@@ -60,6 +60,7 @@ type config struct {
 	PlatformURL              string
 	PlatformToken            string
 	PlatformSyncInterval     time.Duration
+	VenueIdleTimeout         time.Duration
 	ControllerID             string
 	ControllerIDFile         string
 }
@@ -102,6 +103,7 @@ func main() {
 	flag.StringVar(&cfg.PlatformURL, "platform-url", os.Getenv("MOTION_LEVELS_PLATFORM_URL"), "platform base URL for session ingest; empty disables")
 	flag.StringVar(&cfg.PlatformToken, "platform-token", os.Getenv("MOTION_LEVELS_PLATFORM_TOKEN"), "platform bearer token for session ingest; can also use MOTION_LEVELS_PLATFORM_TOKEN")
 	flag.DurationVar(&cfg.PlatformSyncInterval, "platform-sync-interval", time.Second, "how often to publish session state to the platform")
+	flag.DurationVar(&cfg.VenueIdleTimeout, "venue-session-idle-timeout", defaultVenueIdleLimit, "end the venue session after this much inactivity; 0 keeps the built-in default")
 	flag.StringVar(&cfg.ControllerID, "controller-id", "", "stable controller UUID to attach platform session records to")
 	flag.StringVar(&cfg.ControllerIDFile, "controller-id-file", "", "file containing the stable controller UUID")
 	flag.Parse()

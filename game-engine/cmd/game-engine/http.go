@@ -27,6 +27,22 @@ type controlGameRequest struct {
 	Action string `json:"action"`
 }
 
+type venueSessionRequest struct {
+	Action         string `json:"action"` // start | end
+	VenueSessionID string `json:"venueSessionId"`
+	TeamName       string `json:"teamName"`
+	KioskID        string `json:"kioskId"`
+	Reason         string `json:"reason"`
+}
+
+type menuEventRequest struct {
+	VenueSessionID       string         `json:"venueSessionId"`
+	Name                 string         `json:"name"`
+	KioskID              string         `json:"kioskId"`
+	OccurredAtUnixMillis int64          `json:"occurredAtUnixMillis"`
+	Properties           map[string]any `json:"properties"`
+}
+
 func serveGameAPI(addr string, runtime *gameRuntime) {
 	if addr == "" {
 		return
@@ -98,6 +114,52 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 		}
 		runtime.ControlGame(request.Action)
 		writeJSON(w, runtime.Status())
+	})
+	mux.HandleFunc("/api/venue-session", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var request venueSessionRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if request.VenueSessionID == "" {
+			http.Error(w, "venueSessionId is required", http.StatusBadRequest)
+			return
+		}
+		now := time.Now()
+		switch request.Action {
+		case "start":
+			runtime.StartVenueSession(request.VenueSessionID, request.TeamName, request.KioskID, now)
+		case "end":
+			runtime.EndVenueSession(request.VenueSessionID, request.Reason, now)
+		default:
+			http.Error(w, "action must be start or end", http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, runtime.Status())
+	})
+	mux.HandleFunc("/api/menu-event", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var request menuEventRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		var occurredAt time.Time
+		if request.OccurredAtUnixMillis > 0 {
+			occurredAt = time.UnixMilli(request.OccurredAtUnixMillis)
+		}
+		if err := runtime.RecordMenuEvent(request.VenueSessionID, request.Name, request.KioskID, request.Properties, occurredAt, time.Now()); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
 	})
 	return withAPILogging(runtime, withCORS(mux))
 }

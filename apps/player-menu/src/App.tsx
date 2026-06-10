@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { controlGame, fetchEngineStatus, selectGame, type EngineStatus } from "./api";
+import { controlGame, fetchEngineStatus, postMenuEvent, postVenueSession, selectGame, type EngineStatus } from "./api";
 import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
 import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, LogoIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
 import { defaultFloorAnim, floorAnimations } from "./floor";
 import { hexToColor, hexToRGB, initials } from "./utils";
-import { captureMenuEvent } from "./analytics";
+import { captureMenuEvent, menuKioskID, setMenuEventForwarder } from "./analytics";
 
 type Player = {
   id: number;
@@ -427,10 +427,33 @@ export default function App() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const processedFinishedSessions = useRef(new Set<string>());
   const syncedEngineSession = useRef("");
+  const venueSessionIDRef = useRef(menu.sessionId);
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(menu));
   }, [menu]);
+
+  useEffect(() => {
+    venueSessionIDRef.current = menu.sessionId;
+  }, [menu.sessionId]);
+
+  // Mirror every captured menu event to the game-engine so the visit is fully
+  // recorded server-side (independent of PostHog analytics).
+  useEffect(() => {
+    setMenuEventForwarder((event, properties) => {
+      const venueSessionId = venueSessionIDRef.current
+        || (typeof properties.venue_session_id === "string" ? properties.venue_session_id : "");
+      if (!venueSessionId) return;
+      postMenuEvent({
+        venueSessionId,
+        name: event,
+        kioskId: menuKioskID(),
+        occurredAtUnixMillis: Date.now(),
+        properties,
+      });
+    });
+    return () => setMenuEventForwarder(null);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -741,6 +764,12 @@ export default function App() {
     const nextTeamName = defaultTeamName();
     const nextSessionID = newVenueSessionID();
     const nowUnix = Math.floor(Date.now() / 1000);
+    postVenueSession({
+      action: "start",
+      venueSessionId: nextSessionID,
+      teamName: nextTeamName,
+      kioskId: menuKioskID(),
+    });
     captureMenuEvent("session_started", {
       default_team_name: true,
       venue_session_id: nextSessionID,
@@ -772,6 +801,14 @@ export default function App() {
   }
 
   async function closeSession(reason = "manual") {
+    if (menu.sessionId) {
+      postVenueSession({
+        action: "end",
+        venueSessionId: menu.sessionId,
+        reason,
+        kioskId: menuKioskID(),
+      });
+    }
     captureMenuEvent("session_closed", {
       category: menu.category,
       reason,

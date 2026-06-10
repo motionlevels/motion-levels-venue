@@ -39,6 +39,9 @@ type GameSessionRecord struct {
 	//	*GameSessionRecord_DisplaySnapshot
 	//	*GameSessionRecord_LevelAttemptStarted
 	//	*GameSessionRecord_LevelAttemptFinished
+	//	*GameSessionRecord_VenueSessionStarted
+	//	*GameSessionRecord_VenueSessionEnded
+	//	*GameSessionRecord_MenuEvent
 	Payload       isGameSessionRecord_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -199,6 +202,33 @@ func (x *GameSessionRecord) GetLevelAttemptFinished() *LevelAttemptFinished {
 	return nil
 }
 
+func (x *GameSessionRecord) GetVenueSessionStarted() *VenueSessionStarted {
+	if x != nil {
+		if x, ok := x.Payload.(*GameSessionRecord_VenueSessionStarted); ok {
+			return x.VenueSessionStarted
+		}
+	}
+	return nil
+}
+
+func (x *GameSessionRecord) GetVenueSessionEnded() *VenueSessionEnded {
+	if x != nil {
+		if x, ok := x.Payload.(*GameSessionRecord_VenueSessionEnded); ok {
+			return x.VenueSessionEnded
+		}
+	}
+	return nil
+}
+
+func (x *GameSessionRecord) GetMenuEvent() *MenuEvent {
+	if x != nil {
+		if x, ok := x.Payload.(*GameSessionRecord_MenuEvent); ok {
+			return x.MenuEvent
+		}
+	}
+	return nil
+}
+
 type isGameSessionRecord_Payload interface {
 	isGameSessionRecord_Payload()
 }
@@ -243,6 +273,18 @@ type GameSessionRecord_LevelAttemptFinished struct {
 	LevelAttemptFinished *LevelAttemptFinished `protobuf:"bytes,19,opt,name=level_attempt_finished,json=levelAttemptFinished,proto3,oneof"`
 }
 
+type GameSessionRecord_VenueSessionStarted struct {
+	VenueSessionStarted *VenueSessionStarted `protobuf:"bytes,20,opt,name=venue_session_started,json=venueSessionStarted,proto3,oneof"`
+}
+
+type GameSessionRecord_VenueSessionEnded struct {
+	VenueSessionEnded *VenueSessionEnded `protobuf:"bytes,21,opt,name=venue_session_ended,json=venueSessionEnded,proto3,oneof"`
+}
+
+type GameSessionRecord_MenuEvent struct {
+	MenuEvent *MenuEvent `protobuf:"bytes,22,opt,name=menu_event,json=menuEvent,proto3,oneof"`
+}
+
 func (*GameSessionRecord_SessionStarted) isGameSessionRecord_Payload() {}
 
 func (*GameSessionRecord_SessionEnded) isGameSessionRecord_Payload() {}
@@ -263,6 +305,203 @@ func (*GameSessionRecord_LevelAttemptStarted) isGameSessionRecord_Payload() {}
 
 func (*GameSessionRecord_LevelAttemptFinished) isGameSessionRecord_Payload() {}
 
+func (*GameSessionRecord_VenueSessionStarted) isGameSessionRecord_Payload() {}
+
+func (*GameSessionRecord_VenueSessionEnded) isGameSessionRecord_Payload() {}
+
+func (*GameSessionRecord_MenuEvent) isGameSessionRecord_Payload() {}
+
+// Venue-scoped records describe a client visit at the kiosk. They are written
+// with an empty session_id and only venue_session_id set, because a visit
+// spans multiple game sessions (including the ambient loop).
+type VenueSessionStarted struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	TeamName         string                 `protobuf:"bytes,1,opt,name=team_name,json=teamName,proto3" json:"team_name,omitempty"`
+	KioskId          string                 `protobuf:"bytes,2,opt,name=kiosk_id,json=kioskId,proto3" json:"kiosk_id,omitempty"`
+	StartedUnixNanos int64                  `protobuf:"varint,3,opt,name=started_unix_nanos,json=startedUnixNanos,proto3" json:"started_unix_nanos,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *VenueSessionStarted) Reset() {
+	*x = VenueSessionStarted{}
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VenueSessionStarted) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VenueSessionStarted) ProtoMessage() {}
+
+func (x *VenueSessionStarted) ProtoReflect() protoreflect.Message {
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VenueSessionStarted.ProtoReflect.Descriptor instead.
+func (*VenueSessionStarted) Descriptor() ([]byte, []int) {
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *VenueSessionStarted) GetTeamName() string {
+	if x != nil {
+		return x.TeamName
+	}
+	return ""
+}
+
+func (x *VenueSessionStarted) GetKioskId() string {
+	if x != nil {
+		return x.KioskId
+	}
+	return ""
+}
+
+func (x *VenueSessionStarted) GetStartedUnixNanos() int64 {
+	if x != nil {
+		return x.StartedUnixNanos
+	}
+	return 0
+}
+
+type VenueSessionEnded struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Reason         string                 `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
+	EndedUnixNanos int64                  `protobuf:"varint,2,opt,name=ended_unix_nanos,json=endedUnixNanos,proto3" json:"ended_unix_nanos,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *VenueSessionEnded) Reset() {
+	*x = VenueSessionEnded{}
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VenueSessionEnded) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VenueSessionEnded) ProtoMessage() {}
+
+func (x *VenueSessionEnded) ProtoReflect() protoreflect.Message {
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VenueSessionEnded.ProtoReflect.Descriptor instead.
+func (*VenueSessionEnded) Descriptor() ([]byte, []int) {
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *VenueSessionEnded) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *VenueSessionEnded) GetEndedUnixNanos() int64 {
+	if x != nil {
+		return x.EndedUnixNanos
+	}
+	return 0
+}
+
+type MenuEvent struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // menu taxonomy: player_added, game_selected, ...
+	KioskId        string                 `protobuf:"bytes,2,opt,name=kiosk_id,json=kioskId,proto3" json:"kiosk_id,omitempty"`
+	PropertiesJson string                 `protobuf:"bytes,3,opt,name=properties_json,json=propertiesJson,proto3" json:"properties_json,omitempty"` // raw JSON properties from the menu
+	UnixNanos      int64                  `protobuf:"varint,4,opt,name=unix_nanos,json=unixNanos,proto3" json:"unix_nanos,omitempty"`
+	VenueSequence  uint64                 `protobuf:"varint,5,opt,name=venue_sequence,json=venueSequence,proto3" json:"venue_sequence,omitempty"` // engine-side monotonic sequence per venue session
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *MenuEvent) Reset() {
+	*x = MenuEvent{}
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MenuEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MenuEvent) ProtoMessage() {}
+
+func (x *MenuEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MenuEvent.ProtoReflect.Descriptor instead.
+func (*MenuEvent) Descriptor() ([]byte, []int) {
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *MenuEvent) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MenuEvent) GetKioskId() string {
+	if x != nil {
+		return x.KioskId
+	}
+	return ""
+}
+
+func (x *MenuEvent) GetPropertiesJson() string {
+	if x != nil {
+		return x.PropertiesJson
+	}
+	return ""
+}
+
+func (x *MenuEvent) GetUnixNanos() int64 {
+	if x != nil {
+		return x.UnixNanos
+	}
+	return 0
+}
+
+func (x *MenuEvent) GetVenueSequence() uint64 {
+	if x != nil {
+		return x.VenueSequence
+	}
+	return 0
+}
+
 type SessionStarted struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Game             string                 `protobuf:"bytes,1,opt,name=game,proto3" json:"game,omitempty"`
@@ -281,7 +520,7 @@ type SessionStarted struct {
 
 func (x *SessionStarted) Reset() {
 	*x = SessionStarted{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[1]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -293,7 +532,7 @@ func (x *SessionStarted) String() string {
 func (*SessionStarted) ProtoMessage() {}
 
 func (x *SessionStarted) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[1]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -306,7 +545,7 @@ func (x *SessionStarted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionStarted.ProtoReflect.Descriptor instead.
 func (*SessionStarted) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{1}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *SessionStarted) GetGame() string {
@@ -389,7 +628,7 @@ type SessionEnded struct {
 
 func (x *SessionEnded) Reset() {
 	*x = SessionEnded{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[2]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -401,7 +640,7 @@ func (x *SessionEnded) String() string {
 func (*SessionEnded) ProtoMessage() {}
 
 func (x *SessionEnded) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[2]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -414,7 +653,7 @@ func (x *SessionEnded) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionEnded.ProtoReflect.Descriptor instead.
 func (*SessionEnded) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{2}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SessionEnded) GetReason() string {
@@ -444,7 +683,7 @@ type ApiInteraction struct {
 
 func (x *ApiInteraction) Reset() {
 	*x = ApiInteraction{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[3]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -456,7 +695,7 @@ func (x *ApiInteraction) String() string {
 func (*ApiInteraction) ProtoMessage() {}
 
 func (x *ApiInteraction) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[3]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -469,7 +708,7 @@ func (x *ApiInteraction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApiInteraction.ProtoReflect.Descriptor instead.
 func (*ApiInteraction) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{3}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ApiInteraction) GetMethod() string {
@@ -519,7 +758,7 @@ type MenuCommand struct {
 
 func (x *MenuCommand) Reset() {
 	*x = MenuCommand{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[4]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -531,7 +770,7 @@ func (x *MenuCommand) String() string {
 func (*MenuCommand) ProtoMessage() {}
 
 func (x *MenuCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[4]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -544,7 +783,7 @@ func (x *MenuCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MenuCommand.ProtoReflect.Descriptor instead.
 func (*MenuCommand) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{4}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *MenuCommand) GetCommand() string {
@@ -592,7 +831,7 @@ type PressureInput struct {
 
 func (x *PressureInput) Reset() {
 	*x = PressureInput{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[5]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -604,7 +843,7 @@ func (x *PressureInput) String() string {
 func (*PressureInput) ProtoMessage() {}
 
 func (x *PressureInput) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[5]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -617,7 +856,7 @@ func (x *PressureInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PressureInput.ProtoReflect.Descriptor instead.
 func (*PressureInput) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{5}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *PressureInput) GetSourceSequence() uint64 {
@@ -694,7 +933,7 @@ type GameEvent struct {
 
 func (x *GameEvent) Reset() {
 	*x = GameEvent{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[6]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -706,7 +945,7 @@ func (x *GameEvent) String() string {
 func (*GameEvent) ProtoMessage() {}
 
 func (x *GameEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[6]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -719,7 +958,7 @@ func (x *GameEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GameEvent.ProtoReflect.Descriptor instead.
 func (*GameEvent) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{6}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GameEvent) GetCue() string {
@@ -755,7 +994,7 @@ type AudioCue struct {
 
 func (x *AudioCue) Reset() {
 	*x = AudioCue{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[7]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -767,7 +1006,7 @@ func (x *AudioCue) String() string {
 func (*AudioCue) ProtoMessage() {}
 
 func (x *AudioCue) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[7]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -780,7 +1019,7 @@ func (x *AudioCue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AudioCue.ProtoReflect.Descriptor instead.
 func (*AudioCue) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{7}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *AudioCue) GetRef() string {
@@ -830,7 +1069,7 @@ type LevelAttemptStarted struct {
 
 func (x *LevelAttemptStarted) Reset() {
 	*x = LevelAttemptStarted{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[8]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -842,7 +1081,7 @@ func (x *LevelAttemptStarted) String() string {
 func (*LevelAttemptStarted) ProtoMessage() {}
 
 func (x *LevelAttemptStarted) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[8]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -855,7 +1094,7 @@ func (x *LevelAttemptStarted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LevelAttemptStarted.ProtoReflect.Descriptor instead.
 func (*LevelAttemptStarted) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{8}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *LevelAttemptStarted) GetAttemptId() string {
@@ -959,7 +1198,7 @@ type LevelAttemptFinished struct {
 
 func (x *LevelAttemptFinished) Reset() {
 	*x = LevelAttemptFinished{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[9]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -971,7 +1210,7 @@ func (x *LevelAttemptFinished) String() string {
 func (*LevelAttemptFinished) ProtoMessage() {}
 
 func (x *LevelAttemptFinished) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[9]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -984,7 +1223,7 @@ func (x *LevelAttemptFinished) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LevelAttemptFinished.ProtoReflect.Descriptor instead.
 func (*LevelAttemptFinished) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{9}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *LevelAttemptFinished) GetAttemptId() string {
@@ -1129,7 +1368,7 @@ type DisplaySnapshot struct {
 
 func (x *DisplaySnapshot) Reset() {
 	*x = DisplaySnapshot{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[10]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1141,7 +1380,7 @@ func (x *DisplaySnapshot) String() string {
 func (*DisplaySnapshot) ProtoMessage() {}
 
 func (x *DisplaySnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[10]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1154,7 +1393,7 @@ func (x *DisplaySnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisplaySnapshot.ProtoReflect.Descriptor instead.
 func (*DisplaySnapshot) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{10}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DisplaySnapshot) GetCurrentGame() string {
@@ -1324,7 +1563,7 @@ type DisplayPlayer struct {
 
 func (x *DisplayPlayer) Reset() {
 	*x = DisplayPlayer{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[11]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1336,7 +1575,7 @@ func (x *DisplayPlayer) String() string {
 func (*DisplayPlayer) ProtoMessage() {}
 
 func (x *DisplayPlayer) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[11]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1349,7 +1588,7 @@ func (x *DisplayPlayer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisplayPlayer.ProtoReflect.Descriptor instead.
 func (*DisplayPlayer) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{11}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *DisplayPlayer) GetIndex() uint32 {
@@ -1398,7 +1637,7 @@ type Color struct {
 
 func (x *Color) Reset() {
 	*x = Color{}
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[12]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1410,7 +1649,7 @@ func (x *Color) String() string {
 func (*Color) ProtoMessage() {}
 
 func (x *Color) ProtoReflect() protoreflect.Message {
-	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[12]
+	mi := &file_packages_contracts_gamepb_game_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1423,7 +1662,7 @@ func (x *Color) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Color.ProtoReflect.Descriptor instead.
 func (*Color) Descriptor() ([]byte, []int) {
-	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{12}
+	return file_packages_contracts_gamepb_game_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Color) GetR() uint32 {
@@ -1451,7 +1690,8 @@ var File_packages_contracts_gamepb_game_proto protoreflect.FileDescriptor
 
 const file_packages_contracts_gamepb_game_proto_rawDesc = "" +
 	"\n" +
-	"$packages/contracts/gamepb/game.proto\x12\x1bmotionlevels.engine.game.v1\"\x85\b\n" +
+	"$packages/contracts/gamepb/game.proto\x12\x1bmotionlevels.engine.game.v1\"\x98\n" +
+	"\n" +
 	"\x11GameSessionRecord\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1a\n" +
@@ -1470,8 +1710,26 @@ const file_packages_contracts_gamepb_game_proto_rawDesc = "" +
 	"\taudio_cue\x18\x10 \x01(\v2%.motionlevels.engine.game.v1.AudioCueH\x00R\baudioCue\x12Y\n" +
 	"\x10display_snapshot\x18\x11 \x01(\v2,.motionlevels.engine.game.v1.DisplaySnapshotH\x00R\x0fdisplaySnapshot\x12f\n" +
 	"\x15level_attempt_started\x18\x12 \x01(\v20.motionlevels.engine.game.v1.LevelAttemptStartedH\x00R\x13levelAttemptStarted\x12i\n" +
-	"\x16level_attempt_finished\x18\x13 \x01(\v21.motionlevels.engine.game.v1.LevelAttemptFinishedH\x00R\x14levelAttemptFinishedB\t\n" +
-	"\apayload\"\xe9\x02\n" +
+	"\x16level_attempt_finished\x18\x13 \x01(\v21.motionlevels.engine.game.v1.LevelAttemptFinishedH\x00R\x14levelAttemptFinished\x12f\n" +
+	"\x15venue_session_started\x18\x14 \x01(\v20.motionlevels.engine.game.v1.VenueSessionStartedH\x00R\x13venueSessionStarted\x12`\n" +
+	"\x13venue_session_ended\x18\x15 \x01(\v2..motionlevels.engine.game.v1.VenueSessionEndedH\x00R\x11venueSessionEnded\x12G\n" +
+	"\n" +
+	"menu_event\x18\x16 \x01(\v2&.motionlevels.engine.game.v1.MenuEventH\x00R\tmenuEventB\t\n" +
+	"\apayload\"{\n" +
+	"\x13VenueSessionStarted\x12\x1b\n" +
+	"\tteam_name\x18\x01 \x01(\tR\bteamName\x12\x19\n" +
+	"\bkiosk_id\x18\x02 \x01(\tR\akioskId\x12,\n" +
+	"\x12started_unix_nanos\x18\x03 \x01(\x03R\x10startedUnixNanos\"U\n" +
+	"\x11VenueSessionEnded\x12\x16\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\x12(\n" +
+	"\x10ended_unix_nanos\x18\x02 \x01(\x03R\x0eendedUnixNanos\"\xa9\x01\n" +
+	"\tMenuEvent\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
+	"\bkiosk_id\x18\x02 \x01(\tR\akioskId\x12'\n" +
+	"\x0fproperties_json\x18\x03 \x01(\tR\x0epropertiesJson\x12\x1d\n" +
+	"\n" +
+	"unix_nanos\x18\x04 \x01(\x03R\tunixNanos\x12%\n" +
+	"\x0evenue_sequence\x18\x05 \x01(\x04R\rvenueSequence\"\xe9\x02\n" +
 	"\x0eSessionStarted\x12\x12\n" +
 	"\x04game\x18\x01 \x01(\tR\x04game\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12!\n" +
@@ -1618,41 +1876,47 @@ func file_packages_contracts_gamepb_game_proto_rawDescGZIP() []byte {
 	return file_packages_contracts_gamepb_game_proto_rawDescData
 }
 
-var file_packages_contracts_gamepb_game_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_packages_contracts_gamepb_game_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_packages_contracts_gamepb_game_proto_goTypes = []any{
 	(*GameSessionRecord)(nil),    // 0: motionlevels.engine.game.v1.GameSessionRecord
-	(*SessionStarted)(nil),       // 1: motionlevels.engine.game.v1.SessionStarted
-	(*SessionEnded)(nil),         // 2: motionlevels.engine.game.v1.SessionEnded
-	(*ApiInteraction)(nil),       // 3: motionlevels.engine.game.v1.ApiInteraction
-	(*MenuCommand)(nil),          // 4: motionlevels.engine.game.v1.MenuCommand
-	(*PressureInput)(nil),        // 5: motionlevels.engine.game.v1.PressureInput
-	(*GameEvent)(nil),            // 6: motionlevels.engine.game.v1.GameEvent
-	(*AudioCue)(nil),             // 7: motionlevels.engine.game.v1.AudioCue
-	(*LevelAttemptStarted)(nil),  // 8: motionlevels.engine.game.v1.LevelAttemptStarted
-	(*LevelAttemptFinished)(nil), // 9: motionlevels.engine.game.v1.LevelAttemptFinished
-	(*DisplaySnapshot)(nil),      // 10: motionlevels.engine.game.v1.DisplaySnapshot
-	(*DisplayPlayer)(nil),        // 11: motionlevels.engine.game.v1.DisplayPlayer
-	(*Color)(nil),                // 12: motionlevels.engine.game.v1.Color
+	(*VenueSessionStarted)(nil),  // 1: motionlevels.engine.game.v1.VenueSessionStarted
+	(*VenueSessionEnded)(nil),    // 2: motionlevels.engine.game.v1.VenueSessionEnded
+	(*MenuEvent)(nil),            // 3: motionlevels.engine.game.v1.MenuEvent
+	(*SessionStarted)(nil),       // 4: motionlevels.engine.game.v1.SessionStarted
+	(*SessionEnded)(nil),         // 5: motionlevels.engine.game.v1.SessionEnded
+	(*ApiInteraction)(nil),       // 6: motionlevels.engine.game.v1.ApiInteraction
+	(*MenuCommand)(nil),          // 7: motionlevels.engine.game.v1.MenuCommand
+	(*PressureInput)(nil),        // 8: motionlevels.engine.game.v1.PressureInput
+	(*GameEvent)(nil),            // 9: motionlevels.engine.game.v1.GameEvent
+	(*AudioCue)(nil),             // 10: motionlevels.engine.game.v1.AudioCue
+	(*LevelAttemptStarted)(nil),  // 11: motionlevels.engine.game.v1.LevelAttemptStarted
+	(*LevelAttemptFinished)(nil), // 12: motionlevels.engine.game.v1.LevelAttemptFinished
+	(*DisplaySnapshot)(nil),      // 13: motionlevels.engine.game.v1.DisplaySnapshot
+	(*DisplayPlayer)(nil),        // 14: motionlevels.engine.game.v1.DisplayPlayer
+	(*Color)(nil),                // 15: motionlevels.engine.game.v1.Color
 }
 var file_packages_contracts_gamepb_game_proto_depIdxs = []int32{
-	1,  // 0: motionlevels.engine.game.v1.GameSessionRecord.session_started:type_name -> motionlevels.engine.game.v1.SessionStarted
-	2,  // 1: motionlevels.engine.game.v1.GameSessionRecord.session_ended:type_name -> motionlevels.engine.game.v1.SessionEnded
-	3,  // 2: motionlevels.engine.game.v1.GameSessionRecord.api_interaction:type_name -> motionlevels.engine.game.v1.ApiInteraction
-	4,  // 3: motionlevels.engine.game.v1.GameSessionRecord.menu_command:type_name -> motionlevels.engine.game.v1.MenuCommand
-	5,  // 4: motionlevels.engine.game.v1.GameSessionRecord.pressure_input:type_name -> motionlevels.engine.game.v1.PressureInput
-	6,  // 5: motionlevels.engine.game.v1.GameSessionRecord.game_event:type_name -> motionlevels.engine.game.v1.GameEvent
-	7,  // 6: motionlevels.engine.game.v1.GameSessionRecord.audio_cue:type_name -> motionlevels.engine.game.v1.AudioCue
-	10, // 7: motionlevels.engine.game.v1.GameSessionRecord.display_snapshot:type_name -> motionlevels.engine.game.v1.DisplaySnapshot
-	8,  // 8: motionlevels.engine.game.v1.GameSessionRecord.level_attempt_started:type_name -> motionlevels.engine.game.v1.LevelAttemptStarted
-	9,  // 9: motionlevels.engine.game.v1.GameSessionRecord.level_attempt_finished:type_name -> motionlevels.engine.game.v1.LevelAttemptFinished
-	11, // 10: motionlevels.engine.game.v1.SessionStarted.players:type_name -> motionlevels.engine.game.v1.DisplayPlayer
-	11, // 11: motionlevels.engine.game.v1.DisplaySnapshot.players:type_name -> motionlevels.engine.game.v1.DisplayPlayer
-	12, // 12: motionlevels.engine.game.v1.DisplayPlayer.color:type_name -> motionlevels.engine.game.v1.Color
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	4,  // 0: motionlevels.engine.game.v1.GameSessionRecord.session_started:type_name -> motionlevels.engine.game.v1.SessionStarted
+	5,  // 1: motionlevels.engine.game.v1.GameSessionRecord.session_ended:type_name -> motionlevels.engine.game.v1.SessionEnded
+	6,  // 2: motionlevels.engine.game.v1.GameSessionRecord.api_interaction:type_name -> motionlevels.engine.game.v1.ApiInteraction
+	7,  // 3: motionlevels.engine.game.v1.GameSessionRecord.menu_command:type_name -> motionlevels.engine.game.v1.MenuCommand
+	8,  // 4: motionlevels.engine.game.v1.GameSessionRecord.pressure_input:type_name -> motionlevels.engine.game.v1.PressureInput
+	9,  // 5: motionlevels.engine.game.v1.GameSessionRecord.game_event:type_name -> motionlevels.engine.game.v1.GameEvent
+	10, // 6: motionlevels.engine.game.v1.GameSessionRecord.audio_cue:type_name -> motionlevels.engine.game.v1.AudioCue
+	13, // 7: motionlevels.engine.game.v1.GameSessionRecord.display_snapshot:type_name -> motionlevels.engine.game.v1.DisplaySnapshot
+	11, // 8: motionlevels.engine.game.v1.GameSessionRecord.level_attempt_started:type_name -> motionlevels.engine.game.v1.LevelAttemptStarted
+	12, // 9: motionlevels.engine.game.v1.GameSessionRecord.level_attempt_finished:type_name -> motionlevels.engine.game.v1.LevelAttemptFinished
+	1,  // 10: motionlevels.engine.game.v1.GameSessionRecord.venue_session_started:type_name -> motionlevels.engine.game.v1.VenueSessionStarted
+	2,  // 11: motionlevels.engine.game.v1.GameSessionRecord.venue_session_ended:type_name -> motionlevels.engine.game.v1.VenueSessionEnded
+	3,  // 12: motionlevels.engine.game.v1.GameSessionRecord.menu_event:type_name -> motionlevels.engine.game.v1.MenuEvent
+	14, // 13: motionlevels.engine.game.v1.SessionStarted.players:type_name -> motionlevels.engine.game.v1.DisplayPlayer
+	14, // 14: motionlevels.engine.game.v1.DisplaySnapshot.players:type_name -> motionlevels.engine.game.v1.DisplayPlayer
+	15, // 15: motionlevels.engine.game.v1.DisplayPlayer.color:type_name -> motionlevels.engine.game.v1.Color
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_packages_contracts_gamepb_game_proto_init() }
@@ -1671,6 +1935,9 @@ func file_packages_contracts_gamepb_game_proto_init() {
 		(*GameSessionRecord_DisplaySnapshot)(nil),
 		(*GameSessionRecord_LevelAttemptStarted)(nil),
 		(*GameSessionRecord_LevelAttemptFinished)(nil),
+		(*GameSessionRecord_VenueSessionStarted)(nil),
+		(*GameSessionRecord_VenueSessionEnded)(nil),
+		(*GameSessionRecord_MenuEvent)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1678,7 +1945,7 @@ func file_packages_contracts_gamepb_game_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_packages_contracts_gamepb_game_proto_rawDesc), len(file_packages_contracts_gamepb_game_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

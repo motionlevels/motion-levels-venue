@@ -1,0 +1,14 @@
+all:
+  vars:
+    ansible_user: root
+    ansible_python_interpreter: /usr/bin/python3
+    motion_levels_go_version: "1.26.3"
+    motion_levels_go_bin: /usr/local/go/bin/go
+    motion_levels_remote_root: /opt/motion-levels/rebuild
+    motion_levels_remote_src: /opt/motion-levels/rebuild/src
+  children:
+    motion_levels_venues:
+      hosts:
+        motionlevels-1:
+          ansible_host: motionlevels-1
+          motion_levels_hostname: motionlevels-1

@@ -1094,3 +1094,103 @@ func TestRuntimeRecordsSessionAPIAndDisplayData(t *testing.T) {
 		t.Fatalf("records session=%v menu=%v api=%v display=%v", sawSessionStarted, sawMenuCommand, sawAPIInteraction, sawDisplay)
 	}
 }
+
+func TestVenueSessionLifecycleAndMenuEvents(t *testing.T) {
+	dir := t.TempDir()
+	startedAt := time.Date(2026, 6, 10, 10, 0, 0, 0, time.UTC)
+	recorder, err := sessionrecording.New(dir, startedAt, sessionrecording.Options{MaxSegmentDuration: 7 * 24 * time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, recorder)
+	server := httptest.NewServer(gameAPIHandler(runtime))
+	defer server.Close()
+
+	const venueSessionID = "venue-20260610T100000Z-test"
+	post := func(path, body string) *http.Response {
+		t.Helper()
+		response, err := http.Post(server.URL+path, "application/json", bytes.NewBufferString(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = response.Body.Close() })
+		return response
+	}
+
+	if response := post("/api/venue-session", `{"action":"start","venueSessionId":"`+venueSessionID+`","teamName":"Equipo Test","kioskId":"kiosk-1"}`); response.StatusCode != http.StatusOK {
+		t.Fatalf("venue start response = %d", response.StatusCode)
+	}
+	if response := post("/api/menu-event", `{"venueSessionId":"`+venueSessionID+`","name":"player_added","properties":{"player_count":3}}`); response.StatusCode != http.StatusOK {
+		t.Fatalf("menu event response = %d", response.StatusCode)
+	}
+	if response := post("/api/select", `{"game":"whack-a-mole","playerCount":2,"venueSessionId":"`+venueSessionID+`"}`); response.StatusCode != http.StatusOK {
+		t.Fatalf("select response = %d", response.StatusCode)
+	}
+	if got := runtime.Status().VenueSessionID; got != venueSessionID {
+		t.Fatalf("status venue session id = %q, want %q", got, venueSessionID)
+	}
+	if response := post("/api/venue-session", `{"action":"end","venueSessionId":"`+venueSessionID+`","reason":"manual"}`); response.StatusCode != http.StatusOK {
+		t.Fatalf("venue end response = %d", response.StatusCode)
+	}
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var sawStarted, sawEnded, sawMenuEvent bool
+	_, err = sessionrecording.ReadRecoverable(filepath.Join(dir, "20260610T100000Z.game.pbstream"), func(record *gamepb.GameSessionRecord) error {
+		switch payload := record.Payload.(type) {
+		case *gamepb.GameSessionRecord_VenueSessionStarted:
+			sawStarted = true
+			if record.GetSessionId() != "" {
+				t.Fatalf("venue started record has session id %q", record.GetSessionId())
+			}
+			if record.GetVenueSessionId() != venueSessionID {
+				t.Fatalf("venue started record venue id = %q", record.GetVenueSessionId())
+			}
+			if payload.VenueSessionStarted.GetTeamName() != "Equipo Test" {
+				t.Fatalf("venue started team = %q", payload.VenueSessionStarted.GetTeamName())
+			}
+		case *gamepb.GameSessionRecord_VenueSessionEnded:
+			sawEnded = true
+			if payload.VenueSessionEnded.GetReason() != "manual" {
+				t.Fatalf("venue ended reason = %q", payload.VenueSessionEnded.GetReason())
+			}
+		case *gamepb.GameSessionRecord_MenuEvent:
+			sawMenuEvent = true
+			if payload.MenuEvent.GetName() != "player_added" {
+				t.Fatalf("menu event name = %q", payload.MenuEvent.GetName())
+			}
+			if payload.MenuEvent.GetPropertiesJson() == "" || payload.MenuEvent.GetPropertiesJson() == "{}" {
+				t.Fatalf("menu event properties json = %q", payload.MenuEvent.GetPropertiesJson())
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sawStarted || !sawEnded || !sawMenuEvent {
+		t.Fatalf("venue records started=%v ended=%v menu=%v", sawStarted, sawEnded, sawMenuEvent)
+	}
+
+	events := runtime.DrainVenueOutbox(100)
+	var lifecycle, menu int
+	for _, event := range events {
+		if event.VenueID != venueSessionID {
+			t.Fatalf("outbox event venue id = %q", event.VenueID)
+		}
+		switch event.Type {
+		case "venue_lifecycle":
+			lifecycle++
+		case "menu_event":
+			menu++
+		}
+	}
+	if lifecycle != 2 || menu != 1 {
+		t.Fatalf("outbox lifecycle=%d menu=%d (events=%d)", lifecycle, menu, len(events))
+	}
+	last := events[len(events)-1]
+	if last.Name != "venue_ended" || last.Venue.Status != "ended" || last.Venue.EndReason != "manual" {
+		t.Fatalf("last outbox event = %+v", last)
+	}
+}

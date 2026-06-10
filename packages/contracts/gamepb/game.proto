@@ -21,7 +21,32 @@ message GameSessionRecord {
     DisplaySnapshot display_snapshot = 17;
     LevelAttemptStarted level_attempt_started = 18;
     LevelAttemptFinished level_attempt_finished = 19;
+    VenueSessionStarted venue_session_started = 20;
+    VenueSessionEnded venue_session_ended = 21;
+    MenuEvent menu_event = 22;
   }
+}
+
+// Venue-scoped records describe a client visit at the kiosk. They are written
+// with an empty session_id and only venue_session_id set, because a visit
+// spans multiple game sessions (including the ambient loop).
+message VenueSessionStarted {
+  string team_name = 1;
+  string kiosk_id = 2;
+  int64 started_unix_nanos = 3;
+}
+
+message VenueSessionEnded {
+  string reason = 1;
+  int64 ended_unix_nanos = 2;
+}
+
+message MenuEvent {
+  string name = 1;            // menu taxonomy: player_added, game_selected, ...
+  string kiosk_id = 2;
+  string properties_json = 3; // raw JSON properties from the menu
+  int64 unix_nanos = 4;
+  uint64 venue_sequence = 5;  // engine-side monotonic sequence per venue session
 }
 
 message SessionStarted {

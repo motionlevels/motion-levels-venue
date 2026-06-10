@@ -67,7 +67,27 @@ export function initMenuAnalytics() {
   });
 }
 
+export function menuKioskID(): string {
+  return getDeviceID();
+}
+
+type MenuEventForwarder = (event: string, properties: Properties) => void;
+
+let menuEventForwarder: MenuEventForwarder | null = null;
+
+// The forwarder mirrors every menu event to the game-engine for visit
+// recording. It runs regardless of analyticsEnabled(): PostHog is prod-only,
+// but session recording must also work in dev.
+export function setMenuEventForwarder(forwarder: MenuEventForwarder | null) {
+  menuEventForwarder = forwarder;
+}
+
 export function captureMenuEvent(event: string, properties: Properties = {}) {
+  try {
+    menuEventForwarder?.(event, properties);
+  } catch {
+    // visit recording must never break the kiosk
+  }
   if (!analyticsEnabled()) return;
   posthog.capture(`player_menu_${event}`, {
     ...baseProperties(),

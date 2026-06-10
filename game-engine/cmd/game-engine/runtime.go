@@ -56,6 +56,20 @@ type gameRuntime struct {
 	ambientTouches    []ambientTouch
 	levelAttempt      *levelAttemptTracker
 	recentAttempts    []finishedLevelAttemptStatus
+
+	// Venue session (client visit) state; see venue.go.
+	venueID           string
+	venueTeamName     string
+	venueKioskID      string
+	venueStatus       string // "" | active | ended
+	venueEndReason    string
+	venueStartedAt    time.Time
+	venueEndedAt      time.Time
+	venueSeq          uint64
+	venueLastActivity time.Time
+	venueIdleTimeout  time.Duration
+	venueOutbox       []venueOutboxEvent
+	venueDropped      uint64
 }
 
 type ambientTouch struct {
@@ -216,10 +230,14 @@ func unixOrZero(t time.Time) int64 {
 
 func newGameRuntime(cfg config, audioPlayer *audio.Player, recorder *sessionrecording.Recorder) *gameRuntime {
 	runtime := &gameRuntime{
-		base:     cfg,
-		audio:    audioPlayer,
-		recorder: recorder,
-		narrated: map[string]bool{},
+		base:             cfg,
+		audio:            audioPlayer,
+		recorder:         recorder,
+		narrated:         map[string]bool{},
+		venueIdleTimeout: cfg.VenueIdleTimeout,
+	}
+	if runtime.venueIdleTimeout == 0 {
+		runtime.venueIdleTimeout = defaultVenueIdleLimit
 	}
 	runtime.applyLocked(cfg, true)
 	return runtime
@@ -261,8 +279,13 @@ func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficult
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.applyLockedWithNarration(cfg, true, mode)
 	now := time.Now()
+	if cfg.VenueSessionID != "" {
+		// Adopt the menu's venue session if the engine restarted mid-visit.
+		r.startVenueLocked(cfg.VenueSessionID, cfg.TeamName, "", now, true)
+		r.venueLastActivity = now
+	}
+	r.applyLockedWithNarration(cfg, true, mode)
 	r.recordLocked(now, func(record *gamepb.GameSessionRecord) {
 		record.Payload = &gamepb.GameSessionRecord_MenuCommand{MenuCommand: &gamepb.MenuCommand{
 			Command:     "select_game",
@@ -763,8 +786,13 @@ func (r *gameRuntime) Status() runtimeStatus {
 	}
 	now := time.Now()
 	r.enforceNoPressureTimeout(now)
+	r.ExpireIdleVenueSession(now)
 	r.mu.RLock()
 	cfg := r.current
+	activeVenueID := ""
+	if r.venueStatus == "active" {
+		activeVenueID = r.venueID
+	}
 	started := r.started
 	audioEnabled := r.audio != nil
 	audioMuted := r.audioMuted
@@ -779,9 +807,13 @@ func (r *gameRuntime) Status() runtimeStatus {
 	r.mu.RLock()
 	recentAttempts := append([]finishedLevelAttemptStatus(nil), r.recentAttempts...)
 	r.mu.RUnlock()
+	venueSessionID := activeVenueID
+	if venueSessionID == "" {
+		venueSessionID = cfg.VenueSessionID
+	}
 	return runtimeStatus{
 		CurrentGame:              cfg.Game,
-		VenueSessionID:           cfg.VenueSessionID,
+		VenueSessionID:           venueSessionID,
 		Label:                    gameLabel(cfg.Game),
 		Difficulty:               display.Difficulty,
 		Level:                    display.Level,
@@ -946,6 +978,9 @@ func (r *gameRuntime) recordPressureActivity(now time.Time, pressed bool) {
 	}
 	if pressed && now.After(r.lastPressure) {
 		r.lastPressure = now
+	}
+	if r.venueStatus == "active" && now.After(r.venueLastActivity) {
+		r.venueLastActivity = now
 	}
 	r.mu.Unlock()
 }
