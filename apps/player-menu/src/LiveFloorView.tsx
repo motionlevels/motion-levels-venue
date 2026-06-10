@@ -26,6 +26,12 @@ function controllerWebSocketURL(): string {
     url.search = "";
     return url.toString();
   }
+  const gatewayMatch = window.location.pathname.match(/^\/gateways\/[^/]+\/menu(?:\/|$)/);
+  if (gatewayMatch) {
+    const url = new URL(`${gatewayMatch[0].replace(/\/menu\/?$/, "/controller/ws")}`, window.location.href);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    return url.toString();
+  }
   if (window.location.pathname.startsWith("/menu")) {
     const url = new URL("/controller/ws", window.location.href);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";

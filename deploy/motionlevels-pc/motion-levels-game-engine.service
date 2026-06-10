@@ -18,11 +18,14 @@ ExecStart=/opt/motion-levels/rebuild/bin/game-engine \
   -audio=true \
   -audio-player aplay-raw \
   -audio-assets /opt/motion-levels/rebuild/content/audio \
-  -record-sessions /opt/motion-levels/rebuild/var/game-engine/sessions \
-  -session-segment-bytes 268435456 \
+  -record-replay /opt/motion-levels/rebuild/var/game-engine/replays \
+  -replay-keyframe-interval 5s \
+  -replay-zstd-path /usr/bin/zstd \
   -display-snapshot-fps ${MOTION_LEVELS_DISPLAY_SNAPSHOT_FPS} \
   -platform-url ${MOTION_LEVELS_PLATFORM_URL} \
   -platform-sync-interval 1s \
+  -controller-label "${MOTION_LEVELS_CONTROLLER_LABEL}" \
+  -controller-hostname ${MOTION_LEVELS_CONTROLLER_HOSTNAME} \
   -controller-id-file /opt/motion-levels/rebuild/var/floor-controller/controller-id
 Restart=always
 RestartSec=2

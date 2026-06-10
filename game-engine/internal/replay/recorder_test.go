@@ -1,0 +1,122 @@
+package replay
+
+import (
+	"bufio"
+	"io"
+	"os/exec"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/lobis/motion-levels/packages/contracts/gamepb"
+	"github.com/lobis/motion-levels/packages/contracts/pbstream"
+	"github.com/lobis/motion-levels/packages/contracts/recordingpb"
+	"github.com/lobis/motion-levels/packages/contracts/replaypb"
+)
+
+func TestRecorderWritesCompressedDeltaReplay(t *testing.T) {
+	zstdPath, err := exec.LookPath("zstd")
+	if err != nil {
+		t.Skip("zstd not installed")
+	}
+	started := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
+	recorder, err := New(t.TempDir(), Options{
+		ControllerID:     "controller-1",
+		ZstdPath:         zstdPath,
+		KeyframeInterval: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := recorder.Record(&gamepb.GameSessionRecord{
+		SessionId: "session-1",
+		Sequence:  1,
+		UnixNanos: started.UnixNano(),
+		Payload: &gamepb.GameSessionRecord_SessionStarted{SessionStarted: &gamepb.SessionStarted{
+			Game:             "temporada1",
+			Label:            "Temporada 1",
+			StartedUnixNanos: started.UnixNano(),
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := recorder.RecordFrame(testFrame(1, started, 10, 20)); err != nil {
+		t.Fatal(err)
+	}
+	if err := recorder.RecordFrame(testFrame(2, started.Add(50*time.Millisecond), 10, 21)); err != nil {
+		t.Fatal(err)
+	}
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	records := readReplay(t, filepath.Join(recorder.root, "session-1", "replay.mlreplay.zst"), zstdPath)
+	var keyframeTiles int
+	var deltaTiles int
+	for _, record := range records {
+		frame := record.GetFloorFrame()
+		if frame == nil {
+			continue
+		}
+		if frame.GetKeyframe() {
+			keyframeTiles = len(frame.GetTiles())
+		} else {
+			deltaTiles = len(frame.GetTiles())
+		}
+	}
+	if keyframeTiles != 4 {
+		t.Fatalf("keyframe tiles = %d, want 4", keyframeTiles)
+	}
+	if deltaTiles != 1 {
+		t.Fatalf("delta tiles = %d, want 1", deltaTiles)
+	}
+}
+
+func testFrame(sequence uint64, now time.Time, r uint32, changedB uint32) *recordingpb.FrameRecord {
+	tiles := []*recordingpb.TileState{
+		{X: 0, Y: 0, R: r, G: 0, B: 0},
+		{X: 1, Y: 0, R: 0, G: 20, B: 0},
+		{X: 0, Y: 1, R: 0, G: 0, B: changedB},
+		{X: 1, Y: 1, R: 2, G: 3, B: 4, Pressed: true},
+	}
+	return &recordingpb.FrameRecord{
+		Sequence:          sequence,
+		UnixNanos:         now.UnixNano(),
+		Width:             2,
+		Height:            2,
+		SessionId:         "session-1",
+		GameFrameSequence: sequence,
+		GameUnixNanos:     now.UnixNano(),
+		Tiles:             tiles,
+	}
+}
+
+func readReplay(t *testing.T, path string, zstdPath string) []*replaypb.ReplayRecord {
+	t.Helper()
+	cmd := exec.Command(zstdPath, "-dc", path)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	reader := bufio.NewReader(stdout)
+	var records []*replaypb.ReplayRecord
+	for {
+		var record replaypb.ReplayRecord
+		err := pbstream.Read(reader, &record)
+		if err == nil {
+			records = append(records, &record)
+			continue
+		}
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			break
+		}
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	return records
+}

@@ -1040,7 +1040,9 @@ func TestGameAPIDisplayStatus(t *testing.T) {
 
 func TestRuntimeRecordsSessionAPIAndDisplayData(t *testing.T) {
 	dir := t.TempDir()
-	startedAt := time.Date(2026, 6, 3, 13, 0, 0, 0, time.UTC)
+	// Recent start time: a stale fixed date plus real-time record timestamps
+	// would exceed MaxSegmentDuration and rotate the segment mid-test.
+	startedAt := time.Now().UTC().Truncate(time.Second)
 	recorder, err := sessionrecording.New(dir, startedAt, sessionrecording.Options{MaxSegmentDuration: 7 * 24 * time.Hour})
 	if err != nil {
 		t.Fatal(err)
@@ -1065,7 +1067,7 @@ func TestRuntimeRecordsSessionAPIAndDisplayData(t *testing.T) {
 	}
 
 	var sawSessionStarted, sawMenuCommand, sawAPIInteraction, sawDisplay bool
-	_, err = sessionrecording.ReadRecoverable(filepath.Join(dir, "20260603T130000Z.game.pbstream"), func(record *gamepb.GameSessionRecord) error {
+	_, err = sessionrecording.ReadRecoverable(filepath.Join(dir, startedAt.Format("20060102T150405Z")+".game.pbstream"), func(record *gamepb.GameSessionRecord) error {
 		if record.GetSessionId() != selectedSessionID {
 			return nil
 		}
@@ -1097,7 +1099,7 @@ func TestRuntimeRecordsSessionAPIAndDisplayData(t *testing.T) {
 
 func TestVenueSessionLifecycleAndMenuEvents(t *testing.T) {
 	dir := t.TempDir()
-	startedAt := time.Date(2026, 6, 10, 10, 0, 0, 0, time.UTC)
+	startedAt := time.Now().UTC().Truncate(time.Second)
 	recorder, err := sessionrecording.New(dir, startedAt, sessionrecording.Options{MaxSegmentDuration: 7 * 24 * time.Hour})
 	if err != nil {
 		t.Fatal(err)
@@ -1137,7 +1139,7 @@ func TestVenueSessionLifecycleAndMenuEvents(t *testing.T) {
 	}
 
 	var sawStarted, sawEnded, sawMenuEvent bool
-	_, err = sessionrecording.ReadRecoverable(filepath.Join(dir, "20260610T100000Z.game.pbstream"), func(record *gamepb.GameSessionRecord) error {
+	_, err = sessionrecording.ReadRecoverable(filepath.Join(dir, startedAt.Format("20060102T150405Z")+".game.pbstream"), func(record *gamepb.GameSessionRecord) error {
 		switch payload := record.Payload.(type) {
 		case *gamepb.GameSessionRecord_VenueSessionStarted:
 			sawStarted = true

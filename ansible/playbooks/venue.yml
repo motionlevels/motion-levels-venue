@@ -108,7 +108,7 @@
         - "{{ motion_levels_remote_root }}/apps/player-menu"
         - "{{ motion_levels_remote_root }}/apps/player-display"
         - "{{ motion_levels_remote_root }}/var/floor-controller/recordings"
-        - "{{ motion_levels_remote_root }}/var/game-engine/sessions"
+        - "{{ motion_levels_remote_root }}/var/game-engine/replays"
         - /etc/motion-levels
         - /etc/caddy
         - /var/lib/motion-levels

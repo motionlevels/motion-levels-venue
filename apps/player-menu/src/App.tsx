@@ -307,6 +307,24 @@ function playerLabel(players: Player[], player: Player): string {
   return `Jugador ${players.indexOf(player) + 1}`;
 }
 
+function rosterSnapshot(players: Player[]) {
+  return players
+    .filter((player) => player.active)
+    .map((player, index) => ({
+      index,
+      label: playerLabel(players, player),
+      color: hexToColor(player.color),
+    }));
+}
+
+function menuSnapshotProperties(menu: MenuState) {
+  return {
+    team_name: menu.teamName.trim(),
+    players: rosterSnapshot(menu.players),
+    player_count: menu.players.filter((player) => player.active).length,
+  };
+}
+
 function avatarLabel(players: Player[], player: Player): string {
   const name = player.name.trim();
   return name ? initials(name) : `${players.indexOf(player) + 1}`;
@@ -437,10 +455,17 @@ export default function App() {
     venueSessionIDRef.current = menu.sessionId;
   }, [menu.sessionId]);
 
+  const menuRef = useRef(menu);
+
+  useEffect(() => {
+    menuRef.current = menu;
+  }, [menu]);
+
   // Mirror every captured menu event to the game-engine so the visit is fully
   // recorded server-side (independent of PostHog analytics).
   useEffect(() => {
     setMenuEventForwarder((event, properties) => {
+      const current = menuRef.current;
       const venueSessionId = venueSessionIDRef.current
         || (typeof properties.venue_session_id === "string" ? properties.venue_session_id : "");
       if (!venueSessionId) return;
@@ -449,7 +474,10 @@ export default function App() {
         name: event,
         kioskId: menuKioskID(),
         occurredAtUnixMillis: Date.now(),
-        properties,
+        properties: {
+          ...menuSnapshotProperties(current),
+          ...properties,
+        },
       });
     });
     return () => setMenuEventForwarder(null);
@@ -687,6 +715,17 @@ export default function App() {
 
   function addPlayer() {
     const previousPlayerCount = activePlayers.length;
+    const nextPlayers = menu.players.length < maxPlayers
+      ? [
+          ...menu.players,
+          {
+            id: menu.nextPlayerId + 1,
+            name: "",
+            color: firstAvailableColor(menu.players),
+            active: true,
+          },
+        ]
+      : menu.players;
     setMenu((current) => {
       if (current.players.length >= maxPlayers) return current;
       return {
@@ -707,6 +746,7 @@ export default function App() {
       captureMenuEvent("player_added", {
         previous_player_count: previousPlayerCount,
         next_player_count: previousPlayerCount + 1,
+        players: rosterSnapshot(nextPlayers),
       });
     }
   }
@@ -722,16 +762,29 @@ export default function App() {
 
   function updatePlayer(id: number, patch: Partial<Player>) {
     const requestedPatch = typeof patch.name === "string" ? { ...patch, name: cleanNameWhitespace(patch.name, maxPlayerNameLength) } : patch;
+    const currentPlayer = menu.players.find((player) => player.id === id);
+    const nextPlayers = currentPlayer
+      ? menu.players.map((player) => (player.id === id ? { ...player, ...requestedPatch } : player))
+      : menu.players;
+    if (typeof requestedPatch.name === "string" && currentPlayer && requestedPatch.name !== currentPlayer.name) {
+      captureMenuEvent("player_renamed", {
+        player_index: menu.players.filter((player) => player.active).findIndex((player) => player.id === id),
+        player_name: playerLabel(nextPlayers, nextPlayers.find((player) => player.id === id) || currentPlayer),
+        players: rosterSnapshot(nextPlayers),
+      });
+    }
     if (typeof requestedPatch.active === "boolean") {
       captureMenuEvent("player_active_toggled", {
         active: requestedPatch.active,
         player_count: activePlayers.length,
+        players: rosterSnapshot(nextPlayers),
       });
     }
     if (requestedPatch.color) {
       captureMenuEvent("player_color_changed", {
         color: requestedPatch.color,
         player_count: activePlayers.length,
+        players: rosterSnapshot(nextPlayers),
       });
     }
     setMenu((current) => {
@@ -753,8 +806,10 @@ export default function App() {
   }
 
   function deletePlayer(id: number) {
+    const nextPlayers = menu.players.filter((player) => player.id !== id);
     captureMenuEvent("player_removed", {
       player_count: menu.players.filter((player) => player.active).length,
+      players: rosterSnapshot(nextPlayers),
     });
     setMenu((current) => ({ ...current, players: current.players.filter((player) => player.id !== id) }));
     setConfirmRemove(null);
@@ -870,6 +925,9 @@ export default function App() {
     if (!keyboardTarget) return;
     const next = cleanNameWhitespace(value, keyboardMaxLength());
     if (keyboardTarget.kind === "team") {
+      captureMenuEvent("team_renamed", {
+        team_name: next,
+      });
       setMenu((current) => ({ ...current, teamName: next }));
       return;
     }
@@ -1062,9 +1120,12 @@ export default function App() {
       ambient: isAmbientCard(game),
       category: game.category,
       difficulty: launchDifficulty,
+      difficulty_label: launchDifficulty ? difficulties.find((difficulty) => difficulty.id === launchDifficulty)?.label : undefined,
       engine_game: engineGameID(game),
       game: game.id,
+      game_label: game.label,
       level: selectedLevelID || undefined,
+      level_label: launchLevel?.label,
       level_number: selectedLevelID ? levelNumber(selectedLevelID) : undefined,
       narration_enabled: supportsNarration(game) ? playNarration : false,
       player_count: rosterForGame.length,

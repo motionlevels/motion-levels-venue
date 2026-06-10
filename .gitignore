@@ -8,6 +8,7 @@ release/
 .secrets/
 .dev-logs/
 .dev-previews/
+.dev-recordings/
 .motion-levels-controller-id
 
 # Runtime recording output can grow quickly and should not be committed.

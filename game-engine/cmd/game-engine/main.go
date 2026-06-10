@@ -19,50 +19,53 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/games/temporada1"
 	"github.com/lobis/motion-levels/game-engine/internal/games/temporada2"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
-	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
+	"github.com/lobis/motion-levels/game-engine/internal/replay"
 	"github.com/lobis/motion-levels/packages/contracts/inputpb"
 	"github.com/lobis/motion-levels/packages/contracts/pbstream"
 	"github.com/lobis/motion-levels/packages/contracts/recordingpb"
 )
 
 type config struct {
-	HTTPAddr                 string
-	ControllerAddr           string
-	PressureAddr             string
-	Game                     string
-	VenueSessionID           string
-	Difficulty               string
-	Level                    string
-	PlayerCount              int
-	TeamName                 string
-	Players                  []playerConfig
-	FPS                      int
-	Brightness               int
-	AudioEnabled             bool
-	AudioAssetsDir           string
-	AudioPlayer              string
-	MusicRef                 string
-	MusicVolume              float64
-	StartCueRef              string
-	CueVolume                float64
-	CoinCueRef               string
-	DoubleCoinCueRef         string
-	DamageCueRef             string
-	WinCueRef                string
-	NarrationCueRef          string
-	NarrationVolume          float64
-	CountdownCueRef          string
-	CountdownVolume          float64
-	TestAudio                bool
-	SessionRecordingPath     string
-	SessionRecordingMaxBytes int64
-	DisplaySnapshotFPS       int
-	PlatformURL              string
-	PlatformToken            string
-	PlatformSyncInterval     time.Duration
-	VenueIdleTimeout         time.Duration
-	ControllerID             string
-	ControllerIDFile         string
+	HTTPAddr               string
+	ControllerAddr         string
+	PressureAddr           string
+	Game                   string
+	VenueSessionID         string
+	Difficulty             string
+	Level                  string
+	PlayerCount            int
+	TeamName               string
+	Players                []playerConfig
+	FPS                    int
+	Brightness             int
+	AudioEnabled           bool
+	AudioAssetsDir         string
+	AudioPlayer            string
+	MusicRef               string
+	MusicVolume            float64
+	StartCueRef            string
+	CueVolume              float64
+	CoinCueRef             string
+	DoubleCoinCueRef       string
+	DamageCueRef           string
+	WinCueRef              string
+	NarrationCueRef        string
+	NarrationVolume        float64
+	CountdownCueRef        string
+	CountdownVolume        float64
+	TestAudio              bool
+	ReplayRecordingPath    string
+	ReplayKeyframeInterval time.Duration
+	ReplayZstdPath         string
+	DisplaySnapshotFPS     int
+	PlatformURL            string
+	PlatformToken          string
+	PlatformSyncInterval   time.Duration
+	VenueIdleTimeout       time.Duration
+	ControllerID           string
+	ControllerIDFile       string
+	ControllerLabel        string
+	ControllerHostname     string
 }
 
 type floorGame interface {
@@ -97,8 +100,9 @@ func main() {
 	flag.Float64Var(&cfg.CountdownVolume, "countdown-volume", 0.90, "countdown narration volume, 0.0-1.0")
 	flag.Float64Var(&cfg.CueVolume, "cue-volume", 0.18, "cue volume, 0.0-1.0")
 	flag.BoolVar(&cfg.TestAudio, "audio-test", false, "play configured start cue and music briefly, then exit")
-	flag.StringVar(&cfg.SessionRecordingPath, "record-sessions", "game-recordings", "directory or .game.pbstream path for game session recordings; empty disables")
-	flag.Int64Var(&cfg.SessionRecordingMaxBytes, "session-segment-bytes", 256<<20, "maximum bytes per game session recording segment")
+	flag.StringVar(&cfg.ReplayRecordingPath, "record-replay", "game-recordings", "directory for unified .mlreplay.zst session recordings; empty disables replay recording")
+	flag.DurationVar(&cfg.ReplayKeyframeInterval, "replay-keyframe-interval", 5*time.Second, "maximum time between full replay floor keyframes")
+	flag.StringVar(&cfg.ReplayZstdPath, "replay-zstd-path", "zstd", "path to zstd executable for replay compression")
 	flag.IntVar(&cfg.DisplaySnapshotFPS, "display-snapshot-fps", 4, "display snapshots per second to write into game session recordings")
 	flag.StringVar(&cfg.PlatformURL, "platform-url", os.Getenv("MOTION_LEVELS_PLATFORM_URL"), "platform base URL for session ingest; empty disables")
 	flag.StringVar(&cfg.PlatformToken, "platform-token", os.Getenv("MOTION_LEVELS_PLATFORM_TOKEN"), "platform bearer token for session ingest; can also use MOTION_LEVELS_PLATFORM_TOKEN")
@@ -106,6 +110,8 @@ func main() {
 	flag.DurationVar(&cfg.VenueIdleTimeout, "venue-session-idle-timeout", defaultVenueIdleLimit, "end the venue session after this much inactivity; 0 keeps the built-in default")
 	flag.StringVar(&cfg.ControllerID, "controller-id", "", "stable controller UUID to attach platform session records to")
 	flag.StringVar(&cfg.ControllerIDFile, "controller-id-file", "", "file containing the stable controller UUID")
+	flag.StringVar(&cfg.ControllerLabel, "controller-label", os.Getenv("MOTION_LEVELS_CONTROLLER_LABEL"), "human-readable room/venue name shown on the platform (e.g. \"Zaragoza Caracol 1\")")
+	flag.StringVar(&cfg.ControllerHostname, "controller-hostname", os.Getenv("MOTION_LEVELS_CONTROLLER_HOSTNAME"), "tailnet hostname (e.g. motionlevels-1) used for platform gateway links; decoupled from the display label")
 	flag.Parse()
 
 	cfg.normalize()
@@ -126,17 +132,28 @@ func main() {
 		return
 	}
 
-	sessionRecorder, err := sessionrecording.New(cfg.SessionRecordingPath, time.Now().UTC(), sessionrecording.Options{MaxSegmentBytes: cfg.SessionRecordingMaxBytes})
+	controllerID, err := resolveControllerID(cfg)
+	if err != nil {
+		log.Printf("replay controller id: %v", err)
+	}
+	replayRecorder, err := replay.New(cfg.ReplayRecordingPath, replay.Options{
+		ControllerID:      controllerID,
+		PlatformURL:       cfg.PlatformURL,
+		PlatformToken:     cfg.PlatformToken,
+		ZstdPath:          cfg.ReplayZstdPath,
+		KeyframeInterval:  cfg.ReplayKeyframeInterval,
+		UploadHTTPTimeout: 5 * time.Minute,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer func() {
-		if err := sessionRecorder.Close(); err != nil {
-			log.Printf("session recorder close: %v", err)
+		if err := replayRecorder.Close(); err != nil {
+			log.Printf("replay recorder close: %v", err)
 		}
 	}()
 
-	runtime := newGameRuntime(cfg, audioPlayer, sessionRecorder)
+	runtime := newGameRuntime(cfg, audioPlayer, replayRecorder)
 	runtime.StartDisplaySnapshotRecording(displaySnapshotInterval(cfg.DisplaySnapshotFPS))
 	startPlatformSync(runtime, cfg)
 	go serveGameAPI(cfg.HTTPAddr, runtime)
@@ -185,6 +202,12 @@ func (c *config) normalize() {
 	}
 	if c.DisplaySnapshotFPS < 1 {
 		c.DisplaySnapshotFPS = 1
+	}
+	if c.ReplayKeyframeInterval <= 0 {
+		c.ReplayKeyframeInterval = 5 * time.Second
+	}
+	if c.ReplayZstdPath == "" {
+		c.ReplayZstdPath = "zstd"
 	}
 	if c.Brightness < 1 {
 		c.Brightness = 1
@@ -299,6 +322,13 @@ func run(cfg config, runtime *gameRuntime) error {
 	for now := range ticker.C {
 		sequence++
 		frame := makeFrame(sequence, now, now.Sub(startedAt).Seconds(), runtime)
+		if replayRecorder, ok := runtime.recorder.(interface {
+			RecordFrame(*recordingpb.FrameRecord) error
+		}); ok {
+			if err := replayRecorder.RecordFrame(frame); err != nil {
+				log.Printf("replay frame: %v", err)
+			}
+		}
 		if err := pbstream.Write(writer, frame); err != nil {
 			return err
 		}

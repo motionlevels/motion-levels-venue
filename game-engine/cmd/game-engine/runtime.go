@@ -33,6 +33,10 @@ const (
 	noPressureGameLimit = 5 * time.Minute
 )
 
+type gameRecordWriter interface {
+	Record(*gamepb.GameSessionRecord) error
+}
+
 type gameRuntime struct {
 	mu                sync.RWMutex
 	base              config
@@ -41,7 +45,7 @@ type gameRuntime struct {
 	audio             *audio.Player
 	started           time.Time
 	lastEvent         displayEvent
-	recorder          *sessionrecording.Recorder
+	recorder          gameRecordWriter
 	sessionID         string
 	sessionSeq        uint64
 	rngSeed           int64
@@ -60,6 +64,8 @@ type gameRuntime struct {
 	// Venue session (client visit) state; see venue.go.
 	venueID           string
 	venueTeamName     string
+	venuePlayerLabels []string
+	venuePlayerRoster []venuePlayerSnapshot
 	venueKioskID      string
 	venueStatus       string // "" | active | ended
 	venueEndReason    string
@@ -216,7 +222,7 @@ type runtimeStatus struct {
 	SessionID                string                       `json:"sessionId"`
 	LastPressureUnix         int64                        `json:"lastPressureUnix"`
 	RNGSeed                  int64                        `json:"rngSeed"`
-	Recorder                 sessionrecording.Stats       `json:"recorder"`
+	Recorder                 any                          `json:"recorder"`
 	FinishedLevelAttempts    []finishedLevelAttemptStatus `json:"finishedLevelAttempts,omitempty"`
 	Catalog                  []gameCatalogEntry           `json:"catalog"`
 }
@@ -228,7 +234,7 @@ func unixOrZero(t time.Time) int64 {
 	return t.Unix()
 }
 
-func newGameRuntime(cfg config, audioPlayer *audio.Player, recorder *sessionrecording.Recorder) *gameRuntime {
+func newGameRuntime(cfg config, audioPlayer *audio.Player, recorder gameRecordWriter) *gameRuntime {
 	runtime := &gameRuntime{
 		base:             cfg,
 		audio:            audioPlayer,
@@ -800,7 +806,10 @@ func (r *gameRuntime) Status() runtimeStatus {
 	lastPressureInput := r.lastPressureInput
 	rngSeed := r.rngSeed
 	paused := r.paused
-	recorderStats := r.recorder.Stats()
+	var recorderStats any
+	if stats, ok := r.recorder.(interface{ Stats() sessionrecording.Stats }); ok {
+		recorderStats = stats.Stats()
+	}
 	r.mu.RUnlock()
 	display := r.DisplayStatus(now)
 	r.ObserveDisplayStatus(display, now)

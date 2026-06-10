@@ -42,6 +42,10 @@ function inferEngineURL(): string {
   if (typeof window === "undefined" || !window.location.hostname || window.location.protocol === "file:") {
     return localEngineURL;
   }
+  const gatewayMatch = window.location.pathname.match(/^\/gateways\/[^/]+\/display(?:\/|$)/);
+  if (gatewayMatch) {
+    return `${window.location.origin}${gatewayMatch[0].replace(/\/display\/?$/, "/engine")}`;
+  }
   if (window.location.pathname.startsWith("/display")) {
     return `${window.location.origin}/engine`;
   }

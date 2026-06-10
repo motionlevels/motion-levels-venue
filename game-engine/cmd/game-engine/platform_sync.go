@@ -8,17 +8,20 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type platformSyncer struct {
-	runtime      *gameRuntime
-	platformURL  string
-	token        string
-	controllerID string
-	interval     time.Duration
-	client       *http.Client
+	runtime            *gameRuntime
+	platformURL        string
+	token              string
+	controllerID       string
+	controllerLabel    string
+	controllerHostname string
+	interval           time.Duration
+	client             *http.Client
 
 	lastSessionID       string
 	lastEventUnixNanos  int64
@@ -27,26 +30,27 @@ type platformSyncer struct {
 }
 
 type platformSessionPayload struct {
-	SessionID        string                    `json:"sessionId"`
-	VenueSessionID   string                    `json:"venueSessionId,omitempty"`
-	ControllerID     string                    `json:"controllerId,omitempty"`
-	ControllerLabel  string                    `json:"controllerLabel,omitempty"`
-	Game             string                    `json:"game"`
-	Label            string                    `json:"label"`
-	Phase            string                    `json:"phase"`
-	Status           string                    `json:"status"`
-	TeamName         string                    `json:"teamName,omitempty"`
-	StartedAt        string                    `json:"startedAt,omitempty"`
-	EndedAt          string                    `json:"endedAt,omitempty"`
-	RNGSeed          string                    `json:"rngSeed,omitempty"`
-	PlayerCount      int                       `json:"playerCount"`
-	Score            int                       `json:"score"`
-	Lives            int                       `json:"lives"`
-	ActiveTargets    int                       `json:"activeTargets"`
-	LastEventMessage string                    `json:"lastEventMessage,omitempty"`
-	Players          []platformPlayerPayload   `json:"players,omitempty"`
-	Events           []platformEventPayload    `json:"events,omitempty"`
-	DisplaySnapshots []platformSnapshotPayload `json:"displaySnapshots,omitempty"`
+	SessionID          string                    `json:"sessionId"`
+	VenueSessionID     string                    `json:"venueSessionId,omitempty"`
+	ControllerID       string                    `json:"controllerId,omitempty"`
+	ControllerLabel    string                    `json:"controllerLabel,omitempty"`
+	ControllerHostname string                    `json:"controllerHostname,omitempty"`
+	Game               string                    `json:"game"`
+	Label              string                    `json:"label"`
+	Phase              string                    `json:"phase"`
+	Status             string                    `json:"status"`
+	TeamName           string                    `json:"teamName,omitempty"`
+	StartedAt          string                    `json:"startedAt,omitempty"`
+	EndedAt            string                    `json:"endedAt,omitempty"`
+	RNGSeed            string                    `json:"rngSeed,omitempty"`
+	PlayerCount        int                       `json:"playerCount"`
+	Score              int                       `json:"score"`
+	Lives              int                       `json:"lives"`
+	ActiveTargets      int                       `json:"activeTargets"`
+	LastEventMessage   string                    `json:"lastEventMessage,omitempty"`
+	Players            []platformPlayerPayload   `json:"players,omitempty"`
+	Events             []platformEventPayload    `json:"events,omitempty"`
+	DisplaySnapshots   []platformSnapshotPayload `json:"displaySnapshots,omitempty"`
 }
 
 type platformPlayerPayload struct {
@@ -96,11 +100,19 @@ type platformVenuePayload struct {
 	ControllerID   string                      `json:"controllerId,omitempty"`
 	KioskID        string                      `json:"kioskId,omitempty"`
 	TeamName       string                      `json:"teamName,omitempty"`
+	PlayerLabels   []string                    `json:"playerLabels,omitempty"`
+	PlayerRoster   []platformVenuePlayer       `json:"players,omitempty"`
 	Status         string                      `json:"status"`
 	EndReason      string                      `json:"endReason,omitempty"`
 	StartedAt      string                      `json:"startedAt,omitempty"`
 	EndedAt        string                      `json:"endedAt,omitempty"`
 	Events         []platformVenueEventPayload `json:"events,omitempty"`
+}
+
+type platformVenuePlayer struct {
+	Index int    `json:"index"`
+	Label string `json:"label"`
+	Color string `json:"color,omitempty"`
 }
 
 type platformVenueEventPayload struct {
@@ -141,12 +153,14 @@ func newPlatformSyncer(runtime *gameRuntime, cfg config) (*platformSyncer, error
 		log.Printf("platform sync controller id: %v", err)
 	}
 	return &platformSyncer{
-		runtime:      runtime,
-		platformURL:  platformURL,
-		token:        strings.TrimSpace(cfg.PlatformToken),
-		controllerID: controllerID,
-		interval:     interval,
-		client:       &http.Client{Timeout: 10 * time.Second},
+		runtime:            runtime,
+		platformURL:        platformURL,
+		token:              strings.TrimSpace(cfg.PlatformToken),
+		controllerID:       controllerID,
+		controllerLabel:    strings.TrimSpace(cfg.ControllerLabel),
+		controllerHostname: strings.TrimSpace(cfg.ControllerHostname),
+		interval:           interval,
+		client:             &http.Client{Timeout: 10 * time.Second},
 	}, nil
 }
 
@@ -238,6 +252,8 @@ func (s *platformSyncer) venuePayload(venue venueSnapshot, events []venueOutboxE
 		ControllerID:   s.controllerID,
 		KioskID:        venue.KioskID,
 		TeamName:       venue.TeamName,
+		PlayerLabels:   venue.PlayerLabels,
+		PlayerRoster:   venuePlayersPayload(venue.PlayerRoster),
 		Status:         venue.Status,
 		EndReason:      venue.EndReason,
 	}
@@ -258,6 +274,21 @@ func (s *platformSyncer) venuePayload(venue venueSnapshot, events []venueOutboxE
 		})
 	}
 	return payload
+}
+
+func venuePlayersPayload(players []venuePlayerSnapshot) []platformVenuePlayer {
+	if len(players) == 0 {
+		return nil
+	}
+	out := make([]platformVenuePlayer, 0, len(players))
+	for _, player := range players {
+		out = append(out, platformVenuePlayer{
+			Index: player.Index,
+			Label: player.Label,
+			Color: player.Color,
+		})
+	}
+	return out
 }
 
 func (s *platformSyncer) postIngest(path string, payload any) error {
@@ -322,11 +353,17 @@ func (s *platformSyncer) payload(status runtimeStatus, display displayStatus, no
 		Payload: map[string]any{
 			"view":                     "player-display-v1",
 			"currentGame":              display.CurrentGame,
-			"label":                    display.Label,
+			"label":                    platformDisplayLabel(display),
+			"level":                    display.Level,
+			"levelNumber":              display.LevelNumber,
+			"difficulty":               display.Difficulty,
 			"introRemainingMillis":     display.IntroRemainingMillis,
 			"countdownRemainingMillis": display.CountdownRemainingMillis,
 			"audioEnabled":             display.AudioEnabled,
 			"audioMuted":               display.AudioMuted,
+			// Per-player scores at this instant, so replay scoreboards can
+			// show time-accurate values instead of the session's final state.
+			"players": display.Players,
 		},
 	}}
 
@@ -344,29 +381,81 @@ func (s *platformSyncer) payload(status runtimeStatus, display displayStatus, no
 	}
 
 	payload := platformSessionPayload{
-		SessionID:        status.SessionID,
-		VenueSessionID:   status.VenueSessionID,
-		ControllerID:     s.controllerID,
-		Game:             display.CurrentGame,
-		Label:            display.Label,
-		Phase:            display.Phase,
-		Status:           platformSessionStatus(display.Phase),
-		TeamName:         display.TeamName,
-		StartedAt:        unixSecondsTime(display.StartedUnix).Format(time.RFC3339Nano),
-		RNGSeed:          fmt.Sprintf("%d", status.RNGSeed),
-		PlayerCount:      display.PlayerCount,
-		Score:            display.Score,
-		Lives:            display.Lives,
-		ActiveTargets:    display.ActiveTargets,
-		LastEventMessage: display.LastEventMessage,
-		Players:          players,
-		Events:           events,
-		DisplaySnapshots: snapshots,
+		SessionID:          status.SessionID,
+		VenueSessionID:     status.VenueSessionID,
+		ControllerID:       s.controllerID,
+		ControllerLabel:    s.controllerLabel,
+		ControllerHostname: s.controllerHostname,
+		Game:               display.CurrentGame,
+		Label:              platformDisplayLabel(display),
+		Phase:              display.Phase,
+		Status:             platformSessionStatus(display.Phase),
+		TeamName:           display.TeamName,
+		StartedAt:          unixSecondsTime(display.StartedUnix).Format(time.RFC3339Nano),
+		RNGSeed:            fmt.Sprintf("%d", status.RNGSeed),
+		PlayerCount:        display.PlayerCount,
+		Score:              display.Score,
+		Lives:              display.Lives,
+		ActiveTargets:      display.ActiveTargets,
+		LastEventMessage:   display.LastEventMessage,
+		Players:            players,
+		Events:             events,
+		DisplaySnapshots:   snapshots,
 	}
 	if payload.Status == "complete" {
 		payload.EndedAt = now.UTC().Format(time.RFC3339Nano)
 	}
 	return payload
+}
+
+func platformDisplayLabel(display displayStatus) string {
+	base := strings.TrimSpace(display.Label)
+	if base == "" {
+		base = gameLabel(display.CurrentGame)
+	}
+	level := platformLevelLabel(display.Level, display.LevelNumber)
+	if level == "" {
+		return base
+	}
+	difficulty := platformDifficultyLabel(display.Difficulty)
+	if difficulty != "" {
+		return fmt.Sprintf("%s / %s · %s", base, level, difficulty)
+	}
+	return fmt.Sprintf("%s / %s", base, level)
+}
+
+func platformLevelLabel(level string, levelNumber int) string {
+	if levelNumber > 0 {
+		return fmt.Sprintf("Nivel %d", levelNumber)
+	}
+	level = strings.TrimSpace(level)
+	if level == "" {
+		return ""
+	}
+	if strings.HasPrefix(level, "level-") {
+		if number, err := strconv.Atoi(strings.TrimPrefix(level, "level-")); err == nil && number > 0 {
+			return fmt.Sprintf("Nivel %d", number)
+		}
+	}
+	if number, err := strconv.Atoi(level); err == nil && number > 0 {
+		return fmt.Sprintf("Nivel %d", number)
+	}
+	return level
+}
+
+func platformDifficultyLabel(difficulty string) string {
+	switch strings.TrimSpace(difficulty) {
+	case "easy":
+		return "Fácil"
+	case "medium":
+		return "Media"
+	case "hard":
+		return "Difícil"
+	case "expert":
+		return "Experto"
+	default:
+		return ""
+	}
 }
 
 func (s *platformSyncer) logError(err error) {

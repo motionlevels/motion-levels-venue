@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package motionlevels.engine.replay.v1;
+
+import "packages/contracts/gamepb/game.proto";
+
+option go_package = "github.com/lobis/motion-levels/packages/contracts/replaypb";
+
+message ReplayRecord {
+  string session_id = 1;
+  string venue_session_id = 2;
+  uint64 sequence = 3;
+  int64 unix_nanos = 4;
+
+  oneof payload {
+    ReplayHeader header = 10;
+    motionlevels.engine.game.v1.GameSessionRecord game_record = 11;
+    FloorFrame floor_frame = 12;
+    ReplayFooter footer = 13;
+  }
+}
+
+message ReplayHeader {
+  string version = 1;
+  string controller_id = 2;
+  string game = 3;
+  string label = 4;
+  string team_name = 5;
+  int64 started_unix_nanos = 6;
+}
+
+message ReplayFooter {
+  string reason = 1;
+  int64 ended_unix_nanos = 2;
+  uint64 frame_count = 3;
+  uint64 event_count = 4;
+}
+
+message FloorFrame {
+  uint32 width = 1;
+  uint32 height = 2;
+  bool keyframe = 3;
+  uint64 controller_sequence = 4;
+  uint64 game_frame_sequence = 5;
+  int64 game_unix_nanos = 6;
+  int64 controller_received_unix_nanos = 7;
+  int64 controller_presented_unix_nanos = 8;
+  repeated TileDelta tiles = 9;
+}
+
+message TileDelta {
+  uint32 index = 1;
+  uint32 r = 2;
+  uint32 g = 3;
+  uint32 b = 4;
+  bool pressed = 5;
+}

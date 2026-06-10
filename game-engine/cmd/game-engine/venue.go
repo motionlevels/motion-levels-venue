@@ -24,13 +24,21 @@ const (
 )
 
 type venueSnapshot struct {
-	ID        string
-	TeamName  string
-	KioskID   string
-	Status    string // active | ended
-	EndReason string
-	StartedAt time.Time
-	EndedAt   time.Time
+	ID           string
+	TeamName     string
+	PlayerLabels []string
+	PlayerRoster []venuePlayerSnapshot
+	KioskID      string
+	Status       string // active | ended
+	EndReason    string
+	StartedAt    time.Time
+	EndedAt      time.Time
+}
+
+type venuePlayerSnapshot struct {
+	Index int    `json:"index"`
+	Label string `json:"label"`
+	Color string `json:"color,omitempty"`
 }
 
 type venueOutboxEvent struct {
@@ -96,6 +104,7 @@ func (r *gameRuntime) RecordMenuEvent(venueID, name, kioskID string, properties 
 		r.startVenueLocked(venueID, "", kioskID, now, true)
 	}
 	r.venueLastActivity = now
+	r.applyVenuePropertiesLocked(properties)
 
 	propertiesJSON := "{}"
 	if len(properties) > 0 {
@@ -134,6 +143,8 @@ func (r *gameRuntime) startVenueLocked(id, teamName, kioskID string, now time.Ti
 	}
 	r.venueID = id
 	r.venueTeamName = teamName
+	r.venuePlayerLabels = nil
+	r.venuePlayerRoster = nil
 	r.venueKioskID = kioskID
 	r.venueStatus = "active"
 	r.venueEndReason = ""
@@ -219,15 +230,112 @@ func (r *gameRuntime) enqueueVenueEventLocked(occurredAt time.Time, eventType, n
 }
 
 func (r *gameRuntime) venueSnapshotLocked() venueSnapshot {
+	playerLabels := append([]string(nil), r.venuePlayerLabels...)
+	playerRoster := append([]venuePlayerSnapshot(nil), r.venuePlayerRoster...)
 	return venueSnapshot{
-		ID:        r.venueID,
-		TeamName:  r.venueTeamName,
-		KioskID:   r.venueKioskID,
-		Status:    r.venueStatus,
-		EndReason: r.venueEndReason,
-		StartedAt: r.venueStartedAt,
-		EndedAt:   r.venueEndedAt,
+		ID:           r.venueID,
+		TeamName:     r.venueTeamName,
+		PlayerLabels: playerLabels,
+		PlayerRoster: playerRoster,
+		KioskID:      r.venueKioskID,
+		Status:       r.venueStatus,
+		EndReason:    r.venueEndReason,
+		StartedAt:    r.venueStartedAt,
+		EndedAt:      r.venueEndedAt,
 	}
+}
+
+func (r *gameRuntime) applyVenuePropertiesLocked(properties map[string]any) {
+	if len(properties) == 0 {
+		return
+	}
+	if teamName := stringProperty(properties, "team_name", "teamName"); teamName != "" {
+		r.venueTeamName = teamName
+	}
+	if roster, labels := playerRosterProperty(properties["players"]); len(roster) > 0 || len(labels) > 0 {
+		r.venuePlayerRoster = roster
+		r.venuePlayerLabels = labels
+	}
+}
+
+func stringProperty(properties map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := properties[key]; ok {
+			if text, ok := value.(string); ok {
+				if trimmed := strings.TrimSpace(text); trimmed != "" {
+					return trimmed
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func playerRosterProperty(value any) ([]venuePlayerSnapshot, []string) {
+	items, ok := value.([]any)
+	if !ok {
+		return nil, nil
+	}
+	roster := make([]venuePlayerSnapshot, 0, len(items))
+	labels := make([]string, 0, len(items))
+	for fallbackIndex, item := range items {
+		player, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		index := fallbackIndex
+		if rawIndex, ok := player["index"]; ok {
+			switch typed := rawIndex.(type) {
+			case float64:
+				index = int(typed)
+			case int:
+				index = typed
+			}
+		}
+		label, _ := player["label"].(string)
+		label = strings.TrimSpace(label)
+		if label == "" {
+			label = fmt.Sprintf("Jugador %d", index+1)
+		}
+		color := ""
+		if rawColor, ok := player["color"]; ok {
+			color = colorProperty(rawColor)
+		}
+		roster = append(roster, venuePlayerSnapshot{Index: index, Label: label, Color: color})
+		labels = append(labels, label)
+	}
+	return roster, labels
+}
+
+func colorProperty(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case map[string]any:
+		r, okR := numericColor(typed["r"])
+		g, okG := numericColor(typed["g"])
+		b, okB := numericColor(typed["b"])
+		if okR && okG && okB {
+			return fmt.Sprintf("#%02x%02x%02x", r, g, b)
+		}
+	}
+	return ""
+}
+
+func numericColor(value any) (int, bool) {
+	switch typed := value.(type) {
+	case float64:
+		if typed < 0 || typed > 255 {
+			return 0, false
+		}
+		return int(typed), true
+	case int:
+		if typed < 0 || typed > 255 {
+			return 0, false
+		}
+		return typed, true
+	}
+	return 0, false
 }
 
 // VenueSnapshot returns the current visit state for the platform heartbeat.
