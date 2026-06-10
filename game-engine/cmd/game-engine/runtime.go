@@ -18,6 +18,7 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/games/memorychallenge"
 	"github.com/lobis/motion-levels/game-engine/internal/games/parkour"
 	"github.com/lobis/motion-levels/game-engine/internal/games/patrones"
+	"github.com/lobis/motion-levels/game-engine/internal/games/plataformas"
 	"github.com/lobis/motion-levels/game-engine/internal/games/saltos"
 	"github.com/lobis/motion-levels/game-engine/internal/games/temporada1"
 	"github.com/lobis/motion-levels/game-engine/internal/games/temporada2"
@@ -102,6 +103,10 @@ const (
 	narrationSkip
 	narrationForce
 )
+
+type plataformasAudioProvider interface {
+	AudioRefs() plataformas.AudioRefs
+}
 
 type gameCatalogEntry struct {
 	Game        string           `json:"game"`
@@ -639,6 +644,43 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		return status
 	}
 
+	if cfg.Game == "plataformas" {
+		if plataformasGame, ok := game.(*plataformas.Game); ok {
+			snapshot := plataformasGame.Snapshot(gameNow)
+			status.Phase = snapshot.Phase
+			status.Score = snapshot.Score
+			status.StartedUnix = snapshot.StartedUnix
+			status.EndsUnix = snapshot.EndsUnix
+			status.ElapsedMillis = snapshot.ElapsedMillis
+			status.RemainingMillis = snapshot.RemainingMillis
+			status.CountdownRemainingMillis = snapshot.CountdownMillis
+			status.ActiveTargets = snapshot.ActiveTargets
+			status.Lives = snapshot.Lives
+			status.LivesStart = snapshot.LivesStart
+			status.Difficulty = snapshot.Difficulty
+			status.Level = snapshot.Level
+			status.LevelNumber = snapshot.LevelNumber
+			status.AttemptStartedUnixNanos = snapshot.CreatedUnixNanos
+			status.GameplayStartedUnixNanos = snapshot.StartedUnixNanos
+			status.AttemptEndedUnixNanos = snapshot.EndedUnixNanos
+			status.Success = snapshot.Success
+			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
+			for _, player := range snapshot.Players {
+				status.Players = append(status.Players, displayPlayer{
+					Index: player.Index,
+					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
+					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
+					Score: player.Score,
+					Lives: player.Lives,
+				})
+			}
+		}
+		if paused && status.Phase != "finished" {
+			status.Phase = "paused"
+		}
+		return status
+	}
+
 	if cfg.Game == "temporada1" || cfg.Game == "temporada2" {
 		if temporadaGame, ok := game.(*temporada1.Game); ok {
 			snapshot := temporadaGame.Snapshot(gameNow)
@@ -825,12 +867,14 @@ func (r *gameRuntime) applyLockedWithNarrationReason(cfg config, playAudio bool,
 		introHold = r.narrationHoldDurationLocked(cfg)
 	}
 	gameNow := now.Add(introHold)
+	r.rngSeed = now.UnixNano()
+	game := makeGame(cfg, r.rngSeed, gameNow)
+	cfg = applyPlataformasAudioConfig(cfg, game)
 	r.current = cfg
 	r.started = now
 	r.sessionID = newSessionID(now)
 	r.sessionSeq = 0
-	r.rngSeed = now.UnixNano()
-	r.game = makeGame(cfg, r.rngSeed, gameNow)
+	r.game = game
 	r.lastEvent = displayEvent{}
 	r.ambientTouches = nil
 	r.levelAttempt = nil
@@ -859,6 +903,37 @@ func (r *gameRuntime) applyLockedWithNarrationReason(cfg config, playAudio bool,
 	if playAudio {
 		r.startAudioLocked(cfg, now, introHold, mode)
 	}
+}
+
+func applyPlataformasAudioConfig(cfg config, game floorGame) config {
+	if cfg.Game != "plataformas" {
+		return cfg
+	}
+	provider, ok := game.(plataformasAudioProvider)
+	if !ok {
+		return cfg
+	}
+	refs := provider.AudioRefs()
+	if refs.MusicRef != "" {
+		cfg.MusicRef = refs.MusicRef
+		cfg.MusicVolume = clamp01(refs.MusicVolume)
+	}
+	if refs.CoinCueRef != "" {
+		cfg.CoinCueRef = refs.CoinCueRef
+	}
+	if refs.DoubleCoinCueRef != "" {
+		cfg.DoubleCoinCueRef = refs.DoubleCoinCueRef
+	}
+	if refs.DamageCueRef != "" {
+		cfg.DamageCueRef = refs.DamageCueRef
+	}
+	if refs.WinCueRef != "" {
+		cfg.WinCueRef = refs.WinCueRef
+	}
+	if cfg.DoubleCoinCueRef == "" {
+		cfg.DoubleCoinCueRef = cfg.CoinCueRef
+	}
+	return cfg
 }
 
 func (r *gameRuntime) recordPressureActivity(now time.Time, pressed bool) {
@@ -1001,7 +1076,7 @@ func (r *gameRuntime) playCountdownLocked(cfg config, now time.Time) {
 
 func shouldPlayCountdownCue(cfg config) bool {
 	switch cfg.Game {
-	case "lava", "saltos", "parkour", "temporada1", "temporada2":
+	case "lava", "saltos", "parkour", "plataformas", "temporada1", "temporada2":
 		return true
 	default:
 		return false
@@ -1320,7 +1395,7 @@ func (r *gameRuntime) StartDisplaySnapshotRecording(interval time.Duration) {
 
 func recordsLevelAttempts(game string) bool {
 	switch game {
-	case "parkour", "temporada1", "temporada2":
+	case "parkour", "plataformas", "temporada1", "temporada2":
 		return true
 	default:
 		return false
@@ -1468,6 +1543,9 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 	case "parkour":
 		log.Printf("game: parkour difficulty=%s level=%s", cfg.Difficulty, cfg.Level)
 		return parkour.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level)
+	case "plataformas":
+		log.Printf("game: plataformas players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
+		return plataformas.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL)
 	case "temporada1":
 		log.Printf("game: temporada1 players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 		return temporada1.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level)
@@ -1495,7 +1573,7 @@ func whackPlayersFromConfig(cfg config) []whackamole.PlayerConfig {
 	for i := 0; i < playerCount; i++ {
 		color := configuredPlayerColor(cfg, i, displayColor{})
 		players[i] = whackamole.PlayerConfig{
-			Label: configuredPlayerLabel(cfg, i, fmt.Sprintf("Player %d", i+1)),
+			Label: configuredPlayerLabel(cfg, i, fmt.Sprintf("Jugador %d", i+1)),
 			Color: animation.RGB{R: byte(clampColorByte(color.R)), G: byte(clampColorByte(color.G)), B: byte(clampColorByte(color.B))},
 		}
 	}
@@ -1670,6 +1748,8 @@ func configForSelection(base config, game string, players int) config {
 		cfg.Level = parkour.NormalizeLevel(cfg.Level)
 		cfg.MusicRef = parkour.DefaultMusicRef
 		cfg.MusicVolume = parkour.DefaultMusicVolume
+	case "plataformas":
+		cfg.Level = plataformas.NormalizeLevel(cfg.Level)
 	case "temporada1":
 		cfg.Level = temporada1.NormalizeLevel(cfg.Level)
 	case "temporada2":
@@ -1698,6 +1778,8 @@ func defaultMusicForGame(game string) (string, float64) {
 		return saltos.DefaultMusicRef, saltos.DefaultMusicVolume
 	case "parkour":
 		return parkour.DefaultMusicRef, parkour.DefaultMusicVolume
+	case "plataformas":
+		return plataformas.DefaultMusicRef, plataformas.DefaultMusicVolume
 	case "temporada1":
 		return temporada1.DefaultMusicRef, temporada1.DefaultMusicVolume
 	case "temporada2":
@@ -1771,6 +1853,18 @@ func gameCatalog() []gameCatalogEntry {
 			Difficulty:  true,
 			Volume:      parkour.DefaultMusicVolume,
 			Levels:      parkourCatalogLevels(),
+		},
+		{
+			Game:        "plataformas",
+			Label:       "Plataformas",
+			Description: "Niveles publicados desde la base de datos en la nube, creados como secuencias reutilizables de fotogramas.",
+			Music:       plataformas.DefaultMusicRef,
+			Players:     true,
+			MinPlayers:  1,
+			MaxPlayers:  6,
+			Difficulty:  true,
+			Volume:      plataformas.DefaultMusicVolume,
+			Levels:      plataformasCatalogLevels(),
 		},
 		{
 			Game:        "temporada1",
@@ -1929,6 +2023,19 @@ func parkourCatalogLevels() []gameLevelEntry {
 	return out
 }
 
+func plataformasCatalogLevels() []gameLevelEntry {
+	levels := plataformas.Levels()
+	out := make([]gameLevelEntry, 0, len(levels))
+	for _, level := range levels {
+		out = append(out, gameLevelEntry{
+			ID:          level.ID,
+			Label:       level.Label,
+			Description: level.Description,
+		})
+	}
+	return out
+}
+
 func patronesCatalogLevels() []gameLevelEntry {
 	levels := patrones.Levels()
 	out := make([]gameLevelEntry, 0, len(levels))
@@ -1971,7 +2078,7 @@ func defaultDisplayPlayers(cfg config) []displayPlayer {
 	for i := 0; i < playerCount; i++ {
 		players = append(players, displayPlayer{
 			Index: i,
-			Label: configuredPlayerLabel(cfg, i, "Player "+string(rune('1'+i))),
+			Label: configuredPlayerLabel(cfg, i, "Jugador "+string(rune('1'+i))),
 			Color: configuredPlayerColor(cfg, i, colors[i%len(colors)]),
 			Lives: -1,
 		})
@@ -2105,6 +2212,7 @@ func preloadAudioRefs(cfg config) []string {
 		lava.DefaultMusicRef,
 		saltos.DefaultMusicRef,
 		parkour.DefaultMusicRef,
+		plataformas.DefaultMusicRef,
 		temporada1.DefaultMusicRef,
 		temporada2.DefaultMusicRef,
 		duel.DefaultMusicRef,

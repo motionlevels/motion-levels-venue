@@ -35,12 +35,15 @@ export type DisplayStatus = {
   lastEventMessage: string;
 };
 
-const enginePort = "8082";
+const enginePort = "4102";
 const localEngineURL = `http://127.0.0.1:${enginePort}`;
 
 function inferEngineURL(): string {
   if (typeof window === "undefined" || !window.location.hostname || window.location.protocol === "file:") {
     return localEngineURL;
+  }
+  if (window.location.pathname.startsWith("/display")) {
+    return `${window.location.origin}/engine`;
   }
   return `${window.location.protocol}//${window.location.hostname}:${enginePort}`;
 }

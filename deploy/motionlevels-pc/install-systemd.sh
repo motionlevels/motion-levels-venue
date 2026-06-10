@@ -25,9 +25,21 @@ fi
 
 mkdir -p \
   /etc/motion-levels \
+  /etc/caddy \
   /opt/motion-levels/rebuild/var/floor-controller/recordings \
   /opt/motion-levels/rebuild/var/game-engine/sessions \
   /var/lib/motion-levels
+
+if command -v apt-get >/dev/null 2>&1 && ! command -v caddy >/dev/null 2>&1; then
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y caddy
+fi
+
+if [ ! -f /etc/motion-levels/motion-levels.env ]; then
+  install -m 0644 "$UNIT_DIR/motion-levels.env" /etc/motion-levels/motion-levels.env
+fi
+
+install -m 0644 "$UNIT_DIR/Caddyfile" /etc/caddy/Caddyfile
 
 for service in "${old_services[@]}"; do
   systemctl stop "$service" 2>/dev/null || true
@@ -39,10 +51,12 @@ for service in "${new_services[@]}"; do
 done
 
 systemctl daemon-reload
+systemctl enable caddy 2>/dev/null || true
 
 for service in "${new_services[@]}"; do
   systemctl enable "$service"
 done
 
+systemctl restart caddy
 systemctl restart "${new_services[@]}"
-systemctl --no-pager --lines=3 status "${new_services[@]}"
+systemctl --no-pager --lines=3 status caddy "${new_services[@]}"

@@ -3,7 +3,7 @@
 Standalone kiosk UI for choosing games, configuring a team, and launching the
 local Go game engine.
 
-During development it talks to the game-engine API at `http://127.0.0.1:8082`.
+During development it talks to the game-engine API at `http://127.0.0.1:4102`.
 
 ```sh
 npm install
@@ -13,17 +13,17 @@ npm run dev
 Open:
 
 ```txt
-http://127.0.0.1:5174
+http://127.0.0.1:4103
 ```
 
 Other devices on the same network can use the Vite network URL printed by
-`npm run dev`, for example `http://192.168.1.137:5174`.
+`npm run dev`, for example `http://192.168.1.137:4103`.
 
 Set `VITE_GAME_ENGINE_URL` if the menu is not running on the same machine as
 the game-engine:
 
 ```sh
-VITE_GAME_ENGINE_URL=http://192.168.1.137:8082 npm run dev
+VITE_GAME_ENGINE_URL=http://192.168.1.137:4102 npm run dev
 ```
 
 Analytics are sent to the dedicated PostHog menu project in production builds.

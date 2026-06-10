@@ -6,21 +6,22 @@ Wants=network-online.target sound.target motion-levels-floor-controller.service
 [Service]
 Type=simple
 WorkingDirectory=/opt/motion-levels/rebuild
+EnvironmentFile=/etc/motion-levels/motion-levels.env
 EnvironmentFile=-/etc/motion-levels/platform.env
 ExecStart=/opt/motion-levels/rebuild/bin/game-engine \
-  -http :8082 \
-  -controller 127.0.0.1:9090 \
-  -pressure-events 127.0.0.1:9091 \
+  -http ${MOTION_LEVELS_ENGINE_HTTP} \
+  -controller ${MOTION_LEVELS_CONTROLLER_FRAMES} \
+  -pressure-events ${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS} \
   -game loop \
-  -fps 20 \
-  -brightness 80 \
+  -fps ${MOTION_LEVELS_ENGINE_FPS} \
+  -brightness ${MOTION_LEVELS_ENGINE_BRIGHTNESS} \
   -audio=true \
   -audio-player aplay-raw \
   -audio-assets /opt/motion-levels/rebuild/content/audio \
   -record-sessions /opt/motion-levels/rebuild/var/game-engine/sessions \
   -session-segment-bytes 268435456 \
-  -display-snapshot-fps 4 \
-  -platform-url https://platform.motionlevels.obis.dev \
+  -display-snapshot-fps ${MOTION_LEVELS_DISPLAY_SNAPSHOT_FPS} \
+  -platform-url ${MOTION_LEVELS_PLATFORM_URL} \
   -platform-sync-interval 1s \
   -controller-id-file /opt/motion-levels/rebuild/var/floor-controller/controller-id
 Restart=always

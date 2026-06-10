@@ -1,0 +1,33 @@
+:80 {
+	encode zstd gzip
+
+	handle_path /controller/* {
+		reverse_proxy 127.0.0.1:4101
+	}
+
+	handle /controller {
+		rewrite * /
+		reverse_proxy 127.0.0.1:4101
+	}
+
+	handle /ws {
+		reverse_proxy 127.0.0.1:4101
+	}
+
+	handle_path /engine/* {
+		reverse_proxy 127.0.0.1:4102
+	}
+
+	redir /menu /menu/
+	handle_path /menu/* {
+		reverse_proxy 127.0.0.1:4103
+	}
+
+	redir /display /display/
+	handle_path /display/* {
+		reverse_proxy 127.0.0.1:4104
+	}
+
+	redir /status /engine/api/status
+	redir / /menu/
+}

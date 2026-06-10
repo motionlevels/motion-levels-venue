@@ -16,14 +16,14 @@ cadence.
 Start `floor-controller` first, then:
 
 ```sh
-go run ./game-engine/cmd/game-engine -controller 127.0.0.1:9090
+go run ./game-engine/cmd/game-engine -controller 127.0.0.1:4201
 ```
 
 The defaults are:
 
-- game-engine API: `http://127.0.0.1:8082/api/status`
-- controller frame stream: `127.0.0.1:9090`
-- pressure event stream: `127.0.0.1:9091`
+- game-engine API: `http://127.0.0.1:4102/api/status`
+- controller frame stream: `127.0.0.1:4201`
+- pressure event stream: `127.0.0.1:4202`
 - game: `loop`
 - desired-state frame rate: `20fps`
 - brightness: `80%`
@@ -42,18 +42,18 @@ npm run dev
 Open:
 
 ```txt
-http://127.0.0.1:5174
+http://127.0.0.1:4103
 ```
 
 Choosing a game updates the running game immediately through the local
-game-engine API at `http://127.0.0.1:8082`. Music is switched with the game, and
+game-engine API at `http://127.0.0.1:4102`. Music is switched with the game, and
 pressure events continue to flow through the same controller stream.
 
 The player-facing TV display lives in `apps/player-display`. It subscribes to
 the game-engine display stream:
 
 ```txt
-http://127.0.0.1:8082/api/display/events
+http://127.0.0.1:4102/api/display/events
 ```
 
 The display app is visual-only for now. Low-latency music and cue playback stay
@@ -110,8 +110,8 @@ Run it locally with the existing asset pool:
 go run ./game-engine/cmd/game-engine \
   -game whack-a-mole \
   -players 1 \
-  -controller 127.0.0.1:9090 \
-  -pressure-events 127.0.0.1:9091 \
+  -controller 127.0.0.1:4201 \
+  -pressure-events 127.0.0.1:4202 \
   -fps 30 \
   -brightness 85 \
   -audio \

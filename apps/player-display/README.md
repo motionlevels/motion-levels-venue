@@ -2,7 +2,7 @@
 
 Full-screen player-facing TV display for score, timer, phase, and game status.
 
-The display talks to the local Go game-engine API at `http://127.0.0.1:8082`
+The display talks to the local Go game-engine API at `http://127.0.0.1:4102`
 and subscribes to `/api/display/events` for live state updates.
 
 ```sh
@@ -13,7 +13,7 @@ npm run dev
 Open:
 
 ```txt
-http://127.0.0.1:5175
+http://127.0.0.1:4104
 ```
 
 For kiosk-style fullscreen Electron testing:
@@ -26,5 +26,5 @@ Set `VITE_GAME_ENGINE_URL` if the display is pointed at a different game-engine
 machine:
 
 ```sh
-VITE_GAME_ENGINE_URL=http://192.168.1.137:8082 npm run dev
+VITE_GAME_ENGINE_URL=http://192.168.1.137:4102 npm run dev
 ```

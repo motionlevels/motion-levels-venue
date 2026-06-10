@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { drawFloorCanvas, floorDisplayCells, type FloorBoardCell } from "@motion-levels/floor-view";
 import { FLOOR_COLS, FLOOR_ROWS } from "./floor";
 
 const PITCH = 14;
 const GAP = 2;
 const LIT = PITCH - GAP;
 const IDLE: [number, number, number] = [13, 19, 30];
+const IDLE_CSS = `rgb(${IDLE[0]}, ${IDLE[1]}, ${IDLE[2]})`;
 
 type ConnectionState = "connecting" | "live" | "error";
 
@@ -20,11 +22,16 @@ function controllerWebSocketURL(): string {
   if (configured) {
     const url = new URL(configured, window.location.href);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-    url.pathname = "/ws";
+    url.pathname = `${url.pathname.replace(/\/$/, "")}/ws`;
     url.search = "";
     return url.toString();
   }
-  const controllerPort = import.meta.env.VITE_FLOOR_CONTROLLER_PORT || "8081";
+  if (window.location.pathname.startsWith("/menu")) {
+    const url = new URL("/controller/ws", window.location.href);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    return url.toString();
+  }
+  const controllerPort = import.meta.env.VITE_FLOOR_CONTROLLER_PORT || "4101";
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const host = window.location.hostname || "127.0.0.1";
   return `${protocol}://${host}:${controllerPort}/ws`;
@@ -41,10 +48,7 @@ export function LiveFloorView() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const context = canvas.getContext("2d");
-    if (!context) return;
     const targetCanvas = canvas;
-    const ctx: CanvasRenderingContext2D = context;
 
     const displayCols = FLOOR_ROWS;
     const displayRows = FLOOR_COLS;
@@ -65,18 +69,10 @@ export function LiveFloorView() {
       targetCanvas.style.width = `${cssWidth}px`;
     }
 
-    function logicalToDraw(x: number, y: number) {
-      return {
-        x: GAP + y * PITCH,
-        y: GAP + (FLOOR_COLS - 1 - x) * PITCH,
-      };
-    }
-
     function draw() {
-      ctx.fillStyle = "#05070a";
-      ctx.fillRect(0, 0, width, height);
       const frame = frameRef.current;
       const frameSize = frameSizeRef.current;
+      const cells: FloorBoardCell[] = [];
       for (let y = 0; y < FLOOR_ROWS; y++) {
         for (let x = 0; x < FLOOR_COLS; x++) {
           const index = y * FLOOR_COLS + x;
@@ -90,16 +86,22 @@ export function LiveFloorView() {
             b = frame[rgbIndex + 2] || 0;
             if (r + g + b < 14) [r, g, b] = IDLE;
           }
-          const drawPt = logicalToDraw(x, y);
-          ctx.fillStyle = `rgb(${r | 0}, ${g | 0}, ${b | 0})`;
-          ctx.fillRect(drawPt.x, drawPt.y, LIT, LIT);
-          if (pressedRef.current.has(index)) {
-            ctx.strokeStyle = "#ff334f";
-            ctx.lineWidth = 3;
-            ctx.strokeRect(drawPt.x + 1.5, drawPt.y + 1.5, LIT - 3, LIT - 3);
-          }
+          cells.push({ x, y, color: `rgb(${r | 0}, ${g | 0}, ${b | 0})`, pressed: pressedRef.current.has(index) });
         }
       }
+      drawFloorCanvas({
+        canvas: targetCanvas,
+        ...floorDisplayCells(FLOOR_COLS, FLOOR_ROWS, cells, "clockwise", IDLE_CSS),
+        emptyColor: "#05070a",
+        tileSize: LIT,
+        gapSize: GAP,
+        drawCellOverlay(context, cell, rect) {
+          if (!cell.pressed) return;
+          context.strokeStyle = "#ff334f";
+          context.lineWidth = 3;
+          context.strokeRect(rect.x + 1.5, rect.y + 1.5, rect.size - 3, rect.size - 3);
+        },
+      });
     }
 
     function applyFrame(buffer: ArrayBuffer) {

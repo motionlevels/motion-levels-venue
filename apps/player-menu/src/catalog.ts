@@ -145,6 +145,15 @@ export const temporada1Levels: GameLevel[] = temporada1Descriptions.map((descrip
   previewSrc: temporada1Previews[index],
 }));
 
+export const plataformasLevels: GameLevel[] = [
+  {
+    id: "level-1",
+    label: "Temporada 1 / Nivel 1",
+    description: "Láser N1 migrado al formato editable en la nube.",
+    previewSrc: previewAsset("temporada1-level-1.gif"),
+  },
+];
+
 const temporada2Descriptions = [
   "Islas seguras, escáneres rojos cruzados y monedas para repartir el equipo.",
   "Un río de lava con huecos móviles: cruza, espera y recoge las monedas.",
@@ -406,6 +415,24 @@ export const games: GameCard[] = [
     description: "Moveos en equipo, evitad las zonas rojas y reclamad tantas plataformas seguras únicas como podáis.",
     rules: ["1 estrella: plataformas grandes y lentas.", "Cada plataforma segura nueva suma 1 punto.", "Tras recibir daño hay 1 segundo de inmunidad."],
     previewAnimation: "lava",
+  },
+  {
+    id: "plataformas",
+    label: "Plataformas",
+    category: "team",
+    color: colors.cyan,
+    players: "1-6",
+    difficulty: "Fácil-Experto",
+    duration: "Niveles en la nube",
+    mode: "Editor",
+    audio: "Música + efectos",
+    description: "Niveles creados desde la plataforma: fotogramas editables, música y mecanismos reutilizables para baldosas.",
+    rules: ["El motor descarga los niveles publicados desde la nube.", "Las baldosas azules suman puntos.", "Las rojas hacen daño y las moradas piden doble toque."],
+    engineGame: "plataformas",
+    previewSrc: previewAsset("temporada1-level-1.gif"),
+    previewAnimation: "ambient-pulse",
+    allowDifficultyWithLevels: true,
+    levels: plataformasLevels,
   },
   {
     id: "temporada1",

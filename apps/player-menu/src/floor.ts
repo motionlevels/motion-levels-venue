@@ -2,7 +2,7 @@
 //
 // The physical floor is a 16 x 32 LED grid (see game-engine animation.GridWidth/Height
 // and floor-controller floor.Grid*). The preview renders it at this exact resolution and
-// aspect ratio (portrait, 1:2), matching the controller's /live view.
+// aspect ratio (portrait, 1:2), matching the controller preview.
 //
 // Each animation is a pure function of tile coordinates and time, returning an RGB triple
 // in 0..255. These are placeholders meant to *showcase* each game's identity until the real

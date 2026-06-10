@@ -1,10 +1,12 @@
 import { useEffect, useRef } from "react";
+import { drawFloorCanvas, floorDisplayCells, type FloorBoardCell } from "@motion-levels/floor-view";
 import { FLOOR_COLS, FLOOR_ROWS, type FloorAnim } from "./floor";
 
 const PITCH = 14; // device pixels per LED (lit cell + gap)
 const GAP = 2;
 const LIT = PITCH - GAP;
-const IDLE: [number, number, number] = [13, 19, 30]; // unlit LED, matches /live tile tone
+const IDLE: [number, number, number] = [13, 19, 30]; // unlit LED, matches controller preview tile tone
+const IDLE_CSS = `rgb(${IDLE[0]}, ${IDLE[1]}, ${IDLE[2]})`;
 const FPS = 30;
 
 type FloorPreviewOrientation = "portrait" | "landscape";
@@ -19,9 +21,6 @@ export function FloorPreview({ anim, orientation = "portrait" }: { anim: FloorAn
     const canvas = canvasRef.current;
     if (!canvas) return;
     const targetCanvas = canvas;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-    const ctx: CanvasRenderingContext2D = context;
 
     const cols = FLOOR_COLS;
     const rows = FLOOR_ROWS;
@@ -52,20 +51,21 @@ export function FloorPreview({ anim, orientation = "portrait" }: { anim: FloorAn
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     function draw(seconds: number) {
-      ctx.fillStyle = "#05070a";
-      ctx.fillRect(0, 0, width, height);
+      const cells: FloorBoardCell[] = [];
       for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols; x++) {
           let [r, g, b] = anim(x, y, cols, rows, seconds);
-          if (r + g + b < 14) {
-            [r, g, b] = IDLE;
-          }
-          const drawX = landscape ? y : x;
-          const drawY = landscape ? cols - 1 - x : y;
-          ctx.fillStyle = `rgb(${r | 0}, ${g | 0}, ${b | 0})`;
-          ctx.fillRect(GAP + drawX * PITCH, GAP + drawY * PITCH, LIT, LIT);
+          if (r + g + b < 14) [r, g, b] = IDLE;
+          cells.push({ x, y, color: `rgb(${r | 0}, ${g | 0}, ${b | 0})` });
         }
       }
+      drawFloorCanvas({
+        canvas: targetCanvas,
+        ...floorDisplayCells(cols, rows, cells, landscape ? "clockwise" : "data", IDLE_CSS),
+        emptyColor: "#05070a",
+        tileSize: LIT,
+        gapSize: GAP,
+      });
     }
 
     if (reduceMotion) {

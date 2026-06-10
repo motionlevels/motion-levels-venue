@@ -15,3 +15,7 @@ recordings/
 engine/recordings/
 floor-controller/recordings/
 game-recordings/
+
+# Framework build output and local test artifacts.
+.next/
+test-results/

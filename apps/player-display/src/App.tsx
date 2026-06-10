@@ -27,7 +27,7 @@ const emptyStatus: DisplayStatus = {
 };
 
 function isTeamScoreGame(currentGame: string): boolean {
-  return currentGame === "lava" || currentGame === "temporada1";
+  return currentGame === "lava" || currentGame === "plataformas" || currentGame === "temporada1";
 }
 
 export default function App() {
@@ -118,7 +118,7 @@ export default function App() {
         </article>
       </section>
 
-      <section className={`player-grid ${teamScoreGame ? "team-score" : ""} count-${Math.min(Math.max(status.players.length, 1), 3)}`} aria-label={teamScoreGame ? "Equipo" : "Players"}>
+      <section className={`player-grid ${teamScoreGame ? "team-score" : ""} count-${Math.min(Math.max(status.players.length, 1), 3)}`} aria-label={teamScoreGame ? "Equipo" : "Jugadores"}>
         {teamScoreGame && status.players.length ? (
           <article className="team-card">
             <div className="team-card-head">

@@ -6,14 +6,15 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/motion-levels/rebuild
+EnvironmentFile=/etc/motion-levels/motion-levels.env
 EnvironmentFile=-/etc/motion-levels/platform.env
 ExecStart=/opt/motion-levels/rebuild/bin/floor-controller \
-  -http :8080 \
-  -frames :9090 \
-  -input-events :9091 \
-  -recv-port 7800 \
-  -broadcast-ip 255.255.255.255 \
-  -broadcast-port 4626 \
+  -http ${MOTION_LEVELS_CONTROLLER_HTTP} \
+  -frames ${MOTION_LEVELS_CONTROLLER_FRAMES} \
+  -input-events ${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS} \
+  -recv-port ${MOTION_LEVELS_FLOOR_RECV_PORT} \
+  -broadcast-ip ${MOTION_LEVELS_LED_BROADCAST_IP} \
+  -broadcast-port ${MOTION_LEVELS_LED_BROADCAST_PORT} \
   -controller-id-file /opt/motion-levels/rebuild/var/floor-controller/controller-id \
   -record-frames /opt/motion-levels/rebuild/var/floor-controller/recordings \
   -record-compression none \
@@ -22,11 +23,11 @@ ExecStart=/opt/motion-levels/rebuild/bin/floor-controller \
   -record-segment-duration 10m \
   -record-delete-raw-after 1h \
   -record-max-pending-raw-bytes 4294967296 \
-  -record-upload-platform-url https://platform.motionlevels.obis.dev \
+  -record-upload-platform-url ${MOTION_LEVELS_RECORDING_UPLOAD_PLATFORM_URL} \
   -record-upload-queue-size 256 \
   -record-upload-timeout 5m \
   -zstd-path /usr/bin/zstd \
-  -refresh-fps 30 \
+  -refresh-fps ${MOTION_LEVELS_REFRESH_FPS} \
   -engine-fade-delay 2s \
   -engine-fade-duration 3s
 Restart=always

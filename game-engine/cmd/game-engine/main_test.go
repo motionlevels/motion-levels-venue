@@ -16,6 +16,7 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
 	"github.com/lobis/motion-levels/game-engine/internal/games/memorychallenge"
+	"github.com/lobis/motion-levels/game-engine/internal/games/plataformas"
 	"github.com/lobis/motion-levels/game-engine/internal/games/temporada1"
 	"github.com/lobis/motion-levels/game-engine/internal/games/temporada2"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
@@ -225,6 +226,66 @@ func TestReusableTileCueRefsAndDoubleCoinBurst(t *testing.T) {
 	backend.waitForCount(t, coinPath, 6)
 }
 
+func TestPlataformasRuntimeUsesCloudLevelAudioRefs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/level-games/plataformas/levels" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"gameId":"plataformas",
+			"levels":[{
+				"id":"cloud-1",
+				"slug":"level-1",
+				"label":"Nivel nube",
+				"description":"Nivel con audio personalizado",
+				"difficulty":"medium",
+				"life":5,
+				"pass_score":2,
+				"time_limit_seconds":0,
+				"frame_tick_ms":25,
+				"music_ref":"Motion/canciones/Musica8.mp3",
+				"music_volume":0.27,
+				"coin_cue_ref":"Motion/sonidos/coin.wav",
+				"double_coin_cue_ref":"Motion/sonidos/coin-doble.wav",
+				"damage_cue_ref":"Motion/sonidos/fallo.mp3",
+				"win_cue_ref":"Motion/sonidos/victoria.mp3",
+				"frames":[{"r":8,"c":[[7,14,0],[4,4,1,"coin-a"]]}]
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	runtime := newGameRuntime(config{
+		Game:               "plataformas",
+		Difficulty:         "medium",
+		Level:              "level-1",
+		PlayerCount:        1,
+		PlatformURL:        server.URL,
+		MusicRef:           loopMusicRef,
+		MusicVolume:        0.10,
+		CoinCueRef:         "Motion/sonidos/default-coin.wav",
+		DamageCueRef:       "Motion/sonidos/default-damage.wav",
+		WinCueRef:          "Motion/sonidos/default-win.wav",
+		CueVolume:          0.18,
+		Brightness:         80,
+		FPS:                20,
+		DisplaySnapshotFPS: 4,
+	}, nil, nil)
+
+	status := runtime.Status()
+	if status.Music != "Motion/canciones/Musica8.mp3" || status.MusicVolume != 0.27 {
+		t.Fatalf("status music = %q %.2f, want cloud audio", status.Music, status.MusicVolume)
+	}
+	refs := runtime.current
+	if refs.CoinCueRef != "Motion/sonidos/coin.wav" || refs.DoubleCoinCueRef != "Motion/sonidos/coin-doble.wav" {
+		t.Fatalf("runtime cues = %+v, want cloud cues", refs)
+	}
+	if got := plataformas.DefaultMusicRef; got == status.Music {
+		t.Fatalf("status music = default %q, want cloud override", got)
+	}
+}
+
 func TestGameAPIStatusAndSelect(t *testing.T) {
 	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
 	server := httptest.NewServer(gameAPIHandler(runtime))
@@ -243,8 +304,8 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if len(status.Catalog) != 13 {
-		t.Fatalf("catalog = %d entries, want 13", len(status.Catalog))
+	if len(status.Catalog) != 14 {
+		t.Fatalf("catalog = %d entries, want 14", len(status.Catalog))
 	}
 
 	body := bytes.NewBufferString(`{"game":"lava","playerCount":3,"difficulty":"expert"}`)

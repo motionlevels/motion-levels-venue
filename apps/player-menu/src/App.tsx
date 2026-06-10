@@ -44,11 +44,17 @@ type RosterIssue = { message: string; playerIds: Set<number> };
 
 const storageKey = "ml-player-menu-state-v1";
 const maxPlayers = 6;
+const maxTeamNameLength = 24;
+const maxPlayerNameLength = 12;
 const noPressureSessionLimitMillis = 60 * 60 * 1000;
 const devUnlockLevels = import.meta.env.DEV || import.meta.env.VITE_UNLOCK_LEVELS === "1";
-// Spanish QWERTY with Ñ and an accent row for proper names.
-const keyboardRows = ["1234567890", "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM", "ÁÉÍÓÚÜ"];
+// Spanish QWERTY adapted for a kiosk touch surface.
+const keyboardLetterRows = ["qwertyuiop", "asdfghjklñ", "zxcvbnm"];
+const keyboardNumberRows = ["1234567890", "-_/&()'\"", ".,!?"];
+const keyboardAccentRows = ["áéíóúü", "àèìòù", "äëïöüñ"];
 const defaultPlayers: Player[] = [{ id: 1, name: "", color: playerColors[0], active: true }];
+const teamNameStarts = ["Rayo", "Neón", "Pulso", "Láser", "Cumbre", "Órbita", "Turbo", "Brillo", "Salto", "Ritmo", "Chispa", "Fuego"];
+const teamNameFinishes = ["Verde", "Azul", "Solar", "Norte", "Sur", "Lima", "Rojo", "Claro", "Pista", "Nivel", "Flash", "Veloz"];
 
 function newVenueSessionID(date = new Date()): string {
   const stamp = date
@@ -60,19 +66,15 @@ function newVenueSessionID(date = new Date()): string {
 }
 
 function defaultTeamName(date = new Date()): string {
-  const stamp = new Intl.DateTimeFormat("es-ES", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  })
-    .format(date)
-    .replace(/\//g, "-")
-    .replace(/,?\s+/g, " ");
-  return `Equipo ${stamp}`;
+  const seed = Math.max(0, Math.floor(date.getTime() / 1000));
+  const start = teamNameStarts[seed % teamNameStarts.length];
+  const finish = teamNameFinishes[Math.floor(seed / teamNameStarts.length) % teamNameFinishes.length];
+  const code = 100 + (seed % 900);
+  return `${start} ${finish} ${code}`;
+}
+
+function cleanNameWhitespace(value: string, maxLength: number): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, maxLength).trim();
 }
 
 function engineGameID(game: GameCard): string {
@@ -249,6 +251,12 @@ function loadMenuState(): MenuState {
       const selectedLevels = saved.selectedLevels && typeof saved.selectedLevels === "object" ? saved.selectedLevels : {};
       const levelProgress = saved.levelProgress && typeof saved.levelProgress === "object" ? saved.levelProgress : {};
       const savedPlayers = Array.isArray(saved.players) ? saved.players : [];
+      const cleanedPlayers = savedPlayers.map((player, index) => ({
+        id: Number(player?.id) || index + 1,
+        name: cleanNameWhitespace(String(player?.name || ""), maxPlayerNameLength),
+        color: typeof player?.color === "string" ? player.color : playerColors[index % playerColors.length],
+        active: Boolean(player?.active),
+      }));
       const wasOldUntouchedDefault =
         !saved.teamName &&
         savedPlayers.length === 2 &&
@@ -258,9 +266,9 @@ function loadMenuState(): MenuState {
           return player && player.active && (name === "" || name === oldName);
         });
       return {
-        teamName: "",
         difficulty: "easy",
         ...saved,
+        teamName: cleanNameWhitespace(String(saved.teamName || ""), maxTeamNameLength),
         sessionActive: Boolean(saved.sessionActive),
         sessionId: typeof saved.sessionId === "string" ? saved.sessionId : "",
         sessionStartedUnix: Number(saved.sessionStartedUnix) || 0,
@@ -268,7 +276,7 @@ function loadMenuState(): MenuState {
         selectedGame: saved.selectedGame === "whack-a-mole" && wasOldUntouchedDefault ? "lava" : saved.selectedGame || "lava",
         selectedLevels,
         levelProgress,
-        players: wasOldUntouchedDefault ? defaultPlayers : savedPlayers,
+        players: wasOldUntouchedDefault ? defaultPlayers : cleanedPlayers,
         nextPlayerId: wasOldUntouchedDefault ? 1 : saved.nextPlayerId || 0,
         narrationArmed,
       };
@@ -690,27 +698,28 @@ export default function App() {
   }
 
   function updatePlayer(id: number, patch: Partial<Player>) {
-    if (typeof patch.active === "boolean") {
+    const requestedPatch = typeof patch.name === "string" ? { ...patch, name: cleanNameWhitespace(patch.name, maxPlayerNameLength) } : patch;
+    if (typeof requestedPatch.active === "boolean") {
       captureMenuEvent("player_active_toggled", {
-        active: patch.active,
+        active: requestedPatch.active,
         player_count: activePlayers.length,
       });
     }
-    if (patch.color) {
+    if (requestedPatch.color) {
       captureMenuEvent("player_color_changed", {
-        color: patch.color,
+        color: requestedPatch.color,
         player_count: activePlayers.length,
       });
     }
     setMenu((current) => {
-      let nextPatch = patch;
-      if (patch.color && current.players.some((player) => player.id !== id && player.active && player.color.toLowerCase() === patch.color?.toLowerCase())) {
+      let nextPatch = requestedPatch;
+      if (requestedPatch.color && current.players.some((player) => player.id !== id && player.active && player.color.toLowerCase() === requestedPatch.color?.toLowerCase())) {
         return current;
       }
-      if (patch.active === true) {
+      if (requestedPatch.active === true) {
         const player = current.players.find((candidate) => candidate.id === id);
         if (player && current.players.some((candidate) => candidate.id !== id && candidate.active && candidate.color.toLowerCase() === player.color.toLowerCase())) {
-          nextPatch = { ...patch, color: firstAvailableColor(current.players, id) };
+          nextPatch = { ...requestedPatch, color: firstAvailableColor(current.players, id) };
         }
       }
       return {
@@ -816,9 +825,13 @@ export default function App() {
     return player ? `Jugador ${menu.players.indexOf(player) + 1}` : "Jugador";
   }
 
+  function keyboardMaxLength() {
+    return keyboardTarget?.kind === "team" ? maxTeamNameLength : maxPlayerNameLength;
+  }
+
   function setKeyboardValue(value: string) {
     if (!keyboardTarget) return;
-    const next = value.slice(0, keyboardTarget.kind === "team" ? 20 : 12);
+    const next = cleanNameWhitespace(value, keyboardMaxLength());
     if (keyboardTarget.kind === "team") {
       setMenu((current) => ({ ...current, teamName: next }));
       return;
@@ -826,15 +839,14 @@ export default function App() {
     updatePlayer(keyboardTarget.id, { name: next });
   }
 
+  function regenerateTeamName() {
+    setMenu((current) => ({ ...current, teamName: defaultTeamName() }));
+    setKeyboardTarget({ kind: "team" });
+  }
+
   function typeKey(key: string) {
     const current = keyboardValue();
-    let ch = key;
-    // Title-case as you type so names read "José" instead of "JOSÉ".
-    if (key !== " " && /\p{L}/u.test(key)) {
-      const atWordStart = current.length === 0 || current.endsWith(" ");
-      ch = atWordStart ? key.toUpperCase() : key.toLowerCase();
-    }
-    setKeyboardValue(`${current}${ch}`);
+    setKeyboardValue(`${current}${key}`);
   }
 
   function selectGameCard(gameID: string) {
@@ -1138,7 +1150,7 @@ export default function App() {
   }
 
   return (
-    <main className={`app ${connectionState} ${keyboardTarget ? "keyboard-open" : ""} ${screenMode === "game" ? "playing" : ""}`}>
+    <main className={`app ${connectionState} ${keyboardTarget ? `keyboard-open keyboard-${keyboardTarget.kind}` : ""} ${screenMode === "game" ? "playing" : ""}`}>
       <header className="topbar">
         <div className="brand">
           <button className="brand-mark" type="button" aria-label="Entrar en pantalla completa" onClick={enterBrowserFullscreen}>
@@ -1252,19 +1264,28 @@ export default function App() {
               <CloseIcon />
             </button>
           </div>
-          <section className="team-name">
-            <div className="micro">Equipo</div>
+          <section className={`team-name ${keyboardTarget?.kind === "team" ? "editing" : ""}`}>
+            <div className="team-name-head">
+              <div>
+                <div className="micro">Equipo</div>
+                <strong>Alias de partida</strong>
+              </div>
+              <button className="btn compact name-refresh" type="button" onClick={regenerateTeamName}>
+                <RestartIcon />
+                Nuevo
+              </button>
+            </div>
             <input
               className="ph-no-capture"
               value={menu.teamName}
-              maxLength={20}
+              maxLength={maxTeamNameLength}
               autoComplete="off"
               spellCheck={false}
               placeholder="Nombre del equipo"
               inputMode="none"
               onFocus={() => setKeyboardTarget({ kind: "team" })}
               onClick={() => setKeyboardTarget({ kind: "team" })}
-              onChange={(event) => setMenu((current) => ({ ...current, teamName: event.target.value }))}
+              onChange={(event) => setMenu((current) => ({ ...current, teamName: cleanNameWhitespace(event.target.value, maxTeamNameLength) }))}
             />
           </section>
 
@@ -1272,15 +1293,16 @@ export default function App() {
             {menu.players.length === 0 ? <div className="message">Añade un jugador o usa el inicio rápido.</div> : null}
             {menu.players.map((player, index) => {
               const invalidPlayer = Boolean(rosterIssue?.playerIds.has(player.id));
+              const editingPlayer = keyboardTarget?.kind === "player" && keyboardTarget.id === player.id;
               return (
-                <article key={player.id} className={`player ${player.active ? "" : "off"} ${invalidPlayer ? "invalid" : ""}`} style={{ "--pc": player.color } as CSSProperties}>
+                <article key={player.id} className={`player ${player.active ? "" : "off"} ${invalidPlayer ? "invalid" : ""} ${editingPlayer ? "editing" : ""}`} style={{ "--pc": player.color } as CSSProperties}>
                   <button className="avatar" type="button" onClick={() => setColorPickerFor(player.id)} aria-label={`Elegir color de ${playerLabel(menu.players, player)}`}>
                     {avatarLabel(menu.players, player)}
                   </button>
                   <input
                     className="ph-no-capture"
                     value={player.name}
-                    maxLength={12}
+                    maxLength={maxPlayerNameLength}
                     aria-label="Nombre del jugador"
                     autoComplete="off"
                     spellCheck={false}
@@ -1563,7 +1585,6 @@ export default function App() {
           onType={typeKey}
           onBackspace={() => setKeyboardValue(keyboardValue().slice(0, -1))}
           onClear={() => setKeyboardValue("")}
-          onSpace={() => typeKey(" ")}
           onDone={() => setKeyboardTarget(null)}
         />
       ) : null}
@@ -1798,7 +1819,6 @@ function TouchKeyboard({
   onType,
   onBackspace,
   onClear,
-  onSpace,
   onDone,
 }: {
   title: string;
@@ -1807,46 +1827,104 @@ function TouchKeyboard({
   onType: (key: string) => void;
   onBackspace: () => void;
   onClear: () => void;
-  onSpace: () => void;
   onDone: () => void;
 }) {
+  const [mode, setMode] = useState<"letters" | "numbers" | "accents">("letters");
+  const [shiftActive, setShiftActive] = useState(true);
+  const [spacePending, setSpacePending] = useState(false);
+  const rows = mode === "numbers" ? keyboardNumberRows : mode === "accents" ? keyboardAccentRows : keyboardLetterRows;
+  const shifted = mode !== "numbers" && shiftActive;
+
+  function showKey(key: string) {
+    return shifted ? key.toLocaleUpperCase("es-ES") : key;
+  }
+
+  function pressKey(key: string) {
+    const visibleKey = showKey(key);
+    onType(`${spacePending && value ? " " : ""}${visibleKey}`);
+    setSpacePending(false);
+  }
+
+  function setKeyboardMode(nextMode: "letters" | "numbers" | "accents") {
+    setMode((current) => (current === nextMode ? "letters" : nextMode));
+    if (nextMode === "numbers") setShiftActive(false);
+  }
+
+  function pressSpace() {
+    if (value) setSpacePending(true);
+  }
+
+  function pressBackspace() {
+    if (spacePending) {
+      setSpacePending(false);
+      return;
+    }
+    onBackspace();
+  }
+
+  function pressClear() {
+    setSpacePending(false);
+    onClear();
+  }
+
   return (
-    <section className="touch-keyboard" aria-label="Teclado táctil" onMouseDown={(event) => event.preventDefault()}>
-      <div className="kb-display">
-        <div className="kb-field">
-          <span className="micro">{title}</span>
-          <div className="kb-value ph-mask">
-            {value ? <span>{value}</span> : <span className="kb-placeholder">{placeholder}</span>}
-            <span className="kb-caret" />
-          </div>
+    <div className="keyboard-modal-layer" role="dialog" aria-modal="true" aria-label="Editar nombre" onMouseDown={(event) => event.preventDefault()}>
+      <section className="touch-keyboard" aria-label="Teclado táctil">
+        <div className="kb-title-tab">
+          <span aria-hidden="true">●</span>
+          {title}
         </div>
-        <button className="kb-clear" type="button" onClick={onClear} disabled={!value}>
-          Borrar todo
-        </button>
-      </div>
-      <div className="keyboard-rows">
-        {keyboardRows.map((row, index) => (
-          <div className={`keyboard-row ${index === keyboardRows.length - 1 ? "accents" : ""}`} key={row}>
-            {row.split("").map((key) => (
-              <button className={`key ${index === keyboardRows.length - 1 ? "accent" : ""}`} key={key} type="button" onClick={() => onType(key)}>
-                {key}
-              </button>
-            ))}
+
+        <div className="kb-compose">
+          <div className="kb-field ph-mask">
+            <div className="kb-value ph-mask">
+              {value ? <span>{value}</span> : <span className="kb-placeholder">{placeholder}</span>}
+              <span className="kb-caret" />
+            </div>
           </div>
-        ))}
-        <div className="keyboard-row keyboard-tools">
-          <button className="key utility" type="button" aria-label="Borrar" onClick={onBackspace}>
-            <BackspaceIcon />
-          </button>
-          <button className="key space" type="button" onClick={onSpace}>
-            Espacio
-          </button>
-          <button className="key done" type="button" onClick={onDone}>
+          <button className="kb-done" type="button" onClick={onDone}>
+            <CheckIcon />
             Listo
           </button>
         </div>
-      </div>
-    </section>
+
+        <div className="keyboard-rows">
+          {rows.map((row, index) => (
+            <div className={`keyboard-row ${mode === "accents" ? "accents" : ""} ${index === 2 ? "bottom-letters" : ""}`} key={`${mode}-${row}`}>
+              {index === 2 && mode !== "numbers" ? (
+                <button className={`key shift ${shiftActive ? "active" : ""}`} type="button" aria-label="Mayúsculas" aria-pressed={shiftActive} onClick={() => setShiftActive((active) => !active)}>
+                  ⇧
+                </button>
+              ) : null}
+              {row.split("").map((key) => (
+                <button className={`key ${mode === "accents" ? "accent" : ""}`} key={key} type="button" onClick={() => pressKey(key)}>
+                  {showKey(key)}
+                </button>
+              ))}
+              {index === 2 ? (
+                <button className="key backspace" type="button" aria-label="Borrar" onClick={pressBackspace}>
+                  <BackspaceIcon />
+                </button>
+              ) : null}
+            </div>
+          ))}
+          <div className="keyboard-row keyboard-tools">
+            <button className={`key mode ${mode === "numbers" ? "active" : ""}`} type="button" aria-pressed={mode === "numbers"} onClick={() => setKeyboardMode("numbers")}>
+              123
+            </button>
+            <button className={`key mode ${mode === "accents" ? "active" : ""}`} type="button" aria-pressed={mode === "accents"} onClick={() => setKeyboardMode("accents")}>
+              Acentos
+            </button>
+            <button className={`key space ${spacePending ? "pending" : ""}`} type="button" aria-pressed={spacePending} onClick={pressSpace}>
+              Espacio
+            </button>
+            <button className="key clear" type="button" onClick={pressClear} disabled={!value}>
+              Borrar
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 

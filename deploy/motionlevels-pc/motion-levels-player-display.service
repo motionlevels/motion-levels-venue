@@ -5,8 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+EnvironmentFile=/etc/motion-levels/motion-levels.env
 WorkingDirectory=/opt/motion-levels/rebuild/apps/player-display/dist
-ExecStart=/usr/bin/python3 -m http.server 5175 --bind 0.0.0.0 --directory /opt/motion-levels/rebuild/apps/player-display/dist
+ExecStart=/usr/bin/python3 -m http.server ${MOTION_LEVELS_PLAYER_DISPLAY_PORT} --bind ${MOTION_LEVELS_PLAYER_DISPLAY_HOST} --directory /opt/motion-levels/rebuild/apps/player-display/dist
 Restart=always
 RestartSec=2
 
