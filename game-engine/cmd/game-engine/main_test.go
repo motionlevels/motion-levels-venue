@@ -228,6 +228,11 @@ func TestReusableTileCueRefsAndDoubleCoinBurst(t *testing.T) {
 
 func TestPlataformasRuntimeUsesCloudLevelAudioRefs(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/level-games/animations/levels" {
+			w.Header().Set("content-type", "application/json")
+			_, _ = w.Write([]byte(`{"gameId":"animations","levels":[]}`))
+			return
+		}
 		if r.URL.Path != "/api/level-games/plataformas/levels" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
