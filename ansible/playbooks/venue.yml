@@ -259,6 +259,41 @@
         state: started
       loop: "{{ motion_levels_services }}"
 
+    - name: Read game engine state before activating rebuilt services
+      ansible.builtin.uri:
+        url: http://127.0.0.1:4102/api/status
+        status_code: 200
+        return_content: true
+      register: motion_levels_engine_state_before_restart
+      failed_when: false
+      changed_when: false
+
+    - name: Decide whether rebuilt services can be activated now
+      ansible.builtin.set_fact:
+        motion_levels_can_restart_now: >-
+          {{
+            motion_levels_engine_state_before_restart.status != 200
+            or (
+              (motion_levels_engine_state_before_restart.json.currentGame | default('')) in ['loop', 'animations', 'ambient-comet', 'ambient-pulse', 'ambient-spark']
+              and (motion_levels_engine_state_before_restart.json.phase | default('')) in ['idle', 'ambient']
+            )
+          }}
+
+    - name: Activate rebuilt Motion Levels services when venue is idle
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: restarted
+      loop: "{{ motion_levels_services }}"
+      when: motion_levels_can_restart_now
+
+    - name: Keep rebuilt Motion Levels services staged while a session is active
+      ansible.builtin.debug:
+        msg: >-
+          Rebuilt services were staged but not restarted because the engine is running
+          {{ motion_levels_engine_state_before_restart.json.currentGame | default('unknown') }}
+          in {{ motion_levels_engine_state_before_restart.json.phase | default('unknown') }}.
+      when: not motion_levels_can_restart_now
+
     - name: Wait for local service health
       ansible.builtin.uri:
         url: "{{ item }}"

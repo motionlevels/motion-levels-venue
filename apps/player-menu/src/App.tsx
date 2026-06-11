@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { controlGame, fetchEngineStatus, postMenuEvent, postVenueSession, selectGame, type EngineStatus } from "./api";
+import { controlGame, fetchEngineStatus, postMenuEvent, postVenueSession, selectGame, type EngineGame, type EngineStatus } from "./api";
 import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
 import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
@@ -101,10 +101,32 @@ function animationIsIdleLoop(currentGame: string, phase: string): boolean {
   return currentGame === "animations" && (phase === "idle" || phase === "ambient");
 }
 
-function gameForEngineStatus(engineGame: string, currentMenuGameID: string): GameCard | undefined {
-  const matches = games.filter((game) => engineGameID(game) === engineGame);
+function gameForEngineStatus(engineGame: string, currentMenuGameID: string, catalogGames = games): GameCard | undefined {
+  const matches = catalogGames.filter((game) => engineGameID(game) === engineGame);
   if (matches.length === 0) return undefined;
   return matches.find((game) => game.id === currentMenuGameID) || matches.find((game) => !game.id.startsWith("featured-")) || matches[0];
+}
+
+function liveAnimationCards(catalog: EngineGame[] | undefined): GameCard[] {
+  const existingEngineGames = new Set(games.map(engineGameID));
+  const animationColors = [colors.cyan, colors.blue, colors.green, colors.violet, colors.orange, colors.yellow];
+  return (catalog || [])
+    .filter((entry) => entry.game.startsWith("animation-") && !existingEngineGames.has(entry.game))
+    .map((entry, index): GameCard => ({
+      id: entry.game,
+      label: entry.label || entry.game.replace(/^animation-/, ""),
+      category: "attract",
+      color: animationColors[index % animationColors.length],
+      players: "Todos",
+      difficulty: "Ambiente",
+      duration: "Bucle",
+      mode: "Ambiente",
+      audio: entry.music ? "Música" : "Suave",
+      description: entry.description || "Animación publicada desde el editor.",
+      rules: ["Animación publicada desde el editor.", "Se actualiza desde el motor sin reiniciar el menú."],
+      engineGame: entry.game,
+      previewAnimation: "animations",
+    }));
 }
 
 function isIndividualCard(game: GameCard): boolean {
@@ -461,6 +483,8 @@ export default function App() {
     menuRef.current = menu;
   }, [menu]);
 
+  const menuGames = useMemo(() => [...games, ...liveAnimationCards(status?.catalog)], [status?.catalog]);
+
   // Mirror every captured menu event to the game-engine so the visit is fully
   // recorded server-side (independent of PostHog analytics).
   useEffect(() => {
@@ -520,7 +544,7 @@ export default function App() {
 
   useEffect(() => {
     if (!status) return;
-    const engineGame = gameForEngineStatus(status.currentGame, menu.selectedGame);
+    const engineGame = gameForEngineStatus(status.currentGame, menu.selectedGame, menuGames);
     if (!engineGame) return;
 
     const engineIsAmbient = isAmbientCard(engineGame);
@@ -599,7 +623,7 @@ export default function App() {
       syncPlayTiming(status, engineGame);
       syncedEngineSession.current = syncKey;
     }
-  }, [status, menu.selectedGame, screenMode]);
+  }, [status, menu.selectedGame, screenMode, menuGames]);
 
   useEffect(() => {
     if (screenMode !== "game") return;
@@ -614,7 +638,7 @@ export default function App() {
     if (!status?.sessionId) return;
     const attempts: FinishedLevelAttempt[] = [...(status.finishedLevelAttempts || [])];
     if (status.phase === "finished") {
-      const game = games.find((candidate) => engineGameID(candidate) === status.currentGame);
+      const game = menuGames.find((candidate) => engineGameID(candidate) === status.currentGame);
       const finishedLevel = status.level || (game ? selectedLevelFor(game) : "");
       const alreadyHasAttempt = attempts.some((attempt) => attempt.game === status.currentGame && attempt.level === finishedLevel);
       if (game?.levels?.length && finishedLevel && !alreadyHasAttempt) {
@@ -633,7 +657,7 @@ export default function App() {
     }
 
     const pending = attempts
-      .map((attempt) => ({ attempt, game: games.find((candidate) => engineGameID(candidate) === attempt.game) }))
+      .map((attempt) => ({ attempt, game: menuGames.find((candidate) => engineGameID(candidate) === attempt.game) }))
       .filter(({ attempt, game }) => game?.levels?.length && attempt.level && !processedFinishedSessions.current.has(attempt.attemptId));
     if (pending.length === 0) return;
 
@@ -646,7 +670,7 @@ export default function App() {
         return recordLevelCompletion(next, game, attempt.level, attempt.success, difficultyFromEngine(attempt.difficulty, next.difficulty), attempt.elapsedMillis || 0);
       }, current),
     );
-  }, [status]);
+  }, [status, menuGames]);
 
   // Esc closes the topmost overlay (keyboard first, then dialogs, then the team drawer).
   useEffect(() => {
@@ -671,11 +695,11 @@ export default function App() {
   const activePlayers = menu.players.filter((player) => player.active);
   const enginePlayers = statusPlayersForDisplay(status);
   const activeCategory = categories.find((category) => category.id === menu.category) || categories[0];
-  const selectedGame = games.find((game) => game.id === menu.selectedGame) || games[0];
-  const launchedGame = games.find((game) => game.id === launchedGameID) || selectedGame;
-  const levelBrowserGame = games.find((game) => game.id === levelBrowserGameID && game.category === menu.category && game.levels?.length) || null;
+  const selectedGame = menuGames.find((game) => game.id === menu.selectedGame) || menuGames[0] || games[0];
+  const launchedGame = menuGames.find((game) => game.id === launchedGameID) || selectedGame;
+  const levelBrowserGame = menuGames.find((game) => game.id === levelBrowserGameID && game.category === menu.category && game.levels?.length) || null;
   const browsingLevels = Boolean(levelBrowserGame);
-  const visibleGames = games.filter((game) => game.category === menu.category);
+  const visibleGames = menuGames.filter((game) => game.category === menu.category);
   const selectedLevel = selectedGame.levels?.find((level) => level.id === selectedLevelFor(selectedGame));
   const selectedSupportedDifficulties = supportedDifficultiesFor(selectedGame, selectedLevel);
   const effectiveDifficulty = closestSupportedDifficulty(menu.difficulty, selectedSupportedDifficulties);
@@ -945,7 +969,7 @@ export default function App() {
   }
 
   function selectGameCard(gameID: string) {
-    const game = games.find((candidate) => candidate.id === gameID);
+    const game = menuGames.find((candidate) => candidate.id === gameID);
     if (game) {
       captureMenuEvent("game_selected", {
         category: game.category,
@@ -1059,7 +1083,7 @@ export default function App() {
   }
 
   async function launch(gameID = selectedGame.id) {
-    const game = games.find((candidate) => candidate.id === gameID);
+    const game = menuGames.find((candidate) => candidate.id === gameID);
     if (!game || game.disabled || !availableGames.has(engineGameID(game))) {
       captureMenuEvent("start_blocked", {
         engine_game: game ? engineGameID(game) : gameID,
@@ -1267,10 +1291,10 @@ export default function App() {
               aria-pressed={menu.category === category.id}
               onClick={() => {
                 if (gameActive) return;
-                const first = games.find((game) => game.category === category.id);
+                const first = menuGames.find((game) => game.category === category.id);
                 captureMenuEvent("category_selected", {
                   category: category.id,
-                  game_count: games.filter((game) => game.category === category.id).length,
+                  game_count: menuGames.filter((game) => game.category === category.id).length,
                   selected_game: first?.id,
                 });
                 setMenu((current) => {

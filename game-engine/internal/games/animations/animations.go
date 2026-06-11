@@ -16,14 +16,14 @@ import (
 )
 
 const (
-	GridWidth          = animation.GridWidth
-	GridHeight         = animation.GridHeight
-	tickDuration       = 50 * time.Millisecond
-	DefaultMusicRef    = "Motion/canciones/Background01.mp3"
-	DefaultMusicVolume = 0.10
-	DefaultCoinCueRef  = "Motion/sonidos/coin.wav"
+	GridWidth           = animation.GridWidth
+	GridHeight          = animation.GridHeight
+	tickDuration        = 50 * time.Millisecond
+	DefaultMusicRef     = "Motion/canciones/Background01.mp3"
+	DefaultMusicVolume  = 0.10
+	DefaultCoinCueRef   = "Motion/sonidos/coin.wav"
 	DefaultDamageCueRef = "Motion/sonidos/fallo.mp3"
-	DefaultWinCueRef   = "Motion/sonidos/victoria.mp3"
+	DefaultWinCueRef    = "Motion/sonidos/victoria.mp3"
 )
 
 type RGB = animation.RGB
@@ -53,14 +53,15 @@ type CompiledLevel struct {
 	frameTick     time.Duration
 	totalDuration time.Duration
 	frames        []compiledFrame
+	procedure     *compiledProcedure
 	tileEffects   map[int]compiledTileEffect
 	audio         AudioRefs
 }
 
-func (cl CompiledLevel) ID() string { return cl.id }
-func (cl CompiledLevel) Label() string { return cl.label }
-func (cl CompiledLevel) Description() string { return cl.description }
-func (cl CompiledLevel) MusicRef() string { return cl.audio.MusicRef }
+func (cl CompiledLevel) ID() string           { return cl.id }
+func (cl CompiledLevel) Label() string        { return cl.label }
+func (cl CompiledLevel) Description() string  { return cl.description }
+func (cl CompiledLevel) MusicRef() string     { return cl.audio.MusicRef }
 func (cl CompiledLevel) MusicVolume() float64 { return cl.audio.MusicVolume }
 
 type AudioRefs struct {
@@ -173,6 +174,17 @@ func (g *Game) Render(now time.Time) []RGB {
 }
 
 func (g *Game) colorAtLocked(pt Point, now time.Time) RGB {
+	if g.level.procedure != nil {
+		elapsed := g.elapsedLocked(now)
+		frameIndex := 0
+		if g.level.frameTick > 0 {
+			frameIndex = int(elapsed / g.level.frameTick)
+		}
+		color, err := g.level.procedure.colorAt(pt.X, pt.Y, timeSeconds(elapsed.Seconds()), frameIndex)
+		if err == nil {
+			return color
+		}
+	}
 	point := g.rawPointAtLocked(pt, now)
 	if !point.present {
 		return RGB{}
@@ -195,7 +207,7 @@ func (g *Game) frameAtLocked(now time.Time) *compiledFrame {
 	if len(g.level.frames) == 0 {
 		return nil
 	}
-	elapsed := now.Sub(g.startedAt)
+	elapsed := g.elapsedLocked(now)
 	if g.level.totalDuration > 0 {
 		elapsed %= g.level.totalDuration
 	}
@@ -207,6 +219,14 @@ func (g *Game) frameAtLocked(now time.Time) *compiledFrame {
 		elapsed -= frame.duration
 	}
 	return &g.level.frames[len(g.level.frames)-1]
+}
+
+func (g *Game) elapsedLocked(now time.Time) time.Duration {
+	elapsed := now.Sub(g.startedAt)
+	if elapsed < 0 {
+		return 0
+	}
+	return elapsed
 }
 
 func (g *Game) AudioRefs() AudioRefs {
@@ -238,7 +258,24 @@ type cloudLevel struct {
 	WinCueRef        string                `json:"win_cue_ref"`
 	TileEffects      map[string]TileEffect `json:"tile_effects"`
 	Frames           []rawFrame            `json:"frames"`
+	Rules            cloudRules            `json:"rules"`
 }
+
+type cloudRules struct {
+	AnimationSource animationSource `json:"animation_source"`
+}
+
+type animationSource struct {
+	Type                 string         `json:"type"`
+	Language             string         `json:"language"`
+	Code                 string         `json:"code"`
+	Params               map[string]any `json:"params"`
+	Seed                 float64        `json:"seed"`
+	LoopSeconds          float64        `json:"loop_seconds"`
+	ReferenceLoopSeconds float64        `json:"reference_loop_seconds"`
+}
+
+type animationProcedureSource = animationSource
 
 type TileEffect struct {
 	ID    string `json:"id"`
@@ -324,7 +361,7 @@ func GetOrFetchLevels(platformURL string) ([]CompiledLevel, error) {
 		return nil, err
 	}
 	cachedLevels = levels
-	cacheExpire = time.Now().Add(5 * time.Second)
+	cacheExpire = time.Now().Add(2 * time.Second)
 	return levels, nil
 }
 
@@ -403,7 +440,21 @@ func compileCloudLevels(raw []cloudLevel) ([]CompiledLevel, error) {
 			compiled.totalDuration += next.duration
 			compiled.frames = append(compiled.frames, next)
 		}
-		if len(compiled.frames) == 0 {
+		if isProcedureSource(level.Rules.AnimationSource) {
+			procedure, err := compileProcedureSource(animationProcedureSource(level.Rules.AnimationSource))
+			if err != nil {
+				if len(compiled.frames) == 0 {
+					return nil, fmt.Errorf("animation %s has invalid procedural source: %w", compiled.id, err)
+				}
+				log.Printf("animations: animation %s has invalid procedural source, using baked frames: %v", compiled.id, err)
+			} else {
+				compiled.procedure = procedure
+				if compiled.totalDuration <= 0 {
+					compiled.totalDuration = time.Duration(procedure.loopSeconds * float64(time.Second))
+				}
+			}
+		}
+		if len(compiled.frames) == 0 && compiled.procedure == nil {
 			return nil, fmt.Errorf("animation %s has no frames", compiled.id)
 		}
 		levels = append(levels, compiled)
@@ -412,6 +463,10 @@ func compileCloudLevels(raw []cloudLevel) ([]CompiledLevel, error) {
 		return nil, fmt.Errorf("no published animations returned")
 	}
 	return levels, nil
+}
+
+func isProcedureSource(source animationSource) bool {
+	return source.Type == "procedure" && source.Language == "motion-dsl-v1" && strings.TrimSpace(source.Code) != ""
 }
 
 func parseHexColor(hexStr string) RGB {
