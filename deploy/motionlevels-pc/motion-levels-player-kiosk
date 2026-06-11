@@ -13,9 +13,9 @@ fi
 if [ -n "${MOTION_LEVELS_XRANDR_MODE:-}" ]; then
   echo "Configuring display using xrandr..."
   # Detect connected output (usually HDMI-1, DP-1, etc.)
-  OUTPUT=$(xrandr --query | grep " connected" | cut -d' ' -f1 | head -n1)
+  OUTPUT=$(/usr/bin/xrandr --query | grep " connected" | cut -d' ' -f1 | head -n1)
   if [ -n "${OUTPUT}" ]; then
-    xrandr --output "${OUTPUT}" --mode "${MOTION_LEVELS_XRANDR_MODE}" --rate "${MOTION_LEVELS_XRANDR_RATE:-60}" || true
+    /usr/bin/xrandr --output "${OUTPUT}" --mode "${MOTION_LEVELS_XRANDR_MODE}" --rate "${MOTION_LEVELS_XRANDR_RATE:-60}" || true
   else
     echo "Warning: No connected display output found for xrandr."
   fi
@@ -26,8 +26,8 @@ USER_DATA_DIR="${MOTION_LEVELS_PLAYER_PROFILE:-/var/lib/motion-levels/rebuild-pl
 mkdir -p "${USER_DATA_DIR}"
 
 # 4. Hide mouse cursor if unclutter is available
-if command -v unclutter >/dev/null 2>&1; then
-  unclutter -idle 0.1 -root &
+if command -v /usr/bin/unclutter >/dev/null 2>&1; then
+  /usr/bin/unclutter -idle 0.1 -root &
 fi
 
 # 5. Build Chromium arguments
@@ -53,4 +53,4 @@ fi
 TARGET_URL="${MOTION_LEVELS_PLAYER_URL:-http://127.0.0.1/display/}"
 
 echo "Starting Chromium kiosk pointing to ${TARGET_URL}..."
-exec chromium "${CHROME_FLAGS[@]}" "${TARGET_URL}"
+exec /usr/bin/chromium "${CHROME_FLAGS[@]}" "${TARGET_URL}"

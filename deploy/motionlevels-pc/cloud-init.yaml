@@ -31,17 +31,17 @@ write_files:
 
       if [ -n "${MOTION_LEVELS_XRANDR_MODE:-}" ]; then
         echo "Configuring display using xrandr..."
-        OUTPUT=$(xrandr --query | grep " connected" | cut -d' ' -f1 | head -n1)
+        OUTPUT=$(/usr/bin/xrandr --query | grep " connected" | cut -d' ' -f1 | head -n1)
         if [ -n "${OUTPUT}" ]; then
-          xrandr --output "${OUTPUT}" --mode "${MOTION_LEVELS_XRANDR_MODE}" --rate "${MOTION_LEVELS_XRANDR_RATE:-60}" || true
+          /usr/bin/xrandr --output "${OUTPUT}" --mode "${MOTION_LEVELS_XRANDR_MODE}" --rate "${MOTION_LEVELS_XRANDR_RATE:-60}" || true
         fi
       fi
 
       USER_DATA_DIR="${MOTION_LEVELS_PLAYER_PROFILE:-/var/lib/motion-levels/rebuild-player-chromium}"
       mkdir -p "${USER_DATA_DIR}"
 
-      if command -v unclutter >/dev/null 2>&1; then
-        unclutter -idle 0.1 -root &
+      if command -v /usr/bin/unclutter >/dev/null 2>&1; then
+        /usr/bin/unclutter -idle 0.1 -root &
       fi
 
       CHROME_FLAGS=(
@@ -63,7 +63,7 @@ write_files:
 
       TARGET_URL="${MOTION_LEVELS_PLAYER_URL:-http://127.0.0.1/display/}"
       echo "Starting Chromium kiosk pointing to ${TARGET_URL}..."
-      exec chromium "${CHROME_FLAGS[@]}" "${TARGET_URL}"
+      exec /usr/bin/chromium "${CHROME_FLAGS[@]}" "${TARGET_URL}"
 
   # 2. Default runtime environment file
   - path: /etc/motion-levels/motion-levels.env
@@ -146,6 +146,14 @@ write_files:
       	redir /status /engine/api/status
       	redir / /menu/
       }
+
+  # 3a. Xwrapper configuration to allow xinit/Xorg running from systemd service
+  - path: /etc/X11/Xwrapper.config
+    owner: root:root
+    permissions: '0644'
+    content: |
+      allowed_users=anybody
+      needs_root_rights=yes
 
   # 4. Systemd unit: floor-controller
   - path: /etc/systemd/system/motion-levels-floor-controller.service

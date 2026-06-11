@@ -1,14 +1,3 @@
-export function LogoIcon() {
-  return (
-    <svg viewBox="0 0 64 64" aria-hidden="true">
-      <path d="M32 5 58 19.5 32 34 6 19.5Z" fill="currentColor" />
-      <path d="M6 20 32 34v25L6 45Z" fill="currentColor" opacity=".56" />
-      <path d="M58 20 32 34v25l26-14Z" fill="currentColor" opacity=".36" />
-      <path d="M32 16 42 21.5 32 27 22 21.5Z" fill="#031017" opacity=".82" />
-    </svg>
-  );
-}
-
 export function PlusIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">

@@ -45,7 +45,7 @@ type tilePoint struct {
 	kind    int
 }
 
-type compiledLevel struct {
+type CompiledLevel struct {
 	id            string
 	settingsHash  string
 	label         string
@@ -56,6 +56,12 @@ type compiledLevel struct {
 	tileEffects   map[int]compiledTileEffect
 	audio         AudioRefs
 }
+
+func (cl CompiledLevel) ID() string { return cl.id }
+func (cl CompiledLevel) Label() string { return cl.label }
+func (cl CompiledLevel) Description() string { return cl.description }
+func (cl CompiledLevel) MusicRef() string { return cl.audio.MusicRef }
+func (cl CompiledLevel) MusicVolume() float64 { return cl.audio.MusicVolume }
 
 type AudioRefs struct {
 	MusicRef         string
@@ -69,7 +75,7 @@ type AudioRefs struct {
 type Game struct {
 	mu sync.Mutex
 
-	level     compiledLevel
+	level     CompiledLevel
 	startedAt time.Time
 	pressed   map[Point]bool
 }
@@ -87,7 +93,7 @@ func NewWithSeed(now time.Time, seed int64, playerCount int, difficulty string, 
 	_ = seed
 	_ = playerCount
 	_ = difficulty
-	levels, err := fetchLevels(platformURL)
+	levels, err := GetOrFetchLevels(platformURL)
 	if err != nil {
 		log.Printf("animations: cloud animation fetch failed: %v", err)
 		levels = fallbackCompiledLevels()
@@ -281,7 +287,48 @@ func NormalizeLevel(value string) string {
 	return value
 }
 
-func fetchLevels(platformURL string) ([]compiledLevel, error) {
+func GetLabel(id string) string {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	for _, cl := range cachedLevels {
+		if cl.id == id {
+			return cl.label
+		}
+	}
+	parts := strings.Split(id, "-")
+	for i, part := range parts {
+		if len(part) > 0 {
+			parts[i] = strings.ToUpper(part[0:1]) + part[1:]
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+var (
+	cacheMu      sync.Mutex
+	cachedLevels []CompiledLevel
+	cacheExpire  time.Time
+)
+
+func GetOrFetchLevels(platformURL string) ([]CompiledLevel, error) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	if time.Now().Before(cacheExpire) && len(cachedLevels) > 0 {
+		return cachedLevels, nil
+	}
+	levels, err := fetchLevels(platformURL)
+	if err != nil {
+		if len(cachedLevels) > 0 {
+			return cachedLevels, nil
+		}
+		return nil, err
+	}
+	cachedLevels = levels
+	cacheExpire = time.Now().Add(5 * time.Second)
+	return levels, nil
+}
+
+func fetchLevels(platformURL string) ([]CompiledLevel, error) {
 	base := strings.TrimRight(strings.TrimSpace(platformURL), "/")
 	if base == "" {
 		return nil, fmt.Errorf("platform URL is empty")
@@ -306,8 +353,8 @@ func fetchLevels(platformURL string) ([]compiledLevel, error) {
 	return compileCloudLevels(payload.Levels)
 }
 
-func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
-	levels := make([]compiledLevel, 0, len(raw))
+func compileCloudLevels(raw []cloudLevel) ([]CompiledLevel, error) {
+	levels := make([]CompiledLevel, 0, len(raw))
 	for index, level := range raw {
 		id := level.Slug
 		if strings.TrimSpace(id) == "" {
@@ -317,7 +364,7 @@ func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
 		if frameTick <= 0 {
 			frameTick = tickDuration
 		}
-		compiled := compiledLevel{
+		compiled := CompiledLevel{
 			id:           NormalizeLevel(id),
 			settingsHash: strings.TrimSpace(level.SettingsHash),
 			label:        level.Label,
@@ -418,7 +465,7 @@ func normalizeAudioRefs(level cloudLevel) AudioRefs {
 	return audio
 }
 
-func selectLevel(levels []compiledLevel, id string) compiledLevel {
+func selectLevel(levels []CompiledLevel, id string) CompiledLevel {
 	for _, candidate := range levels {
 		if candidate.id == id {
 			return candidate
@@ -427,9 +474,9 @@ func selectLevel(levels []compiledLevel, id string) compiledLevel {
 	return levels[0]
 }
 
-func fallbackCompiledLevels() []compiledLevel {
+func fallbackCompiledLevels() []CompiledLevel {
 	// Fallback to simple rainbow-ish moving pattern
-	compiled := compiledLevel{
+	compiled := CompiledLevel{
 		id:          "arcoiris",
 		label:       "Arcoíris (Respaldo)",
 		description: "Respaldo local cuando la plataforma no está disponible.",
@@ -461,7 +508,7 @@ func fallbackCompiledLevels() []compiledLevel {
 		compiled.frames = append(compiled.frames, next)
 	}
 
-	return []compiledLevel{compiled}
+	return []CompiledLevel{compiled}
 }
 
 func inBounds(x, y int) bool {

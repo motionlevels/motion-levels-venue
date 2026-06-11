@@ -10,6 +10,8 @@ import (
 	"os"
 	"time"
 
+	"strings"
+
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
 	"github.com/lobis/motion-levels/game-engine/internal/games/parkour"
@@ -433,6 +435,9 @@ func clamp01(value float64) float64 {
 }
 
 func normalizeGame(value string) string {
+	if strings.HasPrefix(value, "animation-") {
+		return value
+	}
 	switch value {
 	case "whack-a-mole", "whackamole", "mole":
 		return "whack-a-mole"

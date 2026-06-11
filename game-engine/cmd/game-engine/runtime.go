@@ -789,7 +789,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 
 func (r *gameRuntime) Status() runtimeStatus {
 	if r == nil {
-		return runtimeStatus{Catalog: gameCatalog()}
+		return runtimeStatus{Catalog: gameCatalog("")}
 	}
 	now := time.Now()
 	r.enforceNoPressureTimeout(now)
@@ -846,7 +846,7 @@ func (r *gameRuntime) Status() runtimeStatus {
 		RNGSeed:                  rngSeed,
 		Recorder:                 recorderStats,
 		FinishedLevelAttempts:    recentAttempts,
-		Catalog:                  gameCatalog(),
+		Catalog:                  gameCatalog(cfg.PlatformURL),
 	}
 }
 
@@ -970,7 +970,7 @@ func applyPlataformasAudioConfig(cfg config, game floorGame) config {
 		if refs.WinCueRef != "" {
 			cfg.WinCueRef = refs.WinCueRef
 		}
-	} else if cfg.Game == "animations" {
+	} else if cfg.Game == "animations" || strings.HasPrefix(cfg.Game, "animation-") {
 		provider, ok := game.(interface {
 			AudioRefs() animations.AudioRefs
 		})
@@ -1598,6 +1598,10 @@ func newSessionID(now time.Time) string {
 }
 
 func makeGame(cfg config, seed int64, now time.Time) floorGame {
+	if strings.HasPrefix(cfg.Game, "animation-") {
+		cfg.Level = strings.TrimPrefix(cfg.Game, "animation-")
+		cfg.Game = "animations"
+	}
 	switch cfg.Game {
 	case "whack-a-mole":
 		log.Printf("game: whack-a-mole players=%d", cfg.PlayerCount)
@@ -1877,8 +1881,8 @@ func defaultNarrationRef(game string) string {
 	}
 }
 
-func gameCatalog() []gameCatalogEntry {
-	return []gameCatalogEntry{
+func gameCatalog(platformURL string) []gameCatalogEntry {
+	entries := []gameCatalogEntry{
 		{
 			Game:        "whack-a-mole",
 			Label:       "Atrapa al topo",
@@ -2040,6 +2044,27 @@ func gameCatalog() []gameCatalogEntry {
 			Volume:      0.10,
 		},
 	}
+
+	if platformURL != "" {
+		levels, err := animations.GetOrFetchLevels(platformURL)
+		if err == nil {
+			for _, level := range levels {
+				entries = append(entries, gameCatalogEntry{
+					Game:        "animation-" + level.ID(),
+					Label:       level.Label(),
+					Description: level.Description(),
+					Music:       level.MusicRef(),
+					Players:     false,
+					MinPlayers:  1,
+					MaxPlayers:  1,
+					Difficulty:  false,
+					Volume:      level.MusicVolume(),
+				})
+			}
+		}
+	}
+
+	return entries
 }
 
 func saltosCatalogLevels() []gameLevelEntry {
@@ -2121,7 +2146,10 @@ func patronesCatalogLevels() []gameLevelEntry {
 }
 
 func gameLabel(game string) string {
-	for _, entry := range gameCatalog() {
+	if strings.HasPrefix(game, "animation-") {
+		return animations.GetLabel(strings.TrimPrefix(game, "animation-"))
+	}
+	for _, entry := range gameCatalog("") {
 		if entry.Game == game {
 			return entry.Label
 		}
