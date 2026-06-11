@@ -505,7 +505,7 @@ export const defaultFloorAnim = loop;
 
 export const floorAnimations: Record<string, FloorAnim> = {
   "whack-a-mole": whackAMole,
-  loop,
+  animations: loop,
   "ambient-comet": ambientComet,
   "ambient-pulse": ambientPulse,
   "ambient-spark": ambientSpark,

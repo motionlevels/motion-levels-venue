@@ -22,6 +22,7 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/games/saltos"
 	"github.com/lobis/motion-levels/game-engine/internal/games/temporada1"
 	"github.com/lobis/motion-levels/game-engine/internal/games/temporada2"
+	"github.com/lobis/motion-levels/game-engine/internal/games/animations"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
 	"github.com/lobis/motion-levels/packages/contracts/gamepb"
@@ -334,7 +335,7 @@ func (r *gameRuntime) ControlGame(action string) {
 	case "toggle_mute":
 		r.setAudioMutedLocked(!r.audioMuted, now)
 	case "exit":
-		r.applyLocked(configForSelection(r.base, "loop", 1), true)
+		r.applyLocked(configForSelection(r.base, "animations", 1), true)
 	default:
 		return
 	}
@@ -410,9 +411,9 @@ func (r *gameRuntime) HandlePressure(event *inputpb.PressureEvent, fallbackStart
 func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 	if r == nil {
 		return displayStatus{
-			CurrentGame:    "loop",
+			CurrentGame:    "animations",
 			VenueSessionID: "",
-			Label:          gameLabel("loop"),
+			Label:          gameLabel("animations"),
 			Phase:          "idle",
 			Lives:          -1,
 		}
@@ -947,29 +948,52 @@ func (r *gameRuntime) applyLockedWithNarrationReason(cfg config, playAudio bool,
 }
 
 func applyPlataformasAudioConfig(cfg config, game floorGame) config {
-	if cfg.Game != "plataformas" {
-		return cfg
-	}
-	provider, ok := game.(plataformasAudioProvider)
-	if !ok {
-		return cfg
-	}
-	refs := provider.AudioRefs()
-	if refs.MusicRef != "" {
-		cfg.MusicRef = refs.MusicRef
-		cfg.MusicVolume = clamp01(refs.MusicVolume)
-	}
-	if refs.CoinCueRef != "" {
-		cfg.CoinCueRef = refs.CoinCueRef
-	}
-	if refs.DoubleCoinCueRef != "" {
-		cfg.DoubleCoinCueRef = refs.DoubleCoinCueRef
-	}
-	if refs.DamageCueRef != "" {
-		cfg.DamageCueRef = refs.DamageCueRef
-	}
-	if refs.WinCueRef != "" {
-		cfg.WinCueRef = refs.WinCueRef
+	if cfg.Game == "plataformas" {
+		provider, ok := game.(plataformasAudioProvider)
+		if !ok {
+			return cfg
+		}
+		refs := provider.AudioRefs()
+		if refs.MusicRef != "" {
+			cfg.MusicRef = refs.MusicRef
+			cfg.MusicVolume = clamp01(refs.MusicVolume)
+		}
+		if refs.CoinCueRef != "" {
+			cfg.CoinCueRef = refs.CoinCueRef
+		}
+		if refs.DoubleCoinCueRef != "" {
+			cfg.DoubleCoinCueRef = refs.DoubleCoinCueRef
+		}
+		if refs.DamageCueRef != "" {
+			cfg.DamageCueRef = refs.DamageCueRef
+		}
+		if refs.WinCueRef != "" {
+			cfg.WinCueRef = refs.WinCueRef
+		}
+	} else if cfg.Game == "animations" {
+		provider, ok := game.(interface {
+			AudioRefs() animations.AudioRefs
+		})
+		if !ok {
+			return cfg
+		}
+		refs := provider.AudioRefs()
+		if refs.MusicRef != "" {
+			cfg.MusicRef = refs.MusicRef
+			cfg.MusicVolume = clamp01(refs.MusicVolume)
+		}
+		if refs.CoinCueRef != "" {
+			cfg.CoinCueRef = refs.CoinCueRef
+		}
+		if refs.DoubleCoinCueRef != "" {
+			cfg.DoubleCoinCueRef = refs.DoubleCoinCueRef
+		}
+		if refs.DamageCueRef != "" {
+			cfg.DamageCueRef = refs.DamageCueRef
+		}
+		if refs.WinCueRef != "" {
+			cfg.WinCueRef = refs.WinCueRef
+		}
 	}
 	if cfg.DoubleCoinCueRef == "" {
 		cfg.DoubleCoinCueRef = cfg.CoinCueRef
@@ -1017,7 +1041,7 @@ func (r *gameRuntime) enforceNoPressureTimeoutLocked(now time.Time) {
 		return
 	}
 	log.Printf("game no-pressure timeout: game=%s idle=%s", r.current.Game, now.Sub(r.lastPressure).Round(time.Second))
-	r.applyLockedWithNarrationReason(configForSelection(r.base, "loop", 1), true, narrationAuto, "no pressure timeout")
+	r.applyLockedWithNarrationReason(configForSelection(r.base, "animations", 1), true, narrationAuto, "no pressure timeout")
 }
 
 func (r *gameRuntime) recordEvent(cue, message string, now time.Time) {
@@ -1590,6 +1614,9 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 	case "plataformas":
 		log.Printf("game: plataformas players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 		return plataformas.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL)
+	case "animations":
+		log.Printf("game: animations players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
+		return animations.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL)
 	case "temporada1":
 		log.Printf("game: temporada1 players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 		return temporada1.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level)
@@ -1969,9 +1996,9 @@ func gameCatalog() []gameCatalogEntry {
 			Levels:      patronesCatalogLevels(),
 		},
 		{
-			Game:        "loop",
-			Label:       "Arcoíris",
-			Description: "The simple full-floor looping color animation.",
+			Game:        "animations",
+			Label:       "Animaciones",
+			Description: "Modo reposo para reproducir animaciones y efectos desde la nube.",
 			Music:       loopMusicRef,
 			Players:     false,
 			MinPlayers:  1,

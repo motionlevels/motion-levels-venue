@@ -720,8 +720,8 @@ func TestGameAPIControlPauseRestartAndExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = response.Body.Close()
-	if runtime.Status().CurrentGame != "loop" {
-		t.Fatalf("exit game = %q, want loop", runtime.Status().CurrentGame)
+	if runtime.Status().CurrentGame != "animations" {
+		t.Fatalf("exit game = %q, want animations", runtime.Status().CurrentGame)
 	}
 }
 
@@ -733,8 +733,8 @@ func TestRuntimeStopsNonAmbientGameAfterFiveMinutesWithoutPressure(t *testing.T)
 	runtime.mu.Unlock()
 
 	status := runtime.Status()
-	if status.CurrentGame != "loop" {
-		t.Fatalf("game after no-pressure timeout = %q, want loop", status.CurrentGame)
+	if status.CurrentGame != "animations" {
+		t.Fatalf("game after no-pressure timeout = %q, want animations", status.CurrentGame)
 	}
 }
 

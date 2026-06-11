@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { controlGame, fetchEngineStatus, postMenuEvent, postVenueSession, selectGame, type EngineStatus } from "./api";
 import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
-import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, LogoIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
+import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
 import { defaultFloorAnim, floorAnimations } from "./floor";
@@ -98,7 +98,7 @@ function isAmbientCard(game: GameCard): boolean {
 }
 
 function animationIsIdleLoop(currentGame: string, phase: string): boolean {
-  return currentGame === "loop" && (phase === "idle" || phase === "ambient");
+  return currentGame === "animations" && (phase === "idle" || phase === "ambient");
 }
 
 function gameForEngineStatus(engineGame: string, currentMenuGameID: string): GameCard | undefined {
@@ -1251,9 +1251,7 @@ export default function App() {
     <main className={`app ${connectionState} ${keyboardTarget ? `keyboard-open keyboard-${keyboardTarget.kind}` : ""} ${screenMode === "game" ? "playing" : ""}`}>
       <header className="topbar">
         <div className="brand">
-          <button className="brand-mark" type="button" aria-label="Entrar en pantalla completa" onClick={enterBrowserFullscreen}>
-            <LogoIcon />
-          </button>
+          <button className="brand-mark" type="button" aria-label="Entrar en pantalla completa" onClick={enterBrowserFullscreen} />
           <div className="brand-copy">
             <b>Motion Levels</b>
             <span>Quiosco</span>
@@ -1706,9 +1704,7 @@ function WelcomeScreen({
     <main className={`app welcome-app ${connectionState}`}>
       <section className="welcome-screen" aria-label="Inicio">
         <div className="welcome-copy">
-          <button className="welcome-mark" type="button" aria-label="Entrar en pantalla completa" onClick={onFullscreen}>
-            <LogoIcon />
-          </button>
+          <button className="welcome-mark" type="button" aria-label="Entrar en pantalla completa" onClick={onFullscreen} />
           <h1>Motion Levels</h1>
           <p>Preparad el equipo, elegid un reto y jugad sobre el suelo LED.</p>
         </div>

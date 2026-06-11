@@ -1,0 +1,361 @@
+#cloud-config
+# Motion Levels Venue Appliance provisioning configuration for Debian 13 (Trixie)
+#
+# Instructions:
+# 1. Replace YOUR_TAILSCALE_AUTH_KEY with a valid Tailscale auth key
+#    (pre-authorized, ephemeral/non-ephemeral, and tagged with tag:motionlevels-venue).
+# 2. Add your ssh public keys under the ssh_authorized_keys section of the default user.
+# 3. Boot your VM/server with this user-data config.
+
+users:
+  - default
+    # If using a specific user, you can also inject SSH authorized keys here:
+    # ssh_authorized_keys:
+    #   - ssh-rsa AAAA...
+
+# Write configuration files and helper scripts before packages are installed
+write_files:
+  # 1. Kiosk display launcher script
+  - path: /usr/local/bin/motion-levels-player-kiosk
+    owner: root:root
+    permissions: '0755'
+    content: |
+      #!/usr/bin/env bash
+      # Motion Levels Kiosk Launcher
+      set -euo pipefail
+
+      if [ -f /etc/motion-levels/motion-levels.env ]; then
+        # shellcheck disable=SC1090
+        source /etc/motion-levels/motion-levels.env
+      fi
+
+      if [ -n "${MOTION_LEVELS_XRANDR_MODE:-}" ]; then
+        echo "Configuring display using xrandr..."
+        OUTPUT=$(xrandr --query | grep " connected" | cut -d' ' -f1 | head -n1)
+        if [ -n "${OUTPUT}" ]; then
+          xrandr --output "${OUTPUT}" --mode "${MOTION_LEVELS_XRANDR_MODE}" --rate "${MOTION_LEVELS_XRANDR_RATE:-60}" || true
+        fi
+      fi
+
+      USER_DATA_DIR="${MOTION_LEVELS_PLAYER_PROFILE:-/var/lib/motion-levels/rebuild-player-chromium}"
+      mkdir -p "${USER_DATA_DIR}"
+
+      if command -v unclutter >/dev/null 2>&1; then
+        unclutter -idle 0.1 -root &
+      fi
+
+      CHROME_FLAGS=(
+        --kiosk
+        --no-first-run
+        --new-window
+        --user-data-dir="${USER_DATA_DIR}"
+        --noerrdialogs
+        --disable-infobars
+        --disable-session-crashed-bubble
+        --disable-features=Translate
+        --check-for-update-interval=31536000
+        --autoplay-policy=no-user-gesture-required
+      )
+
+      if [ "$(id -u)" -eq 0 ]; then
+        CHROME_FLAGS+=( --no-sandbox )
+      fi
+
+      TARGET_URL="${MOTION_LEVELS_PLAYER_URL:-http://127.0.0.1/display/}"
+      echo "Starting Chromium kiosk pointing to ${TARGET_URL}..."
+      exec chromium "${CHROME_FLAGS[@]}" "${TARGET_URL}"
+
+  # 2. Default runtime environment file
+  - path: /etc/motion-levels/motion-levels.env
+    owner: root:root
+    permissions: '0644'
+    content: |
+      # Motion Levels local appliance defaults.
+      MOTION_LEVELS_CONTROLLER_HTTP=127.0.0.1:4101
+      MOTION_LEVELS_ENGINE_HTTP=127.0.0.1:4102
+      MOTION_LEVELS_PLAYER_MENU_HTTP=127.0.0.1:4103
+      MOTION_LEVELS_PLAYER_MENU_HOST=127.0.0.1
+      MOTION_LEVELS_PLAYER_MENU_PORT=4103
+      MOTION_LEVELS_PLAYER_DISPLAY_HTTP=127.0.0.1:4104
+      MOTION_LEVELS_PLAYER_DISPLAY_HOST=127.0.0.1
+      MOTION_LEVELS_PLAYER_DISPLAY_PORT=4104
+
+      MOTION_LEVELS_CONTROLLER_FRAMES=127.0.0.1:4201
+      MOTION_LEVELS_CONTROLLER_INPUT_EVENTS=127.0.0.1:4202
+
+      MOTION_LEVELS_FLOOR_RECV_PORT=7800
+      MOTION_LEVELS_LED_BROADCAST_IP=255.255.255.255
+      MOTION_LEVELS_LED_BROADCAST_PORT=4626
+
+      MOTION_LEVELS_PLATFORM_URL=https://platform.motionlevels.obis.dev
+      MOTION_LEVELS_CONTROLLER_LABEL=Venue Floor 1
+      MOTION_LEVELS_CONTROLLER_HOSTNAME=motionlevels-1
+      MOTION_LEVELS_RECORDING_UPLOAD_PLATFORM_URL=https://platform.motionlevels.obis.dev
+      MOTION_LEVELS_LIVE_PUSH_PLATFORM_URL=https://platform.motionlevels.obis.dev
+      MOTION_LEVELS_LIVE_PUSH_FPS=5
+      MOTION_LEVELS_LIVE_PUSH_TIMEOUT=10s
+
+      MOTION_LEVELS_REFRESH_FPS=30
+      MOTION_LEVELS_ENGINE_FPS=20
+      MOTION_LEVELS_ENGINE_BRIGHTNESS=80
+      MOTION_LEVELS_DISPLAY_SNAPSHOT_FPS=4
+
+      MOTION_LEVELS_PLAYER_URL=http://127.0.0.1/display/
+      MOTION_LEVELS_PLAYER_PROFILE=/var/lib/motion-levels/rebuild-player-chromium
+      MOTION_LEVELS_PLAYER_WINDOW_SIZE=auto
+      MOTION_LEVELS_HDMI_ALSA_DEVICE=plughw:0,5
+      MOTION_LEVELS_XRANDR_MODE=1920x1080
+      MOTION_LEVELS_XRANDR_RATE=60
+      MOTION_LEVELS_FORCE_ALSA_OUTPUT=1
+
+  # 3. Default Caddy reverse proxy config
+  - path: /etc/caddy/Caddyfile
+    owner: root:root
+    permissions: '0644'
+    content: |
+      :80 {
+      	encode zstd gzip
+
+      	handle_path /controller/* {
+      		reverse_proxy 127.0.0.1:4101
+      	}
+
+      	handle /controller {
+      		rewrite * /
+      		reverse_proxy 127.0.0.1:4101
+      	}
+
+      	handle /ws {
+      		reverse_proxy 127.0.0.1:4101
+      	}
+
+      	handle_path /engine/* {
+      		reverse_proxy 127.0.0.1:4102
+      	}
+
+      	redir /menu /menu/
+      	handle_path /menu/* {
+      		reverse_proxy 127.0.0.1:4103
+      	}
+
+      	redir /display /display/
+      	handle_path /display/* {
+      		reverse_proxy 127.0.0.1:4104
+      	}
+
+      	redir /status /engine/api/status
+      	redir / /menu/
+      }
+
+  # 4. Systemd unit: floor-controller
+  - path: /etc/systemd/system/motion-levels-floor-controller.service
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Motion Levels floor controller
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      WorkingDirectory=/opt/motion-levels/rebuild
+      EnvironmentFile=/etc/motion-levels/motion-levels.env
+      EnvironmentFile=-/etc/motion-levels/platform.env
+      ExecStart=/opt/motion-levels/rebuild/bin/floor-controller \
+        -http ${MOTION_LEVELS_CONTROLLER_HTTP} \
+        -frames ${MOTION_LEVELS_CONTROLLER_FRAMES} \
+        -input-events ${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS} \
+        -recv-port ${MOTION_LEVELS_FLOOR_RECV_PORT} \
+        -broadcast-ip ${MOTION_LEVELS_LED_BROADCAST_IP} \
+        -broadcast-port ${MOTION_LEVELS_LED_BROADCAST_PORT} \
+        -controller-id-file /opt/motion-levels/rebuild/var/floor-controller/controller-id \
+        -record-frames /opt/motion-levels/rebuild/var/floor-controller/recordings \
+        -record-compression none \
+        -record-post-compression zstd \
+        -record-segment-bytes 268435456 \
+        -record-segment-duration 10m \
+        -record-delete-raw-after 1h \
+        -record-max-pending-raw-bytes 4294967296 \
+        -record-upload-platform-url ${MOTION_LEVELS_RECORDING_UPLOAD_PLATFORM_URL} \
+        -record-upload-queue-size 256 \
+        -record-upload-timeout 5m \
+        -zstd-path /usr/bin/zstd \
+        -refresh-fps ${MOTION_LEVELS_REFRESH_FPS} \
+        -engine-fade-delay 2s \
+        -engine-fade-duration 3s
+      Restart=always
+      RestartSec=2
+      Nice=-5
+      CPUWeight=1000
+      LimitNOFILE=65536
+      Environment=GOMAXPROCS=2
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # 5. Systemd unit: game-engine
+  - path: /etc/systemd/system/motion-levels-game-engine.service
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Motion Levels game engine
+      After=network-online.target sound.target motion-levels-floor-controller.service
+      Wants=network-online.target sound.target motion-levels-floor-controller.service
+
+      [Service]
+      Type=simple
+      WorkingDirectory=/opt/motion-levels/rebuild
+      EnvironmentFile=/etc/motion-levels/motion-levels.env
+      EnvironmentFile=-/etc/motion-levels/platform.env
+      ExecStart=/opt/motion-levels/rebuild/bin/game-engine \
+        -http ${MOTION_LEVELS_ENGINE_HTTP} \
+        -controller ${MOTION_LEVELS_CONTROLLER_FRAMES} \
+        -pressure-events ${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS} \
+        -game loop \
+        -fps ${MOTION_LEVELS_ENGINE_FPS} \
+        -brightness ${MOTION_LEVELS_ENGINE_BRIGHTNESS} \
+        -audio=true \
+        -audio-player aplay-raw \
+        -audio-assets /opt/motion-levels/rebuild/content/audio \
+        -record-replay /opt/motion-levels/rebuild/var/game-engine/replays \
+        -replay-keyframe-interval 5s \
+        -replay-zstd-path /usr/bin/zstd \
+        -display-snapshot-fps ${MOTION_LEVELS_DISPLAY_SNAPSHOT_FPS} \
+        -platform-url ${MOTION_LEVELS_PLATFORM_URL} \
+        -platform-sync-interval 1s \
+        -controller-label "${MOTION_LEVELS_CONTROLLER_LABEL}" \
+        -controller-hostname ${MOTION_LEVELS_CONTROLLER_HOSTNAME} \
+        -controller-id-file /opt/motion-levels/rebuild/var/floor-controller/controller-id
+      Restart=always
+      RestartSec=2
+      Environment=GOMAXPROCS=2
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # 6. Systemd unit: player-menu
+  - path: /etc/systemd/system/motion-levels-player-menu.service
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Motion Levels player menu web app
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      EnvironmentFile=/etc/motion-levels/motion-levels.env
+      WorkingDirectory=/opt/motion-levels/rebuild/apps/player-menu/dist
+      ExecStart=/usr/bin/python3 -m http.server ${MOTION_LEVELS_PLAYER_MENU_PORT} --bind ${MOTION_LEVELS_PLAYER_MENU_HOST} --directory /opt/motion-levels/rebuild/apps/player-menu/dist
+      Restart=always
+      RestartSec=2
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # 7. Systemd unit: player-display
+  - path: /etc/systemd/system/motion-levels-player-display.service
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Motion Levels player display web app
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      EnvironmentFile=/etc/motion-levels/motion-levels.env
+      WorkingDirectory=/opt/motion-levels/rebuild/apps/player-display/dist
+      ExecStart=/usr/bin/python3 -m http.server ${MOTION_LEVELS_PLAYER_DISPLAY_PORT} --bind ${MOTION_LEVELS_PLAYER_DISPLAY_HOST} --directory /opt/motion-levels/rebuild/apps/player-display/dist
+      Restart=always
+      RestartSec=2
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # 8. Systemd unit: kiosk
+  - path: /etc/systemd/system/motion-levels-kiosk.service
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Motion Levels HDMI kiosk browser
+      After=network-online.target sound.target caddy.service motion-levels-player-display.service motion-levels-game-engine.service
+      Wants=network-online.target sound.target caddy.service motion-levels-player-display.service motion-levels-game-engine.service
+      Conflicts=getty@tty7.service display-manager.service
+      
+      [Service]
+      Type=simple
+      EnvironmentFile=/etc/motion-levels/motion-levels.env
+      Environment=DISPLAY=:0
+      Environment=XDG_RUNTIME_DIR=/run/user/0
+      WorkingDirectory=/var/lib/motion-levels
+      ExecStart=/usr/bin/xinit /usr/local/bin/motion-levels-player-kiosk -- :0 vt7 -nolisten tcp -s 0 -dpms
+      Restart=always
+      RestartSec=3
+
+      [Install]
+      WantedBy=multi-user.target
+
+# Shell commands executed sequentially during the boot setup phase
+runcmd:
+  # 1. Update package database and install prerequisites
+  - apt-get update
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y curl gpg ca-certificates apt-transport-https
+
+  # 2. Add Caddy official repository
+  - curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  - curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+
+  # 3. Add Tailscale and install it using the official script
+  - curl -fsSL https://tailscale.com/install.sh | sh
+
+  # 4. Install all runtime, build, and display/kiosk packages
+  - apt-get update
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y caddy build-essential pkg-config libasound2-dev zstd git rsync python3 xinit xserver-xorg x11-xserver-utils chromium unclutter alsa-utils
+
+  # 5. Download and install Go compiler (required to build Go programs during deploy)
+  - |
+    GO_VERSION="1.26.3"
+    ARCH=$(uname -m)
+    case "$ARCH" in
+      x86_64|amd64) GO_ARCH=amd64 ;;
+      aarch64|arm64) GO_ARCH=arm64 ;;
+      *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
+    esac
+    TMP_DIR=$(mktemp -d)
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz" -o "${TMP_DIR}/go.tar.gz"
+    rm -rf /usr/local/go
+    tar -C /usr/local -xzf "${TMP_DIR}/go.tar.gz"
+    rm -rf "${TMP_DIR}"
+
+  # 6. Create required appliance deployment directories
+  - mkdir -p /opt/motion-levels/rebuild/src
+  - mkdir -p /opt/motion-levels/rebuild/bin
+  - mkdir -p /opt/motion-levels/rebuild/apps/player-menu
+  - mkdir -p /opt/motion-levels/rebuild/apps/player-display
+  - mkdir -p /opt/motion-levels/rebuild/var/floor-controller/recordings
+  - mkdir -p /opt/motion-levels/rebuild/var/game-engine/replays
+  - mkdir -p /var/lib/motion-levels
+
+  # 7. Start Tailscale auto-registration
+  # NOTE: Replace 'YOUR_TAILSCALE_AUTH_KEY' below with your actual tailnet auth key
+  - |
+    TAILSCALE_AUTHKEY="YOUR_TAILSCALE_AUTH_KEY"
+    if [ "${TAILSCALE_AUTHKEY}" != "YOUR_TAILSCALE_AUTH_KEY" ] && [ -n "${TAILSCALE_AUTHKEY}" ]; then
+      echo "Registering machine with Tailscale..."
+      tailscale up --authkey="${TAILSCALE_AUTHKEY}" --advertise-tags=tag:motionlevels-venue --ssh --accept-dns=false
+    else
+      echo "WARNING: Tailscale auth key was not set or remains at placeholder value."
+      echo "You will need to manually authenticate using: tailscale up --authkey <key> --advertise-tags tag:motionlevels-venue --ssh --accept-dns=false"
+    fi
+
+  # 8. Reload systemd daemon to recognize newly written services
+  - systemctl daemon-reload
+  
+  # 9. Enable Caddy web server (will start up and reload Caddyfile)
+  - systemctl enable --now caddy

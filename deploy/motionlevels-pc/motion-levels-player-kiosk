@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Motion Levels Kiosk Launcher
+# Configures the display and launches the Chromium player kiosk under xinit.
+set -euo pipefail
+
+# 1. Source environment variables if present
+if [ -f /etc/motion-levels/motion-levels.env ]; then
+  # shellcheck disable=SC1090
+  source /etc/motion-levels/motion-levels.env
+fi
+
+# 2. Configure screen mode/rate if specified
+if [ -n "${MOTION_LEVELS_XRANDR_MODE:-}" ]; then
+  echo "Configuring display using xrandr..."
+  # Detect connected output (usually HDMI-1, DP-1, etc.)
+  OUTPUT=$(xrandr --query | grep " connected" | cut -d' ' -f1 | head -n1)
+  if [ -n "${OUTPUT}" ]; then
+    xrandr --output "${OUTPUT}" --mode "${MOTION_LEVELS_XRANDR_MODE}" --rate "${MOTION_LEVELS_XRANDR_RATE:-60}" || true
+  else
+    echo "Warning: No connected display output found for xrandr."
+  fi
+fi
+
+# 3. Ensure player user data directory exists
+USER_DATA_DIR="${MOTION_LEVELS_PLAYER_PROFILE:-/var/lib/motion-levels/rebuild-player-chromium}"
+mkdir -p "${USER_DATA_DIR}"
+
+# 4. Hide mouse cursor if unclutter is available
+if command -v unclutter >/dev/null 2>&1; then
+  unclutter -idle 0.1 -root &
+fi
+
+# 5. Build Chromium arguments
+CHROME_FLAGS=(
+  --kiosk
+  --no-first-run
+  --new-window
+  --user-data-dir="${USER_DATA_DIR}"
+  --noerrdialogs
+  --disable-infobars
+  --disable-session-crashed-bubble
+  --disable-features=Translate
+  --check-for-update-interval=31536000
+  --autoplay-policy=no-user-gesture-required
+)
+
+# Chromium won't run as root without --no-sandbox
+if [ "$(id -u)" -eq 0 ]; then
+  CHROME_FLAGS+=( --no-sandbox )
+fi
+
+# Determine target URL
+TARGET_URL="${MOTION_LEVELS_PLAYER_URL:-http://127.0.0.1/display/}"
+
+echo "Starting Chromium kiosk pointing to ${TARGET_URL}..."
+exec chromium "${CHROME_FLAGS[@]}" "${TARGET_URL}"

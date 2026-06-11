@@ -40,6 +40,7 @@ if [ ! -f /etc/motion-levels/motion-levels.env ]; then
 fi
 
 install -m 0644 "$UNIT_DIR/Caddyfile" /etc/caddy/Caddyfile
+install -m 0755 "$UNIT_DIR/motion-levels-player-kiosk" /usr/local/bin/motion-levels-player-kiosk
 
 for service in "${old_services[@]}"; do
   systemctl stop "$service" 2>/dev/null || true

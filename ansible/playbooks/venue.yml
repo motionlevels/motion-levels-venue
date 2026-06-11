@@ -93,6 +93,12 @@
           - pkg-config
           - rsync
           - zstd
+          - xinit
+          - xserver-xorg
+          - x11-xserver-utils
+          - chromium
+          - unclutter
+          - alsa-utils
         state: present
         update_cache: true
       when: ansible_facts.os_family == "Debian"
@@ -196,6 +202,13 @@
         mode: "0644"
         remote_src: true
       notify: Restart caddy
+
+    - name: Install kiosk player script
+      ansible.builtin.copy:
+        src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/motion-levels-player-kiosk"
+        dest: /usr/local/bin/motion-levels-player-kiosk
+        mode: "0755"
+        remote_src: true
 
     - name: Disable old services
       ansible.builtin.systemd_service:

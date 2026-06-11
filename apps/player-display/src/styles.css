@@ -113,6 +113,14 @@ body {
   letter-spacing: -0.01em;
 }
 
+.display-brand-mark {
+  width: clamp(38px, 3.2vw, 72px);
+  height: clamp(38px, 3.2vw, 72px);
+  flex: 0 0 auto;
+  background: url("/motion-levels-icon.png") center / contain no-repeat;
+  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 18px rgba(54, 217, 255, 0.25));
+}
+
 .connection {
   justify-content: center;
   align-items: flex-end;
@@ -167,9 +175,10 @@ body {
 }
 
 .live-dot {
-  width: clamp(12px, 0.9vw, 20px);
-  height: clamp(12px, 0.9vw, 20px);
+  width: clamp(8px, 0.56vw, 14px);
+  height: clamp(8px, 0.56vw, 14px);
   flex: 0 0 auto;
+  margin-left: 4px;
   border-radius: 50%;
   background: #59657a;
   transition: background 220ms var(--ease), box-shadow 220ms var(--ease);

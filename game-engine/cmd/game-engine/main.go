@@ -78,7 +78,7 @@ func main() {
 	flag.StringVar(&cfg.HTTPAddr, "http", "127.0.0.1:4102", "HTTP address for the game-engine API; empty disables")
 	flag.StringVar(&cfg.ControllerAddr, "controller", "127.0.0.1:4201", "floor-controller frame stream address")
 	flag.StringVar(&cfg.PressureAddr, "pressure-events", "127.0.0.1:4202", "floor-controller pressure event stream address")
-	flag.StringVar(&cfg.Game, "game", "loop", "game to run: loop, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, parkour, plataformas, temporada1, temporada2, duel, memory, or patrones")
+	flag.StringVar(&cfg.Game, "game", "animations", "game to run: animations, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, parkour, plataformas, temporada1, temporada2, duel, memory, or patrones")
 	flag.StringVar(&cfg.Difficulty, "difficulty", "easy", "difficulty for games that support it: easy, medium, hard, expert")
 	flag.StringVar(&cfg.Level, "level", "starter", "level for games that support level selection")
 	flag.IntVar(&cfg.PlayerCount, "players", 1, "number of players for focused games")
@@ -222,7 +222,7 @@ func (c *config) normalize() {
 	if c.MusicRef == "" || c.MusicRef == loopMusicRef {
 		musicRef, musicVolume := defaultMusicForGame(c.Game)
 		c.MusicRef = musicRef
-		if c.Game != "loop" {
+		if c.Game != "animations" {
 			c.MusicVolume = musicVolume
 		}
 	}
@@ -454,10 +454,10 @@ func normalizeGame(value string) string {
 		return "memory"
 	case "patrones", "patterns", "pattern", "reto-patrones":
 		return "patrones"
-	case "loop", "ambient-comet", "ambient-pulse", "ambient-spark":
+	case "animations", "loop", "ambient-comet", "ambient-pulse", "ambient-spark":
 		return value
 	default:
-		return "loop"
+		return "animations"
 	}
 }
 
@@ -494,7 +494,7 @@ func makeFrame(sequence uint64, now time.Time, seconds float64, runtime *gameRun
 	}
 	for y := 0; y < animation.GridHeight; y++ {
 		for x := 0; x < animation.GridWidth; x++ {
-			color := animation.Color("loop", x, y, seconds)
+			color := animation.Color("animations", x, y, seconds)
 			if len(gameColors) == animation.GridWidth*animation.GridHeight {
 				color = gameColors[y*animation.GridWidth+x]
 			}

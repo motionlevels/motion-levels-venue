@@ -90,8 +90,9 @@ export default function App() {
     <main className={`display ${status.phase} ${eventClass}`}>
       <header className="display-top">
         <div className="brand">
-          <span className={`live-dot ${connected ? "on" : ""}`} />
+          <span className="display-brand-mark" aria-hidden="true" />
           <strong>Motion Levels</strong>
+          <span className={`live-dot ${connected ? "on" : ""}`} aria-label={connected ? "En directo" : "Sin conexión"} />
         </div>
         <div className="game-title">
           <span>{phaseLabel(status.phase)}</span>
