@@ -62,6 +62,13 @@ func serveGameAPI(addr string, runtime *gameRuntime) {
 
 func gameAPIHandler(runtime *gameRuntime) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		writeHealth(w, r)
+	})
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -314,7 +321,7 @@ func withAPILogging(runtime *gameRuntime, next http.Handler) http.Handler {
 
 func isAPIPath(path string) bool {
 	switch path {
-	case "/api/status", "/api/select", "/api/control", "/api/display", "/api/display/events", "/api/animation-preview":
+	case "/api/health", "/api/status", "/api/select", "/api/control", "/api/display", "/api/display/events", "/api/animation-preview":
 		return true
 	default:
 		return false
@@ -326,6 +333,18 @@ func writeJSON(w http.ResponseWriter, payload any) {
 	w.Header().Set("Cache-Control", "no-store")
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		log.Printf("json response: %v", err)
+	}
+}
+
+func writeHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if _, err := w.Write([]byte(`{"status":"ok"}` + "\n")); err != nil {
+		log.Printf("health response: %v", err)
 	}
 }
 

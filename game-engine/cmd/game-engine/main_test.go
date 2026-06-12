@@ -309,6 +309,15 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	server := httptest.NewServer(gameAPIHandler(runtime))
 	defer server.Close()
 
+	healthResponse, err := http.Head(server.URL + "/api/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer healthResponse.Body.Close()
+	if healthResponse.StatusCode != http.StatusOK {
+		t.Fatalf("health response = %d", healthResponse.StatusCode)
+	}
+
 	response, err := http.Get(server.URL + "/api/status")
 	if err != nil {
 		t.Fatal(err)
