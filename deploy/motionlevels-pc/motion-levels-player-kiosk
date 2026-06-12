@@ -49,7 +49,7 @@ MOTION_LEVELS_PLAYER_URL="$(env_file_value MOTION_LEVELS_PLAYER_URL http://127.0
 if [ -n "${MOTION_LEVELS_XRANDR_MODE:-}" ]; then
   echo "Configuring display using xrandr..."
   # Detect connected output (usually HDMI-1, DP-1, etc.)
-  OUTPUT=$(/usr/bin/xrandr --query | grep " connected" | cut -d' ' -f1 | head -n1)
+  OUTPUT=$(/usr/bin/xrandr --query | awk '/ connected/ { print $1; exit }')
   if [ -n "${OUTPUT}" ]; then
     /usr/bin/xrandr --output "${OUTPUT}" --mode "${MOTION_LEVELS_XRANDR_MODE}" --rate "${MOTION_LEVELS_XRANDR_RATE:-60}" || true
   else

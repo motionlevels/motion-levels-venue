@@ -66,7 +66,7 @@ write_files:
 
       if [ -n "${MOTION_LEVELS_XRANDR_MODE:-}" ]; then
         echo "Configuring display using xrandr..."
-        OUTPUT=$(/usr/bin/xrandr --query | grep " connected" | cut -d' ' -f1 | head -n1)
+        OUTPUT=$(/usr/bin/xrandr --query | awk '/ connected/ { print $1; exit }')
         if [ -n "${OUTPUT}" ]; then
           /usr/bin/xrandr --output "${OUTPUT}" --mode "${MOTION_LEVELS_XRANDR_MODE}" --rate "${MOTION_LEVELS_XRANDR_RATE:-60}" || true
         fi
