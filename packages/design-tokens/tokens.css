@@ -33,7 +33,10 @@
   --accent-rgb: 47, 216, 108;
   --green: var(--accent);
   --cyan: #36d9ff;
+  --cyan-rgb: 54, 217, 255;
+  --cyan-ink: #cffafe;
   --red: #ff5268;
+  --red-rgb: 255, 82, 104;
   --amber: #fbbf24;
   --amber-rgb: 251, 191, 36;
   /* Readable amber text on amber-tinted dark fills. */
