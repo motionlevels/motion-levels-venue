@@ -34,6 +34,10 @@
   --green: var(--accent);
   --cyan: #36d9ff;
   --red: #ff5268;
+  --amber: #fbbf24;
+  --amber-rgb: 251, 191, 36;
+  /* Readable amber text on amber-tinted dark fills. */
+  --amber-ink: #fde68a;
 
   /* Radii */
   --r-xs: 10px;
