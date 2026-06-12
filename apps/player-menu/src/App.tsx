@@ -58,13 +58,14 @@ const defaultPlayers: Player[] = [{ id: 1, name: "", color: playerColors[0], act
 const teamNameStarts = ["Rayo", "Neón", "Pulso", "Láser", "Cumbre", "Órbita", "Turbo", "Brillo", "Salto", "Ritmo", "Chispa", "Fuego"];
 const teamNameFinishes = ["Verde", "Azul", "Solar", "Norte", "Sur", "Lima", "Rojo", "Claro", "Pista", "Nivel", "Flash", "Veloz"];
 
-function newVenueSessionID(date = new Date()): string {
-  const stamp = date
-    .toISOString()
-    .replace(/[-:]/g, "")
-    .replace(/\.\d{3}Z$/, "Z");
-  const random = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Math.random().toString(16).slice(2);
-  return `venue-${stamp}-${random}`;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUUID(value: unknown): value is string {
+  return typeof value === "string" && uuidPattern.test(value.trim());
+}
+
+function newVenueSessionID(): string {
+  return crypto.randomUUID();
 }
 
 function defaultTeamName(date = new Date()): string {
@@ -301,7 +302,7 @@ function loadMenuState(): MenuState {
         ...saved,
         teamName: cleanNameWhitespace(String(saved.teamName || ""), maxTeamNameLength),
         sessionActive: Boolean(saved.sessionActive),
-        sessionId: typeof saved.sessionId === "string" ? saved.sessionId : "",
+        sessionId: isUUID(saved.sessionId) ? saved.sessionId.toLowerCase() : "",
         sessionStartedUnix: Number(saved.sessionStartedUnix) || 0,
         category: savedGame?.category || savedCategory,
         selectedGame: savedGame?.id || "featured-lava",
@@ -1323,7 +1324,8 @@ export default function App() {
   const launchStatusMessage = error || launchIssue || message || (isAmbientCard(selectedGame) ? "Ambiente listo" : "Listo para jugar");
 
   function enterBrowserFullscreen() {
-    if (document.fullscreenElement) return;
+    const fullscreenDocument = document as Document & { webkitFullscreenElement?: Element | null };
+    if (document.fullscreenElement || fullscreenDocument.webkitFullscreenElement) return;
     const root = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
     const requestFullscreen = root.requestFullscreen?.bind(root) || root.webkitRequestFullscreen?.bind(root);
     if (!requestFullscreen) return;
@@ -1341,7 +1343,7 @@ export default function App() {
     <main className={`app ${connectionState} ${keyboardTarget ? `keyboard-open keyboard-${keyboardTarget.kind}` : ""} ${screenMode === "game" ? "playing" : ""}`}>
       <header className="topbar">
         <div className="brand">
-          <button className="brand-mark" type="button" aria-label="Entrar en pantalla completa" onClick={enterBrowserFullscreen} />
+          <button className="brand-mark" type="button" aria-label="Pantalla completa" title="Pantalla completa" onClick={enterBrowserFullscreen} />
           <div className="brand-copy">
             <b>Motion Levels</b>
             <span>Quiosco</span>
@@ -1829,7 +1831,7 @@ function WelcomeScreen({
     <main className={`app welcome-app ${connectionState}`}>
       <section className="welcome-screen" aria-label="Inicio">
         <div className="welcome-copy">
-          <button className="welcome-mark" type="button" aria-label="Entrar en pantalla completa" onClick={onFullscreen} />
+          <button className="welcome-mark" type="button" aria-label="Pantalla completa" title="Pantalla completa" onClick={onFullscreen} />
           <h1>Motion Levels</h1>
           <p>Preparad el equipo, elegid un reto y jugad sobre el suelo LED.</p>
         </div>

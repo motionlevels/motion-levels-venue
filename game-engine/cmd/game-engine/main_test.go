@@ -1069,7 +1069,7 @@ func TestRuntimeRecordsSessionAPIAndDisplayData(t *testing.T) {
 	server := httptest.NewServer(gameAPIHandler(runtime))
 	defer server.Close()
 
-	const venueSessionID = "venue-20260604T120000Z-test"
+	const venueSessionID = "11111111-1111-4111-8111-111111111111"
 	response, err := http.Post(server.URL+"/api/select", "application/json", bytes.NewBufferString(`{"game":"whack-a-mole","playerCount":2,"venueSessionId":"`+venueSessionID+`"}`))
 	if err != nil {
 		t.Fatal(err)
@@ -1126,7 +1126,7 @@ func TestVenueSessionLifecycleAndMenuEvents(t *testing.T) {
 	server := httptest.NewServer(gameAPIHandler(runtime))
 	defer server.Close()
 
-	const venueSessionID = "venue-20260610T100000Z-test"
+	const venueSessionID = "22222222-2222-4222-8222-222222222222"
 	post := func(path, body string) *http.Response {
 		t.Helper()
 		response, err := http.Post(server.URL+path, "application/json", bytes.NewBufferString(body))
@@ -1137,7 +1137,7 @@ func TestVenueSessionLifecycleAndMenuEvents(t *testing.T) {
 		return response
 	}
 
-	if response := post("/api/venue-session", `{"action":"start","venueSessionId":"`+venueSessionID+`","teamName":"Equipo Test","kioskId":"kiosk-1"}`); response.StatusCode != http.StatusOK {
+	if response := post("/api/venue-session", `{"action":"start","venueSessionId":"`+venueSessionID+`","teamName":"Equipo Test","kioskId":"33333333-3333-4333-8333-333333333333"}`); response.StatusCode != http.StatusOK {
 		t.Fatalf("venue start response = %d", response.StatusCode)
 	}
 	if response := post("/api/menu-event", `{"venueSessionId":"`+venueSessionID+`","name":"player_added","properties":{"player_count":3}}`); response.StatusCode != http.StatusOK {

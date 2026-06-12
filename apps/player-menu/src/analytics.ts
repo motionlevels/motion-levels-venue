@@ -7,6 +7,7 @@ const defaultPostHogHost = "https://p.obis.dev";
 // ui_host keeps the toolbar and "view in PostHog" links pointing at the real app.
 const defaultPostHogUiHost = "https://us.posthog.com";
 const deviceStorageKey = "ml-player-menu-device-id";
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function readEnv(name: string): string {
   const value = import.meta.env[name];
@@ -22,12 +23,13 @@ function analyticsEnabled(): boolean {
 
 function getDeviceID(): string {
   const configured = readEnv("VITE_KIOSK_ID") || readEnv("VITE_DEVICE_ID");
-  if (configured) return configured;
+  if (configured && uuidPattern.test(configured)) return configured.toLowerCase();
+  if (configured) console.warn("Ignoring configured kiosk id because it is not a UUID.");
 
   const existing = localStorage.getItem(deviceStorageKey);
-  if (existing) return existing;
+  if (existing && uuidPattern.test(existing)) return existing.toLowerCase();
 
-  const generated = globalThis.crypto?.randomUUID?.() || `kiosk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const generated = globalThis.crypto.randomUUID();
   localStorage.setItem(deviceStorageKey, generated);
   return generated;
 }

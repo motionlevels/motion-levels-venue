@@ -205,6 +205,9 @@ func (s *platformSyncer) syncOnce(now time.Time) error {
 	if status.SessionID == "" {
 		return nil
 	}
+	if currentSessionID := s.runtime.SessionID(); currentSessionID != "" && currentSessionID != status.SessionID {
+		return nil
+	}
 	if status.SessionID != s.lastSessionID {
 		s.lastSessionID = status.SessionID
 		s.lastEventUnixNanos = 0

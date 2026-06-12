@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lobis/motion-levels/game-engine/internal/games/animations"
 )
+
+var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 type selectGameRequest struct {
 	Game             string `json:"game"`
@@ -126,7 +130,12 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		runtime.SelectGameWithMetadata(request.Game, request.PlayerCount, request.Difficulty, request.Level, request.NarrationEnabled, request.TeamName, request.VenueSessionID, players)
+		venueSessionID, ok := normalizeOptionalUUID(request.VenueSessionID)
+		if !ok {
+			http.Error(w, "venueSessionId must be a UUID", http.StatusBadRequest)
+			return
+		}
+		runtime.SelectGameWithMetadata(request.Game, request.PlayerCount, request.Difficulty, request.Level, request.NarrationEnabled, request.TeamName, venueSessionID, players)
 		writeJSON(w, runtime.Status())
 	})
 	mux.HandleFunc("/api/control", func(w http.ResponseWriter, r *http.Request) {
@@ -152,16 +161,22 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if request.VenueSessionID == "" {
-			http.Error(w, "venueSessionId is required", http.StatusBadRequest)
+		venueSessionID, ok := normalizeOptionalUUID(request.VenueSessionID)
+		if !ok || venueSessionID == "" {
+			http.Error(w, "venueSessionId must be a UUID", http.StatusBadRequest)
+			return
+		}
+		kioskID, ok := normalizeOptionalUUID(request.KioskID)
+		if !ok {
+			http.Error(w, "kioskId must be a UUID", http.StatusBadRequest)
 			return
 		}
 		now := time.Now()
 		switch request.Action {
 		case "start":
-			runtime.StartVenueSession(request.VenueSessionID, request.TeamName, request.KioskID, now)
+			runtime.StartVenueSession(venueSessionID, request.TeamName, kioskID, now)
 		case "end":
-			runtime.EndVenueSession(request.VenueSessionID, request.Reason, now)
+			runtime.EndVenueSession(venueSessionID, request.Reason, now)
 		default:
 			http.Error(w, "action must be start or end", http.StatusBadRequest)
 			return
@@ -182,13 +197,34 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 		if request.OccurredAtUnixMillis > 0 {
 			occurredAt = time.UnixMilli(request.OccurredAtUnixMillis)
 		}
-		if err := runtime.RecordMenuEvent(request.VenueSessionID, request.Name, request.KioskID, request.Properties, occurredAt, time.Now()); err != nil {
+		venueSessionID, ok := normalizeOptionalUUID(request.VenueSessionID)
+		if !ok || venueSessionID == "" {
+			http.Error(w, "venueSessionId must be a UUID", http.StatusBadRequest)
+			return
+		}
+		kioskID, ok := normalizeOptionalUUID(request.KioskID)
+		if !ok {
+			http.Error(w, "kioskId must be a UUID", http.StatusBadRequest)
+			return
+		}
+		if err := runtime.RecordMenuEvent(venueSessionID, request.Name, kioskID, request.Properties, occurredAt, time.Now()); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 	return withAPILogging(runtime, withCORS(mux))
+}
+
+func normalizeOptionalUUID(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", true
+	}
+	if !uuidPattern.MatchString(value) {
+		return "", false
+	}
+	return strings.ToLower(value), true
 }
 
 func writeDisplayEvents(w http.ResponseWriter, r *http.Request, runtime *gameRuntime) {

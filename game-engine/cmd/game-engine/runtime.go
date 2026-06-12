@@ -2,7 +2,6 @@ package main
 
 import (
 	crand "crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"math"
@@ -1601,12 +1600,28 @@ func levelNumberFromID(level string) int {
 	return n
 }
 
-func newSessionID(now time.Time) string {
-	var random [8]byte
-	if _, err := crand.Read(random[:]); err == nil {
-		return now.UTC().Format("20060102T150405Z") + "-" + hex.EncodeToString(random[:])
+func newSessionID(time.Time) string {
+	id, err := newUUID()
+	if err != nil {
+		return fmt.Sprintf("00000000-0000-4000-8000-%012x", time.Now().UnixNano()&0xffffffffffff)
 	}
-	return fmt.Sprintf("%s-%d", now.UTC().Format("20060102T150405Z"), now.UnixNano())
+	return id
+}
+
+func newUUID() (string, error) {
+	var random [16]byte
+	if _, err := crand.Read(random[:]); err != nil {
+		return "", err
+	}
+	random[6] = (random[6] & 0x0f) | 0x40
+	random[8] = (random[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		random[0:4],
+		random[4:6],
+		random[6:8],
+		random[8:10],
+		random[10:16],
+	), nil
 }
 
 func makeGame(cfg config, seed int64, now time.Time) floorGame {
