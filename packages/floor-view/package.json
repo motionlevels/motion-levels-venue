@@ -6,6 +6,9 @@
   "type": "module",
   "main": "./src/index.tsx",
   "types": "./src/index.tsx",
+  "scripts": {
+    "typecheck": "tsc --noEmit --jsx react-jsx --module NodeNext --moduleResolution NodeNext --target ES2022 src/index.tsx"
+  },
   "exports": {
     ".": "./src/index.tsx"
   },
@@ -17,6 +20,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.2.7",
-    "react": "^19.2.1"
+    "react": "^19.2.1",
+    "typescript": "^5.9.3"
   }
 }
