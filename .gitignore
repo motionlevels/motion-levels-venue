@@ -9,6 +9,7 @@ release/
 .secrets/
 .dev-*/
 .motion-levels-controller-id
+scratch
 
 # Runtime recording output can grow quickly and should not be committed.
 recordings/
