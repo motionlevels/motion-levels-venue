@@ -206,3 +206,36 @@ func TestPressureSoundEmitsPressureCue(t *testing.T) {
 		t.Fatalf("pressure cue ref = %q", got)
 	}
 }
+
+func TestRandomRotationSwitchesEveryMinuteWithoutImmediateRepeat(t *testing.T) {
+	levels := []CompiledLevel{
+		{id: "aurora", label: "Aurora", audio: AudioRefs{MusicRef: DefaultMusicRef, MusicVolume: DefaultMusicVolume}},
+		{id: "lava", label: "Lava", audio: AudioRefs{MusicRef: DefaultMusicRef, MusicVolume: DefaultMusicVolume}},
+		{id: "ocean", label: "Ocean", audio: AudioRefs{MusicRef: DefaultMusicRef, MusicVolume: DefaultMusicVolume}},
+	}
+	game := &Game{
+		level:          rotatingLevelAt(levels, 42, 0, -1),
+		levels:         levels,
+		rotationSeed:   42,
+		rotationEvery:  rotationDuration,
+		rotationIndex:  0,
+		startedAt:      time.Unix(0, 0),
+		pressed:        map[Point]bool{},
+		pressureEvents: map[Point]time.Time{},
+	}
+
+	initial := game.level.id
+	game.updateRotationLocked(time.Unix(59, 0))
+	if game.level.id != initial {
+		t.Fatalf("level changed before 60s: got %q want %q", game.level.id, initial)
+	}
+	game.updateRotationLocked(time.Unix(60, 0))
+	if game.level.id == initial {
+		t.Fatalf("level repeated after first rotation: %q", game.level.id)
+	}
+	second := game.level.id
+	game.updateRotationLocked(time.Unix(120, 0))
+	if game.level.id == second {
+		t.Fatalf("level repeated after second rotation: %q", game.level.id)
+	}
+}

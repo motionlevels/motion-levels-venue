@@ -331,8 +331,11 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if len(status.Catalog) != 15 {
-		t.Fatalf("catalog = %d entries, want 15", len(status.Catalog))
+	if len(status.Catalog) != 16 {
+		t.Fatalf("catalog = %d entries, want 16", len(status.Catalog))
+	}
+	if !catalogHasGame(status.Catalog, "animation-random") {
+		t.Fatal("catalog missing animation-random")
 	}
 
 	body := bytes.NewBufferString(`{"game":"lava","playerCount":3,"difficulty":"expert"}`)
@@ -414,6 +417,15 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if status.CurrentGame != "patrones" || status.PlayerCount != 4 || status.Difficulty != "hard" || status.Level != "level-3" || status.Phase != "countdown" {
 		t.Fatalf("selected patrones status = %+v", status)
 	}
+}
+
+func catalogHasGame(catalog []gameCatalogEntry, game string) bool {
+	for _, entry := range catalog {
+		if entry.Game == game {
+			return true
+		}
+	}
+	return false
 }
 
 func TestGameAPIRejectsDuplicatePlayerNames(t *testing.T) {

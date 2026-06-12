@@ -21,6 +21,7 @@ const (
 	GridWidth           = animation.GridWidth
 	GridHeight          = animation.GridHeight
 	tickDuration        = 50 * time.Millisecond
+	rotationDuration    = 60 * time.Second
 	DefaultMusicRef     = "Motion/canciones/Background01.mp3"
 	DefaultMusicVolume  = 0.10
 	DefaultCoinCueRef   = "Motion/sonidos/coin.wav"
@@ -93,6 +94,10 @@ type Game struct {
 	mu sync.Mutex
 
 	level          CompiledLevel
+	levels         []CompiledLevel
+	rotationSeed   int64
+	rotationEvery  time.Duration
+	rotationIndex  int64
 	startedAt      time.Time
 	pressed        map[Point]bool
 	pressureEvents map[Point]time.Time
@@ -125,12 +130,34 @@ func NewWithSeed(now time.Time, seed int64, playerCount int, difficulty string, 
 	}
 }
 
+func NewRandomRotationWithSeed(now time.Time, seed int64, playerCount int, difficulty string, platformURL string) *Game {
+	_ = playerCount
+	_ = difficulty
+	levels, err := GetOrFetchLevels(platformURL)
+	if err != nil {
+		log.Printf("animations: cloud animation fetch failed: %v", err)
+		levels = fallbackCompiledLevels()
+	}
+	selected := rotatingLevelAt(levels, seed, 0, -1)
+	return &Game{
+		level:          selected,
+		levels:         levels,
+		rotationSeed:   seed,
+		rotationEvery:  rotationDuration,
+		rotationIndex:  0,
+		startedAt:      now,
+		pressed:        map[Point]bool{},
+		pressureEvents: map[Point]time.Time{},
+	}
+}
+
 func (g *Game) Press(event whackamole.PressEvent, now time.Time) []whackamole.Event {
 	if !inBounds(event.X, event.Y) {
 		return nil
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.updateRotationLocked(now)
 
 	pt := Point{X: event.X, Y: event.Y}
 	if event.Pressed {
@@ -188,6 +215,7 @@ func (g *Game) Press(event whackamole.PressEvent, now time.Time) []whackamole.Ev
 func (g *Game) Render(now time.Time) []RGB {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.updateRotationLocked(now)
 	g.cleanupPressureEventsLocked(now)
 	frame := make([]RGB, GridWidth*GridHeight)
 	for y := 0; y < GridHeight; y++ {
@@ -201,7 +229,7 @@ func (g *Game) Render(now time.Time) []RGB {
 func (g *Game) colorAtLocked(pt Point, now time.Time) RGB {
 	base := RGB{}
 	if g.level.procedure != nil {
-		elapsed := g.elapsedLocked(now)
+		elapsed := g.renderElapsedLocked(now)
 		frameIndex := 0
 		if g.level.frameTick > 0 {
 			frameIndex = int(elapsed / g.level.frameTick)
@@ -214,12 +242,12 @@ func (g *Game) colorAtLocked(pt Point, now time.Time) RGB {
 	}
 	point := g.rawPointAtLocked(pt, now)
 	if !point.present {
-		return g.applyPressureEffectLocked(pt, base, now, g.elapsedLocked(now), 0)
+		return g.applyPressureEffectLocked(pt, base, now, g.renderElapsedLocked(now), 0)
 	}
 	if eff, ok := g.level.tileEffects[point.kind]; ok {
 		base = eff.color
 	}
-	return g.applyPressureEffectLocked(pt, base, now, g.elapsedLocked(now), 0)
+	return g.applyPressureEffectLocked(pt, base, now, g.renderElapsedLocked(now), 0)
 }
 
 func (g *Game) applyPressureEffectLocked(pt Point, base RGB, now time.Time, elapsed time.Duration, frameIndex int) RGB {
@@ -293,7 +321,7 @@ func (g *Game) frameAtLocked(now time.Time) *compiledFrame {
 	if len(g.level.frames) == 0 {
 		return nil
 	}
-	elapsed := g.elapsedLocked(now)
+	elapsed := g.renderElapsedLocked(now)
 	if g.level.totalDuration > 0 {
 		elapsed %= g.level.totalDuration
 	}
@@ -313,6 +341,53 @@ func (g *Game) elapsedLocked(now time.Time) time.Duration {
 		return 0
 	}
 	return elapsed
+}
+
+func (g *Game) renderElapsedLocked(now time.Time) time.Duration {
+	elapsed := g.elapsedLocked(now)
+	if g.rotationEvery <= 0 {
+		return elapsed
+	}
+	return elapsed % g.rotationEvery
+}
+
+func (g *Game) updateRotationLocked(now time.Time) {
+	if len(g.levels) == 0 || g.rotationEvery <= 0 {
+		return
+	}
+	elapsed := g.elapsedLocked(now)
+	nextRotationIndex := int64(elapsed / g.rotationEvery)
+	if nextRotationIndex == g.rotationIndex {
+		return
+	}
+	previous := indexOfLevel(g.levels, g.level.id)
+	g.level = rotatingLevelAt(g.levels, g.rotationSeed, nextRotationIndex, previous)
+	g.rotationIndex = nextRotationIndex
+	g.pressed = map[Point]bool{}
+	g.pressureEvents = map[Point]time.Time{}
+}
+
+func rotatingLevelAt(levels []CompiledLevel, seed int64, rotationIndex int64, previous int) CompiledLevel {
+	if len(levels) == 0 {
+		return CompiledLevel{}
+	}
+	index := int(uintHashFloat(float64(seed/9973)+float64(rotationIndex)*131.0) % uint32(len(levels)))
+	if len(levels) > 1 && index == previous {
+		index = (index + 1 + int(uintHashFloat(float64(seed)+float64(rotationIndex)*17.0)%uint32(len(levels)-1))) % len(levels)
+		if index == previous {
+			index = (index + 1) % len(levels)
+		}
+	}
+	return levels[index]
+}
+
+func indexOfLevel(levels []CompiledLevel, id string) int {
+	for index, level := range levels {
+		if level.id == id {
+			return index
+		}
+	}
+	return -1
 }
 
 func (g *Game) AudioRefs() AudioRefs {
