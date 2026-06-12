@@ -88,6 +88,25 @@ func TestProceduralDSLRejectsReservedAssignments(t *testing.T) {
 	}
 }
 
+func TestProceduralDSLClampsLoopSeconds(t *testing.T) {
+	source, err := compileProcedureSource(animationProcedureSource{
+		Type:                 "procedure",
+		Language:             "motion-dsl-v1",
+		Code:                 "color = rgb(loop_progress * 255, loop_time, 0)",
+		LoopSeconds:          500,
+		ReferenceLoopSeconds: 500,
+	})
+	if err != nil {
+		t.Fatalf("compileProcedureSource returned error: %v", err)
+	}
+	if source.loopSeconds != maxProcedureLoopSeconds {
+		t.Fatalf("loopSeconds = %v, want %v", source.loopSeconds, maxProcedureLoopSeconds)
+	}
+	if source.referenceLoopSeconds != maxProcedureLoopSeconds {
+		t.Fatalf("referenceLoopSeconds = %v, want %v", source.referenceLoopSeconds, maxProcedureLoopSeconds)
+	}
+}
+
 func TestProceduralDSLMigratesLegacyNormalizedAssignments(t *testing.T) {
 	source, err := compileProcedureSource(animationProcedureSource{
 		Type:     "procedure",

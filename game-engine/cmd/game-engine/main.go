@@ -51,6 +51,7 @@ type config struct {
 	DoubleCoinCueRef       string
 	DamageCueRef           string
 	WinCueRef              string
+	DefeatCueRef           string
 	NarrationCueRef        string
 	NarrationVolume        float64
 	CountdownCueRef        string
@@ -80,7 +81,7 @@ func main() {
 	flag.StringVar(&cfg.HTTPAddr, "http", "127.0.0.1:4102", "HTTP address for the game-engine API; empty disables")
 	flag.StringVar(&cfg.ControllerAddr, "controller", "127.0.0.1:4201", "floor-controller frame stream address")
 	flag.StringVar(&cfg.PressureAddr, "pressure-events", "127.0.0.1:4202", "floor-controller pressure event stream address")
-	flag.StringVar(&cfg.Game, "game", "animations", "game to run: animations, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, parkour, plataformas, temporada1, temporada2, duel, memory, or patrones")
+	flag.StringVar(&cfg.Game, "game", "animations", "game to run: animations, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, parkour, parkour2, plataformas, temporada1, temporada2, duel, memory, or patrones")
 	flag.StringVar(&cfg.Difficulty, "difficulty", "easy", "difficulty for games that support it: easy, medium, hard, expert")
 	flag.StringVar(&cfg.Level, "level", "starter", "level for games that support level selection")
 	flag.IntVar(&cfg.PlayerCount, "players", 1, "number of players for focused games")
@@ -96,6 +97,7 @@ func main() {
 	flag.StringVar(&cfg.DoubleCoinCueRef, "double-coin-cue", "", "double coin cue asset ref; empty reuses coin-cue twice for purple tile feedback")
 	flag.StringVar(&cfg.DamageCueRef, "damage-cue", "Motion/sonidos/fallo.mp3", "damage cue asset ref, preloaded for instant press feedback")
 	flag.StringVar(&cfg.WinCueRef, "win-cue", "Motion/sonidos/victoria.mp3", "win cue asset ref, preloaded for game completion feedback")
+	flag.StringVar(&cfg.DefeatCueRef, "defeat-cue", "", "defeat cue asset ref; empty reuses damage-cue for failed level feedback")
 	flag.StringVar(&cfg.NarrationCueRef, "narration-cue", "", "narration asset ref; empty uses the selected game's default narration")
 	flag.Float64Var(&cfg.NarrationVolume, "narration-volume", 0.85, "narration volume, 0.0-1.0")
 	flag.StringVar(&cfg.CountdownCueRef, "countdown-cue", "Motion/narraciones/countdown-tres-dos-uno-vamos.mp3", "countdown narration asset ref; empty disables countdown narration")
@@ -176,8 +178,11 @@ func (c *config) normalize() {
 	} else if c.Game == "parkour" {
 		c.Level = parkour.NormalizeLevel(c.Level)
 		c.PlayerCount = 1
-	} else if c.Game == "plataformas" {
+	} else if c.Game == "plataformas" || c.Game == "parkour2" {
 		c.Level = plataformas.NormalizeLevel(c.Level)
+		if c.Game == "parkour2" {
+			c.PlayerCount = 1
+		}
 	} else if c.Game == "temporada1" {
 		c.Level = temporada1.NormalizeLevel(c.Level)
 	} else if c.Game == "temporada2" {
@@ -230,6 +235,9 @@ func (c *config) normalize() {
 	}
 	if c.DoubleCoinCueRef == "" {
 		c.DoubleCoinCueRef = c.CoinCueRef
+	}
+	if c.DefeatCueRef == "" {
+		c.DefeatCueRef = c.DamageCueRef
 	}
 	if c.NarrationCueRef == "" {
 		c.NarrationCueRef = defaultNarrationRef(c.Game)
@@ -419,6 +427,8 @@ func cueRef(cfg config, cue string) string {
 		return cfg.DamageCueRef
 	case whackamole.CueWin:
 		return cfg.WinCueRef
+	case whackamole.CueDefeat:
+		return cfg.DefeatCueRef
 	default:
 		return ""
 	}
@@ -447,6 +457,8 @@ func normalizeGame(value string) string {
 		return "saltos"
 	case "parkour", "pk":
 		return "parkour"
+	case "parkour2", "parkour-2", "parkour-2.0", "parkour2.0", "parkour-20":
+		return "parkour2"
 	case "plataformas", "platforms", "cloud-platforms":
 		return "plataformas"
 	case "temporada1", "temporada-1", "season1", "season-1":

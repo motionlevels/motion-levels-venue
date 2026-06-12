@@ -53,6 +53,11 @@ export type EngineStatus = {
   catalog: EngineGame[];
 };
 
+export type AnimationPreview = {
+  level: string;
+  frames: Array<{ pixels: string }>;
+};
+
 export type SelectGameRequest = {
   game: string;
   venueSessionId?: string;
@@ -95,6 +100,15 @@ export async function fetchEngineStatus(): Promise<EngineStatus> {
     throw new Error(await response.text());
   }
   return response.json() as Promise<EngineStatus>;
+}
+
+export async function fetchAnimationPreview(level: string, frames = 16): Promise<AnimationPreview> {
+  const params = new URLSearchParams({ level, frames: String(frames) });
+  const response = await fetch(`${engineBaseURL()}/api/animation-preview?${params.toString()}`);
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return response.json() as Promise<AnimationPreview>;
 }
 
 export async function selectGame(request: SelectGameRequest): Promise<EngineStatus> {

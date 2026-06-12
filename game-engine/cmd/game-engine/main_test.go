@@ -209,6 +209,7 @@ func TestReusableTileCueRefsAndDoubleCoinBurst(t *testing.T) {
 		DoubleCoinCueRef: "coin.wav",
 		DamageCueRef:     "damage.wav",
 	}
+	cfg.normalize()
 
 	if got := cueRef(cfg, whackamole.CueCoin); got != cfg.CoinCueRef {
 		t.Fatalf("coin cue ref = %q", got)
@@ -218,6 +219,9 @@ func TestReusableTileCueRefsAndDoubleCoinBurst(t *testing.T) {
 	}
 	if got := cueRef(cfg, whackamole.CueDamage); got != cfg.DamageCueRef {
 		t.Fatalf("damage cue ref = %q", got)
+	}
+	if got := cueRef(cfg, whackamole.CueDefeat); got != cfg.DamageCueRef {
+		t.Fatalf("defeat fallback cue ref = %q", got)
 	}
 
 	for i := 0; i < 3; i++ {
@@ -255,6 +259,7 @@ func TestPlataformasRuntimeUsesCloudLevelAudioRefs(t *testing.T) {
 				"double_coin_cue_ref":"Motion/sonidos/coin-doble.wav",
 				"damage_cue_ref":"Motion/sonidos/fallo.mp3",
 				"win_cue_ref":"Motion/sonidos/victoria.mp3",
+				"defeat_cue_ref":"Motion/sonidos/derrota.mp3",
 				"frames":[{"r":8,"c":[[7,14,0],[4,4,1,"coin-a"]]}]
 			}]
 		}`))
@@ -272,6 +277,7 @@ func TestPlataformasRuntimeUsesCloudLevelAudioRefs(t *testing.T) {
 		CoinCueRef:         "Motion/sonidos/default-coin.wav",
 		DamageCueRef:       "Motion/sonidos/default-damage.wav",
 		WinCueRef:          "Motion/sonidos/default-win.wav",
+		DefeatCueRef:       "Motion/sonidos/default-defeat.wav",
 		CueVolume:          0.18,
 		Brightness:         80,
 		FPS:                20,
@@ -285,6 +291,9 @@ func TestPlataformasRuntimeUsesCloudLevelAudioRefs(t *testing.T) {
 	refs := runtime.current
 	if refs.CoinCueRef != "Motion/sonidos/coin.wav" || refs.DoubleCoinCueRef != "Motion/sonidos/coin-doble.wav" {
 		t.Fatalf("runtime cues = %+v, want cloud cues", refs)
+	}
+	if refs.DefeatCueRef != "Motion/sonidos/derrota.mp3" {
+		t.Fatalf("runtime defeat cue = %q, want cloud cue", refs.DefeatCueRef)
 	}
 	if got := plataformas.DefaultMusicRef; got == status.Music {
 		t.Fatalf("status music = default %q, want cloud override", got)
@@ -309,8 +318,8 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if len(status.Catalog) != 14 {
-		t.Fatalf("catalog = %d entries, want 14", len(status.Catalog))
+	if len(status.Catalog) != 15 {
+		t.Fatalf("catalog = %d entries, want 15", len(status.Catalog))
 	}
 
 	body := bytes.NewBufferString(`{"game":"lava","playerCount":3,"difficulty":"expert"}`)

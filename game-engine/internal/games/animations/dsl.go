@@ -78,6 +78,11 @@ var dslFunctionNames = map[string]struct{}{
 
 var legacyNormalizedAssignmentPattern = regexp.MustCompile(`(?im)^\s*(?:xn\s*=\s*x\s*/\s*width|yn\s*=\s*y\s*/\s*height)\s*(?:\r?\n|$)`)
 
+const (
+	minProcedureLoopSeconds = 0.1
+	maxProcedureLoopSeconds = 300
+)
+
 func compileProcedureSource(source animationProcedureSource) (*compiledProcedure, error) {
 	if strings.TrimSpace(source.Code) == "" {
 		return nil, fmt.Errorf("La fuente DSL no contiene asignaciones.")
@@ -98,8 +103,8 @@ func compileProcedureSource(source animationProcedureSource) (*compiledProcedure
 	if len(assignments) == 0 {
 		return nil, fmt.Errorf("La fuente DSL no contiene asignaciones.")
 	}
-	loopSeconds := positiveFloat(source.LoopSeconds, 4)
-	refSeconds := positiveFloat(source.ReferenceLoopSeconds, loopSeconds)
+	loopSeconds := loopSecondsFloat(source.LoopSeconds, 4)
+	refSeconds := loopSecondsFloat(source.ReferenceLoopSeconds, loopSeconds)
 	params := map[string]float64{}
 	for key, raw := range source.Params {
 		if _, reserved := dslBuiltinVariables[key]; reserved {
@@ -473,6 +478,10 @@ func positiveFloat(value, fallback float64) float64 {
 		return fallback
 	}
 	return value
+}
+
+func loopSecondsFloat(value, fallback float64) float64 {
+	return clampFloat(positiveFloat(value, fallback), minProcedureLoopSeconds, maxProcedureLoopSeconds)
 }
 
 func positiveModFloat(value, divisor float64) float64 {

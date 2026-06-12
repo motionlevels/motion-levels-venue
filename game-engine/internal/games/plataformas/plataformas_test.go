@@ -36,6 +36,7 @@ func TestFetchesCloudLevelAndScoresCoin(t *testing.T) {
 				"double_coin_cue_ref":"Motion/sonidos/coin-doble.wav",
 				"damage_cue_ref":"Motion/sonidos/fallo.mp3",
 				"win_cue_ref":"Motion/sonidos/victoria.mp3",
+				"defeat_cue_ref":"Motion/sonidos/derrota.mp3",
 				"frames":[{"r":8,"c":[[7,14,0],[4,4,1,"coin-a"],[10,10,2],[5,5,3,"purple-a"]]}]
 			}]
 		}`))
@@ -59,6 +60,9 @@ func TestFetchesCloudLevelAndScoresCoin(t *testing.T) {
 	if audio.DoubleCoinCueRef != "Motion/sonidos/coin-doble.wav" {
 		t.Fatalf("double coin cue = %q, want custom cue", audio.DoubleCoinCueRef)
 	}
+	if audio.DefeatCueRef != "Motion/sonidos/derrota.mp3" {
+		t.Fatalf("defeat cue = %q, want custom cue", audio.DefeatCueRef)
+	}
 
 	events := game.Press(whackamole.PressEvent{X: 4, Y: 4, Pressed: true}, playAt)
 	if len(events) != 1 || events[0].Cue != whackamole.CueCoin {
@@ -66,6 +70,82 @@ func TestFetchesCloudLevelAndScoresCoin(t *testing.T) {
 	}
 	if snapshot := game.Snapshot(playAt); snapshot.Score != 1 || snapshot.ActiveTargets != 1 {
 		t.Fatalf("snapshot = %+v, want score 1 and one active target remaining", snapshot)
+	}
+}
+
+func TestFetchesParkour2CloudLevelsFromNamedGame(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/level-games/parkour2/levels" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"gameId":"parkour2",
+			"levels":[{
+				"slug":"level-1",
+				"label":"Parkour 2.0",
+				"description":"Fetched from named game",
+				"difficulty":"medium",
+				"life":5,
+				"pass_score":0,
+				"frame_tick_ms":25,
+				"frames":[{"r":8,"c":[[7,14,0]]}]
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	game := NewWithSeedForGame(time.Unix(100, 0), 1, 1, "medium", "level-1", server.URL, "parkour2")
+	if game.level.label != "Parkour 2.0" {
+		t.Fatalf("level label = %q, want Parkour 2.0", game.level.label)
+	}
+}
+
+func TestParkourLavaRuleAnimatesRedTiles(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        "level-1",
+		Label:       "Animated lava",
+		Difficulty:  string(DifficultyMedium),
+		Life:        5,
+		FrameTickMS: 25,
+		Rules:       levelRules{RedFloorAnimation: "parkour_lava"},
+		Frames: []rawFrame{{
+			Repeat: 40,
+			Cells:  []cellTuple{{X: 5, Y: 5, Kind: 2}},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	game := &Game{level: levels[0], startedAt: time.Unix(100, 0)}
+	first := game.colorAtLocked(Point{X: 5, Y: 5}, game.startedAt.Add(tickDuration))
+	second := game.colorAtLocked(Point{X: 5, Y: 5}, game.startedAt.Add(2*time.Second))
+	if first == second {
+		t.Fatalf("lava color did not animate: %+v", first)
+	}
+}
+
+func TestGreenPlatformDisappearRuleFadesBeforeNextFrame(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        "level-1",
+		Label:       "Fade green",
+		Difficulty:  string(DifficultyMedium),
+		Life:        5,
+		FrameTickMS: 25,
+		Rules:       levelRules{GreenPlatformDisappear: true},
+		Frames: []rawFrame{
+			{Repeat: 40, Cells: []cellTuple{{X: 5, Y: 5, Kind: 0}}},
+			{Repeat: 40, Cells: []cellTuple{{X: 5, Y: 5, Kind: 2}}},
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	game := &Game{level: levels[0], startedAt: time.Unix(100, 0)}
+	steady := game.colorAtLocked(Point{X: 5, Y: 5}, game.startedAt.Add(200*time.Millisecond))
+	fading := game.colorAtLocked(Point{X: 5, Y: 5}, game.startedAt.Add(900*time.Millisecond))
+	if fading.G >= steady.G {
+		t.Fatalf("fading green = %+v, steady = %+v; want dimmer before disappearing", fading, steady)
 	}
 }
 
@@ -101,6 +181,35 @@ func TestScoreAtLeastWinCondition(t *testing.T) {
 	}
 	if snapshot.ActiveTargets != 1 {
 		t.Fatalf("active targets = %d, want one uncollected target remaining", snapshot.ActiveTargets)
+	}
+}
+
+func TestFinalDamageEmitsDefeatCue(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"levels":[{
+				"slug":"level-1",
+				"label":"Final damage",
+				"difficulty":"medium",
+				"life":1,
+				"frame_tick_ms":25,
+				"frames":[{"r":8,"c":[[4,4,2]]}]
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	now := time.Unix(100, 0)
+	game := NewWithSeed(now, 1, 1, "medium", "level-1", server.URL)
+	playAt := now.Add(countdownDuration + tickDuration)
+	events := game.Press(whackamole.PressEvent{X: 4, Y: 4, Pressed: true}, playAt)
+	if len(events) != 1 || events[0].Cue != whackamole.CueDefeat {
+		t.Fatalf("events = %+v, want defeat cue", events)
+	}
+	snapshot := game.Snapshot(playAt)
+	if snapshot.Success || snapshot.Phase != "finished" {
+		t.Fatalf("snapshot = %+v, want failed finished level", snapshot)
 	}
 }
 

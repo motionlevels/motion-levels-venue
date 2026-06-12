@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -53,6 +54,7 @@ type AudioRefs struct {
 	DoubleCoinCueRef string
 	DamageCueRef     string
 	WinCueRef        string
+	DefeatCueRef     string
 }
 
 type PlayerSnapshot struct {
@@ -123,6 +125,8 @@ type compiledLevel struct {
 	timeLimit     time.Duration
 	frameTick     time.Duration
 	winCondition  string
+	redAnimation  string
+	greenFade     bool
 	totalDuration time.Duration
 	frames        []compiledFrame
 	scoreUniqs    map[string]struct{}
@@ -162,11 +166,14 @@ type cloudLevel struct {
 	DoubleCoinCueRef string     `json:"double_coin_cue_ref"`
 	DamageCueRef     string     `json:"damage_cue_ref"`
 	WinCueRef        string     `json:"win_cue_ref"`
+	DefeatCueRef     string     `json:"defeat_cue_ref"`
 	Frames           []rawFrame `json:"frames"`
 }
 
 type levelRules struct {
-	VictoryCondition string `json:"victory_condition"`
+	VictoryCondition       string `json:"victory_condition"`
+	RedFloorAnimation      string `json:"red_floor_animation"`
+	GreenPlatformDisappear bool   `json:"green_platform_disappear"`
 }
 
 type rawFrame struct {
@@ -241,11 +248,15 @@ func New(now time.Time, playerCount int, difficulty string, level string, platfo
 }
 
 func NewWithSeed(now time.Time, seed int64, playerCount int, difficulty string, level string, platformURL string) *Game {
+	return NewWithSeedForGame(now, seed, playerCount, difficulty, level, platformURL, "plataformas")
+}
+
+func NewWithSeedForGame(now time.Time, seed int64, playerCount int, difficulty string, level string, platformURL string, gameID string) *Game {
 	_ = seed
 	diff := NormalizeDifficulty(difficulty)
-	levels, err := fetchLevels(platformURL, diff)
+	levels, err := fetchLevels(platformURL, diff, gameID)
 	if err != nil {
-		log.Printf("plataformas: cloud level fetch failed: %v", err)
+		log.Printf("%s: cloud level fetch failed: %v", gameID, err)
 		levels = fallbackCompiledLevels()
 	}
 	selected := selectLevel(levels, NormalizeLevel(level))
@@ -413,6 +424,9 @@ func (g *Game) applyPointLocked(point tilePoint, pt Point, now time.Time) []whac
 		}
 	case 2:
 		if g.damageLocked(pt, now) {
+			if g.ended && !g.success {
+				return []whackamole.Event{{Cue: whackamole.CueDefeat, Message: "Plataformas derrota"}}
+			}
 			return []whackamole.Event{{Cue: whackamole.CueDamage, Message: "Plataformas daño"}}
 		}
 	}
@@ -484,7 +498,21 @@ func (g *Game) colorAtLocked(pt Point, now time.Time) RGB {
 	if now.Before(g.startedAt) {
 		return g.countdownColorAtLocked(pt, now)
 	}
-	return colorForPoint(g.pointAtLocked(pt, now))
+	point := g.pointAtLocked(pt, now)
+	return g.colorForPointLocked(pt, point, now)
+}
+
+func (g *Game) colorForPointLocked(pt Point, point tilePoint, now time.Time) RGB {
+	if !point.present {
+		return RGB{}
+	}
+	if point.kind == 2 && g.level.redAnimation == "parkour_lava" {
+		return lavaColor(pt, now)
+	}
+	if point.kind == 0 && g.level.greenFade {
+		return g.greenPlatformColorLocked(pt, now)
+	}
+	return colorForPoint(point)
 }
 
 func (g *Game) pointAtLocked(pt Point, now time.Time) tilePoint {
@@ -509,9 +537,45 @@ func (g *Game) rawPointAtLocked(pt Point, now time.Time) tilePoint {
 	return frame.points[pt.Y][pt.X]
 }
 
+func (g *Game) greenPlatformColorLocked(pt Point, now time.Time) RGB {
+	frame, index, elapsed := g.framePositionAtLocked(now)
+	if frame == nil || index < 0 {
+		return RGB{}
+	}
+	point := frame.points[pt.Y][pt.X]
+	if !point.present || point.kind != 0 {
+		return RGB{}
+	}
+	scale := 1.0
+	if len(g.level.frames) > 1 {
+		previous := g.level.frames[(index-1+len(g.level.frames))%len(g.level.frames)].points[pt.Y][pt.X]
+		next := g.level.frames[(index+1)%len(g.level.frames)].points[pt.Y][pt.X]
+		appearWindow := minDuration(260*time.Millisecond, frame.duration/2)
+		disappearWindow := minDuration(420*time.Millisecond, frame.duration/2)
+		if (!previous.present || previous.kind != 0) && appearWindow > 0 && elapsed < appearWindow {
+			scale = 0.45 + 0.55*easeInOut(float64(elapsed)/float64(appearWindow))
+		}
+		if (!next.present || next.kind != 0) && disappearWindow > 0 {
+			remaining := frame.duration - elapsed
+			if remaining < disappearWindow {
+				fade := 0.35 + 0.65*easeInOut(float64(remaining)/float64(disappearWindow))
+				if fade < scale {
+					scale = fade
+				}
+			}
+		}
+	}
+	return scaleRGB(colorForPoint(point), scale)
+}
+
 func (g *Game) frameAtLocked(now time.Time) *compiledFrame {
+	frame, _, _ := g.framePositionAtLocked(now)
+	return frame
+}
+
+func (g *Game) framePositionAtLocked(now time.Time) (*compiledFrame, int, time.Duration) {
 	if len(g.level.frames) == 0 || now.Before(g.startedAt) {
-		return nil
+		return nil, -1, 0
 	}
 	elapsed := now.Sub(g.startedAt)
 	if g.level.totalDuration > 0 {
@@ -520,11 +584,12 @@ func (g *Game) frameAtLocked(now time.Time) *compiledFrame {
 	for i := range g.level.frames {
 		frame := &g.level.frames[i]
 		if elapsed < frame.duration {
-			return frame
+			return frame, i, elapsed
 		}
 		elapsed -= frame.duration
 	}
-	return &g.level.frames[len(g.level.frames)-1]
+	last := len(g.level.frames) - 1
+	return &g.level.frames[last], last, g.level.frames[last].duration
 }
 
 func (g *Game) failureColorAtLocked(pt Point, now time.Time) RGB {
@@ -576,12 +641,16 @@ func (g *Game) endsUnixLocked() int64 {
 	return g.startedAt.Add(g.level.timeLimit).Unix()
 }
 
-func fetchLevels(platformURL string, diff Difficulty) ([]compiledLevel, error) {
+func fetchLevels(platformURL string, diff Difficulty, gameID string) ([]compiledLevel, error) {
 	base := strings.TrimRight(strings.TrimSpace(platformURL), "/")
 	if base == "" {
 		return nil, fmt.Errorf("platform URL is empty")
 	}
-	endpoint, err := url.Parse(base + "/api/level-games/plataformas/levels")
+	cleanGameID := strings.Trim(strings.TrimSpace(gameID), "/")
+	if cleanGameID == "" {
+		cleanGameID = "plataformas"
+	}
+	endpoint, err := url.Parse(base + "/api/level-games/" + url.PathEscape(cleanGameID) + "/levels")
 	if err != nil {
 		return nil, err
 	}
@@ -629,6 +698,8 @@ func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
 			timeLimit:    time.Duration(level.TimeLimitSeconds) * time.Second,
 			frameTick:    frameTick,
 			winCondition: winCondition,
+			redAnimation: normalizeRedFloorAnimation(level.Rules.RedFloorAnimation),
+			greenFade:    level.Rules.GreenPlatformDisappear,
 			scoreUniqs:   map[string]struct{}{},
 			audio:        normalizeAudioRefs(level),
 		}
@@ -668,6 +739,7 @@ func normalizeAudioRefs(level cloudLevel) AudioRefs {
 		DoubleCoinCueRef: strings.TrimSpace(level.DoubleCoinCueRef),
 		DamageCueRef:     strings.TrimSpace(level.DamageCueRef),
 		WinCueRef:        strings.TrimSpace(level.WinCueRef),
+		DefeatCueRef:     strings.TrimSpace(level.DefeatCueRef),
 	}
 	if audio.MusicRef == "" {
 		audio.MusicRef = DefaultMusicRef
@@ -694,6 +766,9 @@ func normalizeAudioRefs(level cloudLevel) AudioRefs {
 	}
 	if audio.WinCueRef == "" {
 		audio.WinCueRef = DefaultWinCueRef
+	}
+	if audio.DefeatCueRef == "" {
+		audio.DefeatCueRef = audio.DamageCueRef
 	}
 	return audio
 }
@@ -750,6 +825,71 @@ func colorForPoint(point tilePoint) RGB {
 	default:
 		return RGB{}
 	}
+}
+
+func normalizeRedFloorAnimation(value string) string {
+	if strings.TrimSpace(value) == "parkour_lava" {
+		return "parkour_lava"
+	}
+	return "none"
+}
+
+func lavaColor(pt Point, now time.Time) RGB {
+	seconds := now.Sub(time.Unix(0, 0)).Seconds() * 0.22
+	field := parkourLavaHeatField(pt, seconds)
+	heat := clampFloat(0.18 + field*0.82)
+	flicker := 0.92 + 0.08*math.Sin((float64(pt.X)*1.3+float64(pt.Y)*0.7+seconds*4.2)*math.Pi)
+	return RGB{
+		R: clampByte(math.Round((150 + 105*heat) * flicker)),
+		G: clampByte(math.Round((14 + 70*heat) * flicker)),
+		B: clampByte(math.Round((2 + 10*heat) * flicker)),
+	}
+}
+
+func parkourLavaHeatField(pt Point, seconds float64) float64 {
+	nx := float64(pt.X) / float64(GridWidth)
+	ny := float64(pt.Y) / float64(GridHeight)
+	return 0.5 + 0.5*math.Sin((nx*3.0+ny*1.6+seconds*0.7)*math.Pi)*math.Cos((nx*2.2-ny*3.2-seconds*0.5)*math.Pi)
+}
+
+func scaleRGB(color RGB, scale float64) RGB {
+	return RGB{
+		R: clampByte(math.Round(float64(color.R) * scale)),
+		G: clampByte(math.Round(float64(color.G) * scale)),
+		B: clampByte(math.Round(float64(color.B) * scale)),
+	}
+}
+
+func minDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func clampByte(value float64) byte {
+	if value < 0 {
+		return 0
+	}
+	if value > 255 {
+		return 255
+	}
+	return byte(value)
+}
+
+func clampFloat(value float64) float64 {
+	if value < 0 {
+		return 0
+	}
+	if value > 1 {
+		return 1
+	}
+	return value
+}
+
+func easeInOut(t float64) float64 {
+	t = clampFloat(t)
+	return t * t * (3 - 2*t)
 }
 
 func successColor(pt Point, now time.Time) RGB {

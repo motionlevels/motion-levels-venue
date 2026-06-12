@@ -64,6 +64,10 @@ func (cl CompiledLevel) Description() string  { return cl.description }
 func (cl CompiledLevel) MusicRef() string     { return cl.audio.MusicRef }
 func (cl CompiledLevel) MusicVolume() float64 { return cl.audio.MusicVolume }
 
+type PreviewFrame struct {
+	Pixels string `json:"pixels"`
+}
+
 type AudioRefs struct {
 	MusicRef         string
 	MusicVolume      float64
@@ -71,6 +75,7 @@ type AudioRefs struct {
 	DoubleCoinCueRef string
 	DamageCueRef     string
 	WinCueRef        string
+	DefeatCueRef     string
 }
 
 type Game struct {
@@ -256,6 +261,7 @@ type cloudLevel struct {
 	DoubleCoinCueRef string                `json:"double_coin_cue_ref"`
 	DamageCueRef     string                `json:"damage_cue_ref"`
 	WinCueRef        string                `json:"win_cue_ref"`
+	DefeatCueRef     string                `json:"defeat_cue_ref"`
 	TileEffects      map[string]TileEffect `json:"tile_effects"`
 	Frames           []rawFrame            `json:"frames"`
 	Rules            cloudRules            `json:"rules"`
@@ -490,6 +496,7 @@ func normalizeAudioRefs(level cloudLevel) AudioRefs {
 		DoubleCoinCueRef: strings.TrimSpace(level.DoubleCoinCueRef),
 		DamageCueRef:     strings.TrimSpace(level.DamageCueRef),
 		WinCueRef:        strings.TrimSpace(level.WinCueRef),
+		DefeatCueRef:     strings.TrimSpace(level.DefeatCueRef),
 	}
 	if audio.MusicRef == "" {
 		audio.MusicRef = DefaultMusicRef
@@ -517,6 +524,9 @@ func normalizeAudioRefs(level cloudLevel) AudioRefs {
 	if audio.WinCueRef == "" {
 		audio.WinCueRef = DefaultWinCueRef
 	}
+	if audio.DefeatCueRef == "" {
+		audio.DefeatCueRef = audio.DamageCueRef
+	}
 	return audio
 }
 
@@ -527,6 +537,91 @@ func selectLevel(levels []CompiledLevel, id string) CompiledLevel {
 		}
 	}
 	return levels[0]
+}
+
+func PreviewFrames(platformURL string, id string, frameCount int) ([]PreviewFrame, error) {
+	levels, err := GetOrFetchLevels(platformURL)
+	if err != nil {
+		return nil, err
+	}
+	selected := selectLevel(levels, NormalizeLevel(id))
+	if frameCount < 2 {
+		frameCount = 2
+	}
+	if frameCount > 24 {
+		frameCount = 24
+	}
+	loopDuration := selected.totalDuration
+	if loopDuration <= 0 {
+		loopDuration = 4 * time.Second
+	}
+	frames := make([]PreviewFrame, 0, frameCount)
+	for index := 0; index < frameCount; index++ {
+		elapsed := time.Duration(float64(loopDuration) * float64(index) / float64(frameCount))
+		frames = append(frames, PreviewFrame{Pixels: selected.previewPixels(elapsed)})
+	}
+	return frames, nil
+}
+
+func (cl CompiledLevel) previewPixels(elapsed time.Duration) string {
+	var builder strings.Builder
+	builder.Grow(GridWidth * GridHeight * 6)
+	frameIndex := 0
+	if cl.frameTick > 0 {
+		frameIndex = int(elapsed / cl.frameTick)
+	}
+	for y := 0; y < GridHeight; y++ {
+		for x := 0; x < GridWidth; x++ {
+			color := cl.previewColorAt(x, y, elapsed, frameIndex)
+			builder.WriteString(hexByte(color.R))
+			builder.WriteString(hexByte(color.G))
+			builder.WriteString(hexByte(color.B))
+		}
+	}
+	return builder.String()
+}
+
+func (cl CompiledLevel) previewColorAt(x, y int, elapsed time.Duration, frameIndex int) RGB {
+	if cl.procedure != nil {
+		color, err := cl.procedure.colorAt(x, y, timeSeconds(elapsed.Seconds()), frameIndex)
+		if err == nil {
+			return color
+		}
+	}
+	frame := cl.previewFrameAt(elapsed)
+	if frame == nil {
+		return RGB{}
+	}
+	point := frame.points[y][x]
+	if !point.present {
+		return RGB{}
+	}
+	if eff, ok := cl.tileEffects[point.kind]; ok {
+		return eff.color
+	}
+	return RGB{}
+}
+
+func (cl CompiledLevel) previewFrameAt(elapsed time.Duration) *compiledFrame {
+	if len(cl.frames) == 0 {
+		return nil
+	}
+	if cl.totalDuration > 0 {
+		elapsed %= cl.totalDuration
+	}
+	for index := range cl.frames {
+		frame := &cl.frames[index]
+		if elapsed < frame.duration {
+			return frame
+		}
+		elapsed -= frame.duration
+	}
+	return &cl.frames[len(cl.frames)-1]
+}
+
+func hexByte(value byte) string {
+	const digits = "0123456789abcdef"
+	return string([]byte{digits[value>>4], digits[value&0x0f]})
 }
 
 func fallbackCompiledLevels() []CompiledLevel {

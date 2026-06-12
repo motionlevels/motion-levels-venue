@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
+
+	"github.com/lobis/motion-levels/game-engine/internal/games/animations"
 )
 
 type selectGameRequest struct {
@@ -68,6 +71,30 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			return
 		}
 		writeJSON(w, runtime.DisplayStatus(time.Now()))
+	})
+	mux.HandleFunc("/api/animation-preview", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		level := r.URL.Query().Get("level")
+		if level == "" {
+			http.Error(w, "level is required", http.StatusBadRequest)
+			return
+		}
+		frameCount, _ := strconv.Atoi(r.URL.Query().Get("frames"))
+		if frameCount <= 0 {
+			frameCount = 16
+		}
+		frames, err := animations.PreviewFrames(runtime.base.PlatformURL, level, frameCount)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		writeJSON(w, map[string]any{
+			"level":  animations.NormalizeLevel(level),
+			"frames": frames,
+		})
 	})
 	mux.HandleFunc("/api/display/events", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -251,7 +278,7 @@ func withAPILogging(runtime *gameRuntime, next http.Handler) http.Handler {
 
 func isAPIPath(path string) bool {
 	switch path {
-	case "/api/status", "/api/select", "/api/control", "/api/display", "/api/display/events":
+	case "/api/status", "/api/select", "/api/control", "/api/display", "/api/display/events", "/api/animation-preview":
 		return true
 	default:
 		return false

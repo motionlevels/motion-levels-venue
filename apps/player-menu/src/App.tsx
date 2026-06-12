@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { controlGame, fetchEngineStatus, postMenuEvent, postVenueSession, selectGame, type EngineGame, type EngineStatus } from "./api";
+import { controlGame, fetchAnimationPreview, fetchEngineStatus, postMenuEvent, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus } from "./api";
 import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
 import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
-import { defaultFloorAnim, floorAnimations } from "./floor";
+import { defaultFloorAnim, floorAnimations, type FloorAnim, type RGB } from "./floor";
 import { hexToColor, hexToRGB, initials } from "./utils";
 import { captureMenuEvent, menuKioskID, setMenuEventForwarder } from "./analytics";
 
@@ -125,7 +125,7 @@ function liveAnimationCards(catalog: EngineGame[] | undefined): GameCard[] {
       description: entry.description || "Animación publicada desde el editor.",
       rules: ["Animación publicada desde el editor.", "Se actualiza desde el motor sin reiniciar el menú."],
       engineGame: entry.game,
-      previewAnimation: "animations",
+      previewAnimation: entry.game,
     }));
 }
 
@@ -2046,8 +2046,72 @@ function TouchKeyboard({
   );
 }
 
+const animationPreviewCache = new Map<string, Promise<AnimationPreview>>();
+
+function cachedAnimationPreview(level: string): Promise<AnimationPreview> {
+  const key = level.trim().toLowerCase();
+  const cached = animationPreviewCache.get(key);
+  if (cached) return cached;
+  const request = fetchAnimationPreview(key).catch((error) => {
+    animationPreviewCache.delete(key);
+    throw error;
+  });
+  animationPreviewCache.set(key, request);
+  return request;
+}
+
+function previewLevelID(animationID: string): string | null {
+  return animationID.startsWith("animation-") ? animationID.replace(/^animation-/, "") : null;
+}
+
+function decodePreviewFrames(preview: AnimationPreview | null): RGB[][] {
+  if (!preview?.frames?.length) return [];
+  return preview.frames.flatMap((frame) => {
+    const raw = frame.pixels || "";
+    if (raw.length < 16 * 32 * 6) return [];
+    const pixels: RGB[] = [];
+    for (let index = 0; index < 16 * 32; index++) {
+      const offset = index * 6;
+      pixels.push([
+        Number.parseInt(raw.slice(offset, offset + 2), 16) || 0,
+        Number.parseInt(raw.slice(offset + 2, offset + 4), 16) || 0,
+        Number.parseInt(raw.slice(offset + 4, offset + 6), 16) || 0,
+      ]);
+    }
+    return [pixels];
+  });
+}
+
+function animFromPreviewFrames(frames: RGB[][]): FloorAnim | null {
+  if (!frames.length) return null;
+  return (x, y, cols, _rows, t) => {
+    const frame = frames[Math.floor(t * 12) % frames.length] || frames[0];
+    return frame[y * cols + x] || [0, 0, 0];
+  };
+}
+
 function Preview({ animationID, compact = false, src }: { animationID: string; compact?: boolean; src?: string }) {
-  const anim = floorAnimations[animationID] || defaultFloorAnim;
+  const liveLevelID = previewLevelID(animationID);
+  const [livePreview, setLivePreview] = useState<AnimationPreview | null>(null);
+
+  useEffect(() => {
+    if (!liveLevelID || src) return;
+    let cancelled = false;
+    cachedAnimationPreview(liveLevelID)
+      .then((preview) => {
+        if (!cancelled) setLivePreview(preview);
+      })
+      .catch(() => {
+        if (!cancelled) setLivePreview(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [liveLevelID, src]);
+
+  const previewFrames = useMemo(() => decodePreviewFrames(livePreview), [livePreview]);
+  const liveAnim = useMemo(() => animFromPreviewFrames(previewFrames), [previewFrames]);
+  const anim = liveAnim || floorAnimations[animationID] || defaultFloorAnim;
   return (
     <div className={`preview ${compact ? "compact-preview" : ""}`}>
       {src ? <img className="preview-media" src={src} alt="" aria-hidden="true" /> : <FloorPreview anim={anim} orientation="landscape" />}

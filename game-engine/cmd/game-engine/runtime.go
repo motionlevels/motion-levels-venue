@@ -13,6 +13,7 @@ import (
 
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
+	"github.com/lobis/motion-levels/game-engine/internal/games/animations"
 	"github.com/lobis/motion-levels/game-engine/internal/games/duel"
 	"github.com/lobis/motion-levels/game-engine/internal/games/lava"
 	"github.com/lobis/motion-levels/game-engine/internal/games/memorychallenge"
@@ -22,7 +23,6 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/games/saltos"
 	"github.com/lobis/motion-levels/game-engine/internal/games/temporada1"
 	"github.com/lobis/motion-levels/game-engine/internal/games/temporada2"
-	"github.com/lobis/motion-levels/game-engine/internal/games/animations"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
 	"github.com/lobis/motion-levels/packages/contracts/gamepb"
@@ -674,7 +674,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		return status
 	}
 
-	if cfg.Game == "plataformas" {
+	if cfg.Game == "plataformas" || cfg.Game == "parkour2" {
 		if plataformasGame, ok := game.(*plataformas.Game); ok {
 			snapshot := plataformasGame.Snapshot(gameNow)
 			status.Phase = snapshot.Phase
@@ -948,7 +948,7 @@ func (r *gameRuntime) applyLockedWithNarrationReason(cfg config, playAudio bool,
 }
 
 func applyPlataformasAudioConfig(cfg config, game floorGame) config {
-	if cfg.Game == "plataformas" {
+	if cfg.Game == "plataformas" || cfg.Game == "parkour2" {
 		provider, ok := game.(plataformasAudioProvider)
 		if !ok {
 			return cfg
@@ -969,6 +969,9 @@ func applyPlataformasAudioConfig(cfg config, game floorGame) config {
 		}
 		if refs.WinCueRef != "" {
 			cfg.WinCueRef = refs.WinCueRef
+		}
+		if refs.DefeatCueRef != "" {
+			cfg.DefeatCueRef = refs.DefeatCueRef
 		}
 	} else if cfg.Game == "animations" || strings.HasPrefix(cfg.Game, "animation-") {
 		provider, ok := game.(interface {
@@ -994,9 +997,15 @@ func applyPlataformasAudioConfig(cfg config, game floorGame) config {
 		if refs.WinCueRef != "" {
 			cfg.WinCueRef = refs.WinCueRef
 		}
+		if refs.DefeatCueRef != "" {
+			cfg.DefeatCueRef = refs.DefeatCueRef
+		}
 	}
 	if cfg.DoubleCoinCueRef == "" {
 		cfg.DoubleCoinCueRef = cfg.CoinCueRef
+	}
+	if cfg.DefeatCueRef == "" {
+		cfg.DefeatCueRef = cfg.DamageCueRef
 	}
 	return cfg
 }
@@ -1144,7 +1153,7 @@ func (r *gameRuntime) playCountdownLocked(cfg config, now time.Time) {
 
 func shouldPlayCountdownCue(cfg config) bool {
 	switch cfg.Game {
-	case "lava", "saltos", "parkour", "plataformas", "temporada1", "temporada2":
+	case "lava", "saltos", "parkour", "parkour2", "plataformas", "temporada1", "temporada2":
 		return true
 	default:
 		return false
@@ -1463,7 +1472,7 @@ func (r *gameRuntime) StartDisplaySnapshotRecording(interval time.Duration) {
 
 func recordsLevelAttempts(game string) bool {
 	switch game {
-	case "parkour", "plataformas", "temporada1", "temporada2":
+	case "parkour", "parkour2", "plataformas", "temporada1", "temporada2":
 		return true
 	default:
 		return false
@@ -1618,6 +1627,9 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 	case "plataformas":
 		log.Printf("game: plataformas players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 		return plataformas.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL)
+	case "parkour2":
+		log.Printf("game: parkour2 difficulty=%s level=%s", cfg.Difficulty, cfg.Level)
+		return plataformas.NewWithSeedForGame(now, seed, 1, cfg.Difficulty, cfg.Level, cfg.PlatformURL, "parkour2")
 	case "animations":
 		log.Printf("game: animations players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 		return animations.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL)
@@ -1825,6 +1837,9 @@ func configForSelection(base config, game string, players int) config {
 		cfg.MusicVolume = parkour.DefaultMusicVolume
 	case "plataformas":
 		cfg.Level = plataformas.NormalizeLevel(cfg.Level)
+	case "parkour2":
+		cfg.PlayerCount = 1
+		cfg.Level = plataformas.NormalizeLevel(cfg.Level)
 	case "temporada1":
 		cfg.Level = temporada1.NormalizeLevel(cfg.Level)
 	case "temporada2":
@@ -1853,7 +1868,7 @@ func defaultMusicForGame(game string) (string, float64) {
 		return saltos.DefaultMusicRef, saltos.DefaultMusicVolume
 	case "parkour":
 		return parkour.DefaultMusicRef, parkour.DefaultMusicVolume
-	case "plataformas":
+	case "plataformas", "parkour2":
 		return plataformas.DefaultMusicRef, plataformas.DefaultMusicVolume
 	case "temporada1":
 		return temporada1.DefaultMusicRef, temporada1.DefaultMusicVolume
@@ -1928,6 +1943,18 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 			Difficulty:  true,
 			Volume:      parkour.DefaultMusicVolume,
 			Levels:      parkourCatalogLevels(),
+		},
+		{
+			Game:        "parkour2",
+			Label:       "Parkour 2.0",
+			Description: "Reto individual editable desde la nube, con animaciones opcionales para lava y plataformas verdes.",
+			Music:       plataformas.DefaultMusicRef,
+			Players:     true,
+			MinPlayers:  1,
+			MaxPlayers:  1,
+			Difficulty:  true,
+			Volume:      plataformas.DefaultMusicVolume,
+			Levels:      plataformasCatalogLevels(),
 		},
 		{
 			Game:        "plataformas",
@@ -2322,6 +2349,7 @@ func preloadAudioRefs(cfg config) []string {
 		cfg.DoubleCoinCueRef,
 		cfg.DamageCueRef,
 		cfg.WinCueRef,
+		cfg.DefeatCueRef,
 		cfg.NarrationCueRef,
 		cfg.CountdownCueRef,
 	}
