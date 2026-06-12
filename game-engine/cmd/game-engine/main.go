@@ -52,6 +52,7 @@ type config struct {
 	DamageCueRef           string
 	WinCueRef              string
 	DefeatCueRef           string
+	PressureCueRef         string
 	NarrationCueRef        string
 	NarrationVolume        float64
 	CountdownCueRef        string
@@ -98,6 +99,7 @@ func main() {
 	flag.StringVar(&cfg.DamageCueRef, "damage-cue", "Motion/sonidos/fallo.mp3", "damage cue asset ref, preloaded for instant press feedback")
 	flag.StringVar(&cfg.WinCueRef, "win-cue", "Motion/sonidos/victoria.mp3", "win cue asset ref, preloaded for game completion feedback")
 	flag.StringVar(&cfg.DefeatCueRef, "defeat-cue", "", "defeat cue asset ref; empty reuses damage-cue for failed level feedback")
+	flag.StringVar(&cfg.PressureCueRef, "pressure-cue", "", "pressure cue asset ref for animation touch effects")
 	flag.StringVar(&cfg.NarrationCueRef, "narration-cue", "", "narration asset ref; empty uses the selected game's default narration")
 	flag.Float64Var(&cfg.NarrationVolume, "narration-volume", 0.85, "narration volume, 0.0-1.0")
 	flag.StringVar(&cfg.CountdownCueRef, "countdown-cue", "Motion/narraciones/countdown-tres-dos-uno-vamos.mp3", "countdown narration asset ref; empty disables countdown narration")
@@ -429,6 +431,8 @@ func cueRef(cfg config, cue string) string {
 		return cfg.WinCueRef
 	case whackamole.CueDefeat:
 		return cfg.DefeatCueRef
+	case whackamole.CuePressure:
+		return cfg.PressureCueRef
 	default:
 		return ""
 	}

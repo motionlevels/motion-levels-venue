@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { controlGame, fetchAnimationPreview, fetchEngineStatus, postMenuEvent, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus } from "./api";
 import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
-import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
+import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
 import { defaultFloorAnim, floorAnimations, type FloorAnim, type RGB } from "./floor";
@@ -29,6 +29,7 @@ type MenuState = {
   levelProgress: Record<string, LevelProgress>;
   nextPlayerId: number;
   narrationArmed: Record<string, boolean>;
+  operatorUnlockLevels: boolean;
 };
 
 type LevelProgress = {
@@ -47,11 +48,12 @@ const maxPlayers = 6;
 const maxTeamNameLength = 24;
 const maxPlayerNameLength = 12;
 const noPressureSessionLimitMillis = 60 * 60 * 1000;
-const devUnlockLevels = import.meta.env.DEV || import.meta.env.VITE_UNLOCK_LEVELS === "1";
 // Spanish QWERTY adapted for a kiosk touch surface.
 const keyboardLetterRows = ["qwertyuiop", "asdfghjklñ", "zxcvbnm"];
 const keyboardNumberRows = ["1234567890", "-_/&()'\"", ".,!?"];
 const keyboardAccentRows = ["áéíóúü", "àèìòù", "äëïöüñ"];
+const envUnlockLevels = import.meta.env.DEV || import.meta.env.VITE_UNLOCK_LEVELS === "1";
+const operatorSettingsPin = /^\d{6}$/.test(import.meta.env.VITE_DEV_SETTINGS_PIN || "") ? import.meta.env.VITE_DEV_SETTINGS_PIN || "" : "739481";
 const defaultPlayers: Player[] = [{ id: 1, name: "", color: playerColors[0], active: true }];
 const teamNameStarts = ["Rayo", "Neón", "Pulso", "Láser", "Cumbre", "Órbita", "Turbo", "Brillo", "Salto", "Ritmo", "Chispa", "Fuego"];
 const teamNameFinishes = ["Verde", "Azul", "Solar", "Norte", "Sur", "Lima", "Rojo", "Claro", "Pista", "Nivel", "Flash", "Veloz"];
@@ -192,9 +194,13 @@ function progressFor(game: GameCard, state: MenuState): LevelProgress {
   return { unlockedThrough: progress?.unlockedThrough || 1, bestByLevel: progress?.bestByLevel || {}, bestTimeByLevel: progress?.bestTimeByLevel || {} };
 }
 
+function unlockLevelsEnabled(state: MenuState): boolean {
+  return envUnlockLevels || state.operatorUnlockLevels;
+}
+
 function isLevelUnlocked(game: GameCard, levelID: string, state: MenuState): boolean {
   if (!game.levels?.length) return true;
-  if (devUnlockLevels) return true;
+  if (unlockLevelsEnabled(state)) return true;
   return levelNumber(levelID) <= progressFor(game, state).unlockedThrough;
 }
 
@@ -287,6 +293,9 @@ function loadMenuState(): MenuState {
           const oldName = index === 0 ? "Red" : "Blue";
           return player && player.active && (name === "" || name === oldName);
         });
+      const requestedGameID = saved.selectedGame === "whack-a-mole" && wasOldUntouchedDefault ? "featured-lava" : String(saved.selectedGame || "featured-lava");
+      const savedGame = games.find((game) => game.id === requestedGameID);
+      const savedCategory: CategoryID = categories.some((category) => category.id === saved.category) ? (saved.category as CategoryID) : "featured";
       return {
         difficulty: "easy",
         ...saved,
@@ -294,13 +303,14 @@ function loadMenuState(): MenuState {
         sessionActive: Boolean(saved.sessionActive),
         sessionId: typeof saved.sessionId === "string" ? saved.sessionId : "",
         sessionStartedUnix: Number(saved.sessionStartedUnix) || 0,
-        category: saved.selectedGame === "whack-a-mole" && wasOldUntouchedDefault ? "team" : saved.category || "team",
-        selectedGame: saved.selectedGame === "whack-a-mole" && wasOldUntouchedDefault ? "lava" : saved.selectedGame || "lava",
+        category: savedGame?.category || savedCategory,
+        selectedGame: savedGame?.id || "featured-lava",
         selectedLevels,
         levelProgress,
         players: wasOldUntouchedDefault ? defaultPlayers : cleanedPlayers,
         nextPlayerId: wasOldUntouchedDefault ? 1 : saved.nextPlayerId || 0,
         narrationArmed,
+        operatorUnlockLevels: envUnlockLevels || Boolean(saved.operatorUnlockLevels),
       };
     }
   } catch {
@@ -312,13 +322,14 @@ function loadMenuState(): MenuState {
     sessionStartedUnix: 0,
     teamName: "",
     players: defaultPlayers,
-    category: "team",
-    selectedGame: "lava",
+    category: "featured",
+    selectedGame: "featured-lava",
     difficulty: "easy",
     selectedLevels: {},
     levelProgress: {},
     nextPlayerId: 1,
     narrationArmed: {},
+    operatorUnlockLevels: envUnlockLevels,
   };
 }
 
@@ -458,6 +469,10 @@ export default function App() {
   const [colorPickerFor, setColorPickerFor] = useState<number | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<number | null>(null);
   const [confirmResetSession, setConfirmResetSession] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsUnlocked, setSettingsUnlocked] = useState(false);
+  const [settingsPin, setSettingsPin] = useState("");
+  const [settingsError, setSettingsError] = useState("");
   const [teamOpen, setTeamOpen] = useState(false);
   const [screenMode, setScreenMode] = useState<ScreenMode>("browse");
   const [launchedGameID, setLaunchedGameID] = useState(menu.selectedGame);
@@ -685,16 +700,18 @@ export default function App() {
       else if (colorPickerFor !== null) setColorPickerFor(null);
       else if (confirmRemove !== null) setConfirmRemove(null);
       else if (confirmResetSession) setConfirmResetSession(false);
+      else if (settingsOpen) setSettingsOpen(false);
       else if (teamOpen) setTeamOpen(false);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [keyboardTarget, colorPickerFor, confirmRemove, confirmResetSession, teamOpen]);
+  }, [keyboardTarget, colorPickerFor, confirmRemove, confirmResetSession, settingsOpen, teamOpen]);
 
   const availableGames = useMemo(() => new Set((status?.catalog || []).map((entry) => entry.game)), [status]);
   const activePlayers = menu.players.filter((player) => player.active);
   const enginePlayers = statusPlayersForDisplay(status);
   const activeCategory = categories.find((category) => category.id === menu.category) || categories[0];
+  const levelsUnlocked = unlockLevelsEnabled(menu);
   const selectedGame = menuGames.find((game) => game.id === menu.selectedGame) || menuGames[0] || games[0];
   const launchedGame = menuGames.find((game) => game.id === launchedGameID) || selectedGame;
   const levelBrowserGame = menuGames.find((game) => game.id === levelBrowserGameID && game.category === menu.category && game.levels?.length) || null;
@@ -727,8 +744,8 @@ export default function App() {
   const rosterIssue = useMemo(() => gameRosterIssue(selectedGame, menu.players), [selectedGame, menu.players]);
 
   useEffect(() => {
-    document.documentElement.style.setProperty("--accent", colors.green);
-    document.documentElement.style.setProperty("--accent-rgb", hexToRGB(colors.green));
+    document.documentElement.style.setProperty("--accent", colors.blue);
+    document.documentElement.style.setProperty("--accent-rgb", hexToRGB(colors.blue));
   }, []);
 
   useEffect(() => {
@@ -860,8 +877,8 @@ export default function App() {
       sessionStartedUnix: nowUnix,
       teamName: nextTeamName,
       players: defaultPlayers,
-      category: "team",
-      selectedGame: "lava",
+      category: "featured",
+      selectedGame: "featured-lava",
       difficulty: "easy",
       selectedLevels: {},
       levelProgress: {},
@@ -902,8 +919,8 @@ export default function App() {
       sessionStartedUnix: 0,
       teamName: "",
       players: defaultPlayers,
-      category: "team",
-      selectedGame: "lava",
+      category: "featured",
+      selectedGame: "featured-lava",
       difficulty: "easy",
       selectedLevels: {},
       levelProgress: {},
@@ -926,6 +943,53 @@ export default function App() {
         setError(err instanceof Error ? err.message : "No se pudo cerrar la sesión");
       }
     }
+  }
+
+  function openSettings() {
+    captureMenuEvent("settings_opened", {
+      operator_unlock_levels: menu.operatorUnlockLevels,
+    });
+    setSettingsOpen(true);
+    setSettingsUnlocked(false);
+    setSettingsPin("");
+    setSettingsError("");
+  }
+
+  function closeSettings() {
+    setSettingsOpen(false);
+    setSettingsUnlocked(false);
+    setSettingsPin("");
+    setSettingsError("");
+  }
+
+  function setOperatorUnlockLevels(enabled: boolean) {
+    captureMenuEvent("operator_unlock_levels_changed", {
+      enabled,
+      env_unlock_levels: envUnlockLevels,
+    });
+    setMenu((current) => ({ ...current, operatorUnlockLevels: enabled }));
+  }
+
+  function submitSettingsPin(pin = settingsPin) {
+    if (pin === operatorSettingsPin) {
+      setSettingsUnlocked(true);
+      setSettingsPin("");
+      setSettingsError("");
+      captureMenuEvent("settings_unlocked");
+      return;
+    }
+    setSettingsPin("");
+    setSettingsError("Código incorrecto");
+    captureMenuEvent("settings_pin_failed");
+  }
+
+  function typeSettingsPinDigit(digit: string) {
+    setSettingsError("");
+    setSettingsPin((current) => {
+      const next = `${current}${digit}`.slice(0, 6);
+      if (next.length === 6) window.setTimeout(() => submitSettingsPin(next), 0);
+      return next;
+    });
   }
 
   function keyboardValue() {
@@ -1049,14 +1113,16 @@ export default function App() {
         onClick={() => setSelectedLevel(game, level.id)}
       >
         <Preview src={levelPreviewSrc(game, level, previewDifficulty)} animationID={levelPreviewAnimationID(game, level)} compact />
-        <strong>{level.label}</strong>
-        {locked ? (
-          <span className="level-state locked-label">Bloqueado</span>
-        ) : (
-          <span className={`level-state ${bestDifficulty ? "rated" : "unrated"}`}>
-            <StarRating difficulty={bestDifficulty} label="Mejor dificultad" muted={!bestDifficulty} />
-          </span>
-        )}
+        <span className="level-footer">
+          <strong>{level.label}</strong>
+          {locked ? (
+            <span className="level-state locked-label">Bloqueado</span>
+          ) : (
+            <span className={`level-state ${bestDifficulty ? "rated" : "unrated"}`}>
+              <StarRating difficulty={bestDifficulty} label="Mejor dificultad" muted={!bestDifficulty} />
+            </span>
+          )}
+        </span>
       </button>
     );
   }
@@ -1313,7 +1379,10 @@ export default function App() {
                 setLevelBrowserGameID(null);
               }}
             >
-              {category.label}
+              <span className="tab-emoji" aria-hidden="true">
+                {category.icon}
+              </span>
+              <span>{category.label}</span>
             </button>
           ))}
         </nav>
@@ -1323,10 +1392,10 @@ export default function App() {
             type="button"
             onClick={() => sendGameControl("toggle_mute")}
             disabled={!status?.audioEnabled}
-            aria-label={status?.audioMuted ? "Activar audio" : "Silenciar audio"}
+            aria-label={status?.audioMuted ? "Unmute" : "Mute"}
+            title={status?.audioMuted ? "Unmute" : "Mute"}
           >
             {status?.audioMuted ? <VolumeMutedIcon /> : <VolumeIcon />}
-            <strong>{status?.audioMuted ? "Mute" : "Audio"}</strong>
           </button>
           <button
             className={`capsule equipo-btn ${rosterIssue ? "invalid" : ""}`}
@@ -1349,6 +1418,16 @@ export default function App() {
               ))}
             </span>
             <strong>{playerCountLabel}</strong>
+          </button>
+          <button
+            className={`capsule settings-btn ${levelsUnlocked ? "active" : ""}`}
+            type="button"
+            onClick={openSettings}
+            aria-label="Ajustes"
+            aria-pressed={levelsUnlocked}
+            title="Ajustes"
+          >
+            <GearIcon />
           </button>
         </div>
       </header>
@@ -1479,7 +1558,7 @@ export default function App() {
                 </div>
                 {browsingLevels ? (
                   <div className="level-browser-actions">
-                    {devUnlockLevels ? <span className="dev-unlock-pill">Dev: niveles abiertos</span> : null}
+                    {levelsUnlocked ? <span className="dev-unlock-pill">Dev: niveles abiertos</span> : null}
                     <button className="btn compact back-to-games" type="button" onClick={() => setLevelBrowserGameID(null)}>
                       <ArrowLeftIcon />
                       Juegos
@@ -1697,6 +1776,28 @@ export default function App() {
         />
       ) : null}
 
+      {settingsOpen ? (
+        <OperatorSettingsDialog
+          unlocked={settingsUnlocked}
+          pin={settingsPin}
+          error={settingsError}
+          levelsUnlocked={levelsUnlocked}
+          envUnlockLevels={envUnlockLevels}
+          onTypeDigit={typeSettingsPinDigit}
+          onBackspace={() => {
+            setSettingsError("");
+            setSettingsPin((current) => current.slice(0, -1));
+          }}
+          onClear={() => {
+            setSettingsError("");
+            setSettingsPin("");
+          }}
+          onSubmit={() => submitSettingsPin()}
+          onToggleLevels={() => setOperatorUnlockLevels(!menu.operatorUnlockLevels)}
+          onClose={closeSettings}
+        />
+      ) : null}
+
       {keyboardTarget ? (
         <TouchKeyboard
           title={keyboardTitle()}
@@ -1786,6 +1887,89 @@ function ColorPicker({
             );
           })}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function OperatorSettingsDialog({
+  unlocked,
+  pin,
+  error,
+  levelsUnlocked,
+  envUnlockLevels,
+  onTypeDigit,
+  onBackspace,
+  onClear,
+  onSubmit,
+  onToggleLevels,
+  onClose,
+}: {
+  unlocked: boolean;
+  pin: string;
+  error: string;
+  levelsUnlocked: boolean;
+  envUnlockLevels: boolean;
+  onTypeDigit: (digit: string) => void;
+  onBackspace: () => void;
+  onClear: () => void;
+  onSubmit: () => void;
+  onToggleLevels: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Ajustes" onClick={onClose}>
+      <div className="modal settings-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <strong>Ajustes</strong>
+          <button className="icon-button" type="button" aria-label="Cerrar ajustes" onClick={onClose}>
+            <CloseIcon />
+          </button>
+        </div>
+
+        {unlocked ? (
+          <section className="settings-section" aria-label="Opciones de operador">
+            <button className={`settings-toggle ${levelsUnlocked ? "active" : ""}`} type="button" onClick={onToggleLevels} disabled={envUnlockLevels} aria-pressed={levelsUnlocked}>
+              <span>
+                <strong>Dev: niveles abiertos</strong>
+                <small>{envUnlockLevels ? "Activado por entorno" : levelsUnlocked ? "Todos los niveles visibles" : "Progreso normal"}</small>
+              </span>
+              <span className="switch-track" aria-hidden="true">
+                <span />
+              </span>
+            </button>
+          </section>
+        ) : (
+          <section className="pin-panel" aria-label="PIN operador">
+            <span className="micro">PIN operador</span>
+            <div className={`pin-dots ${error ? "error" : ""}`} aria-label={`${pin.length} de 6 dígitos`}>
+              {Array.from({ length: 6 }, (_, index) => (
+                <span key={index} className={index < pin.length ? "filled" : ""} />
+              ))}
+            </div>
+            {error ? <p className="pin-error">{error}</p> : <p className="pin-error placeholder">{"\u00a0"}</p>}
+            <div className="pin-keypad" aria-label="Teclado PIN">
+              {"123456789".split("").map((digit) => (
+                <button key={digit} className="pin-key" type="button" onClick={() => onTypeDigit(digit)}>
+                  {digit}
+                </button>
+              ))}
+              <button className="pin-key secondary" type="button" onClick={onClear}>
+                C
+              </button>
+              <button className="pin-key" type="button" onClick={() => onTypeDigit("0")}>
+                0
+              </button>
+              <button className="pin-key secondary" type="button" onClick={onBackspace} aria-label="Borrar dígito">
+                <BackspaceIcon />
+              </button>
+            </div>
+            <button className="btn primary settings-submit" type="button" onClick={onSubmit} disabled={pin.length !== 6}>
+              <CheckIcon />
+              Entrar
+            </button>
+          </section>
+        )}
       </div>
     </div>
   );

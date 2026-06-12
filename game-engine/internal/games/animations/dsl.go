@@ -68,6 +68,8 @@ type dslEvalContext struct {
 var dslBuiltinVariables = map[string]struct{}{
 	"x": {}, "y": {}, "width": {}, "height": {}, "xn": {}, "yn": {},
 	"loop_time": {}, "loop_progress": {}, "loop_seconds": {}, "frame": {}, "seed": {}, "pi": {},
+	"press_x": {}, "press_y": {}, "press_age": {}, "press_progress": {}, "press_distance": {},
+	"base_r": {}, "base_g": {}, "base_b": {},
 }
 
 var dslFunctionNames = map[string]struct{}{
@@ -133,6 +135,10 @@ func compileProcedureSource(source animationProcedureSource) (*compiledProcedure
 }
 
 func (p *compiledProcedure) colorAt(x, y int, elapsed timeSeconds, frameIndex int) (RGB, error) {
+	return p.colorAtWithVariables(x, y, elapsed, frameIndex, nil)
+}
+
+func (p *compiledProcedure) colorAtWithVariables(x, y int, elapsed timeSeconds, frameIndex int, extraVariables map[string]float64) (RGB, error) {
 	renderTime := float64(elapsed)
 	if p.loopSeconds > 0 {
 		renderTime = positiveModFloat(renderTime, p.loopSeconds)
@@ -163,6 +169,11 @@ func (p *compiledProcedure) colorAt(x, y int, elapsed timeSeconds, frameIndex in
 	}
 	for key, value := range p.params {
 		env[key] = numberValue(value)
+	}
+	for key, value := range extraVariables {
+		if _, ok := dslBuiltinVariables[key]; ok {
+			env[key] = numberValue(value)
+		}
 	}
 	ctx := &dslEvalContext{env: env, source: p}
 	for _, assignment := range p.assignments {

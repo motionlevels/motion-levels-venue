@@ -1000,6 +1000,9 @@ func applyPlataformasAudioConfig(cfg config, game floorGame) config {
 		if refs.DefeatCueRef != "" {
 			cfg.DefeatCueRef = refs.DefeatCueRef
 		}
+		if refs.PressureCueRef != "" {
+			cfg.PressureCueRef = refs.PressureCueRef
+		}
 	}
 	if cfg.DoubleCoinCueRef == "" {
 		cfg.DoubleCoinCueRef = cfg.CoinCueRef
@@ -2350,6 +2353,7 @@ func preloadAudioRefs(cfg config) []string {
 		cfg.DamageCueRef,
 		cfg.WinCueRef,
 		cfg.DefeatCueRef,
+		cfg.PressureCueRef,
 		cfg.NarrationCueRef,
 		cfg.CountdownCueRef,
 	}

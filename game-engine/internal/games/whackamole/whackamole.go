@@ -46,6 +46,7 @@ const (
 	CueDoubleCoin = "double_coin"
 	CueDamage     = "damage"
 	CueDefeat     = "defeat"
+	CuePressure   = "pressure"
 )
 
 type RGB = animation.RGB

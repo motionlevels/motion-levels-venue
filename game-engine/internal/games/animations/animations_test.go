@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 )
 
 func TestCompileCloudLevelsSupportsProceduralDSLWithoutFrames(t *testing.T) {
@@ -130,5 +132,77 @@ func TestProceduralDSLMigratesLegacyNormalizedAssignments(t *testing.T) {
 	}
 	if _, err := source.colorAt(3, 7, 0.25, 0); err != nil {
 		t.Fatalf("legacy migrated source failed render: %v", err)
+	}
+}
+
+func TestPressureEffectPresetRendersFromPressEvent(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        "pressure-effect",
+		Label:       "Pressure Effect",
+		FrameTickMS: 20,
+		Rules: cloudRules{AnimationSource: animationSource{
+			Type:        "procedure",
+			Language:    "motion-dsl-v1",
+			Code:        "color = rgb(20, 30, 40)",
+			LoopSeconds: 2,
+			PressureEffect: pressureEffectSource{
+				Type:            "preset",
+				Preset:          "ripple",
+				DurationSeconds: 1,
+			},
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("compileCloudLevels returned error: %v", err)
+	}
+	game := &Game{
+		level:          levels[0],
+		startedAt:      time.Unix(0, 0),
+		pressed:        map[Point]bool{},
+		pressureEvents: map[Point]time.Time{},
+	}
+	before := game.colorAtLocked(Point{X: 8, Y: 16}, time.Unix(0, 0))
+	game.Press(whackamole.PressEvent{X: 8, Y: 16, Pressed: true}, time.Unix(0, int64(100*time.Millisecond)))
+	after := game.colorAtLocked(Point{X: 8, Y: 16}, time.Unix(0, int64(100*time.Millisecond)))
+	if before == after {
+		t.Fatalf("pressure effect did not change color: before=%+v after=%+v", before, after)
+	}
+	expired := game.colorAtLocked(Point{X: 8, Y: 16}, time.Unix(2, 0))
+	if expired != before {
+		t.Fatalf("expired pressure color = %+v, want base %+v", expired, before)
+	}
+}
+
+func TestPressureSoundEmitsPressureCue(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        "pressure-sound",
+		Label:       "Pressure Sound",
+		FrameTickMS: 20,
+		Rules: cloudRules{AnimationSource: animationSource{
+			Type:        "procedure",
+			Language:    "motion-dsl-v1",
+			Code:        "color = rgb(20, 30, 40)",
+			LoopSeconds: 2,
+			PressureSound: pressureSoundSource{
+				Type:   "cue",
+				CueRef: "Motion/sonidos/aparecer.mp3",
+			},
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("compileCloudLevels returned error: %v", err)
+	}
+	game := &Game{
+		level:          levels[0],
+		startedAt:      time.Unix(0, 0),
+		pressed:        map[Point]bool{},
+		pressureEvents: map[Point]time.Time{},
+	}
+	events := game.Press(whackamole.PressEvent{X: 8, Y: 16, Pressed: true}, time.Unix(0, 0))
+	if len(events) != 1 || events[0].Cue != whackamole.CuePressure {
+		t.Fatalf("events = %+v, want pressure cue", events)
+	}
+	if got := game.AudioRefs().PressureCueRef; got != "Motion/sonidos/aparecer.mp3" {
+		t.Fatalf("pressure cue ref = %q", got)
 	}
 }

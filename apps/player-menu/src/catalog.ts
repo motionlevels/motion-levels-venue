@@ -27,7 +27,7 @@ export const colors = {
   red: "#ff5268",
   violet: "#b987ff",
   orange: "#ff9f45",
-  blue: "#5b8cff",
+  blue: "#005af8",
 };
 
 // Eight fully saturated, easy-to-distinguish player colors.
@@ -45,21 +45,23 @@ export const playerColors = [
 export const playerColorNames = ["Rojo", "Cian", "Verde", "Rosa", "Azul", "Amarillo", "Naranja", "Morado"];
 export const nameHints = playerColorNames;
 
-export type CategoryID = "featured" | "individual" | "team" | "versus" | "attract";
+export type CategoryID = "featured" | "team" | "versus" | "individual" | "arcade" | "attract";
 
 export type Category = {
   id: CategoryID;
   label: string;
   title: string;
   color: string;
+  icon: string;
 };
 
 export const categories: Category[] = [
-  { id: "featured", label: "Destacados", title: "Listos para jugar", color: colors.cyan },
-  { id: "individual", label: "Individual", title: "Retos individuales", color: colors.orange },
-  { id: "team", label: "Equipo", title: "Jugad en equipo", color: colors.green },
-  { id: "versus", label: "Versus", title: "Cara a cara", color: colors.red },
-  { id: "attract", label: "Ambiente", title: "Modos ambiente", color: colors.violet },
+  { id: "featured", label: "Destacados", title: "Listos para jugar", color: colors.blue, icon: "⭐" },
+  { id: "team", label: "Cooperativos", title: "Jugad en equipo", color: colors.blue, icon: "👥" },
+  { id: "versus", label: "Competitivos", title: "Cara a cara", color: colors.blue, icon: "⚔️" },
+  { id: "individual", label: "Individual", title: "Retos individuales", color: colors.blue, icon: "👤" },
+  { id: "arcade", label: "Arcade", title: "Arcade", color: colors.blue, icon: "🎮" },
+  { id: "attract", label: "Ambiente", title: "Modos ambiente", color: colors.blue, icon: "🏞️" },
 ];
 
 export type DifficultyID = "easy" | "medium" | "hard" | "expert";
@@ -71,7 +73,7 @@ export type Difficulty = {
 };
 
 export const difficulties: Difficulty[] = [
-  { id: "easy", label: "Fácil", color: colors.green },
+  { id: "easy", label: "Fácil", color: colors.blue },
   { id: "medium", label: "Media", color: colors.yellow },
   { id: "hard", label: "Difícil", color: colors.orange },
   { id: "expert", label: "Experto", color: colors.red },
@@ -262,6 +264,21 @@ export const games: GameCard[] = [
     audio: "Narración + música",
     description: "Pisa los objetivos 2×2 antes de que se apaguen. Rápido, claro y muy físico.",
     rules: ["Pisa solo las zonas iluminadas.", "Los aciertos suman puntos.", "Los fallos rompen la racha."],
+  },
+  {
+    id: "simon-dice",
+    label: "Simón dice",
+    category: "arcade",
+    color: colors.blue,
+    players: "1-6",
+    difficulty: "Memoria",
+    duration: "Rondas",
+    mode: "Secuencia",
+    audio: "Música + efectos",
+    description: "Memorizad la secuencia de luces y repetidla en grupo antes de que el ritmo suba.",
+    rules: ["Mirad la secuencia iluminada.", "Pisad los colores en el mismo orden.", "Cada ronda añade un paso más."],
+    previewAnimation: "simon-dice",
+    disabled: true,
   },
   {
     id: "featured-lava",

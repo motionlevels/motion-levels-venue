@@ -158,6 +158,39 @@ const whackAMole: FloorAnim = (x, y, cols, rows, t) => {
   return out;
 };
 
+const simonDice: FloorAnim = (x, y, cols, rows, t) => {
+  const halfCols = Math.floor(cols / 2);
+  const halfRows = Math.floor(rows / 2);
+  const pads: Array<{ x: number; y: number; w: number; h: number; color: RGB }> = [
+    { x: 1, y: 2, w: halfCols - 2, h: halfRows - 3, color: [0, 90, 248] },
+    { x: halfCols + 1, y: 2, w: cols - halfCols - 2, h: halfRows - 3, color: [255, 82, 104] },
+    { x: 1, y: halfRows + 1, w: halfCols - 2, h: rows - halfRows - 3, color: [255, 209, 102] },
+    { x: halfCols + 1, y: halfRows + 1, w: cols - halfCols - 2, h: rows - halfRows - 3, color: [0, 232, 98] },
+  ];
+  const sequence = [0, 1, 2, 0, 3, 1, 2, 3];
+  const cycle = t * 1.15;
+  const active = sequence[Math.floor(cycle) % sequence.length] || 0;
+  const phase = cycle % 1;
+
+  for (let i = 0; i < pads.length; i++) {
+    const pad = pads[i];
+    if (!onRect(x, y, pad.x, pad.y, pad.w, pad.h)) continue;
+    const edge = x === pad.x || x === pad.x + pad.w - 1 || y === pad.y || y === pad.y + pad.h - 1;
+    const idlePulse = 0.16 + 0.04 * Math.sin(t * 2.2 + i);
+    const hitPulse = i === active ? 0.35 + 0.65 * Math.pow(1 - phase, 1.35) : 0;
+    const brightness = edge ? Math.max(idlePulse + 0.1, hitPulse * 0.8) : Math.max(idlePulse, hitPulse);
+    return [pad.color[0] * brightness, pad.color[1] * brightness, pad.color[2] * brightness];
+  }
+
+  const centerCue = Math.abs(x - (cols - 1) / 2) <= 1 && Math.abs(y - (rows - 1) / 2) <= 1;
+  if (centerCue) {
+    const flash = 0.18 + 0.42 * Math.pow(1 - phase, 1.8);
+    return [255 * flash, 255 * flash, 255 * flash];
+  }
+
+  return [1, 5, 12];
+};
+
 // Floor is Lava: flowing red/orange heat with cool dark safe islands.
 const lava: FloorAnim = (x, y, cols, rows, t) => {
   const nx = x / cols;
@@ -505,6 +538,7 @@ export const defaultFloorAnim = loop;
 
 export const floorAnimations: Record<string, FloorAnim> = {
   "whack-a-mole": whackAMole,
+  "simon-dice": simonDice,
   animations: loop,
   "ambient-comet": ambientComet,
   "ambient-pulse": ambientPulse,

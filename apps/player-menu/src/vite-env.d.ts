@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_POSTHOG_KEY?: string;
   readonly VITE_POSTHOG_UI_HOST?: string;
   readonly VITE_VENUE_ID?: string;
+  readonly VITE_UNLOCK_LEVELS?: string;
+  readonly VITE_DEV_SETTINGS_PIN?: string;
 }
 
 interface ImportMeta {

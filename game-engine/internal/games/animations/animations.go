@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,22 +42,30 @@ type compiledFrame struct {
 	points   [GridHeight][GridWidth]tilePoint
 }
 
+type compiledPressureEffect struct {
+	kind      string
+	preset    string
+	duration  time.Duration
+	procedure *compiledProcedure
+}
+
 type tilePoint struct {
 	present bool
 	kind    int
 }
 
 type CompiledLevel struct {
-	id            string
-	settingsHash  string
-	label         string
-	description   string
-	frameTick     time.Duration
-	totalDuration time.Duration
-	frames        []compiledFrame
-	procedure     *compiledProcedure
-	tileEffects   map[int]compiledTileEffect
-	audio         AudioRefs
+	id             string
+	settingsHash   string
+	label          string
+	description    string
+	frameTick      time.Duration
+	totalDuration  time.Duration
+	frames         []compiledFrame
+	procedure      *compiledProcedure
+	pressureEffect *compiledPressureEffect
+	tileEffects    map[int]compiledTileEffect
+	audio          AudioRefs
 }
 
 func (cl CompiledLevel) ID() string           { return cl.id }
@@ -76,14 +86,16 @@ type AudioRefs struct {
 	DamageCueRef     string
 	WinCueRef        string
 	DefeatCueRef     string
+	PressureCueRef   string
 }
 
 type Game struct {
 	mu sync.Mutex
 
-	level     CompiledLevel
-	startedAt time.Time
-	pressed   map[Point]bool
+	level          CompiledLevel
+	startedAt      time.Time
+	pressed        map[Point]bool
+	pressureEvents map[Point]time.Time
 }
 
 type Point struct {
@@ -106,9 +118,10 @@ func NewWithSeed(now time.Time, seed int64, playerCount int, difficulty string, 
 	}
 	selected := selectLevel(levels, NormalizeLevel(level))
 	return &Game{
-		level:     selected,
-		startedAt: now,
-		pressed:   map[Point]bool{},
+		level:          selected,
+		startedAt:      now,
+		pressed:        map[Point]bool{},
+		pressureEvents: map[Point]time.Time{},
 	}
 }
 
@@ -122,46 +135,52 @@ func (g *Game) Press(event whackamole.PressEvent, now time.Time) []whackamole.Ev
 	pt := Point{X: event.X, Y: event.Y}
 	if event.Pressed {
 		g.pressed[pt] = true
+		if g.pressureEvents == nil {
+			g.pressureEvents = map[Point]time.Time{}
+		}
+		g.pressureEvents[pt] = now
 	} else {
 		delete(g.pressed, pt)
 		return nil
 	}
 
-	point := g.rawPointAtLocked(pt, now)
-	if !point.present {
-		return nil
-	}
-
-	eff, ok := g.level.tileEffects[point.kind]
-	if !ok {
-		return nil
-	}
-
 	// Map the effect press/cue action to the standard cue event
 	var cueName string
-	switch eff.cue {
-	case "coin":
-		cueName = whackamole.CueCoin
-	case "doubleCoin":
-		cueName = whackamole.CueDoubleCoin
-	case "damage":
-		cueName = whackamole.CueDamage
-	case "win":
-		cueName = whackamole.CueWin
-	default:
-		// fallback to standard mapping based on press behavior
-		switch eff.press {
-		case "score":
-			cueName = whackamole.CueCoin
-		case "primeThenScore":
-			cueName = whackamole.CueDoubleCoin
-		case "damage":
-			cueName = whackamole.CueDamage
+	point := g.rawPointAtLocked(pt, now)
+	if point.present {
+		if eff, ok := g.level.tileEffects[point.kind]; ok {
+			switch eff.cue {
+			case "coin":
+				cueName = whackamole.CueCoin
+			case "doubleCoin":
+				cueName = whackamole.CueDoubleCoin
+			case "damage":
+				cueName = whackamole.CueDamage
+			case "win":
+				cueName = whackamole.CueWin
+			default:
+				// fallback to standard mapping based on press behavior
+				switch eff.press {
+				case "score":
+					cueName = whackamole.CueCoin
+				case "primeThenScore":
+					cueName = whackamole.CueDoubleCoin
+				case "damage":
+					cueName = whackamole.CueDamage
+				}
+			}
+			if cueName != "" {
+				return []whackamole.Event{{Cue: cueName, Message: "Animación toque " + eff.label}}
+			}
 		}
 	}
 
+	if g.level.audio.PressureCueRef != "" {
+		cueName = whackamole.CuePressure
+	}
+
 	if cueName != "" {
-		return []whackamole.Event{{Cue: cueName, Message: "Animación toque " + eff.label}}
+		return []whackamole.Event{{Cue: cueName, Message: "Animación presión"}}
 	}
 	return nil
 }
@@ -169,6 +188,7 @@ func (g *Game) Press(event whackamole.PressEvent, now time.Time) []whackamole.Ev
 func (g *Game) Render(now time.Time) []RGB {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.cleanupPressureEventsLocked(now)
 	frame := make([]RGB, GridWidth*GridHeight)
 	for y := 0; y < GridHeight; y++ {
 		for x := 0; x < GridWidth; x++ {
@@ -179,6 +199,7 @@ func (g *Game) Render(now time.Time) []RGB {
 }
 
 func (g *Game) colorAtLocked(pt Point, now time.Time) RGB {
+	base := RGB{}
 	if g.level.procedure != nil {
 		elapsed := g.elapsedLocked(now)
 		frameIndex := 0
@@ -187,17 +208,77 @@ func (g *Game) colorAtLocked(pt Point, now time.Time) RGB {
 		}
 		color, err := g.level.procedure.colorAt(pt.X, pt.Y, timeSeconds(elapsed.Seconds()), frameIndex)
 		if err == nil {
-			return color
+			base = color
+			return g.applyPressureEffectLocked(pt, base, now, elapsed, frameIndex)
 		}
 	}
 	point := g.rawPointAtLocked(pt, now)
 	if !point.present {
-		return RGB{}
+		return g.applyPressureEffectLocked(pt, base, now, g.elapsedLocked(now), 0)
 	}
 	if eff, ok := g.level.tileEffects[point.kind]; ok {
-		return eff.color
+		base = eff.color
 	}
-	return RGB{}
+	return g.applyPressureEffectLocked(pt, base, now, g.elapsedLocked(now), 0)
+}
+
+func (g *Game) applyPressureEffectLocked(pt Point, base RGB, now time.Time, elapsed time.Duration, frameIndex int) RGB {
+	effect := g.level.pressureEffect
+	if effect == nil || effect.duration <= 0 || len(g.pressureEvents) == 0 {
+		return base
+	}
+	events := make([]struct {
+		point     Point
+		startedAt time.Time
+	}, 0, len(g.pressureEvents))
+	for point, startedAt := range g.pressureEvents {
+		age := now.Sub(startedAt)
+		if age >= 0 && age <= effect.duration {
+			events = append(events, struct {
+				point     Point
+				startedAt time.Time
+			}{point: point, startedAt: startedAt})
+		}
+	}
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].startedAt.Before(events[j].startedAt)
+	})
+	out := base
+	for _, event := range events {
+		age := now.Sub(event.startedAt)
+		progress := clampFloat(age.Seconds()/effect.duration.Seconds(), 0, 1)
+		distance := math.Hypot(float64(pt.X-event.point.X), float64(pt.Y-event.point.Y))
+		if effect.kind == "dsl" && effect.procedure != nil {
+			color, err := effect.procedure.colorAtWithVariables(pt.X, pt.Y, timeSeconds(age.Seconds()), frameIndex, map[string]float64{
+				"press_x":        float64(event.point.X),
+				"press_y":        float64(event.point.Y),
+				"press_age":      age.Seconds(),
+				"press_progress": progress,
+				"press_distance": distance,
+				"base_r":         float64(out.R),
+				"base_g":         float64(out.G),
+				"base_b":         float64(out.B),
+			})
+			if err == nil {
+				out = color
+			}
+			continue
+		}
+		out = applyPresetPressureEffect(out, effect.preset, progress, distance, event.point, pt)
+	}
+	return out
+}
+
+func (g *Game) cleanupPressureEventsLocked(now time.Time) {
+	effect := g.level.pressureEffect
+	if effect == nil || effect.duration <= 0 || len(g.pressureEvents) == 0 {
+		return
+	}
+	for point, startedAt := range g.pressureEvents {
+		if now.Sub(startedAt) > effect.duration {
+			delete(g.pressureEvents, point)
+		}
+	}
 }
 
 func (g *Game) rawPointAtLocked(pt Point, now time.Time) tilePoint {
@@ -272,16 +353,32 @@ type cloudRules struct {
 }
 
 type animationSource struct {
-	Type                 string         `json:"type"`
-	Language             string         `json:"language"`
-	Code                 string         `json:"code"`
-	Params               map[string]any `json:"params"`
-	Seed                 float64        `json:"seed"`
-	LoopSeconds          float64        `json:"loop_seconds"`
-	ReferenceLoopSeconds float64        `json:"reference_loop_seconds"`
+	Type                 string               `json:"type"`
+	Language             string               `json:"language"`
+	Code                 string               `json:"code"`
+	Params               map[string]any       `json:"params"`
+	Seed                 float64              `json:"seed"`
+	LoopSeconds          float64              `json:"loop_seconds"`
+	ReferenceLoopSeconds float64              `json:"reference_loop_seconds"`
+	PressureEffect       pressureEffectSource `json:"pressure_effect"`
+	PressureSound        pressureSoundSource  `json:"pressure_sound"`
 }
 
 type animationProcedureSource = animationSource
+
+type pressureEffectSource struct {
+	Type            string         `json:"type"`
+	Preset          string         `json:"preset"`
+	Code            string         `json:"code"`
+	Params          map[string]any `json:"params"`
+	Seed            float64        `json:"seed"`
+	DurationSeconds float64        `json:"duration_seconds"`
+}
+
+type pressureSoundSource struct {
+	Type   string `json:"type"`
+	CueRef string `json:"cue_ref"`
+}
 
 type TileEffect struct {
 	ID    string `json:"id"`
@@ -460,6 +557,11 @@ func compileCloudLevels(raw []cloudLevel) ([]CompiledLevel, error) {
 				}
 			}
 		}
+		if pressureEffect, err := compilePressureEffect(level.Rules.AnimationSource.PressureEffect, level.Rules.AnimationSource.Seed); err != nil {
+			log.Printf("animations: animation %s has invalid pressure effect: %v", compiled.id, err)
+		} else {
+			compiled.pressureEffect = pressureEffect
+		}
 		if len(compiled.frames) == 0 && compiled.procedure == nil {
 			return nil, fmt.Errorf("animation %s has no frames", compiled.id)
 		}
@@ -473,6 +575,66 @@ func compileCloudLevels(raw []cloudLevel) ([]CompiledLevel, error) {
 
 func isProcedureSource(source animationSource) bool {
 	return source.Type == "procedure" && source.Language == "motion-dsl-v1" && strings.TrimSpace(source.Code) != ""
+}
+
+func compilePressureEffect(source pressureEffectSource, fallbackSeed float64) (*compiledPressureEffect, error) {
+	effectType := strings.TrimSpace(source.Type)
+	if effectType == "" || effectType == "none" {
+		return nil, nil
+	}
+	duration := time.Duration(clampFloat(positiveFloat(source.DurationSeconds, 0.75), 0.15, 2.5) * float64(time.Second))
+	if effectType == "preset" {
+		preset := strings.TrimSpace(source.Preset)
+		if preset != "ripple" && preset != "spark" && preset != "glow" {
+			preset = "ripple"
+		}
+		return &compiledPressureEffect{kind: "preset", preset: preset, duration: duration}, nil
+	}
+	if effectType != "dsl" {
+		return nil, nil
+	}
+	procedure, err := compileProcedureSource(animationProcedureSource{
+		Type:                 "procedure",
+		Language:             "motion-dsl-v1",
+		Code:                 source.Code,
+		Params:               source.Params,
+		Seed:                 finiteFloat(source.Seed, finiteFloat(fallbackSeed, 1)),
+		LoopSeconds:          duration.Seconds(),
+		ReferenceLoopSeconds: duration.Seconds(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &compiledPressureEffect{kind: "dsl", duration: duration, procedure: procedure}, nil
+}
+
+func applyPresetPressureEffect(base RGB, preset string, progress float64, distance float64, event Point, point Point) RGB {
+	fade := math.Pow(1-progress, 0.82)
+	switch preset {
+	case "spark":
+		core := math.Max(0, 1-distance/2.8)
+		rays := math.Max(0, math.Sin(float64(point.X-event.X)*2.1+float64(point.Y-event.Y)*1.4+progress*math.Pi*8))
+		strength := clampFloat((core*0.95+rays*core*0.28)*math.Pow(1-progress, 1.5), 0, 1)
+		return mixRGB(base, RGB{R: 255, G: 232, B: 120}, strength)
+	case "glow":
+		strength := clampFloat(math.Max(0, 1-distance/5.5)*fade, 0, 1)
+		return mixRGB(base, RGB{R: 94, G: 234, B: 212}, strength)
+	default:
+		radius := progress * 7.4
+		ring := math.Max(0, 1-math.Abs(distance-radius)/1.05)
+		core := math.Max(0, 1-distance/1.8) * math.Pow(1-progress, 2)
+		strength := clampFloat((ring*0.95+core*0.5)*fade, 0, 1)
+		return mixRGB(base, RGB{R: 125, G: 211, B: 252}, strength)
+	}
+}
+
+func mixRGB(base RGB, target RGB, amount float64) RGB {
+	t := clampFloat(amount, 0, 1)
+	return RGB{
+		R: clampByteFloat(float64(base.R) + (float64(target.R)-float64(base.R))*t),
+		G: clampByteFloat(float64(base.G) + (float64(target.G)-float64(base.G))*t),
+		B: clampByteFloat(float64(base.B) + (float64(target.B)-float64(base.B))*t),
+	}
 }
 
 func parseHexColor(hexStr string) RGB {
@@ -497,6 +659,7 @@ func normalizeAudioRefs(level cloudLevel) AudioRefs {
 		DamageCueRef:     strings.TrimSpace(level.DamageCueRef),
 		WinCueRef:        strings.TrimSpace(level.WinCueRef),
 		DefeatCueRef:     strings.TrimSpace(level.DefeatCueRef),
+		PressureCueRef:   normalizePressureSoundRef(level.Rules.AnimationSource.PressureSound),
 	}
 	if audio.MusicRef == "" {
 		audio.MusicRef = DefaultMusicRef
@@ -528,6 +691,13 @@ func normalizeAudioRefs(level cloudLevel) AudioRefs {
 		audio.DefeatCueRef = audio.DamageCueRef
 	}
 	return audio
+}
+
+func normalizePressureSoundRef(source pressureSoundSource) string {
+	if strings.TrimSpace(source.Type) != "cue" {
+		return ""
+	}
+	return strings.TrimSpace(source.CueRef)
 }
 
 func selectLevel(levels []CompiledLevel, id string) CompiledLevel {

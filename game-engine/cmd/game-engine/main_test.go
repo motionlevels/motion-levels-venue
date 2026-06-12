@@ -223,6 +223,10 @@ func TestReusableTileCueRefsAndDoubleCoinBurst(t *testing.T) {
 	if got := cueRef(cfg, whackamole.CueDefeat); got != cfg.DamageCueRef {
 		t.Fatalf("defeat fallback cue ref = %q", got)
 	}
+	cfg.PressureCueRef = "pressure.wav"
+	if got := cueRef(cfg, whackamole.CuePressure); got != cfg.PressureCueRef {
+		t.Fatalf("pressure cue ref = %q", got)
+	}
 
 	for i := 0; i < 3; i++ {
 		playCue(cfg, player, whackamole.CueDoubleCoin, cueRef(cfg, whackamole.CueDoubleCoin))
