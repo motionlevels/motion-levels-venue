@@ -3,11 +3,47 @@
 # Configures the display and launches the Chromium player kiosk under xinit.
 set -euo pipefail
 
-# 1. Source environment variables if present
-if [ -f /etc/motion-levels/motion-levels.env ]; then
-  # shellcheck disable=SC1090
-  source /etc/motion-levels/motion-levels.env
-fi
+# 1. Read kiosk settings from the systemd-style environment file without
+# sourcing it as shell; labels and names may contain spaces.
+ENV_FILE=/etc/motion-levels/motion-levels.env
+
+env_file_value() {
+  local key="$1"
+  local fallback="${2:-}"
+  local value=""
+
+  if [ -f "${ENV_FILE}" ]; then
+    value="$(awk -v key="${key}" '
+      /^[[:space:]]*#/ { next }
+      /^[[:space:]]*$/ { next }
+      index($0, key "=") == 1 {
+        sub(/^[^=]*=/, "")
+        print
+        exit
+      }
+    ' "${ENV_FILE}")"
+  fi
+
+  value="${value%$'\r'}"
+  if [ "${#value}" -ge 2 ]; then
+    local first="${value:0:1}"
+    local last="${value: -1}"
+    if { [ "${first}" = '"' ] && [ "${last}" = '"' ]; } || { [ "${first}" = "'" ] && [ "${last}" = "'" ]; }; then
+      value="${value:1:${#value}-2}"
+    fi
+  fi
+
+  if [ -n "${value}" ]; then
+    printf '%s' "${value}"
+  else
+    printf '%s' "${fallback}"
+  fi
+}
+
+MOTION_LEVELS_XRANDR_MODE="$(env_file_value MOTION_LEVELS_XRANDR_MODE)"
+MOTION_LEVELS_XRANDR_RATE="$(env_file_value MOTION_LEVELS_XRANDR_RATE 60)"
+MOTION_LEVELS_PLAYER_PROFILE="$(env_file_value MOTION_LEVELS_PLAYER_PROFILE /var/lib/motion-levels/rebuild-player-chromium)"
+MOTION_LEVELS_PLAYER_URL="$(env_file_value MOTION_LEVELS_PLAYER_URL http://127.0.0.1/display/)"
 
 # 2. Configure screen mode/rate if specified
 if [ -n "${MOTION_LEVELS_XRANDR_MODE:-}" ]; then
@@ -22,7 +58,7 @@ if [ -n "${MOTION_LEVELS_XRANDR_MODE:-}" ]; then
 fi
 
 # 3. Ensure player user data directory exists
-USER_DATA_DIR="${MOTION_LEVELS_PLAYER_PROFILE:-/var/lib/motion-levels/rebuild-player-chromium}"
+USER_DATA_DIR="${MOTION_LEVELS_PLAYER_PROFILE}"
 mkdir -p "${USER_DATA_DIR}"
 
 # 4. Hide mouse cursor if unclutter is available
@@ -50,7 +86,7 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 
 # Determine target URL
-TARGET_URL="${MOTION_LEVELS_PLAYER_URL:-http://127.0.0.1/display/}"
+TARGET_URL="${MOTION_LEVELS_PLAYER_URL}"
 
 echo "Starting Chromium kiosk pointing to ${TARGET_URL}..."
 exec /usr/bin/chromium "${CHROME_FLAGS[@]}" "${TARGET_URL}"
