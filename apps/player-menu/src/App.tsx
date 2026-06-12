@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { controlGame, fetchAnimationPreview, fetchEngineStatus, postMenuEvent, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus } from "./api";
+import { controlGame, fetchAnimationPreview, fetchEngineStatus, fetchGameCatalog, postMenuEvent, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus, type PlatformGameCatalogEntry } from "./api";
 import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
 import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
@@ -130,6 +130,41 @@ function liveAnimationCards(catalog: EngineGame[] | undefined): GameCard[] {
       engineGame: entry.game,
       previewAnimation: entry.game,
     }));
+}
+
+function isCategoryID(value: string): value is CategoryID {
+  return categories.some((category) => category.id === value);
+}
+
+function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalogEntry[] | undefined): GameCard[] {
+  if (!catalog?.length) return baseGames;
+  const byID = new Map(catalog.map((entry) => [entry.id, entry]));
+  const byEngine = new Map(catalog.map((entry) => [entry.engine_game || entry.id, entry]));
+  return baseGames
+    .map((game) => {
+      const entry = byID.get(game.id) || byEngine.get(engineGameID(game));
+      if (!entry) return game;
+      return {
+        ...game,
+        label: entry.label || game.label,
+        category: isCategoryID(entry.catalog_category) ? entry.catalog_category : game.category,
+        color: entry.catalog_color || game.color,
+        players: entry.players_label || game.players,
+        difficulty: entry.difficulty_label || game.difficulty,
+        duration: entry.duration_label || game.duration,
+        mode: entry.mode_label || game.mode,
+        audio: entry.audio_label || game.audio,
+        description: entry.description || game.description,
+        engineGame: entry.engine_game || game.engineGame,
+        disabled: entry.catalog_enabled === false,
+      } satisfies GameCard;
+    })
+    .filter((game) => !game.disabled)
+    .sort((left, right) => {
+      const leftOrder = byID.get(left.id)?.catalog_order ?? byEngine.get(engineGameID(left))?.catalog_order ?? 1000;
+      const rightOrder = byID.get(right.id)?.catalog_order ?? byEngine.get(engineGameID(right))?.catalog_order ?? 1000;
+      return leftOrder - rightOrder || left.label.localeCompare(right.label);
+    });
 }
 
 function isIndividualCard(game: GameCard): boolean {
@@ -464,6 +499,7 @@ function gameRosterIssue(game: GameCard, players: Player[]): RosterIssue | null 
 export default function App() {
   const [menu, setMenu] = useState<MenuState>(() => loadMenuState());
   const [status, setStatus] = useState<EngineStatus | null>(null);
+  const [platformCatalog, setPlatformCatalog] = useState<PlatformGameCatalogEntry[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [keyboardTarget, setKeyboardTarget] = useState<KeyboardTarget | null>(null);
@@ -499,7 +535,10 @@ export default function App() {
     menuRef.current = menu;
   }, [menu]);
 
-  const menuGames = useMemo(() => [...games, ...liveAnimationCards(status?.catalog)], [status?.catalog]);
+  const menuGames = useMemo(
+    () => applyPlatformCatalog([...games, ...liveAnimationCards(status?.catalog)], platformCatalog),
+    [platformCatalog, status?.catalog],
+  );
 
   // Mirror every captured menu event to the game-engine so the visit is fully
   // recorded server-side (independent of PostHog analytics).
@@ -537,6 +576,24 @@ export default function App() {
     }
     refresh();
     const id = window.setInterval(refresh, 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshCatalog() {
+      try {
+        const next = await fetchGameCatalog();
+        if (!cancelled) setPlatformCatalog(next);
+      } catch {
+        if (!cancelled) setPlatformCatalog([]);
+      }
+    }
+    refreshCatalog();
+    const id = window.setInterval(refreshCatalog, 10000);
     return () => {
       cancelled = true;
       window.clearInterval(id);

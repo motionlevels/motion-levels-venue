@@ -13,6 +13,7 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
 	"github.com/lobis/motion-levels/game-engine/internal/games/animations"
+	"github.com/lobis/motion-levels/game-engine/internal/games/authored"
 	"github.com/lobis/motion-levels/game-engine/internal/games/duel"
 	"github.com/lobis/motion-levels/game-engine/internal/games/lava"
 	"github.com/lobis/motion-levels/game-engine/internal/games/memorychallenge"
@@ -710,6 +711,40 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		return status
 	}
 
+	if strings.HasPrefix(cfg.Game, "authored-") {
+		if authoredGame, ok := game.(interface {
+			Snapshot(time.Time) authored.Snapshot
+			Label() string
+		}); ok {
+			snapshot := authoredGame.Snapshot(gameNow)
+			status.Label = authoredGame.Label()
+			status.Phase = snapshot.Phase
+			status.Score = snapshot.Score
+			status.StartedUnix = snapshot.StartedUnix
+			status.EndsUnix = snapshot.EndsUnix
+			status.ElapsedMillis = snapshot.ElapsedMillis
+			status.RemainingMillis = snapshot.RemainingMillis
+			status.CountdownRemainingMillis = snapshot.CountdownMillis
+			status.ActiveTargets = snapshot.ActiveTargets
+			status.Success = snapshot.Success
+			status.Lives = -1
+			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
+			for _, player := range snapshot.Players {
+				status.Players = append(status.Players, displayPlayer{
+					Index: player.Index,
+					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
+					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
+					Score: player.Score,
+					Lives: -1,
+				})
+			}
+		}
+		if paused && status.Phase != "finished" {
+			status.Phase = "paused"
+		}
+		return status
+	}
+
 	if cfg.Game == "temporada1" || cfg.Game == "temporada2" {
 		if temporadaGame, ok := game.(*temporada1.Game); ok {
 			snapshot := temporadaGame.Snapshot(gameNow)
@@ -823,7 +858,7 @@ func (r *gameRuntime) Status() runtimeStatus {
 	return runtimeStatus{
 		CurrentGame:              cfg.Game,
 		VenueSessionID:           venueSessionID,
-		Label:                    gameLabel(cfg.Game),
+		Label:                    display.Label,
 		Difficulty:               display.Difficulty,
 		Level:                    display.Level,
 		TeamName:                 cfg.TeamName,
@@ -911,6 +946,10 @@ func (r *gameRuntime) applyLockedWithNarrationReason(cfg config, playAudio bool,
 	r.rngSeed = now.UnixNano()
 	game := makeGame(cfg, r.rngSeed, gameNow)
 	cfg = applyPlataformasAudioConfig(cfg, game)
+	label := gameLabel(cfg.Game)
+	if labeled, ok := game.(interface{ Label() string }); ok {
+		label = labeled.Label()
+	}
 	r.current = cfg
 	r.started = now
 	r.sessionID = newSessionID(now)
@@ -930,7 +969,7 @@ func (r *gameRuntime) applyLockedWithNarrationReason(cfg config, playAudio bool,
 	r.recordLocked(now, func(record *gamepb.GameSessionRecord) {
 		record.Payload = &gamepb.GameSessionRecord_SessionStarted{SessionStarted: &gamepb.SessionStarted{
 			Game:             cfg.Game,
-			Label:            gameLabel(cfg.Game),
+			Label:            label,
 			PlayerCount:      uint32(cfg.PlayerCount),
 			RngSeed:          r.rngSeed,
 			StartedUnixNanos: now.UnixNano(),
@@ -1154,6 +1193,9 @@ func (r *gameRuntime) playCountdownLocked(cfg config, now time.Time) {
 }
 
 func shouldPlayCountdownCue(cfg config) bool {
+	if strings.HasPrefix(cfg.Game, "authored-") {
+		return true
+	}
 	switch cfg.Game {
 	case "lava", "saltos", "parkour", "parkour2", "plataformas", "temporada1", "temporada2":
 		return true
@@ -1629,6 +1671,15 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 		cfg.Level = strings.TrimPrefix(cfg.Game, "animation-")
 		cfg.Game = "animations"
 	}
+	if strings.HasPrefix(cfg.Game, "authored-") {
+		log.Printf("game: authored id=%s players=%d", cfg.Game, cfg.PlayerCount)
+		game, err := authored.NewWithSeed(now, seed, cfg.Game, cfg.PlayerCount, whackPlayersFromConfig(cfg), cfg.PlatformURL)
+		if err != nil {
+			log.Printf("authored game: %v", err)
+			return nil
+		}
+		return game
+	}
 	switch cfg.Game {
 	case "whack-a-mole":
 		log.Printf("game: whack-a-mole players=%d", cfg.PlayerCount)
@@ -1839,6 +1890,14 @@ func configForSelection(base config, game string, players int) config {
 	cfg := base
 	cfg.Game = normalizeGame(game)
 	cfg.PlayerCount = players
+	if strings.HasPrefix(cfg.Game, "authored-") {
+		cfg.PlayerCount = clampInt(players, 1, 6)
+		cfg.Level = ""
+		cfg.MusicRef = authored.DefaultMusicRef
+		cfg.MusicVolume = authored.DefaultMusicVolume
+		cfg.normalize()
+		return cfg
+	}
 	switch cfg.Game {
 	case "whack-a-mole":
 		cfg.MusicRef = whackamole.DefaultMusicRef
@@ -1880,6 +1939,9 @@ func configForSelection(base config, game string, players int) config {
 }
 
 func defaultMusicForGame(game string) (string, float64) {
+	if strings.HasPrefix(normalizeGame(game), "authored-") {
+		return authored.DefaultMusicRef, authored.DefaultMusicVolume
+	}
 	switch normalizeGame(game) {
 	case "whack-a-mole":
 		return whackamole.DefaultMusicRef, whackamole.DefaultMusicVolume
@@ -2105,6 +2167,23 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 	}
 
 	if platformURL != "" {
+		authoredGames, err := authored.FetchCatalog(platformURL)
+		if err == nil {
+			for _, game := range authoredGames {
+				entries = append(entries, gameCatalogEntry{
+					Game:        game.EngineGame,
+					Label:       game.Label,
+					Description: game.Description,
+					Music:       nonEmptyString(game.DefaultMusicRef, authored.DefaultMusicRef),
+					Players:     true,
+					MinPlayers:  clampInt(game.MinPlayers, 1, 6),
+					MaxPlayers:  max(clampInt(game.MinPlayers, 1, 6), clampInt(game.MaxPlayers, 1, 6)),
+					Difficulty:  false,
+					Volume:      nonZeroFloat(game.DefaultMusicVolume, authored.DefaultMusicVolume),
+				})
+			}
+		}
+
 		levels, err := animations.GetOrFetchLevels(platformURL)
 		if err == nil {
 			for _, level := range levels {
@@ -2124,6 +2203,20 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 	}
 
 	return entries
+}
+
+func nonEmptyString(value string, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
+}
+
+func nonZeroFloat(value float64, fallback float64) float64 {
+	if value == 0 {
+		return fallback
+	}
+	return value
 }
 
 func saltosCatalogLevels() []gameLevelEntry {

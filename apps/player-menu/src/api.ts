@@ -11,6 +11,29 @@ export type EngineGame = {
   levels?: Array<{ id: string; label: string; description: string }>;
 };
 
+export type PlatformGameCatalogEntry = {
+  id: string;
+  engine_game: string;
+  label: string;
+  description: string;
+  catalog_category: string;
+  catalog_enabled: boolean;
+  catalog_color: string;
+  catalog_order: number;
+  players_label: string;
+  difficulty_label: string;
+  duration_label: string;
+  mode_label: string;
+  audio_label: string;
+  min_players: number;
+  max_players: number;
+  default_music_ref: string;
+  default_music_volume: number;
+  source_kind: string;
+  code_editable: boolean;
+  game_source?: Record<string, unknown>;
+};
+
 export type EngineStatus = {
   currentGame: string;
   venueSessionId: string;
@@ -94,12 +117,34 @@ export function engineBaseURL(): string {
   return import.meta.env.VITE_GAME_ENGINE_URL || inferEngineURL();
 }
 
+function inferPlatformURL(): string {
+  if (typeof window === "undefined" || !window.location.origin || window.location.protocol === "file:") {
+    return "";
+  }
+  return window.location.origin;
+}
+
+export function platformBaseURL(): string {
+  return import.meta.env.VITE_PLATFORM_URL || inferPlatformURL();
+}
+
 export async function fetchEngineStatus(): Promise<EngineStatus> {
   const response = await fetch(`${engineBaseURL()}/api/status`);
   if (!response.ok) {
     throw new Error(await response.text());
   }
   return response.json() as Promise<EngineStatus>;
+}
+
+export async function fetchGameCatalog(): Promise<PlatformGameCatalogEntry[]> {
+  const baseURL = platformBaseURL();
+  if (!baseURL) return [];
+  const response = await fetch(`${baseURL}/api/game-catalog`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  const payload = await response.json() as { games?: PlatformGameCatalogEntry[] };
+  return Array.isArray(payload.games) ? payload.games : [];
 }
 
 export async function fetchAnimationPreview(level: string, frames = 16): Promise<AnimationPreview> {

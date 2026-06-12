@@ -449,6 +449,9 @@ func clamp01(value float64) float64 {
 }
 
 func normalizeGame(value string) string {
+	if strings.HasPrefix(value, "authored-") {
+		return value
+	}
 	if strings.HasPrefix(value, "animation-") {
 		return value
 	}

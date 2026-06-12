@@ -236,6 +236,11 @@ func TestReusableTileCueRefsAndDoubleCoinBurst(t *testing.T) {
 
 func TestPlataformasRuntimeUsesCloudLevelAudioRefs(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/game-runtime" {
+			w.Header().Set("content-type", "application/json")
+			_, _ = w.Write([]byte(`{"games":[]}`))
+			return
+		}
 		if r.URL.Path == "/api/level-games/animations/levels" {
 			w.Header().Set("content-type", "application/json")
 			_, _ = w.Write([]byte(`{"gameId":"animations","levels":[]}`))
@@ -416,6 +421,109 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	}
 	if status.CurrentGame != "patrones" || status.PlayerCount != 4 || status.Difficulty != "hard" || status.Level != "level-3" || status.Phase != "countdown" {
 		t.Fatalf("selected patrones status = %+v", status)
+	}
+}
+
+func TestAuthoredGameSelectsFromPlatformRuntimeSpec(t *testing.T) {
+	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		switch r.URL.Path {
+		case "/api/game-runtime":
+			_, _ = w.Write([]byte(`{"games":[{
+				"id":"turbo-topos",
+				"engine_game":"authored-turbo-topos",
+				"label":"Turbo topos",
+				"description":"Whack-a-mole authored variation",
+				"default_music_ref":"Motion/canciones/Musica8.mp3",
+				"default_music_volume":0.12,
+				"min_players":1,
+				"max_players":6,
+				"game_source":{
+					"schema":"motion-game-v1",
+					"kind":"target-rush",
+					"version":1,
+					"duration_ms":45000,
+					"countdown_ms":500,
+					"target_size":1,
+					"target_life_ms":5000,
+					"target_min_life_ms":1000,
+					"respawn_ms":100,
+					"min_spawn_distance":0,
+					"max_spawn_distance":40,
+					"base_score":3,
+					"speed_bonus":12,
+					"miss_penalty":0,
+					"target_palette":["#ff7a1a"]
+				}
+			}]}`))
+		case "/api/game-runtime/authored-turbo-topos":
+			_, _ = w.Write([]byte(`{"game":{
+				"id":"turbo-topos",
+				"engine_game":"authored-turbo-topos",
+				"label":"Turbo topos",
+				"description":"Whack-a-mole authored variation",
+				"default_music_ref":"Motion/canciones/Musica8.mp3",
+				"default_music_volume":0.12,
+				"min_players":1,
+				"max_players":6,
+				"game_source":{
+					"schema":"motion-game-v1",
+					"kind":"target-rush",
+					"version":1,
+					"duration_ms":45000,
+					"countdown_ms":500,
+					"target_size":1,
+					"target_life_ms":5000,
+					"target_min_life_ms":1000,
+					"respawn_ms":100,
+					"min_spawn_distance":0,
+					"max_spawn_distance":40,
+					"base_score":3,
+					"speed_bonus":12,
+					"miss_penalty":0,
+					"target_palette":["#ff7a1a"]
+				}
+			}}`))
+		case "/api/level-games/animations/levels":
+			_, _ = w.Write([]byte(`{"gameId":"animations","levels":[]}`))
+		default:
+			t.Fatalf("platform path = %s", r.URL.Path)
+		}
+	}))
+	defer platform.Close()
+
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, PlatformURL: platform.URL}, nil, nil)
+	server := httptest.NewServer(gameAPIHandler(runtime))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/select", "application/json", bytes.NewBufferString(`{"game":"authored-turbo-topos","playerCount":1}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("select response = %d", response.StatusCode)
+	}
+	var status runtimeStatus
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status.CurrentGame != "authored-turbo-topos" || status.Label != "Turbo topos" || status.Phase != "countdown" {
+		t.Fatalf("authored selected status = %+v", status)
+	}
+	if !catalogHasGame(status.Catalog, "authored-turbo-topos") {
+		t.Fatal("engine catalog missing authored runtime game")
+	}
+
+	playAt := time.Now().Add(2 * time.Second)
+	for y := 0; y < animation.GridHeight && runtime.Status().Players[0].Score == 0; y++ {
+		for x := 0; x < animation.GridWidth && runtime.Status().Players[0].Score == 0; x++ {
+			runtime.HandlePressure(&inputpb.PressureEvent{X: uint32(x), Y: uint32(y), Pressed: true, UnixNanos: playAt.UnixNano()}, playAt)
+		}
+	}
+	display := runtime.DisplayStatus(playAt)
+	if display.Phase != "running" || display.Players[0].Score <= 0 || display.ActiveTargets > 1 {
+		t.Fatalf("authored gameplay status = %+v", display)
 	}
 }
 
