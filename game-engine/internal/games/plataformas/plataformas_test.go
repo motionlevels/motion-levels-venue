@@ -142,10 +142,14 @@ func TestGreenPlatformDisappearRuleFadesBeforeNextFrame(t *testing.T) {
 		t.Fatal(err)
 	}
 	game := &Game{level: levels[0], startedAt: time.Unix(100, 0)}
-	steady := game.colorAtLocked(Point{X: 5, Y: 5}, game.startedAt.Add(200*time.Millisecond))
+	steady := game.colorAtLocked(Point{X: 5, Y: 5}, game.startedAt.Add(450*time.Millisecond))
 	fading := game.colorAtLocked(Point{X: 5, Y: 5}, game.startedAt.Add(900*time.Millisecond))
+	nearGone := game.colorAtLocked(Point{X: 5, Y: 5}, game.startedAt.Add(995*time.Millisecond))
 	if fading.G >= steady.G {
 		t.Fatalf("fading green = %+v, steady = %+v; want dimmer before disappearing", fading, steady)
+	}
+	if nearGone.G >= fading.G || nearGone.G > 20 {
+		t.Fatalf("near-boundary green = %+v; want fade to reach ~zero at the frame change", nearGone)
 	}
 }
 

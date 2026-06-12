@@ -20,14 +20,19 @@ const (
 	GridWidth  = animation.GridWidth
 	GridHeight = animation.GridHeight
 
-	countdownDuration   = 3 * time.Second
-	tickDuration        = 25 * time.Millisecond
-	damageCooldown      = 1 * time.Second
-	DefaultMusicRef     = "Motion/canciones/Background07.mp3"
-	DefaultMusicVolume  = 0.18
-	DefaultCoinCueRef   = "Motion/sonidos/coin.wav"
-	DefaultDamageCueRef = "Motion/sonidos/fallo.mp3"
-	DefaultWinCueRef    = "Motion/sonidos/victoria.mp3"
+	countdownDuration = 3 * time.Second
+	tickDuration      = 25 * time.Millisecond
+	// Green platform transition fades render between the slow gameplay
+	// frames at the engine's render rate; they must end exactly at the
+	// frame boundary so the disappearance itself is the animation.
+	greenAppearWindow    = 400 * time.Millisecond
+	greenDisappearWindow = 800 * time.Millisecond
+	damageCooldown       = 1 * time.Second
+	DefaultMusicRef      = "Motion/canciones/Background07.mp3"
+	DefaultMusicVolume   = 0.18
+	DefaultCoinCueRef    = "Motion/sonidos/coin.wav"
+	DefaultDamageCueRef  = "Motion/sonidos/fallo.mp3"
+	DefaultWinCueRef     = "Motion/sonidos/victoria.mp3"
 )
 
 type RGB = animation.RGB
@@ -550,15 +555,15 @@ func (g *Game) greenPlatformColorLocked(pt Point, now time.Time) RGB {
 	if len(g.level.frames) > 1 {
 		previous := g.level.frames[(index-1+len(g.level.frames))%len(g.level.frames)].points[pt.Y][pt.X]
 		next := g.level.frames[(index+1)%len(g.level.frames)].points[pt.Y][pt.X]
-		appearWindow := minDuration(260*time.Millisecond, frame.duration/2)
-		disappearWindow := minDuration(420*time.Millisecond, frame.duration/2)
+		appearWindow := minDuration(greenAppearWindow, frame.duration/2)
+		disappearWindow := minDuration(greenDisappearWindow, frame.duration/2)
 		if (!previous.present || previous.kind != 0) && appearWindow > 0 && elapsed < appearWindow {
-			scale = 0.45 + 0.55*easeInOut(float64(elapsed)/float64(appearWindow))
+			scale = easeInOut(float64(elapsed) / float64(appearWindow))
 		}
 		if (!next.present || next.kind != 0) && disappearWindow > 0 {
 			remaining := frame.duration - elapsed
 			if remaining < disappearWindow {
-				fade := 0.35 + 0.65*easeInOut(float64(remaining)/float64(disappearWindow))
+				fade := easeInOut(float64(remaining) / float64(disappearWindow))
 				if fade < scale {
 					scale = fade
 				}
