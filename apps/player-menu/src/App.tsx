@@ -217,6 +217,14 @@ function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalo
     .map((game) => {
       const entry = byID.get(game.id) || byEngine.get(engineGameID(game));
       if (!entry) return game;
+      const levels = entry.levels && entry.levels.length > 0
+        ? entry.levels.map((lvl) => ({
+            id: lvl.id,
+            label: lvl.label,
+            description: lvl.description,
+            previewSrc: game.previewSrc,
+          }))
+        : game.levels;
       return {
         ...game,
         label: entry.label || game.label,
@@ -230,6 +238,7 @@ function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalo
         description: entry.description || game.description,
         engineGame: entry.engine_game || game.engineGame,
         disabled: entry.catalog_enabled === false,
+        levels,
       } satisfies GameCard;
     })
     .filter((game) => !game.disabled)

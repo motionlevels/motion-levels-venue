@@ -32,6 +32,7 @@ export type PlatformGameCatalogEntry = {
   source_kind: string;
   code_editable: boolean;
   game_source?: Record<string, unknown>;
+  levels?: Array<{ id: string; label: string; description: string }>;
 };
 
 export type EngineStatus = {
