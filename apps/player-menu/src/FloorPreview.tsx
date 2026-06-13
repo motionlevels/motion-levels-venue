@@ -36,10 +36,11 @@ export function FloorPreview({ anim, orientation = "portrait" }: { anim: FloorAn
     function fitCanvas() {
       const parent = targetCanvas.parentElement;
       if (!parent) return;
-      const rect = parent.getBoundingClientRect();
       const aspect = width / height;
-      const maxWidth = Math.max(1, rect.width - 16);
-      const maxHeight = Math.max(1, rect.height - 8);
+      // The kiosk frame is transform-scaled to preserve its 16:9 shape.
+      // Measure layout pixels here so canvas previews are not scaled twice.
+      const maxWidth = Math.max(1, parent.clientWidth - 8);
+      const maxHeight = Math.max(1, parent.clientHeight - 8);
       const cssWidth = Math.floor(Math.min(maxWidth, maxHeight * aspect));
       targetCanvas.style.width = `${cssWidth}px`;
     }
@@ -75,14 +76,13 @@ export function FloorPreview({ anim, orientation = "portrait" }: { anim: FloorAn
 
     let raf = 0;
     let last = -1;
-    const start = performance.now();
     const interval = 1000 / FPS;
 
     function frame(nowMs: number) {
       raf = requestAnimationFrame(frame);
       if (nowMs - last < interval) return;
       last = nowMs;
-      draw((nowMs - start) / 1000);
+      draw(nowMs / 1000);
     }
 
     function onVisibility() {

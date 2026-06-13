@@ -67,6 +67,7 @@ type wasmSnapshotResponse struct {
 	RemainingMillis int64                `json:"remaining_millis"`
 	CountdownMillis int64                `json:"countdown_millis"`
 	ActiveTargets   int                  `json:"active_targets"`
+	Lives           int                  `json:"lives"`
 	Success         bool                 `json:"success"`
 	Players         []wasmPlayerSnapshot `json:"players"`
 }
@@ -76,6 +77,7 @@ type wasmPlayerSnapshot struct {
 	Label string `json:"label"`
 	Color string `json:"color"`
 	Score int    `json:"score"`
+	Lives int    `json:"lives"`
 }
 
 func NewWASMWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount int, players []whackamole.PlayerConfig) (*WASMGame, error) {
@@ -199,6 +201,7 @@ func (g *WASMGame) Snapshot(now time.Time) Snapshot {
 			Label: player.Label,
 			Color: hexColor(player.Color, RGB{R: 255, G: 255, B: 255}),
 			Score: player.Score,
+			Lives: player.Lives,
 		})
 	}
 	if len(players) == 0 {
@@ -214,6 +217,7 @@ func (g *WASMGame) Snapshot(now time.Time) Snapshot {
 		RemainingMillis: snapshot.RemainingMillis,
 		CountdownMillis: snapshot.CountdownMillis,
 		ActiveTargets:   snapshot.ActiveTargets,
+		Lives:           snapshot.Lives,
 		Success:         snapshot.Success,
 	}
 }

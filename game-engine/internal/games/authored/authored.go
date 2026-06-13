@@ -80,6 +80,7 @@ type PlayerSnapshot struct {
 	Label string
 	Color RGB
 	Score int
+	Lives int
 }
 
 type Snapshot struct {
@@ -92,6 +93,7 @@ type Snapshot struct {
 	RemainingMillis int64
 	CountdownMillis int64
 	ActiveTargets   int
+	Lives           int
 	Success         bool
 }
 

@@ -77,6 +77,9 @@ type gameRuntime struct {
 	venueIdleTimeout  time.Duration
 	venueOutbox       []venueOutboxEvent
 	venueDropped      uint64
+
+	menuStateSnapshot menuStateSnapshot
+	menuStateVersion  uint64
 }
 
 type ambientTouch struct {
@@ -727,7 +730,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.CountdownRemainingMillis = snapshot.CountdownMillis
 			status.ActiveTargets = snapshot.ActiveTargets
 			status.Success = snapshot.Success
-			status.Lives = -1
+			status.Lives = snapshot.Lives
 			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
 			for _, player := range snapshot.Players {
 				status.Players = append(status.Players, displayPlayer{
@@ -735,7 +738,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
 					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
 					Score: player.Score,
-					Lives: -1,
+					Lives: player.Lives,
 				})
 			}
 		}

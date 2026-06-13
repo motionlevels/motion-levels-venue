@@ -343,6 +343,38 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 		t.Fatal("catalog missing animation-random")
 	}
 
+	menuStateBody := bytes.NewBufferString(`{"kioskId":"kiosk-test","snapshot":{"screenMode":"browse","message":"ready"}}`)
+	response, err = http.Post(server.URL+"/api/menu-state", "application/json", menuStateBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("menu state response = %d", response.StatusCode)
+	}
+	var menuState menuStateSnapshot
+	if err := json.NewDecoder(response.Body).Decode(&menuState); err != nil {
+		t.Fatal(err)
+	}
+	if menuState.KioskID != "kiosk-test" || menuState.Version == 0 || len(menuState.Snapshot) == 0 {
+		t.Fatalf("menu state = %+v, want stored snapshot", menuState)
+	}
+	response, err = http.Get(server.URL + "/api/menu-state")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("menu state get response = %d", response.StatusCode)
+	}
+	var fetchedMenuState menuStateSnapshot
+	if err := json.NewDecoder(response.Body).Decode(&fetchedMenuState); err != nil {
+		t.Fatal(err)
+	}
+	if fetchedMenuState.Version != menuState.Version || string(fetchedMenuState.Snapshot) != string(menuState.Snapshot) {
+		t.Fatalf("fetched menu state = %+v, want %+v", fetchedMenuState, menuState)
+	}
+
 	body := bytes.NewBufferString(`{"game":"lava","playerCount":3,"difficulty":"expert"}`)
 	response, err = http.Post(server.URL+"/api/select", "application/json", body)
 	if err != nil {

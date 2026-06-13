@@ -50,6 +50,11 @@ type menuEventRequest struct {
 	Properties           map[string]any `json:"properties"`
 }
 
+type menuStateRequest struct {
+	KioskID  string          `json:"kioskId"`
+	Snapshot json.RawMessage `json:"snapshot"`
+}
+
 func serveGameAPI(addr string, runtime *gameRuntime) {
 	if addr == "" {
 		return
@@ -113,6 +118,36 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			return
 		}
 		writeDisplayEvents(w, r, runtime)
+	})
+	mux.HandleFunc("/api/menu-state", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, runtime.MenuStateSnapshot())
+		case http.MethodPost, http.MethodPut:
+			var request menuStateRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if len(request.Snapshot) == 0 || !json.Valid(request.Snapshot) {
+				http.Error(w, "snapshot must be valid JSON", http.StatusBadRequest)
+				return
+			}
+			if len(request.Snapshot) > 1_000_000 {
+				http.Error(w, "snapshot is too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			writeJSON(w, runtime.PutMenuStateSnapshot(request.KioskID, request.Snapshot, time.Now()))
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/menu-state/events", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		writeMenuStateEvents(w, r, runtime)
 	})
 	mux.HandleFunc("/api/select", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -262,6 +297,40 @@ func writeDisplayEvents(w http.ResponseWriter, r *http.Request, runtime *gameRun
 	}
 }
 
+func writeMenuStateEvents(w http.ResponseWriter, r *http.Request, runtime *gameRuntime) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Connection", "keep-alive")
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	var lastVersion uint64
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			snapshot := runtime.MenuStateSnapshot()
+			if snapshot.Version == lastVersion {
+				continue
+			}
+			lastVersion = snapshot.Version
+			data, err := json.Marshal(snapshot)
+			if err != nil {
+				log.Printf("menu state event: %v", err)
+				continue
+			}
+			_, _ = fmt.Fprintf(w, "event: menu-state\n")
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		}
+	}
+}
+
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isAPIPath(r.URL.Path) {
@@ -321,7 +390,7 @@ func withAPILogging(runtime *gameRuntime, next http.Handler) http.Handler {
 
 func isAPIPath(path string) bool {
 	switch path {
-	case "/api/health", "/api/status", "/api/select", "/api/control", "/api/display", "/api/display/events", "/api/animation-preview":
+	case "/api/health", "/api/status", "/api/select", "/api/control", "/api/display", "/api/display/events", "/api/menu-state", "/api/menu-state/events", "/api/animation-preview":
 		return true
 	default:
 		return false

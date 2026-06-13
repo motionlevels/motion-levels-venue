@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { controlGame, fetchAnimationPreview, fetchEngineStatus, fetchGameCatalog, postMenuEvent, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus, type PlatformGameCatalogEntry } from "./api";
+import { controlGame, fetchAnimationPreview, fetchEngineStatus, fetchGameCatalog, fetchMenuState, postMenuEvent, postMenuState, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus, type MenuStateEnvelope, type PlatformGameCatalogEntry } from "./api";
 import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
 import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
@@ -42,6 +42,15 @@ type FinishedLevelAttempt = NonNullable<EngineStatus["finishedLevelAttempts"]>[n
 type KeyboardTarget = { kind: "team" } | { kind: "player"; id: number };
 type ScreenMode = "browse" | "game";
 type RosterIssue = { message: string; playerIds: Set<number> };
+type MenuMirrorSnapshot = {
+  menu: MenuState;
+  screenMode: ScreenMode;
+  launchedGameID: string;
+  levelBrowserGameID: string | null;
+  teamOpen: boolean;
+  message: string;
+  error: string;
+};
 type RemoteSessionRequest = {
   configuredPlayerCount: number;
   reservationId: string;
@@ -105,6 +114,18 @@ function clearRemoteSessionURL() {
     url.searchParams.delete(key);
   }
   window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+function menuReadOnlyFromURL(): boolean {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.get("readOnly") === "1" || params.get("readonly") === "1" || params.get("mode") === "readonly";
+}
+
+function floorOnlyFromURL(): boolean {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.get("floorOnly") === "1" || params.get("floor") === "1" || params.get("mode") === "floor";
 }
 
 function playersForCount(count: number): Player[] {
@@ -549,6 +570,11 @@ function gameRosterIssue(game: GameCard, players: Player[]): RosterIssue | null 
 }
 
 export default function App() {
+  return floorOnlyFromURL() ? <FloorOnlyApp /> : <MenuApp />;
+}
+
+function MenuApp() {
+  const readOnlyMirror = useMemo(() => menuReadOnlyFromURL(), []);
   const [menu, setMenu] = useState<MenuState>(() => loadMenuState());
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [platformCatalog, setPlatformCatalog] = useState<PlatformGameCatalogEntry[]>([]);
@@ -572,11 +598,13 @@ export default function App() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const processedFinishedSessions = useRef(new Set<string>());
   const syncedEngineSession = useRef("");
+  const mirroredMenuVersion = useRef(0);
   const venueSessionIDRef = useRef(menu.sessionId);
 
   useEffect(() => {
+    if (readOnlyMirror) return;
     localStorage.setItem(storageKey, JSON.stringify(menu));
-  }, [menu]);
+  }, [menu, readOnlyMirror]);
 
   useEffect(() => {
     venueSessionIDRef.current = menu.sessionId;
@@ -596,6 +624,7 @@ export default function App() {
   // Mirror every captured menu event to the game-engine so the visit is fully
   // recorded server-side (independent of PostHog analytics).
   useEffect(() => {
+    if (readOnlyMirror) return;
     setMenuEventForwarder((event, properties) => {
       const current = menuRef.current;
       const venueSessionId = venueSessionIDRef.current
@@ -613,7 +642,62 @@ export default function App() {
       });
     });
     return () => setMenuEventForwarder(null);
-  }, []);
+  }, [readOnlyMirror]);
+
+  useEffect(() => {
+    if (readOnlyMirror) return;
+    const snapshot: MenuMirrorSnapshot = {
+      menu,
+      screenMode,
+      launchedGameID,
+      levelBrowserGameID,
+      teamOpen,
+      message,
+      error,
+    };
+    const timeout = window.setTimeout(() => {
+      postMenuState({ kioskId: menuKioskID(), snapshot });
+    }, 150);
+    return () => window.clearTimeout(timeout);
+  }, [error, launchedGameID, levelBrowserGameID, menu, message, readOnlyMirror, screenMode, teamOpen]);
+
+  useEffect(() => {
+    if (!readOnlyMirror) return;
+    let cancelled = false;
+
+    function applyEnvelope(envelope: MenuStateEnvelope<MenuMirrorSnapshot>) {
+      if (cancelled || !envelope.snapshot || envelope.version <= mirroredMenuVersion.current) return;
+      mirroredMenuVersion.current = envelope.version;
+      const snapshot = envelope.snapshot;
+      setMenu(snapshot.menu);
+      setScreenMode(snapshot.screenMode);
+      setLaunchedGameID(snapshot.launchedGameID);
+      setLevelBrowserGameID(snapshot.levelBrowserGameID);
+      setTeamOpen(snapshot.teamOpen);
+      setMessage(snapshot.message);
+      setError(snapshot.error);
+      setKeyboardTarget(null);
+      setColorPickerFor(null);
+      setConfirmRemove(null);
+      setConfirmResetSession(false);
+      setSettingsOpen(false);
+    }
+
+    async function refreshMenuState() {
+      try {
+        applyEnvelope(await fetchMenuState<MenuMirrorSnapshot>());
+      } catch {
+        if (!cancelled) setError("Sin conexión con el menú principal");
+      }
+    }
+
+    refreshMenuState();
+    const interval = window.setInterval(refreshMenuState, 700);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [readOnlyMirror]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1439,8 +1523,11 @@ export default function App() {
       setNowMs(now);
       return;
     }
-    const introMillis = Math.max(0, nextStatus.introRemainingMillis || 0);
-    const countdownMillis = Math.max(0, nextStatus.countdownRemainingMillis || 3000);
+    const introMillis = nextStatus.phase === "intro" ? Math.max(0, nextStatus.introRemainingMillis || 0) : 0;
+    const countdownMillis =
+      nextStatus.phase === "intro" || nextStatus.phase === "countdown"
+        ? Math.max(0, nextStatus.countdownRemainingMillis || 0)
+        : 0;
     setIntroUntil(now + introMillis);
     setCountdownUntil(now + introMillis + countdownMillis);
     setNowMs(now);
@@ -1467,6 +1554,7 @@ export default function App() {
     return (
       <WelcomeScreen
         connectionState={connectionState}
+        readOnly={readOnlyMirror}
         remoteSessionRequest={remoteSessionRequest}
         onCancelRemoteStart={dismissRemoteSessionStart}
         onConfirmRemoteStart={confirmRemoteSessionStart}
@@ -1477,7 +1565,7 @@ export default function App() {
   }
 
   return (
-    <main className={`app ${connectionState} ${keyboardTarget ? `keyboard-open keyboard-${keyboardTarget.kind}` : ""} ${screenMode === "game" ? "playing" : ""}`}>
+    <main className={`app ${connectionState} ${readOnlyMirror ? "read-only-mirror" : ""} ${keyboardTarget ? `keyboard-open keyboard-${keyboardTarget.kind}` : ""} ${screenMode === "game" ? "playing" : ""}`}>
       <header className="topbar">
         <div className="brand">
           <button className="brand-mark" type="button" aria-label="Pantalla completa" title="Pantalla completa" onClick={enterBrowserFullscreen} />
@@ -1952,8 +2040,17 @@ export default function App() {
   );
 }
 
+function FloorOnlyApp() {
+  return (
+    <main className="app floor-only-app">
+      <LiveFloorView interactive />
+    </main>
+  );
+}
+
 function WelcomeScreen({
   connectionState,
+  readOnly,
   remoteSessionRequest,
   onCancelRemoteStart,
   onConfirmRemoteStart,
@@ -1961,6 +2058,7 @@ function WelcomeScreen({
   onFullscreen,
 }: {
   connectionState: string;
+  readOnly?: boolean;
   remoteSessionRequest: RemoteSessionRequest | null;
   onCancelRemoteStart: () => void;
   onConfirmRemoteStart: () => void;
@@ -1971,7 +2069,7 @@ function WelcomeScreen({
   const welcomeLevel = welcomeGame?.levels?.[0];
   const welcomePreviewSrc = welcomeGame ? levelPreviewSrc(welcomeGame, welcomeLevel, "easy") : undefined;
   return (
-    <main className={`app welcome-app ${connectionState}`}>
+    <main className={`app welcome-app ${connectionState} ${readOnly ? "read-only-mirror" : ""}`}>
       <section className="welcome-screen" aria-label="Inicio">
         <div className="welcome-copy">
           <button className="welcome-mark" type="button" aria-label="Pantalla completa" title="Pantalla completa" onClick={onFullscreen} />
@@ -1983,9 +2081,9 @@ function WelcomeScreen({
             <Preview src={welcomePreviewSrc} animationID="temporada1" />
           </div>
         </div>
-        <button className="btn primary welcome-start" type="button" onClick={onStart}>
+        <button className="btn primary welcome-start" type="button" onClick={onStart} disabled={readOnly}>
           <PlayIcon />
-          Comenzar
+          {readOnly ? "Esperando menú" : "Comenzar"}
         </button>
         {remoteSessionRequest ? (
           <section className="remote-session-card" aria-label="Reserva pendiente">

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { drawFloorCanvas, floorDisplayCells, type FloorBoardCell } from "@motion-levels/floor-view";
 import { FLOOR_COLS, FLOOR_ROWS } from "./floor";
 
@@ -43,11 +43,13 @@ function controllerWebSocketURL(): string {
   return `${protocol}://${host}:${controllerPort}/ws`;
 }
 
-export function LiveFloorView() {
+export function LiveFloorView({ interactive = false }: { interactive?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const socketRef = useRef<WebSocket | null>(null);
   const frameRef = useRef<Uint8Array | null>(null);
   const frameSizeRef = useRef({ width: FLOOR_COLS, height: FLOOR_ROWS });
   const pressedRef = useRef<Set<number>>(new Set());
+  const pointerPressRef = useRef<{ x: number; y: number } | null>(null);
   const reconnectRef = useRef<number | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("connecting");
 
@@ -151,13 +153,13 @@ export function LiveFloorView() {
     const resizeObserver = new ResizeObserver(fitCanvas);
     if (targetCanvas.parentElement) resizeObserver.observe(targetCanvas.parentElement);
 
-    let socket: WebSocket | null = null;
     let closed = false;
 
     function connect() {
       if (closed) return;
       setConnection("connecting");
-      socket = new WebSocket(controllerWebSocketURL());
+      const socket = new WebSocket(controllerWebSocketURL());
+      socketRef.current = socket;
       socket.binaryType = "arraybuffer";
       socket.addEventListener("open", () => setConnection("live"));
       socket.addEventListener("message", (event) => {
@@ -173,6 +175,7 @@ export function LiveFloorView() {
       });
       socket.addEventListener("error", () => setConnection("error"));
       socket.addEventListener("close", () => {
+        if (socketRef.current === socket) socketRef.current = null;
         if (closed) return;
         setConnection("error");
         reconnectRef.current = window.setTimeout(connect, 600);
@@ -184,13 +187,57 @@ export function LiveFloorView() {
       closed = true;
       resizeObserver.disconnect();
       if (reconnectRef.current !== null) window.clearTimeout(reconnectRef.current);
-      socket?.close();
+      socketRef.current?.close();
+      socketRef.current = null;
     };
   }, []);
 
+  function pressureFromPointer(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const canvasX = ((event.clientX - rect.left) / rect.width) * canvas.width;
+    const canvasY = ((event.clientY - rect.top) / rect.height) * canvas.height;
+    const displayX = Math.floor((canvasX - GAP) / PITCH);
+    const displayY = Math.floor((canvasY - GAP) / PITCH);
+    if (displayX < 0 || displayX >= FLOOR_ROWS || displayY < 0 || displayY >= FLOOR_COLS) return null;
+    return { x: displayY, y: FLOOR_ROWS - 1 - displayX };
+  }
+
+  function sendPressure(point: { x: number; y: number }, pressed: boolean) {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ type: "press", x: point.x, y: point.y, pressed }));
+  }
+
+  function handlePointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
+    if (!interactive) return;
+    const point = pressureFromPointer(event);
+    if (!point) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointerPressRef.current = point;
+    sendPressure(point, true);
+  }
+
+  function releasePointer() {
+    const point = pointerPressRef.current;
+    if (!point) return;
+    pointerPressRef.current = null;
+    sendPressure(point, false);
+  }
+
   return (
-    <div className={`live-floor ${connection}`}>
-      <canvas ref={canvasRef} className="live-floor-canvas" aria-label="Estado real del suelo LED" />
+    <div className={`live-floor ${connection} ${interactive ? "interactive" : ""}`}>
+      <canvas
+        ref={canvasRef}
+        className="live-floor-canvas"
+        aria-label="Estado real del suelo LED"
+        onPointerDown={handlePointerDown}
+        onPointerUp={releasePointer}
+        onPointerCancel={releasePointer}
+        onPointerLeave={releasePointer}
+      />
       <span className="live-floor-status">{connection === "live" ? "Suelo en vivo" : connection === "connecting" ? "Conectando al suelo" : "Sin señal del suelo"}</span>
     </div>
   );

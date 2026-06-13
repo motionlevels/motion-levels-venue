@@ -96,6 +96,7 @@ type PlayerSnapshot struct {
 	Label string `json:"label"`
 	Color string `json:"color"`
 	Score int    `json:"score"`
+	Lives int    `json:"lives,omitempty"`
 }
 
 type Snapshot struct {
@@ -107,6 +108,7 @@ type Snapshot struct {
 	RemainingMillis int64            `json:"remaining_millis"`
 	CountdownMillis int64            `json:"countdown_millis"`
 	ActiveTargets   int              `json:"active_targets"`
+	Lives           int              `json:"lives,omitempty"`
 	Success         bool             `json:"success"`
 	Players         []PlayerSnapshot `json:"players"`
 }

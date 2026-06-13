@@ -198,6 +198,13 @@ export type MenuEventRequest = {
   properties?: Record<string, unknown>;
 };
 
+export type MenuStateEnvelope<TSnapshot = unknown> = {
+  kioskId: string;
+  version: number;
+  updatedUnixMillis: number;
+  snapshot: TSnapshot | null;
+};
+
 // Visit recording is best-effort: the kiosk must never block or surface errors
 // because the engine is briefly unreachable, so these are fire-and-forget.
 export function postVenueSession(request: VenueSessionRequest) {
@@ -212,6 +219,23 @@ export function postVenueSession(request: VenueSessionRequest) {
 export function postMenuEvent(request: MenuEventRequest) {
   void fetch(`${engineBaseURL()}/api/menu-event`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+export async function fetchMenuState<TSnapshot = unknown>(): Promise<MenuStateEnvelope<TSnapshot>> {
+  const response = await fetch(`${engineBaseURL()}/api/menu-state`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return response.json() as Promise<MenuStateEnvelope<TSnapshot>>;
+}
+
+export function postMenuState<TSnapshot>(request: { kioskId: string; snapshot: TSnapshot }) {
+  void fetch(`${engineBaseURL()}/api/menu-state`, {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
     keepalive: true,

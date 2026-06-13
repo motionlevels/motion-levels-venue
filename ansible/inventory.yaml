@@ -19,3 +19,6 @@ all:
         motionlevels-1:
           ansible_host: motionlevels-1
           motion_levels_hostname: motionlevels-1
+        motionlevels-cloud-1:
+          ansible_host: motionlevels-cloud-1
+          motion_levels_hostname: motionlevels-cloud-1
