@@ -2,19 +2,38 @@
 # Motion Levels Venue Appliance provisioning configuration for Debian 13 (Trixie)
 #
 # Instructions:
-# 1. Replace YOUR_TAILSCALE_AUTH_KEY with a valid Tailscale auth key
-#    (pre-authorized, ephemeral/non-ephemeral, and tagged with tag:motionlevels-venue).
-# 2. Add your ssh public keys under the ssh_authorized_keys section of the default user.
-# 3. Boot your VM/server with this user-data config.
+# 1. Set MOTION_LEVELS_PROVISION_HOSTNAME and TAILSCALE_AUTHKEY in
+#    /etc/motion-levels/provision.env below, or use
+#    deploy/homelab/create-motionlevels-venue-vm.sh to render them for Proxmox.
+# 2. Add SSH keys through your cloud platform or hypervisor cloud-init settings.
+# 3. Boot your VM/server, wait for cloud-init to finish, then deploy updates with
+#    ansible/playbooks/venue.yml.
+
+preserve_hostname: false
+manage_etc_hosts: true
+ssh_pwauth: false
+disable_root: false
 
 users:
   - default
-    # If using a specific user, you can also inject SSH authorized keys here:
-    # ssh_authorized_keys:
-    #   - ssh-rsa AAAA...
+  - name: root
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCceWykMBc2que6yg1x1um11hRHUVgsUoeARuworQmz7Yx+Q8TSrCDpAPdN7FbUI+Vqzjq16gbfr/PY+2/0fXuxtkcq/WKv/7ssFVeNO53cOWIUGQgCAGS/JdQ8BN4dBwnrI+RIdan1IRDl4Zb6ikZqIqm1KReEwaijliPnpOEMsMNONOHDcLDfaRcK2nuTiKuAr7X63wQxoXpZXO0KqVIL4OhcxRuRdSuAQAUKNnTBgDeNR4IqzKYN9tfHL3pKt9b85RAksgmAGFPq4QuOiApbqV1A0yj91wpHl35yYWuvx75QAa52DraO++5jTG4NkeSWwu+BjKbqNFp7dPDyCVojmDTITHyxMSlhONmiMocYDJTH8sRc7jYsLhJLpi7FkXW7EqtbPnuEEyZyEPU6rn1hD8+lG7vdpP7tYQQSS43KTB7p8UHICeyYnMmQyyglUbdwTJvIyNtZb2izvD+5HCD6Xe3CgStM8pbOtmi8O99JKAk8o7Vy1pSpcXkpb8jlToc= lobis@lobisapa-cern-macbook-pro.dyndns.cern.ch
+      # MOTION_LEVELS_SSH_AUTHORIZED_KEYS
 
 # Write configuration files and helper scripts before packages are installed
 write_files:
+  # 0. Per-machine bootstrap inputs. Leave empty to use the hypervisor hostname
+  # and skip Tailnet registration.
+  - path: /etc/motion-levels/provision.env
+    owner: root:root
+    permissions: '0600'
+    content: |
+      MOTION_LEVELS_PROVISION_HOSTNAME=""
+      TAILSCALE_AUTHKEY=""
+      TAILSCALE_ADVERTISE_TAGS="tag:motionlevels-venue"
+
   # 1. Kiosk display launcher script
   - path: /usr/local/bin/motion-levels-player-kiosk
     owner: root:root
@@ -348,7 +367,7 @@ write_files:
 runcmd:
   # 1. Update package database and install prerequisites
   - apt-get update
-  - DEBIAN_FRONTEND=noninteractive apt-get install -y curl gpg ca-certificates apt-transport-https
+  - DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::=--force-confold install -y curl gpg ca-certificates apt-transport-https
 
   # 2. Add Caddy official repository
   - curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
@@ -357,9 +376,9 @@ runcmd:
   # 3. Add Tailscale and install it using the official script
   - curl -fsSL https://tailscale.com/install.sh | sh
 
-  # 4. Install all runtime, build, and display/kiosk packages
+  # 4. Install all runtime, build, VM agent, and display/kiosk packages
   - apt-get update
-  - DEBIAN_FRONTEND=noninteractive apt-get install -y caddy build-essential pkg-config libasound2-dev zstd git rsync python3 xinit xserver-xorg x11-xserver-utils chromium unclutter alsa-utils
+  - DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::=--force-confold install -y caddy build-essential pkg-config libasound2-dev zstd git rsync python3 sudo openssh-server qemu-guest-agent xinit xserver-xorg x11-xserver-utils chromium unclutter alsa-utils
 
   # 5. Download and install Go compiler (required to build Go programs during deploy)
   - |
@@ -385,16 +404,40 @@ runcmd:
   - mkdir -p /opt/motion-levels/rebuild/var/game-engine/replays
   - mkdir -p /var/lib/motion-levels
 
-  # 7. Start Tailscale auto-registration
-  # NOTE: Replace 'YOUR_TAILSCALE_AUTH_KEY' below with your actual tailnet auth key
+  # 7. Apply per-machine hostname and start Tailscale auto-registration
   - |
-    TAILSCALE_AUTHKEY="YOUR_TAILSCALE_AUTH_KEY"
-    if [ "${TAILSCALE_AUTHKEY}" != "YOUR_TAILSCALE_AUTH_KEY" ] && [ -n "${TAILSCALE_AUTHKEY}" ]; then
+    set -euo pipefail
+    if [ -f /etc/motion-levels/provision.env ]; then
+      set -a
+      . /etc/motion-levels/provision.env
+      set +a
+    fi
+
+    PROVISION_HOSTNAME="${MOTION_LEVELS_PROVISION_HOSTNAME:-}"
+    if [ -z "${PROVISION_HOSTNAME}" ]; then
+      PROVISION_HOSTNAME="$(hostname -s)"
+    fi
+
+    if [ -n "${PROVISION_HOSTNAME}" ]; then
+      hostnamectl set-hostname "${PROVISION_HOSTNAME}"
+      sed -i "s/^MOTION_LEVELS_CONTROLLER_HOSTNAME=.*/MOTION_LEVELS_CONTROLLER_HOSTNAME=${PROVISION_HOSTNAME}/" /etc/motion-levels/motion-levels.env
+    fi
+
+    systemctl enable --now ssh
+    systemctl enable --now qemu-guest-agent
+    systemctl enable --now tailscaled
+
+    if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
       echo "Registering machine with Tailscale..."
-      tailscale up --authkey="${TAILSCALE_AUTHKEY}" --advertise-tags=tag:motionlevels-venue --ssh --accept-dns=false
+      tailscale up \
+        --auth-key="${TAILSCALE_AUTHKEY}" \
+        --hostname="${PROVISION_HOSTNAME}" \
+        --advertise-tags="${TAILSCALE_ADVERTISE_TAGS:-tag:motionlevels-venue}" \
+        --ssh \
+        --accept-dns=false
     else
-      echo "WARNING: Tailscale auth key was not set or remains at placeholder value."
-      echo "You will need to manually authenticate using: tailscale up --authkey <key> --advertise-tags tag:motionlevels-venue --ssh --accept-dns=false"
+      echo "WARNING: Tailscale auth key was not set."
+      echo "To join later: tailscale up --auth-key <key> --hostname ${PROVISION_HOSTNAME} --advertise-tags ${TAILSCALE_ADVERTISE_TAGS:-tag:motionlevels-venue} --ssh --accept-dns=false"
     fi
 
   # 8. Reload systemd daemon to recognize newly written services

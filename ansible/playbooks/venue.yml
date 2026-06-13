@@ -63,6 +63,8 @@
         dest: "{{ motion_levels_remote_src }}/packages/"
       - src: content/
         dest: "{{ motion_levels_remote_src }}/content/"
+      - src: content/
+        dest: "{{ motion_levels_remote_root }}/content/"
       - src: deploy/
         dest: "{{ motion_levels_remote_src }}/deploy/"
       - src: apps/player-menu/
@@ -110,6 +112,7 @@
         mode: "0755"
       loop:
         - "{{ motion_levels_remote_src }}"
+        - "{{ motion_levels_remote_src }}/apps"
         - "{{ motion_levels_remote_root }}/bin"
         - "{{ motion_levels_remote_root }}/apps/player-menu"
         - "{{ motion_levels_remote_root }}/apps/player-display"
