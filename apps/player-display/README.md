@@ -16,6 +16,24 @@ Open:
 http://127.0.0.1:4104
 ```
 
+The default HUD is the arcade player display. The previous display remains
+available for recovery or comparison:
+
+```txt
+http://127.0.0.1:4104/?hud=classic
+```
+
+For design review without a running game engine, use one of the built-in demo
+states:
+
+```txt
+http://127.0.0.1:4104/?demo=players
+http://127.0.0.1:4104/?demo=countdown
+http://127.0.0.1:4104/?demo=team
+http://127.0.0.1:4104/?demo=duel
+http://127.0.0.1:4104/?hud=classic&demo=classic
+```
+
 For kiosk-style fullscreen Electron testing:
 
 ```sh

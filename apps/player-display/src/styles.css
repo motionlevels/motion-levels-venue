@@ -473,6 +473,536 @@ body {
   background: rgba(var(--accent-rgb), 0.12);
 }
 
+/* ---------- Arcade HUD ---------- */
+
+.display.arcade-display {
+  padding: 34px 46px 30px;
+  grid-template-rows: auto minmax(300px, 1fr) minmax(190px, 0.62fr) auto;
+  gap: 24px;
+  background:
+    linear-gradient(180deg, rgba(5, 8, 15, 0.2), rgba(5, 8, 15, 0.72)),
+    radial-gradient(circle at 50% 12%, rgba(54, 217, 255, 0.12), transparent 38%),
+    linear-gradient(145deg, #05070d 0%, #101524 54%, #060910 100%);
+}
+
+.display.arcade-display.duel-game {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.arcade-top {
+  min-height: 102px;
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) minmax(420px, 1fr) minmax(190px, 0.45fr);
+  align-items: center;
+  gap: 26px;
+}
+
+.arcade-lives,
+.arcade-title,
+.arcade-system,
+.arcade-primary,
+.arcade-metric,
+.arcade-team-card,
+.arcade-player-card,
+.arcade-empty,
+.duel-side,
+.duel-center,
+.arcade-event {
+  border: 1px solid rgba(54, 217, 255, 0.26);
+  background:
+    linear-gradient(180deg, rgba(20, 219, 255, 0.075), rgba(15, 20, 34, 0.18)),
+    rgba(8, 20, 34, 0.78);
+  box-shadow:
+    0 24px 66px -34px rgba(0, 0, 0, 0.86),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.arcade-lives {
+  min-width: 0;
+  min-height: 88px;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  clip-path: polygon(0 0, 96% 0, 100% 50%, 96% 100%, 0 100%);
+}
+
+.heart-meter {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.heart {
+  width: 58px;
+  height: 58px;
+  display: inline-grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.36);
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.38));
+}
+
+.heart::before {
+  content: "\2665";
+  font-size: 66px;
+  line-height: 1;
+}
+
+.heart.filled {
+  color: #ff1730;
+  text-shadow: 0 0 22px rgba(255, 23, 48, 0.52);
+}
+
+.heart-meter.compact {
+  gap: 6px;
+}
+
+.heart-meter.compact .heart {
+  width: 28px;
+  height: 28px;
+}
+
+.heart-meter.compact .heart::before {
+  font-size: 34px;
+}
+
+.heart-meter b {
+  color: var(--cyan);
+  font-size: 2.45rem;
+  line-height: 1;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  text-shadow: 0 0 24px rgba(54, 217, 255, 0.5);
+}
+
+.heart-meter.compact b {
+  font-size: 1.45rem;
+}
+
+.arcade-title {
+  min-width: 0;
+  padding: 14px 26px 16px;
+  text-align: center;
+  clip-path: polygon(5% 0, 95% 0, 100% 32%, 100% 100%, 0 100%, 0 32%);
+}
+
+.arcade-title span,
+.arcade-ribbon,
+.arcade-primary span,
+.arcade-metric span,
+.arcade-team-card span,
+.arcade-system strong,
+.duel-center span {
+  color: var(--cyan);
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.arcade-title h1 {
+  margin: 8px 0 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 3.35rem;
+  line-height: 0.92;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 0 30px rgba(54, 217, 255, 0.25);
+}
+
+.arcade-system {
+  min-height: 78px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  clip-path: polygon(8% 0, 100% 0, 100% 100%, 0 100%, 0 28%);
+}
+
+.arcade-system small {
+  max-width: 140px;
+  overflow: hidden;
+  color: var(--red);
+  font-size: 0.82rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arcade-stage {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
+  gap: 26px;
+}
+
+.arcade-primary {
+  min-width: 0;
+  min-height: 300px;
+  padding: 44px 48px;
+  display: grid;
+  align-content: center;
+  gap: 18px;
+  position: relative;
+  overflow: hidden;
+  clip-path: polygon(0 0, 95% 0, 100% 10%, 100% 100%, 4% 100%, 0 88%);
+}
+
+.arcade-primary::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 8px;
+  background: linear-gradient(90deg, var(--cyan), transparent 68%);
+  opacity: 0.85;
+}
+
+.arcade-ribbon {
+  width: max-content;
+  max-width: 100%;
+  padding: 12px 34px 13px;
+  color: #fff;
+  background: linear-gradient(90deg, #f927ff, rgba(249, 39, 255, 0.18));
+  clip-path: polygon(0 0, 95% 0, 100% 100%, 0 100%);
+}
+
+.arcade-primary strong {
+  overflow: hidden;
+  width: 100%;
+  color: #fffef4;
+  font-size: 9.5rem;
+  line-height: 0.82;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-shadow:
+    0 0 0.035em #f7a823,
+    0 0 0.16em rgba(251, 191, 36, 0.68),
+    8px 8px 0 rgba(255, 117, 20, 0.18);
+}
+
+.arcade-primary span {
+  color: var(--cyan);
+  font-size: 3rem;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 28px rgba(54, 217, 255, 0.42);
+}
+
+.arcade-side {
+  min-height: 0;
+  display: grid;
+  gap: 22px;
+}
+
+.arcade-metric {
+  min-width: 0;
+  min-height: 126px;
+  padding: 22px 28px;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  clip-path: polygon(3% 0, 100% 0, 100% 100%, 0 100%, 0 16%);
+}
+
+.arcade-metric strong {
+  overflow: hidden;
+  font-size: 3.7rem;
+  line-height: 0.92;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.arcade-metric.magenta strong {
+  color: #f927ff;
+  text-shadow: 0 0 26px rgba(249, 39, 255, 0.48);
+}
+
+.arcade-metric.cyan strong {
+  color: var(--cyan);
+  text-shadow: 0 0 26px rgba(54, 217, 255, 0.42);
+}
+
+.arcade-metric.amber strong {
+  color: var(--amber-ink);
+}
+
+.arcade-players {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.arcade-players.count-1 {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.arcade-players.count-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.arcade-players.count-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.arcade-player-card {
+  min-width: 0;
+  min-height: 172px;
+  padding: 20px 22px;
+  display: grid;
+  align-content: space-between;
+  gap: 12px;
+  border-color: rgba(var(--player-rgb), 0.5);
+  background:
+    linear-gradient(90deg, rgba(var(--player-rgb), 0.28), transparent 44%),
+    rgba(8, 20, 34, 0.8);
+  clip-path: polygon(0 0, 96% 0, 100% 18%, 100% 100%, 0 100%);
+}
+
+.arcade-player-card.leader {
+  border-color: rgba(var(--player-rgb), 0.92);
+  box-shadow:
+    0 24px 66px -34px rgba(0, 0, 0, 0.86),
+    0 0 46px -12px rgba(var(--player-rgb), 0.68),
+    inset 0 0 0 2px rgba(var(--player-rgb), 0.42);
+}
+
+.arcade-player-name {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.arcade-player-name i,
+.arcade-player-chip i,
+.duel-side i {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--player);
+  box-shadow: 0 0 18px rgba(var(--player-rgb), 0.65);
+}
+
+.arcade-player-name span {
+  overflow: hidden;
+  color: #fff;
+  font-size: 1.55rem;
+  line-height: 1;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arcade-player-name b {
+  padding: 6px 10px;
+  color: #06140d;
+  background: var(--player);
+  font-size: 0.78rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.arcade-player-card > strong {
+  color: var(--player);
+  font-size: 5.5rem;
+  line-height: 0.82;
+  font-weight: 950;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 30px rgba(var(--player-rgb), 0.46);
+}
+
+.arcade-team-card {
+  grid-column: 1 / -1;
+  min-height: 0;
+  padding: 26px 30px;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.3fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 28px;
+  clip-path: polygon(0 0, 98% 0, 100% 18%, 100% 100%, 2% 100%, 0 84%);
+}
+
+.arcade-team-card strong {
+  display: block;
+  margin-top: 10px;
+  color: #fff;
+  font-size: 3.6rem;
+  line-height: 0.95;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.arcade-roster {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.arcade-player-chip {
+  min-width: 0;
+  min-height: 72px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(var(--player-rgb), 0.44);
+  background: rgba(var(--player-rgb), 0.14);
+  color: #fff;
+  font-size: 1.55rem;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arcade-empty {
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 2rem;
+  font-weight: 900;
+}
+
+.arcade-bottom {
+  min-height: 70px;
+  display: grid;
+}
+
+.arcade-event {
+  min-width: 0;
+  padding: 0 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--soft);
+  font-size: 2.2rem;
+  line-height: 1;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  clip-path: polygon(3% 0, 97% 0, 100% 50%, 97% 100%, 3% 100%, 0 50%);
+}
+
+.arcade-event span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arcade-event.active {
+  color: #fff;
+  border-color: rgba(249, 39, 255, 0.58);
+  background:
+    linear-gradient(90deg, rgba(249, 39, 255, 0.18), rgba(54, 217, 255, 0.12)),
+    rgba(8, 20, 34, 0.86);
+}
+
+.duel-board {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 0.36fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 24px;
+}
+
+.duel-side {
+  min-width: 0;
+  padding: 28px 34px;
+  display: grid;
+  align-content: center;
+  gap: 24px;
+  border-color: rgba(var(--player-rgb), 0.68);
+  background:
+    linear-gradient(135deg, rgba(var(--player-rgb), 0.42), transparent 55%),
+    rgba(8, 20, 34, 0.82);
+}
+
+.duel-side.left {
+  clip-path: polygon(0 0, 96% 0, 100% 12%, 100% 100%, 0 100%);
+}
+
+.duel-side.right {
+  text-align: right;
+  clip-path: polygon(4% 0, 100% 0, 100% 100%, 0 100%, 0 12%);
+}
+
+.duel-side div {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.duel-side.right div {
+  justify-content: flex-end;
+}
+
+.duel-side span {
+  overflow: hidden;
+  color: #fff;
+  font-size: 2.7rem;
+  line-height: 1;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.duel-side strong {
+  color: #fff;
+  font-size: 14rem;
+  line-height: 0.82;
+  font-weight: 950;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 48px rgba(var(--player-rgb), 0.58);
+}
+
+.duel-center {
+  min-width: 0;
+  padding: 24px 18px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 18px;
+  text-align: center;
+  clip-path: polygon(10% 0, 90% 0, 100% 16%, 100% 84%, 90% 100%, 10% 100%, 0 84%, 0 16%);
+}
+
+.duel-center strong {
+  color: var(--cyan);
+  font-size: 3.2rem;
+  line-height: 1;
+  font-weight: 950;
+  font-variant-numeric: tabular-nums;
+}
+
+.duel-center b {
+  color: #fff;
+  font-size: 4.8rem;
+  line-height: 1;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
 /* ---------- Phase + event states ---------- */
 
 .display.finished .game-title span {
@@ -497,6 +1027,16 @@ body {
   color: #fff;
   border-color: rgba(255, 82, 104, 0.8);
   background: rgba(255, 82, 104, 0.22);
+}
+
+.arcade-display.event-life-loss .arcade-lives,
+.arcade-display.event-life-loss .arcade-event {
+  border-color: rgba(255, 82, 104, 0.82);
+  box-shadow:
+    0 24px 66px -34px rgba(0, 0, 0, 0.86),
+    0 0 54px -10px rgba(255, 82, 104, 0.54),
+    inset 0 0 0 2px rgba(255, 82, 104, 0.28);
+  animation: lifeLossStat 720ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @keyframes hitPulse {
@@ -540,6 +1080,65 @@ body {
   .connection {
     align-items: flex-start;
     text-align: left;
+  }
+
+  .display.arcade-display {
+    grid-template-rows: auto auto auto auto;
+    padding: 18px;
+  }
+
+  .display.arcade-display.duel-game {
+    grid-template-rows: auto auto auto;
+  }
+
+  .arcade-top,
+  .arcade-stage,
+  .arcade-players,
+  .arcade-team-card,
+  .duel-board {
+    grid-template-columns: 1fr;
+  }
+
+  .arcade-title {
+    text-align: left;
+  }
+
+  .arcade-title h1,
+  .arcade-primary strong,
+  .duel-side span,
+  .duel-side strong {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .arcade-lives {
+    padding-inline: 12px;
+  }
+
+  .heart-meter {
+    gap: 8px;
+  }
+
+  .heart {
+    width: 42px;
+    height: 42px;
+  }
+
+  .heart::before {
+    font-size: 50px;
+  }
+
+  .arcade-title h1 {
+    font-size: 2.6rem;
+  }
+
+  .arcade-primary strong {
+    font-size: 5.8rem;
+  }
+
+  .duel-side strong {
+    font-size: 8rem;
   }
 }
 

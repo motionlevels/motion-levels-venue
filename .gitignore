@@ -20,3 +20,8 @@ game-recordings/
 # Framework build output and local test artifacts.
 .next/
 test-results/
+
+# Homelab runtime secrets live on the target host and must not be committed.
+deploy/homelab/.env
+deploy/homelab/*.env.local
+deploy/homelab/secrets/

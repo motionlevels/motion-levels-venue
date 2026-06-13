@@ -28,7 +28,10 @@
   --muted: #8b99ad;
   --soft: #c8d2e0;
 
-  /* Accent & signal colors */
+  /* Brand, accent & signal colors */
+  --brand-blue: #005af8;
+  --brand-blue-rgb: 0, 90, 248;
+  --brand-blue-ink: #dbeafe;
   --accent: #2fd86c;
   --accent-rgb: 47, 216, 108;
   --green: var(--accent);
@@ -37,6 +40,13 @@
   --cyan-ink: #cffafe;
   --red: #ff5268;
   --red-rgb: 255, 82, 104;
+  /* Iconic game triad: use as restrained identity accents on dark surfaces. */
+  --game-blue: var(--brand-blue);
+  --game-blue-rgb: var(--brand-blue-rgb);
+  --game-green: var(--green);
+  --game-green-rgb: var(--accent-rgb);
+  --game-red: var(--red);
+  --game-red-rgb: var(--red-rgb);
   --amber: #fbbf24;
   --amber-rgb: 251, 191, 36;
   /* Readable amber text on amber-tinted dark fills. */

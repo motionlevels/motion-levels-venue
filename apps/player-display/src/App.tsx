@@ -31,11 +31,15 @@ function isTeamScoreGame(currentGame: string): boolean {
 }
 
 export default function App() {
+  const options = useMemo(() => displayOptions(), []);
+  const demoStatus = useMemo(() => demoDisplayStatus(options.demo), [options.demo]);
   const [status, setStatus] = useState<DisplayStatus>(emptyStatus);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (demoStatus) return;
+
     let cancelled = false;
     fetchDisplayStatus()
       .then((next) => {
@@ -64,8 +68,20 @@ export default function App() {
       cancelled = true;
       source.close();
     };
-  }, []);
+  }, [demoStatus]);
 
+  const liveStatus = demoStatus || status;
+  const liveConnected = demoStatus ? true : connected;
+  const liveError = demoStatus ? "" : error;
+
+  if (options.hud === "classic") {
+    return <ClassicDisplay status={liveStatus} connected={liveConnected} error={liveError} />;
+  }
+
+  return <ArcadeDisplay status={liveStatus} connected={liveConnected} error={liveError} />;
+}
+
+function ClassicDisplay({ status, connected, error }: DisplayProps) {
   const teamScoreGame = isTeamScoreGame(status.currentGame);
   const leader = useMemo(() => {
     if (teamScoreGame) return null;
@@ -172,4 +188,279 @@ export default function App() {
       </footer>
     </main>
   );
+}
+
+function ArcadeDisplay({ status, connected, error }: DisplayProps) {
+  const teamScoreGame = isTeamScoreGame(status.currentGame);
+  const duelGame = status.currentGame === "duel" && status.players.length >= 2;
+  const leader = useMemo(() => {
+    if (teamScoreGame || duelGame || !status.players.length) return null;
+    return [...status.players].sort((left, right) => right.score - left.score)[0];
+  }, [duelGame, status.players, teamScoreGame]);
+  const lifeLoss = status.lastEventCue === "miss" && status.currentGame === "lava";
+  const eventClass = status.lastEventCue ? `event-${status.lastEventCue}${lifeLoss ? " event-life-loss" : ""}` : "";
+  const clock = displayClock(status);
+  const eventMessage = eventMessageES(status.lastEventCue, status.lastEventMessage);
+  const mainMetric = primaryMetric(status);
+
+  return (
+    <main className={`display arcade-display ${duelGame ? "duel-game" : ""} ${status.phase} ${eventClass}`}>
+      <header className="arcade-top">
+        <div className="arcade-lives" aria-label={status.lives < 0 ? "Vidas ilimitadas" : `${status.lives} vidas`}>
+          <HeartMeter lives={status.lives} />
+        </div>
+        <div className="arcade-title">
+          <span>{phaseLabel(status.phase)}</span>
+          <h1>{gameTitleES(status.currentGame, status.label)}</h1>
+        </div>
+        <div className="arcade-system">
+          <span className={`live-dot ${connected ? "on" : ""}`} aria-label={connected ? "En directo" : "Sin conexión"} />
+          <strong>{connected ? "LIVE" : "OFF"}</strong>
+          {error ? <small>{error}</small> : null}
+        </div>
+      </header>
+
+      {duelGame ? (
+        <DuelBoard status={status} clock={clock} />
+      ) : (
+        <section className={`arcade-stage ${teamScoreGame ? "team-score" : ""}`}>
+          <article className="arcade-primary">
+            <div className="arcade-ribbon">{mainMetric.label}</div>
+            <strong>{mainMetric.value}</strong>
+            <span>{mainMetric.caption}</span>
+          </article>
+
+          <aside className="arcade-side" aria-label="Marcadores de ronda">
+            <MetricPanel label="Puntos" value={String(status.score)} tone="magenta" />
+            <MetricPanel label="Objetivos" value={String(status.activeTargets)} tone="cyan" />
+            <MetricPanel label="Dificultad" value={difficultyLabelES(status.difficulty)} tone="amber" />
+          </aside>
+        </section>
+      )}
+
+      {!duelGame ? (
+        <section
+          className={`arcade-players ${teamScoreGame ? "team-score" : ""} count-${Math.min(Math.max(status.players.length, 1), 4)}`}
+          aria-label={teamScoreGame ? "Equipo" : "Jugadores"}
+        >
+          {teamScoreGame && status.players.length ? (
+            <article className="arcade-team-card">
+              <div>
+                <span>Equipo</span>
+                <strong>{status.players.length} {status.players.length === 1 ? "jugador" : "jugadores"}</strong>
+              </div>
+              <div className="arcade-roster">
+                {status.players.map((player) => (
+                  <PlayerChip player={player} key={player.index} />
+                ))}
+              </div>
+            </article>
+          ) : status.players.length ? (
+            status.players.map((player) => <ArcadePlayerCard key={player.index} player={player} leader={leader?.index === player.index} />)
+          ) : (
+            <article className="arcade-empty">Esperando datos del juego</article>
+          )}
+        </section>
+      ) : null}
+
+      <footer className="arcade-bottom">
+        <div className={`arcade-event ${status.lastEventCue ? "active" : ""}`}>
+          <span>{eventMessage || "Listo"}</span>
+        </div>
+      </footer>
+    </main>
+  );
+}
+
+function DuelBoard({ status, clock }: { status: DisplayStatus; clock: string }) {
+  const left = status.players[0];
+  const right = status.players[1];
+  return (
+    <section className="duel-board" aria-label="Marcador de duelo">
+      <DuelSide player={left} side="left" />
+      <div className="duel-center">
+        <span>Countdown</span>
+        <strong>{clock}</strong>
+        <b>VS</b>
+      </div>
+      <DuelSide player={right} side="right" />
+    </section>
+  );
+}
+
+function DuelSide({ player, side }: { player: DisplayStatus["players"][number]; side: "left" | "right" }) {
+  return (
+    <article className={`duel-side ${side}`} style={{ "--player": colorCSS(player.color), "--player-rgb": colorRGB(player.color) } as CSSProperties}>
+      <div>
+        <i />
+        <span>{playerLabelES(player.label)}</span>
+      </div>
+      <strong>{player.score}</strong>
+      <HeartMeter lives={player.lives} compact />
+    </article>
+  );
+}
+
+function ArcadePlayerCard({ player, leader }: { player: DisplayStatus["players"][number]; leader: boolean }) {
+  return (
+    <article className={`arcade-player-card ${leader ? "leader" : ""}`} style={{ "--player": colorCSS(player.color), "--player-rgb": colorRGB(player.color) } as CSSProperties}>
+      <div className="arcade-player-name">
+        <i />
+        <span>{playerLabelES(player.label)}</span>
+        {leader ? <b>Líder</b> : null}
+      </div>
+      <strong>{player.score}</strong>
+      <HeartMeter lives={player.lives} compact />
+    </article>
+  );
+}
+
+function PlayerChip({ player }: { player: DisplayStatus["players"][number] }) {
+  return (
+    <span className="arcade-player-chip" style={{ "--player": colorCSS(player.color), "--player-rgb": colorRGB(player.color) } as CSSProperties}>
+      <i />
+      {playerLabelES(player.label)}
+    </span>
+  );
+}
+
+function MetricPanel({ label, value, tone }: { label: string; value: string; tone: "magenta" | "cyan" | "amber" }) {
+  return (
+    <article className={`arcade-metric ${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
+  );
+}
+
+function HeartMeter({ lives, compact = false }: { lives: number; compact?: boolean }) {
+  if (lives < 0) {
+    return <div className={`heart-meter ${compact ? "compact" : ""} infinite`}><b>∞</b></div>;
+  }
+  if (lives > 8) {
+    return (
+      <div className={`heart-meter ${compact ? "compact" : ""} many`}>
+        {Array.from({ length: compact ? 3 : 5 }, (_, index) => <span className="heart filled" key={index} />)}
+        <b>x{lives}</b>
+      </div>
+    );
+  }
+  const slots = Math.max(compact ? Math.min(5, Math.max(lives, 3)) : 5, lives);
+  return (
+    <div className={`heart-meter ${compact ? "compact" : ""}`}>
+      {Array.from({ length: slots }, (_, index) => (
+        <span className={`heart ${index < lives ? "filled" : ""}`} key={index} />
+      ))}
+    </div>
+  );
+}
+
+function displayClock(status: DisplayStatus): string {
+  if (status.phase === "intro") return formatClock(status.introRemainingMillis);
+  if (status.phase === "countdown") return formatClock(status.countdownRemainingMillis);
+  if (status.remainingMillis > 0) return formatClock(status.remainingMillis);
+  if (status.phase === "finished") return "0:00";
+  return formatClock(status.elapsedMillis);
+}
+
+function primaryMetric(status: DisplayStatus): { label: string; value: string; caption: string } {
+  if (status.phase === "countdown") {
+    return { label: "Countdown", value: displayClock(status), caption: "Preparados" };
+  }
+  if (status.currentGame === "whack-a-mole" || status.currentGame === "parkour" || status.currentGame === "temporada2") {
+    return { label: "Puntos", value: String(status.score), caption: "Marcador actual" };
+  }
+  if (status.activeTargets > 0 && (status.currentGame === "lava" || status.currentGame === "plataformas" || status.currentGame === "temporada1")) {
+    return { label: "Objetivos", value: String(status.activeTargets), caption: "Restantes" };
+  }
+  return { label: "Tiempo", value: displayClock(status), caption: status.remainingMillis > 0 ? "Restante" : "Transcurrido" };
+}
+
+type DisplayProps = {
+  status: DisplayStatus;
+  connected: boolean;
+  error: string;
+};
+
+function displayOptions(): { hud: "arcade" | "classic"; demo: string } {
+  if (typeof window === "undefined") return { hud: "arcade", demo: "" };
+  const params = new URLSearchParams(window.location.search);
+  return {
+    hud: params.get("hud") === "classic" ? "classic" : "arcade",
+    demo: params.get("demo") || "",
+  };
+}
+
+function demoDisplayStatus(name: string): DisplayStatus | null {
+  const base: DisplayStatus = {
+    ...emptyStatus,
+    currentGame: "temporada2",
+    label: "Temporada 2",
+    phase: "running",
+    difficulty: "medium",
+    playerCount: 4,
+    players: [
+      { index: 0, label: "Red", color: { r: 255, g: 41, b: 56 }, score: 42, lives: 4 },
+      { index: 1, label: "Cyan", color: { r: 30, g: 213, b: 255 }, score: 35, lives: 3 },
+      { index: 2, label: "Green", color: { r: 47, g: 216, b: 108 }, score: 30, lives: 5 },
+      { index: 3, label: "Pink", color: { r: 247, g: 61, b: 255 }, score: 21, lives: 2 },
+    ],
+    score: 128,
+    lives: 5,
+    elapsedMillis: 143000,
+    remainingMillis: 137000,
+    activeTargets: 17,
+    audioEnabled: true,
+    lastEventCue: "hit",
+    lastEventMessage: "Red +5",
+  };
+
+  switch (name) {
+    case "countdown":
+      return {
+        ...base,
+        currentGame: "parkour",
+        label: "Parkour",
+        phase: "countdown",
+        score: 0,
+        lives: 8,
+        countdownRemainingMillis: 19000,
+        remainingMillis: 0,
+        activeTargets: 23,
+        lastEventCue: "",
+        lastEventMessage: "",
+      };
+    case "duel":
+      return {
+        ...base,
+        currentGame: "duel",
+        label: "Duelo",
+        playerCount: 2,
+        players: base.players.slice(0, 2).map((player, index) => ({ ...player, score: index === 0 ? 12 : 9, lives: index === 0 ? 3 : 4 })),
+        score: 21,
+        lives: -1,
+        remainingMillis: 156000,
+        activeTargets: 0,
+        lastEventCue: "hit",
+        lastEventMessage: "Cyan +1",
+      };
+    case "team":
+      return {
+        ...base,
+        currentGame: "lava",
+        label: "El suelo es lava",
+        difficulty: "hard",
+        score: 64,
+        lives: 3,
+        activeTargets: 6,
+        lastEventCue: "miss",
+        lastEventMessage: "Fallo",
+      };
+    case "classic":
+      return base;
+    case "players":
+      return base;
+    default:
+      return null;
+  }
 }

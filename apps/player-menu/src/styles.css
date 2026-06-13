@@ -210,6 +210,51 @@ body {
   height: 48px;
 }
 
+.remote-session-card {
+  position: relative;
+  z-index: 2;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 32px;
+  border: 2px solid rgba(var(--accent-rgb), 0.5);
+  border-radius: 28px;
+  background:
+    linear-gradient(135deg, rgba(var(--accent-rgb), 0.22), rgba(255, 255, 255, 0.08)),
+    rgba(7, 14, 24, 0.92);
+  box-shadow: 0 28px 70px -36px rgba(var(--accent-rgb), 0.95);
+  padding: 30px 34px;
+}
+
+.remote-session-card strong,
+.remote-session-card p,
+.remote-session-card span {
+  min-width: 0;
+  display: block;
+}
+
+.remote-session-card strong {
+  color: #f7fbff;
+  font-size: 38px;
+  font-weight: 950;
+  line-height: 1.05;
+}
+
+.remote-session-card p {
+  margin: 10px 0 0;
+  color: var(--soft);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.remote-session-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
 .welcome-visual {
   display: grid;
   place-items: center;

@@ -42,6 +42,15 @@ type FinishedLevelAttempt = NonNullable<EngineStatus["finishedLevelAttempts"]>[n
 type KeyboardTarget = { kind: "team" } | { kind: "player"; id: number };
 type ScreenMode = "browse" | "game";
 type RosterIssue = { message: string; playerIds: Set<number> };
+type RemoteSessionRequest = {
+  configuredPlayerCount: number;
+  reservationId: string;
+  venueSessionId: string;
+  teamName: string;
+  playerCount: number;
+  room: string;
+  startsAt: string;
+};
 
 const storageKey = "ml-player-menu-state-v1";
 const maxPlayers = 6;
@@ -62,6 +71,49 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 
 function isUUID(value: unknown): value is string {
   return typeof value === "string" && uuidPattern.test(value.trim());
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function remoteSessionRequestFromURL(): RemoteSessionRequest | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("remoteSession") !== "reservation") return null;
+  const venueSessionId = params.get("venueSessionId") || "";
+  const reservationId = params.get("reservationId") || venueSessionId;
+  if (!isUUID(venueSessionId) || !isUUID(reservationId)) return null;
+  const reservedPlayers = Math.max(1, Math.round(Number(params.get("players") || 1)));
+
+  return {
+    configuredPlayerCount: clampInteger(reservedPlayers, 1, maxPlayers),
+    playerCount: reservedPlayers,
+    reservationId: reservationId.toLowerCase(),
+    room: cleanNameWhitespace(params.get("room") || "Sala remota", 40),
+    startsAt: params.get("startsAt") || "",
+    teamName: cleanNameWhitespace(params.get("teamName") || defaultTeamName(), maxTeamNameLength),
+    venueSessionId: venueSessionId.toLowerCase(),
+  };
+}
+
+function clearRemoteSessionURL() {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  for (const key of ["remoteSession", "reservationId", "venueSessionId", "players", "room", "startsAt", "teamName"]) {
+    url.searchParams.delete(key);
+  }
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+function playersForCount(count: number): Player[] {
+  return Array.from({ length: clampInteger(count, 1, maxPlayers) }, (_, index) => ({
+    active: true,
+    color: playerColors[index % playerColors.length],
+    id: index + 1,
+    name: "",
+  }));
 }
 
 function newVenueSessionID(): string {
@@ -512,6 +564,7 @@ export default function App() {
   const [settingsError, setSettingsError] = useState("");
   const [teamOpen, setTeamOpen] = useState(false);
   const [screenMode, setScreenMode] = useState<ScreenMode>("browse");
+  const [remoteSessionRequest, setRemoteSessionRequest] = useState<RemoteSessionRequest | null>(() => remoteSessionRequestFromURL());
   const [launchedGameID, setLaunchedGameID] = useState(menu.selectedGame);
   const [levelBrowserGameID, setLevelBrowserGameID] = useState<string | null>(null);
   const [introUntil, setIntroUntil] = useState(0);
@@ -914,10 +967,11 @@ export default function App() {
     setConfirmRemove(null);
   }
 
-  function beginSession() {
-    const nextTeamName = defaultTeamName();
-    const nextSessionID = newVenueSessionID();
+  function beginSession(remoteRequest?: RemoteSessionRequest) {
+    const nextTeamName = remoteRequest?.teamName || defaultTeamName();
+    const nextSessionID = remoteRequest?.venueSessionId || newVenueSessionID();
     const nowUnix = Math.floor(Date.now() / 1000);
+    const nextPlayers = remoteRequest ? playersForCount(remoteRequest.configuredPlayerCount) : defaultPlayers;
     postVenueSession({
       action: "start",
       venueSessionId: nextSessionID,
@@ -925,7 +979,10 @@ export default function App() {
       kioskId: menuKioskID(),
     });
     captureMenuEvent("session_started", {
-      default_team_name: true,
+      default_team_name: !remoteRequest,
+      remote_reservation: Boolean(remoteRequest),
+      reservation_id: remoteRequest?.reservationId,
+      reserved_player_count: remoteRequest?.playerCount,
       venue_session_id: nextSessionID,
     });
     setMenu((current) => ({
@@ -934,15 +991,19 @@ export default function App() {
       sessionId: nextSessionID,
       sessionStartedUnix: nowUnix,
       teamName: nextTeamName,
-      players: defaultPlayers,
+      players: nextPlayers,
       category: "featured",
       selectedGame: "featured-lava",
       difficulty: "easy",
       selectedLevels: {},
       levelProgress: {},
-      nextPlayerId: 1,
+      nextPlayerId: Math.max(0, ...nextPlayers.map((player) => player.id)),
       narrationArmed: {},
     }));
+    if (remoteRequest) {
+      setRemoteSessionRequest(null);
+      clearRemoteSessionURL();
+    }
     setMessage("");
     setError("");
     setScreenMode("browse");
@@ -1001,6 +1062,16 @@ export default function App() {
         setError(err instanceof Error ? err.message : "No se pudo cerrar la sesión");
       }
     }
+  }
+
+  function confirmRemoteSessionStart() {
+    if (!remoteSessionRequest) return;
+    beginSession(remoteSessionRequest);
+  }
+
+  function dismissRemoteSessionStart() {
+    setRemoteSessionRequest(null);
+    clearRemoteSessionURL();
   }
 
   function openSettings() {
@@ -1393,7 +1464,16 @@ export default function App() {
   }
 
   if (!menu.sessionActive && screenMode !== "game") {
-    return <WelcomeScreen connectionState={connectionState} onStart={beginSession} onFullscreen={enterBrowserFullscreen} />;
+    return (
+      <WelcomeScreen
+        connectionState={connectionState}
+        remoteSessionRequest={remoteSessionRequest}
+        onCancelRemoteStart={dismissRemoteSessionStart}
+        onConfirmRemoteStart={confirmRemoteSessionStart}
+        onStart={() => beginSession()}
+        onFullscreen={enterBrowserFullscreen}
+      />
+    );
   }
 
   return (
@@ -1874,10 +1954,16 @@ export default function App() {
 
 function WelcomeScreen({
   connectionState,
+  remoteSessionRequest,
+  onCancelRemoteStart,
+  onConfirmRemoteStart,
   onStart,
   onFullscreen,
 }: {
   connectionState: string;
+  remoteSessionRequest: RemoteSessionRequest | null;
+  onCancelRemoteStart: () => void;
+  onConfirmRemoteStart: () => void;
   onStart: () => void;
   onFullscreen: () => void;
 }) {
@@ -1901,9 +1987,44 @@ function WelcomeScreen({
           <PlayIcon />
           Comenzar
         </button>
+        {remoteSessionRequest ? (
+          <section className="remote-session-card" aria-label="Reserva pendiente">
+            <div>
+              <span className="micro">Reserva desde plataforma</span>
+              <strong>{remoteSessionRequest.teamName}</strong>
+              <p>
+                {remoteSessionRequest.room} · {remoteSessionPlayerCopy(remoteSessionRequest)}
+                {remoteSessionRequest.startsAt ? ` · ${formatRemoteStartTime(remoteSessionRequest.startsAt)}` : ""}
+              </p>
+            </div>
+            <div className="remote-session-card__actions">
+              <button className="btn compact" type="button" onClick={onCancelRemoteStart}>
+                Ignorar
+              </button>
+              <button className="btn primary" type="button" onClick={onConfirmRemoteStart}>
+                <PlayIcon />
+                Confirmar sesión
+              </button>
+            </div>
+          </section>
+        ) : null}
       </section>
     </main>
   );
+}
+
+function remoteSessionPlayerCopy(request: RemoteSessionRequest) {
+  const reserved = `${request.playerCount} ${request.playerCount === 1 ? "reservado" : "reservados"}`;
+  if (request.configuredPlayerCount === request.playerCount) {
+    return `${request.playerCount} ${request.playerCount === 1 ? "jugador" : "jugadores"}`;
+  }
+  return `${reserved} · ${request.configuredPlayerCount} en menú`;
+}
+
+function formatRemoteStartTime(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return value;
+  return new Intl.DateTimeFormat("es", { day: "2-digit", hour: "2-digit", minute: "2-digit", month: "short" }).format(date);
 }
 
 function ColorPicker({
