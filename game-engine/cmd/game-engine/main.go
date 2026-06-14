@@ -82,7 +82,7 @@ func main() {
 	flag.StringVar(&cfg.HTTPAddr, "http", "127.0.0.1:4102", "HTTP address for the game-engine API; empty disables")
 	flag.StringVar(&cfg.ControllerAddr, "controller", "127.0.0.1:4201", "floor-controller frame stream address")
 	flag.StringVar(&cfg.PressureAddr, "pressure-events", "127.0.0.1:4202", "floor-controller pressure event stream address")
-	flag.StringVar(&cfg.Game, "game", "animations", "game to run: animations, animation-random, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, parkour, parkour2, plataformas, temporada1, temporada2, duel, memory, or patrones")
+	flag.StringVar(&cfg.Game, "game", "animations", "game to run: animations, animation-random, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, parkour, parkour2, plataformas, temporada1-niveles, temporada1, temporada2, duel, memory, or patrones")
 	flag.StringVar(&cfg.Difficulty, "difficulty", "easy", "difficulty for games that support it: easy, medium, hard, expert")
 	flag.StringVar(&cfg.Level, "level", "starter", "level for games that support level selection")
 	flag.IntVar(&cfg.PlayerCount, "players", 1, "number of players for focused games")
@@ -180,7 +180,7 @@ func (c *config) normalize() {
 	} else if c.Game == "parkour" {
 		c.Level = parkour.NormalizeLevel(c.Level)
 		c.PlayerCount = 1
-	} else if c.Game == "plataformas" || c.Game == "parkour2" {
+	} else if c.Game == "plataformas" || c.Game == "parkour2" || c.Game == "temporada1-niveles" {
 		c.Level = plataformas.NormalizeLevel(c.Level)
 		if c.Game == "parkour2" {
 			c.PlayerCount = 1
@@ -468,6 +468,8 @@ func normalizeGame(value string) string {
 		return "parkour2"
 	case "plataformas", "platforms", "cloud-platforms":
 		return "plataformas"
+	case "temporada1-niveles", "temporada-1-niveles", "temporada1-levels", "season1-levels", "season-1-levels":
+		return "temporada1-niveles"
 	case "temporada1", "temporada-1", "season1", "season-1":
 		return "temporada1"
 	case "temporada2", "temporada-2", "season2", "season-2":

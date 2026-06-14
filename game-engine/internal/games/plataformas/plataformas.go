@@ -397,6 +397,9 @@ func (g *Game) tickLocked(now time.Time) {
 		}
 	}
 	if g.hasWonLocked() {
+		if g.level.winCondition == "collect_all" && g.level.passScore > 0 {
+			g.score += g.level.passScore
+		}
 		g.success = true
 		g.ended = true
 		g.endedAt = now

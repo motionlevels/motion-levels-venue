@@ -217,7 +217,7 @@ func TestFinalDamageEmitsDefeatCue(t *testing.T) {
 	}
 }
 
-func TestCollectAllDoesNotAddPassScoreBonus(t *testing.T) {
+func TestCollectAllAddsPassScoreCompletionBonus(t *testing.T) {
 	levels, err := compileCloudLevels([]cloudLevel{{
 		Slug:        "level-1",
 		Label:       "Collect all",
@@ -250,8 +250,8 @@ func TestCollectAllDoesNotAddPassScoreBonus(t *testing.T) {
 	if !snapshot.Success {
 		t.Fatalf("success = false, want true after collecting all points")
 	}
-	if snapshot.Score != 1 {
-		t.Fatalf("score = %d, want collected point only", snapshot.Score)
+	if snapshot.Score != 21 {
+		t.Fatalf("score = %d, want collected point plus completion bonus", snapshot.Score)
 	}
 }
 

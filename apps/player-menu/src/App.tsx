@@ -2,6 +2,23 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { controlGame, fetchAnimationPreview, fetchEngineStatus, fetchGameCatalog, fetchMenuState, postMenuEvent, postMenuState, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus, type MenuStateEnvelope, type PlatformGameCatalogEntry } from "./api";
 import { categories, colors, difficulties, games, playerColorNames, playerColors, previewAsset, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
+import {
+  catalogDifficultyIDs,
+  closestSupportedDifficulty,
+  difficultyRank,
+  estimatedDurationLabel,
+  normalizeEstimatedDurationSeconds,
+  normalizeDifficultyIDs,
+  platformDifficultyLabel,
+  platformDurationLabel,
+  platformPlayerBounds,
+  platformPlayerRangeLabel,
+  platformSupportedDifficulties,
+  platformSupportsLevels,
+  playerBoundsForGame,
+  rosterForGame,
+  supportedDifficultiesForGame,
+} from "./catalogSync";
 import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
@@ -250,38 +267,49 @@ function catalogPreviewAnimation(entry: PlatformGameCatalogEntry, fallback: Game
 function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, index: number): GameCard {
   const engineGame = platformEntryEngineGame(entry);
   const previewSrc = catalogThumbnailSrc(entry.catalog_thumbnail_ref) || fallback?.previewSrc;
-  const levels = entry.levels && entry.levels.length > 0
+  const playerBounds = platformPlayerBounds(entry);
+  const supportedDifficulties = platformSupportedDifficulties(entry, fallback);
+  const supportsLevels = platformSupportsLevels(entry, fallback);
+  const estimatedDurationSeconds = normalizeEstimatedDurationSeconds(entry.estimated_duration_seconds);
+  const levels = supportsLevels && entry.levels && entry.levels.length > 0
     ? entry.levels.map((lvl) => {
         const fallbackLevel = fallback?.levels?.find((level) => level.id === lvl.id);
+        const levelDifficulties = normalizeDifficultyIDs(lvl.difficulties);
         return {
           id: lvl.id,
           label: lvl.label,
           description: lvl.description,
-          difficulties: fallbackLevel?.difficulties,
+          difficulties: levelDifficulties.length ? levelDifficulties : fallbackLevel?.difficulties,
           previewSrc: fallbackLevel?.previewSrc || fallback?.previewSrc,
           previewByDifficulty: fallbackLevel?.previewByDifficulty,
           previewAnimation: fallbackLevel?.previewAnimation,
         };
       })
-    : fallback?.levels;
+    : supportsLevels ? fallback?.levels : undefined;
+  const duration = platformDurationLabel(entry, fallback) || (levels?.length ? `${levels.length} niveles` : "");
   return {
     id: entry.id,
     label: entry.label || fallback?.label || engineGame,
     category: isCategoryID(entry.catalog_category) ? entry.catalog_category : fallback?.category || "arcade",
     color: entry.catalog_color || fallback?.color || [colors.cyan, colors.blue, colors.green, colors.violet, colors.orange, colors.yellow][index % 6],
-    players: entry.players_label || fallback?.players || `${entry.min_players || 1}-${entry.max_players || 1}`,
-    difficulty: entry.difficulty_label || fallback?.difficulty || "Juego",
-    duration: entry.duration_label || fallback?.duration || "",
+    players: platformPlayerRangeLabel(entry, fallback),
+    difficulty: platformDifficultyLabel(entry, fallback),
+    difficulties: supportedDifficulties,
+    duration,
+    estimatedDurationSeconds,
     mode: entry.mode_label || fallback?.mode || "",
-    audio: entry.audio_label || fallback?.audio || (entry.default_music_ref ? "Música" : "Sin música"),
+    audio: entry.audio_label || fallback?.audio || "",
     description: entry.description || fallback?.description || "Juego publicado desde el catálogo.",
     rules: entry.catalog_rules?.length ? entry.catalog_rules : fallback?.rules || ["Configurable desde la página Juegos."],
     featured: typeof entry.catalog_featured === "boolean" ? entry.catalog_featured : fallback?.featured === true || entry.catalog_category === "featured",
     levels,
-    allowDifficultyWithLevels: fallback?.allowDifficultyWithLevels || (entry.source_kind === "cloud_levels" && Boolean(levels?.length)),
+    allowDifficultyWithLevels: supportsLevels && (fallback?.allowDifficultyWithLevels || (entry.source_kind === "cloud_levels" && Boolean(levels?.length))),
     engineGame,
+    minPlayers: playerBounds.minPlayers,
+    maxPlayers: playerBounds.maxPlayers,
     previewSrc,
     previewAnimation: catalogPreviewAnimation(entry, fallback, engineGame),
+    supportsLevels,
     disabled: false,
   };
 }
@@ -310,14 +338,6 @@ function isIndividualCard(game: GameCard): boolean {
   return game.category === "individual";
 }
 
-function isDuelCard(game: GameCard): boolean {
-  return engineGameID(game) === "duel";
-}
-
-function isMemoryCard(game: GameCard): boolean {
-  return engineGameID(game) === "memory";
-}
-
 function usesDifficulty(game: GameCard): boolean {
   return !isAmbientCard(game) && (!game.levels?.length || Boolean(game.allowDifficultyWithLevels));
 }
@@ -335,28 +355,9 @@ function levelNumber(levelID: string): number {
   return Number.isFinite(value) && value > 0 ? value : 1;
 }
 
-function difficultyRank(difficulty: DifficultyID): number {
-  return difficulties.findIndex((candidate) => candidate.id === difficulty);
-}
-
-function allDifficultyIDs(): DifficultyID[] {
-  return difficulties.map((difficulty) => difficulty.id);
-}
-
 function supportedDifficultiesFor(game: GameCard, level?: NonNullable<GameCard["levels"]>[number]): DifficultyID[] {
-  if (!usesDifficulty(game)) return allDifficultyIDs();
-  return level?.difficulties?.length ? level.difficulties : allDifficultyIDs();
-}
-
-function closestSupportedDifficulty(requested: DifficultyID, supported: DifficultyID[]): DifficultyID {
-  if (supported.includes(requested)) return requested;
-  const fallback = supported[0] || difficulties[0].id;
-  return supported.reduce((best, candidate) => {
-    const bestDistance = Math.abs(difficultyRank(best) - difficultyRank(requested));
-    const candidateDistance = Math.abs(difficultyRank(candidate) - difficultyRank(requested));
-    if (candidateDistance !== bestDistance) return candidateDistance < bestDistance ? candidate : best;
-    return difficultyRank(candidate) > difficultyRank(best) ? candidate : best;
-  }, fallback);
+  if (!usesDifficulty(game)) return [...catalogDifficultyIDs];
+  return supportedDifficultiesForGame(game, level);
 }
 
 function higherDifficulty(a: DifficultyID | undefined, b: DifficultyID): DifficultyID {
@@ -649,9 +650,16 @@ function gameRosterIssue(game: GameCard, players: Player[]): RosterIssue | null 
   const duplicateIssue = activeRosterIssue(players);
   if (duplicateIssue) return duplicateIssue;
   const active = players.filter((player) => player.active);
-  if (isDuelCard(game) && active.length < 2) {
+  const { maxPlayers: gameMaxPlayers, minPlayers: gameMinPlayers } = playerBoundsForGame(game);
+  if (active.length < gameMinPlayers) {
     return {
-      message: "Duelo necesita al menos 2 jugadores",
+      message: gameMinPlayers === 1 ? "Necesita al menos 1 jugador" : `Necesita al menos ${gameMinPlayers} jugadores`,
+      playerIds: new Set(active.map((player) => player.id)),
+    };
+  }
+  if (active.length > gameMaxPlayers) {
+    return {
+      message: gameMaxPlayers === 1 ? "Máximo 1 jugador" : `Máximo ${gameMaxPlayers} jugadores`,
       playerIds: new Set(active.map((player) => player.id)),
     };
   }
@@ -1053,9 +1061,10 @@ function MenuApp() {
   const selectedLevelBest = selectedLevel ? selectedLevelProgress.bestByLevel[selectedLevel.id] : undefined;
   const selectedLevelBestTime = selectedLevel ? selectedLevelProgress.bestTimeByLevel[selectedLevel.id] : undefined;
   const selectedLevelBestLabel = selectedLevelBestTime ? formatBestTime(selectedLevelBestTime) : selectedLevelBest ? difficulties.find((difficulty) => difficulty.id === selectedLevelBest)?.label || selectedLevelBest : "Sin superar";
+  const selectedGameDurationLabel = selectedGame.duration || estimatedDurationLabel(selectedGame.estimatedDurationSeconds || 0) || "Sin estimar";
   const levelDetail = Boolean(selectedGame.levels?.length && selectedLevel);
   const gameActive = screenMode === "game";
-  const launchedPlayers = isIndividualCard(launchedGame) ? activePlayers.slice(0, 1) : isDuelCard(launchedGame) || isMemoryCard(launchedGame) ? activePlayers.slice(0, 4) : activePlayers;
+  const launchedPlayers = rosterForGame(launchedGame, activePlayers);
   const displayPlayers = gameActive && enginePlayers.length > 0 ? enginePlayers : launchedPlayers;
   const headerPlayers = gameActive && enginePlayers.length > 0 ? enginePlayers : activePlayers;
   const launchedLevel = launchedGame.levels?.find((level) => level.id === (status?.level || selectedLevelFor(launchedGame)));
@@ -1066,7 +1075,8 @@ function MenuApp() {
   const menuPlayerCount = activePlayers.length || 1;
   const headerPlayerCount = headerPlayers.length || 1;
   const playerCountLabel = `${headerPlayerCount} ${headerPlayerCount === 1 ? "jugador" : "jugadores"}`;
-  const selectedGamePlayerCount = isIndividualCard(selectedGame) ? 1 : isDuelCard(selectedGame) || isMemoryCard(selectedGame) ? Math.min(menuPlayerCount, 4) : menuPlayerCount;
+  const selectedGamePlayerBounds = playerBoundsForGame(selectedGame);
+  const selectedGamePlayerCount = Math.min(menuPlayerCount, selectedGamePlayerBounds.maxPlayers);
   const selectedGamePlayerCountLabel = `${selectedGamePlayerCount} ${selectedGamePlayerCount === 1 ? "jugador" : "jugadores"}`;
   const rosterIssue = useMemo(() => gameRosterIssue(selectedGame, menu.players), [selectedGame, menu.players]);
 
@@ -1531,8 +1541,7 @@ function MenuApp() {
       return;
     }
     const playNarration = narrationArmedFor(game, nextMenu);
-    const launchPlayers = nextMenu.players.filter((player) => player.active);
-    const rosterForGame = isIndividualCard(game) ? launchPlayers.slice(0, 1) : isDuelCard(game) || isMemoryCard(game) ? launchPlayers.slice(0, 4) : launchPlayers;
+    const launchRoster = rosterForGame(game, nextMenu.players);
     const selectedLevelID = selectedLevelFor(game, nextMenu);
     const launchLevel = game.levels?.find((level) => level.id === selectedLevelID);
     const launchDifficulty = usesDifficulty(game) ? closestSupportedDifficulty(nextMenu.difficulty, supportedDifficultiesFor(game, launchLevel)) : undefined;
@@ -1567,19 +1576,19 @@ function MenuApp() {
       level_label: launchLevel?.label,
       level_number: selectedLevelID ? levelNumber(selectedLevelID) : undefined,
       narration_enabled: supportsNarration(game) ? playNarration : false,
-      player_count: rosterForGame.length,
+      player_count: launchRoster.length,
       venue_session_id: nextMenu.sessionId,
     });
     try {
       const nextStatus = await selectGame({
         game: engineGameID(game),
         venueSessionId: nextMenu.sessionId,
-        playerCount: Math.max(1, rosterForGame.length),
+        playerCount: Math.max(1, launchRoster.length),
         difficulty: launchDifficulty,
         level: selectedLevelID || undefined,
         narrationEnabled: supportsNarration(game) ? playNarration : false,
         teamName: nextMenu.teamName.trim(),
-        players: rosterForGame.map((player, index) => ({
+        players: launchRoster.map((player, index) => ({
           index,
           label: playerLabel(nextMenu.players, player),
           color: hexToColor(player.color),
@@ -2002,6 +2011,10 @@ function MenuApp() {
                         <span>Mejor</span>
                         <strong>{selectedLevelBestLabel}</strong>
                       </div>
+                      <div>
+                        <span>Duración</span>
+                        <strong>{selectedGameDurationLabel}</strong>
+                      </div>
                     </section>
                   </>
                 ) : (
@@ -2009,6 +2022,20 @@ function MenuApp() {
                     <span className="micro">Seleccionado</span>
                     <h2>{selectedGame.label}</h2>
                     <p>{selectedGame.description}</p>
+                    <section className="season-facts" aria-label="Resumen de partida">
+                      <div>
+                        <span>{isIndividualCard(selectedGame) ? "Jugador" : "Equipo"}</span>
+                        <strong>{selectedGamePlayerCountLabel}</strong>
+                      </div>
+                      <div>
+                        <span>Dificultad</span>
+                        <strong>{selectedDifficulty.label}</strong>
+                      </div>
+                      <div>
+                        <span>Duración</span>
+                        <strong>{selectedGameDurationLabel}</strong>
+                      </div>
+                    </section>
                     <div className="detail-rules">
                       <span className="micro">Reglas rápidas</span>
                       <ul>

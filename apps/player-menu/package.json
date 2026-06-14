@@ -6,6 +6,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "test": "node --test --experimental-strip-types test/*.test.ts",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "electron:dev": "PLAYER_MENU_URL=http://127.0.0.1:4103 electron electron/main.cjs",

@@ -140,6 +140,14 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 		t.Fatalf("temporada1 music = %q, want Background07", season.MusicRef)
 	}
 
+	seasonLevels := configForSelection(base, "season1-levels", 4)
+	if seasonLevels.Game != "temporada1-niveles" || seasonLevels.PlayerCount != 4 || seasonLevels.Level != "level-1" {
+		t.Fatalf("temporada1-niveles selection = %+v", seasonLevels)
+	}
+	if seasonLevels.MusicRef != plataformas.DefaultMusicRef || seasonLevels.MusicVolume != plataformas.DefaultMusicVolume {
+		t.Fatalf("temporada1-niveles music = %q %.2f, want %q %.2f", seasonLevels.MusicRef, seasonLevels.MusicVolume, plataformas.DefaultMusicRef, plataformas.DefaultMusicVolume)
+	}
+
 	season2 := configForSelection(base, "temporada-2", 4)
 	if season2.Game != "temporada2" || season2.PlayerCount != 4 || season2.Level != "level-1" || season2.Difficulty != "easy" {
 		t.Fatalf("temporada2 selection = %+v", season2)
@@ -336,11 +344,14 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if len(status.Catalog) != 16 {
-		t.Fatalf("catalog = %d entries, want 16", len(status.Catalog))
+	if len(status.Catalog) != 17 {
+		t.Fatalf("catalog = %d entries, want 17", len(status.Catalog))
 	}
 	if !catalogHasGame(status.Catalog, "animation-random") {
 		t.Fatal("catalog missing animation-random")
+	}
+	if !catalogHasGame(status.Catalog, "temporada1-niveles") {
+		t.Fatal("catalog missing temporada1-niveles")
 	}
 
 	menuStateBody := bytes.NewBufferString(`{"kioskId":"kiosk-test","snapshot":{"screenMode":"browse","message":"ready"}}`)
