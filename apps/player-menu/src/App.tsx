@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { controlGame, fetchAnimationPreview, fetchEngineStatus, fetchGameCatalog, fetchMenuState, postMenuEvent, postMenuState, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus, type MenuStateEnvelope, type PlatformGameCatalogEntry } from "./api";
-import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
+import { categories, colors, difficulties, games, playerColorNames, playerColors, previewAsset, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
 import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
@@ -62,6 +62,8 @@ type RemoteSessionRequest = {
 };
 
 const storageKey = "ml-player-menu-state-v1";
+const platformCatalogStorageKey = "ml-player-menu-platform-catalog-v1";
+const platformCatalogRefreshMillis = 5000;
 const maxPlayers = 6;
 const maxTeamNameLength = 24;
 const maxPlayerNameLength = 12;
@@ -173,6 +175,24 @@ function isAmbientCard(game: GameCard): boolean {
   return game.category === "attract";
 }
 
+function isFeaturedCard(game: GameCard): boolean {
+  return game.featured === true || game.category === "featured";
+}
+
+function gamesForCategory(catalogGames: GameCard[], category: CategoryID): GameCard[] {
+  if (category === "featured") return catalogGames.filter(isFeaturedCard);
+  return catalogGames.filter((game) => game.category === category);
+}
+
+function gameBelongsToCategory(game: GameCard, category: CategoryID): boolean {
+  return category === "featured" ? isFeaturedCard(game) : game.category === category;
+}
+
+function menuCategoryForGame(game: GameCard, currentCategory: CategoryID): CategoryID {
+  if (currentCategory === "featured" && isFeaturedCard(game)) return "featured";
+  return game.category;
+}
+
 function animationIsIdleLoop(currentGame: string, phase: string): boolean {
   return currentGame === "animations" && (phase === "idle" || phase === "ambient");
 }
@@ -202,6 +222,7 @@ function liveAnimationCards(catalog: EngineGame[] | undefined): GameCard[] {
       rules: ["Animación publicada desde el editor.", "Se actualiza desde el motor sin reiniciar el menú."],
       engineGame: entry.game,
       previewAnimation: entry.game,
+      featured: false,
     }));
 }
 
@@ -209,42 +230,78 @@ function isCategoryID(value: string): value is CategoryID {
   return categories.some((category) => category.id === value);
 }
 
-function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalogEntry[] | undefined): GameCard[] {
-  if (!catalog?.length) return baseGames;
-  const byID = new Map(catalog.map((entry) => [entry.id, entry]));
-  const byEngine = new Map(catalog.map((entry) => [entry.engine_game || entry.id, entry]));
-  return baseGames
-    .map((game) => {
-      const entry = byID.get(game.id) || byEngine.get(engineGameID(game));
-      if (!entry) return game;
-      const levels = entry.levels && entry.levels.length > 0
-        ? entry.levels.map((lvl) => ({
-            id: lvl.id,
-            label: lvl.label,
-            description: lvl.description,
-            previewSrc: game.previewSrc,
-          }))
-        : game.levels;
-      return {
-        ...game,
-        label: entry.label || game.label,
-        category: isCategoryID(entry.catalog_category) ? entry.catalog_category : game.category,
-        color: entry.catalog_color || game.color,
-        players: entry.players_label || game.players,
-        difficulty: entry.difficulty_label || game.difficulty,
-        duration: entry.duration_label || game.duration,
-        mode: entry.mode_label || game.mode,
-        audio: entry.audio_label || game.audio,
-        description: entry.description || game.description,
-        engineGame: entry.engine_game || game.engineGame,
-        disabled: entry.catalog_enabled === false,
-        levels,
-      } satisfies GameCard;
-    })
-    .filter((game) => !game.disabled)
+function platformEntryEngineGame(entry: PlatformGameCatalogEntry): string {
+  return entry.engine_game || entry.id;
+}
+
+function catalogThumbnailSrc(ref: string | undefined): string | undefined {
+  const clean = String(ref || "").trim();
+  if (!clean) return undefined;
+  if (/^(?:https?:|data:|blob:|\/)/i.test(clean)) return clean;
+  return previewAsset(clean.replace(/^preview:/, "")) || clean;
+}
+
+function catalogPreviewAnimation(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, engineGame: string): string | undefined {
+  const configured = String(entry.catalog_preview_animation || "").trim();
+  if (configured) return configured;
+  return fallback?.previewAnimation || (entry.source_kind === "cloud_animations" || entry.catalog_category === "attract" ? engineGame : undefined);
+}
+
+function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, index: number): GameCard {
+  const engineGame = platformEntryEngineGame(entry);
+  const previewSrc = catalogThumbnailSrc(entry.catalog_thumbnail_ref) || fallback?.previewSrc;
+  const levels = entry.levels && entry.levels.length > 0
+    ? entry.levels.map((lvl) => {
+        const fallbackLevel = fallback?.levels?.find((level) => level.id === lvl.id);
+        return {
+          id: lvl.id,
+          label: lvl.label,
+          description: lvl.description,
+          difficulties: fallbackLevel?.difficulties,
+          previewSrc: fallbackLevel?.previewSrc || fallback?.previewSrc,
+          previewByDifficulty: fallbackLevel?.previewByDifficulty,
+          previewAnimation: fallbackLevel?.previewAnimation,
+        };
+      })
+    : fallback?.levels;
+  return {
+    id: entry.id,
+    label: entry.label || fallback?.label || engineGame,
+    category: isCategoryID(entry.catalog_category) ? entry.catalog_category : fallback?.category || "arcade",
+    color: entry.catalog_color || fallback?.color || [colors.cyan, colors.blue, colors.green, colors.violet, colors.orange, colors.yellow][index % 6],
+    players: entry.players_label || fallback?.players || `${entry.min_players || 1}-${entry.max_players || 1}`,
+    difficulty: entry.difficulty_label || fallback?.difficulty || "Juego",
+    duration: entry.duration_label || fallback?.duration || "",
+    mode: entry.mode_label || fallback?.mode || "",
+    audio: entry.audio_label || fallback?.audio || (entry.default_music_ref ? "Música" : "Sin música"),
+    description: entry.description || fallback?.description || "Juego publicado desde el catálogo.",
+    rules: entry.catalog_rules?.length ? entry.catalog_rules : fallback?.rules || ["Configurable desde la página Juegos."],
+    featured: typeof entry.catalog_featured === "boolean" ? entry.catalog_featured : fallback?.featured === true || entry.catalog_category === "featured",
+    levels,
+    allowDifficultyWithLevels: fallback?.allowDifficultyWithLevels || (entry.source_kind === "cloud_levels" && Boolean(levels?.length)),
+    engineGame,
+    previewSrc,
+    previewAnimation: catalogPreviewAnimation(entry, fallback, engineGame),
+    disabled: false,
+  };
+}
+
+function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalogEntry[] | null): GameCard[] {
+  if (!catalog) return baseGames;
+  const fallbackByID = new Map(baseGames.map((game) => [game.id, game]));
+  const fallbackByEngine = new Map(baseGames.map((game) => [engineGameID(game), game]));
+  const catalogOrderByID = new Map(catalog.map((entry) => [entry.id, entry.catalog_order]));
+  const catalogOrderByEngine = new Map(catalog.map((entry) => [platformEntryEngineGame(entry), entry.catalog_order]));
+  return catalog
+    .filter((entry) => entry.catalog_enabled !== false)
+    .map((entry, index) => platformEntryToGameCard(
+      entry,
+      fallbackByID.get(entry.id) || fallbackByEngine.get(platformEntryEngineGame(entry)),
+      index,
+    ))
     .sort((left, right) => {
-      const leftOrder = byID.get(left.id)?.catalog_order ?? byEngine.get(engineGameID(left))?.catalog_order ?? 1000;
-      const rightOrder = byID.get(right.id)?.catalog_order ?? byEngine.get(engineGameID(right))?.catalog_order ?? 1000;
+      const leftOrder = catalogOrderByID.get(left.id) ?? catalogOrderByEngine.get(engineGameID(left)) ?? 1000;
+      const rightOrder = catalogOrderByID.get(right.id) ?? catalogOrderByEngine.get(engineGameID(right)) ?? 1000;
       return leftOrder - rightOrder || left.label.localeCompare(right.label);
     });
 }
@@ -451,6 +508,29 @@ function loadMenuState(): MenuState {
   };
 }
 
+function loadCachedPlatformCatalog(): PlatformGameCatalogEntry[] | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const payload = JSON.parse(localStorage.getItem(platformCatalogStorageKey) || "null") as { games?: unknown } | PlatformGameCatalogEntry[] | null;
+    const games = Array.isArray(payload) ? payload : Array.isArray(payload?.games) ? payload.games : null;
+    return games ? games.filter(isPlatformGameCatalogEntry) : null;
+  } catch {
+    return null;
+  }
+}
+
+function cachePlatformCatalog(catalog: PlatformGameCatalogEntry[]) {
+  try {
+    localStorage.setItem(platformCatalogStorageKey, JSON.stringify({ games: catalog, cachedAt: Date.now() }));
+  } catch {
+    // Ignore storage pressure; the bundled catalog remains the offline fallback.
+  }
+}
+
+function isPlatformGameCatalogEntry(value: unknown): value is PlatformGameCatalogEntry {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value) && "id" in value && "label" in value);
+}
+
 // Players get a "Jugador N" placeholder until they are named.
 function playerLabel(players: Player[], player: Player): string {
   const name = player.name.trim();
@@ -586,7 +666,7 @@ function MenuApp() {
   const readOnlyMirror = useMemo(() => menuReadOnlyFromURL(), []);
   const [menu, setMenu] = useState<MenuState>(() => loadMenuState());
   const [status, setStatus] = useState<EngineStatus | null>(null);
-  const [platformCatalog, setPlatformCatalog] = useState<PlatformGameCatalogEntry[]>([]);
+  const [platformCatalog, setPlatformCatalog] = useState<PlatformGameCatalogEntry[] | null>(() => loadCachedPlatformCatalog());
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [keyboardTarget, setKeyboardTarget] = useState<KeyboardTarget | null>(null);
@@ -629,6 +709,33 @@ function MenuApp() {
     () => applyPlatformCatalog([...games, ...liveAnimationCards(status?.catalog)], platformCatalog),
     [platformCatalog, status?.catalog],
   );
+
+  useEffect(() => {
+    if (!platformCatalog || !menuGames.length) return;
+    const launchedStillVisible = menuGames.some((game) => game.id === launchedGameID);
+    if (!launchedStillVisible) {
+      setLaunchedGameID(menuGames[0].id);
+    }
+    setMenu((current) => {
+      const selected =
+        menuGames.find((game) => game.id === current.selectedGame)
+        || gamesForCategory(menuGames, current.category)[0]
+        || menuGames[0];
+      const category = menuCategoryForGame(selected, current.category);
+      if (current.selectedGame === selected.id && current.category === category) return current;
+      const selectedLevels = selected.levels?.length && !current.selectedLevels[selected.id]
+        ? { ...current.selectedLevels, [selected.id]: defaultLevelID(selected) }
+        : current.selectedLevels;
+      const selectedLevel = selected.levels?.find((level) => level.id === selectedLevels[selected.id]);
+      return {
+        ...current,
+        category,
+        difficulty: closestSupportedDifficulty(current.difficulty, supportedDifficultiesFor(selected, selectedLevel)),
+        selectedGame: selected.id,
+        selectedLevels,
+      };
+    });
+  }, [launchedGameID, menu.category, menu.selectedGame, menuGames, platformCatalog]);
 
   // Mirror every captured menu event to the game-engine so the visit is fully
   // recorded server-side (independent of PostHog analytics).
@@ -730,19 +837,35 @@ function MenuApp() {
 
   useEffect(() => {
     let cancelled = false;
+    let inFlight = false;
     async function refreshCatalog() {
+      if (cancelled || inFlight) return;
+      inFlight = true;
       try {
         const next = await fetchGameCatalog();
+        cachePlatformCatalog(next);
         if (!cancelled) setPlatformCatalog(next);
       } catch {
-        if (!cancelled) setPlatformCatalog([]);
+        if (!cancelled) setPlatformCatalog((current) => current);
+      } finally {
+        inFlight = false;
       }
     }
-    refreshCatalog();
-    const id = window.setInterval(refreshCatalog, 10000);
+    const refreshOnDemand = () => { void refreshCatalog(); };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refreshCatalog();
+    };
+    void refreshCatalog();
+    const interval = window.setInterval(refreshCatalog, platformCatalogRefreshMillis);
+    window.addEventListener("motion-levels:refresh-catalog", refreshOnDemand);
+    window.addEventListener("focus", refreshOnDemand);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      window.clearInterval(interval);
+      window.removeEventListener("motion-levels:refresh-catalog", refreshOnDemand);
+      window.removeEventListener("focus", refreshOnDemand);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, []);
 
@@ -807,7 +930,7 @@ function MenuApp() {
       const difficulty = usesDifficulty(engineGame) ? closestSupportedDifficulty(difficultyFromEngine(status.difficulty, current.difficulty), supportedDifficultiesFor(engineGame, level)) : current.difficulty;
       if (
         current.selectedGame === engineGame.id &&
-        current.category === engineGame.category &&
+        current.category === menuCategoryForGame(engineGame, current.category) &&
         current.difficulty === difficulty &&
         current.selectedLevels === selectedLevels &&
         current.levelProgress === levelProgress
@@ -816,7 +939,7 @@ function MenuApp() {
       }
       return {
         ...current,
-        category: engineGame.category,
+        category: menuCategoryForGame(engineGame, current.category),
         selectedGame: engineGame.id,
         selectedLevels,
         levelProgress,
@@ -918,9 +1041,9 @@ function MenuApp() {
   const levelsUnlocked = unlockLevelsEnabled(menu);
   const selectedGame = menuGames.find((game) => game.id === menu.selectedGame) || menuGames[0] || games[0];
   const launchedGame = menuGames.find((game) => game.id === launchedGameID) || selectedGame;
-  const levelBrowserGame = menuGames.find((game) => game.id === levelBrowserGameID && game.category === menu.category && game.levels?.length) || null;
+  const levelBrowserGame = menuGames.find((game) => game.id === levelBrowserGameID && gameBelongsToCategory(game, menu.category) && game.levels?.length) || null;
   const browsingLevels = Boolean(levelBrowserGame);
-  const visibleGames = menuGames.filter((game) => game.category === menu.category);
+  const visibleGames = gamesForCategory(menuGames, menu.category);
   const selectedLevel = selectedGame.levels?.find((level) => level.id === selectedLevelFor(selectedGame));
   const selectedSupportedDifficulties = supportedDifficultiesFor(selectedGame, selectedLevel);
   const effectiveDifficulty = closestSupportedDifficulty(menu.difficulty, selectedSupportedDifficulties);
@@ -1061,6 +1184,8 @@ function MenuApp() {
   }
 
   function beginSession(remoteRequest?: RemoteSessionRequest) {
+    const defaultGame = menuGames[0] || games[0];
+    const defaultSelectedLevels = defaultGame.levels?.length ? { [defaultGame.id]: defaultLevelID(defaultGame) } : {};
     const nextTeamName = remoteRequest?.teamName || defaultTeamName();
     const nextSessionID = remoteRequest?.venueSessionId || newVenueSessionID();
     const nowUnix = Math.floor(Date.now() / 1000);
@@ -1085,10 +1210,10 @@ function MenuApp() {
       sessionStartedUnix: nowUnix,
       teamName: nextTeamName,
       players: nextPlayers,
-      category: "featured",
-      selectedGame: "featured-lava",
+      category: menuCategoryForGame(defaultGame, "featured"),
+      selectedGame: defaultGame.id,
       difficulty: "easy",
-      selectedLevels: {},
+      selectedLevels: defaultSelectedLevels,
       levelProgress: {},
       nextPlayerId: Math.max(0, ...nextPlayers.map((player) => player.id)),
       narrationArmed: {},
@@ -1109,6 +1234,8 @@ function MenuApp() {
   }
 
   async function closeSession(reason = "manual") {
+    const defaultGame = menuGames[0] || games[0];
+    const defaultSelectedLevels = defaultGame.levels?.length ? { [defaultGame.id]: defaultLevelID(defaultGame) } : {};
     if (menu.sessionId) {
       postVenueSession({
         action: "end",
@@ -1131,10 +1258,10 @@ function MenuApp() {
       sessionStartedUnix: 0,
       teamName: "",
       players: defaultPlayers,
-      category: "featured",
-      selectedGame: "featured-lava",
+      category: menuCategoryForGame(defaultGame, "featured"),
+      selectedGame: defaultGame.id,
       difficulty: "easy",
-      selectedLevels: {},
+      selectedLevels: defaultSelectedLevels,
       levelProgress: {},
       nextPlayerId: 1,
       narrationArmed: {},
@@ -1593,10 +1720,11 @@ function MenuApp() {
               aria-pressed={menu.category === category.id}
               onClick={() => {
                 if (gameActive) return;
-                const first = menuGames.find((game) => game.category === category.id);
+                const categoryGames = gamesForCategory(menuGames, category.id);
+                const first = categoryGames[0];
                 captureMenuEvent("category_selected", {
                   category: category.id,
-                  game_count: menuGames.filter((game) => game.category === category.id).length,
+                  game_count: categoryGames.length,
                   selected_game: first?.id,
                 });
                 setMenu((current) => {

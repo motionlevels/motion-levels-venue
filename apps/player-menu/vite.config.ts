@@ -8,6 +8,9 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 4103,
     strictPort: true,
+    proxy: {
+      "/api/game-catalog": "http://localhost:3000",
+    },
     fs: {
       allow: ["../.."],
     },

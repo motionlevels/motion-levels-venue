@@ -18,8 +18,12 @@ export type PlatformGameCatalogEntry = {
   description: string;
   catalog_category: string;
   catalog_enabled: boolean;
+  catalog_featured: boolean;
   catalog_color: string;
   catalog_order: number;
+  catalog_thumbnail_ref?: string;
+  catalog_preview_animation?: string;
+  catalog_rules?: string[];
   players_label: string;
   difficulty_label: string;
   duration_label: string;

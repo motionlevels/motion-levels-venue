@@ -16,7 +16,7 @@ import parkourHardLevel5Preview from "./assets/previews/parkour-hard-level-5.gif
 
 const previewAssets = import.meta.glob("./assets/previews/*.gif", { eager: true, import: "default" }) as Record<string, string>;
 
-function previewAsset(fileName: string): string | undefined {
+export function previewAsset(fileName: string): string | undefined {
   return previewAssets[`./assets/previews/${fileName}`];
 }
 
@@ -96,6 +96,7 @@ export type GameCard = {
   engineGame?: string;
   previewSrc?: string;
   previewAnimation?: string;
+  featured?: boolean;
   disabled?: boolean;
 };
 
