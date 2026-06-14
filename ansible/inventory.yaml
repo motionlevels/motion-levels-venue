@@ -12,7 +12,7 @@ all:
         motionlevels-dev:
           ansible_host: motionlevels-dev
           motion_levels_repo_root: /opt/motion-levels/repo
-          motion_levels_platform_health_url: http://127.0.0.1:3000/api/sessions
+          motion_levels_platform_health_url: http://10.137.25.241:3000/api/sessions
           motion_levels_platform_bind_ip: 10.137.25.241
           motion_levels_platform_url: https://platform.motionlevels.obis.dev
     motion_levels_venues:
