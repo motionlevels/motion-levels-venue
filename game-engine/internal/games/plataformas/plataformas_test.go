@@ -1,6 +1,7 @@
 package plataformas
 
 import (
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -125,14 +126,14 @@ func TestParkourLavaRuleAnimatesRedTiles(t *testing.T) {
 	}
 }
 
-func TestGreenPlatformDisappearRuleFadesBeforeNextFrame(t *testing.T) {
+func TestGreenPlatformDisappearRuleTransitionsToNextFrameColor(t *testing.T) {
 	levels, err := compileCloudLevels([]cloudLevel{{
 		Slug:        "level-1",
 		Label:       "Fade green",
 		Difficulty:  string(DifficultyMedium),
 		Life:        5,
 		FrameTickMS: 25,
-		Rules:       levelRules{GreenPlatformDisappear: true},
+		Rules:       levelRules{GreenPlatformDisappear: true, RedFloorAnimation: "parkour_lava"},
 		Frames: []rawFrame{
 			{Repeat: 40, Cells: []cellTuple{{X: 5, Y: 5, Kind: 0}}},
 			{Repeat: 40, Cells: []cellTuple{{X: 5, Y: 5, Kind: 2}}},
@@ -144,12 +145,129 @@ func TestGreenPlatformDisappearRuleFadesBeforeNextFrame(t *testing.T) {
 	game := &Game{level: levels[0], startedAt: time.Unix(100, 0)}
 	steady := game.colorAtLocked(Point{X: 5, Y: 5}, game.startedAt.Add(450*time.Millisecond))
 	fading := game.colorAtLocked(Point{X: 5, Y: 5}, game.startedAt.Add(900*time.Millisecond))
-	nearGone := game.colorAtLocked(Point{X: 5, Y: 5}, game.startedAt.Add(995*time.Millisecond))
+	nearBoundaryTime := game.startedAt.Add(995 * time.Millisecond)
+	nearBoundary := game.colorAtLocked(Point{X: 5, Y: 5}, nearBoundaryTime)
+	nextBoundaryLava := lavaColor(Point{X: 5, Y: 5}, game.startedAt.Add(time.Second))
 	if fading.G >= steady.G {
 		t.Fatalf("fading green = %+v, steady = %+v; want dimmer before disappearing", fading, steady)
 	}
-	if nearGone.G >= fading.G || nearGone.G > 20 {
-		t.Fatalf("near-boundary green = %+v; want fade to reach ~zero at the frame change", nearGone)
+	if nearBoundary.R <= fading.R {
+		t.Fatalf("near-boundary color = %+v, fading = %+v; want transition toward incoming lava", nearBoundary, fading)
+	}
+	if colorDistance(nearBoundary, nextBoundaryLava) > 8 {
+		t.Fatalf("near-boundary color = %+v, next lava = %+v at %s; want almost next frame color", nearBoundary, nextBoundaryLava, nearBoundaryTime)
+	}
+}
+
+func TestGreenPlatformImpactRippleTriggersOncePerConnectedPlatform(t *testing.T) {
+	game := newGreenImpactTestGame(t)
+	playAt := game.startedAt.Add(tickDuration)
+
+	game.Press(whackamole.PressEvent{X: 5, Y: 5, Pressed: true}, playAt)
+	if len(game.ripples) != 1 {
+		t.Fatalf("ripples after first platform impact = %d, want 1", len(game.ripples))
+	}
+
+	game.Press(whackamole.PressEvent{X: 6, Y: 6, Pressed: true}, playAt.Add(20*time.Millisecond))
+	if len(game.ripples) != 1 {
+		t.Fatalf("ripples after same connected platform impact = %d, want still 1", len(game.ripples))
+	}
+
+	game.Press(whackamole.PressEvent{X: 10, Y: 10, Pressed: true}, playAt.Add(40*time.Millisecond))
+	if len(game.ripples) != 2 {
+		t.Fatalf("ripples after distinct platform impact = %d, want 2", len(game.ripples))
+	}
+}
+
+func TestGreenPlatformImpactRippleBrightensNearbyLava(t *testing.T) {
+	game := newGreenImpactTestGame(t)
+	playAt := game.startedAt.Add(tickDuration)
+	lavaPoint := Point{X: 7, Y: 5}
+	renderAt := playAt.Add(260 * time.Millisecond)
+	base := lavaColor(lavaPoint, renderAt)
+
+	game.Press(whackamole.PressEvent{X: 5, Y: 5, Pressed: true}, playAt)
+	rippled := game.colorAtLocked(lavaPoint, renderAt)
+
+	if rippled == base {
+		t.Fatalf("rippled lava color = base %+v, want visible impact ripple", base)
+	}
+	if rippled.G <= base.G {
+		t.Fatalf("rippled lava color = %+v, base = %+v; want warmer highlighted lava", rippled, base)
+	}
+}
+
+func TestBluePlatformTurnGreenRuleAnimatesCapturedTile(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        "level-1",
+		Label:       "Blue turns green",
+		Difficulty:  string(DifficultyMedium),
+		Life:        5,
+		FrameTickMS: 25,
+		Rules:       levelRules{BluePlatformTurnGreen: true},
+		Frames: []rawFrame{{
+			Repeat: 40,
+			Cells:  []cellTuple{{X: 4, Y: 4, Kind: 1, Uniq: "blue-a"}},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	game := newTestGame(levels[0])
+	playAt := game.startedAt.Add(tickDuration)
+	game.Press(whackamole.PressEvent{X: 4, Y: 4, Pressed: true}, playAt)
+
+	point := game.pointAtLocked(Point{X: 4, Y: 4}, playAt.Add(blueCaptureWindow))
+	if point.kind != 0 {
+		t.Fatalf("captured point kind = %d, want green platform", point.kind)
+	}
+	startColor := game.colorAtLocked(Point{X: 4, Y: 4}, playAt)
+	endColor := game.colorAtLocked(Point{X: 4, Y: 4}, playAt.Add(blueCaptureWindow))
+	blue := colorForPoint(tilePoint{present: true, kind: 1})
+	green := colorForPoint(tilePoint{present: true, kind: 0})
+	if colorDistance(startColor, blue) > 1 {
+		t.Fatalf("capture start color = %+v, blue = %+v; want transition from blue", startColor, blue)
+	}
+	if endColor != green {
+		t.Fatalf("capture end color = %+v, want green %+v", endColor, green)
+	}
+}
+
+func TestBluePlatformCaptureAreaRuleScoresConnectedBluePlatform(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        "level-1",
+		Label:       "Blue capture area",
+		Difficulty:  string(DifficultyMedium),
+		Life:        5,
+		FrameTickMS: 25,
+		Rules:       levelRules{BluePlatformCaptureArea: true},
+		Frames: []rawFrame{{
+			Repeat: 40,
+			Cells: []cellTuple{
+				{X: 4, Y: 4, Kind: 1, Uniq: "blue-a"},
+				{X: 5, Y: 4, Kind: 1, Uniq: "blue-b"},
+				{X: 4, Y: 5, Kind: 1, Uniq: "blue-c"},
+				{X: 5, Y: 5, Kind: 1, Uniq: "blue-d"},
+				{X: 8, Y: 8, Kind: 1, Uniq: "blue-isolated"},
+			},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	game := newTestGame(levels[0])
+	playAt := game.startedAt.Add(tickDuration)
+	game.Press(whackamole.PressEvent{X: 4, Y: 4, Pressed: true}, playAt)
+
+	if game.score != 4 {
+		t.Fatalf("score = %d, want all four connected blue cells captured", game.score)
+	}
+	if len(game.removed) != 4 || game.removed["blue-isolated"] {
+		t.Fatalf("removed = %+v, want only connected blue platform captured", game.removed)
+	}
+	game.Press(whackamole.PressEvent{X: 5, Y: 5, Pressed: true}, playAt.Add(20*time.Millisecond))
+	if game.score != 4 {
+		t.Fatalf("score after re-pressing captured platform = %d, want unchanged", game.score)
 	}
 }
 
@@ -266,4 +384,64 @@ func TestFallsBackWhenCloudUnavailable(t *testing.T) {
 	if audio := game.AudioRefs(); audio.MusicRef != DefaultMusicRef || audio.CoinCueRef != DefaultCoinCueRef {
 		t.Fatalf("fallback audio = %+v, want defaults", audio)
 	}
+}
+
+func newGreenImpactTestGame(t *testing.T) *Game {
+	t.Helper()
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        "level-1",
+		Label:       "Impact ripple",
+		Difficulty:  string(DifficultyMedium),
+		Life:        5,
+		FrameTickMS: 25,
+		Rules:       levelRules{RedFloorAnimation: "parkour_lava", GreenPlatformImpactRipple: true},
+		Frames: []rawFrame{{
+			Repeat: 40,
+			Cells: []cellTuple{
+				{X: 5, Y: 5, Kind: 0},
+				{X: 6, Y: 5, Kind: 0},
+				{X: 5, Y: 6, Kind: 0},
+				{X: 6, Y: 6, Kind: 0},
+				{X: 10, Y: 10, Kind: 0},
+				{X: 7, Y: 5, Kind: 2},
+			},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &Game{
+		level:        levels[0],
+		startedAt:    time.Unix(100, 0),
+		lives:        5,
+		removed:      map[string]bool{},
+		purpleHeld:   map[string]bool{},
+		purplePrimed: map[string]bool{},
+		pressed:      map[Point]bool{},
+		greenImpacts: map[string]bool{},
+		capturedAt:   map[string]time.Time{},
+		hitFlash:     map[Point]time.Time{},
+	}
+}
+
+func newTestGame(level compiledLevel) *Game {
+	return &Game{
+		level:        level,
+		startedAt:    time.Unix(100, 0),
+		lives:        5,
+		removed:      map[string]bool{},
+		purpleHeld:   map[string]bool{},
+		purplePrimed: map[string]bool{},
+		pressed:      map[Point]bool{},
+		greenImpacts: map[string]bool{},
+		capturedAt:   map[string]time.Time{},
+		hitFlash:     map[Point]time.Time{},
+	}
+}
+
+func colorDistance(a RGB, b RGB) float64 {
+	dr := float64(a.R) - float64(b.R)
+	dg := float64(a.G) - float64(b.G)
+	db := float64(a.B) - float64(b.B)
+	return math.Sqrt(dr*dr + dg*dg + db*db)
 }

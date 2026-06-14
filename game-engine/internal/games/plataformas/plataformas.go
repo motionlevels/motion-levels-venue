@@ -22,11 +22,13 @@ const (
 
 	countdownDuration = 3 * time.Second
 	tickDuration      = 25 * time.Millisecond
-	// Green platform transition fades render between the slow gameplay
-	// frames at the engine's render rate; they must end exactly at the
-	// frame boundary so the disappearance itself is the animation.
+	// Green platform transitions render between the slow gameplay frames at the
+	// engine's render rate; they must end exactly at the frame boundary so the
+	// disappearance itself is the animation.
 	greenAppearWindow    = 400 * time.Millisecond
 	greenDisappearWindow = 800 * time.Millisecond
+	greenImpactDuration  = 1100 * time.Millisecond
+	blueCaptureWindow    = 600 * time.Millisecond
 	damageCooldown       = 1 * time.Second
 	DefaultMusicRef      = "Motion/canciones/Background07.mp3"
 	DefaultMusicVolume   = 0.18
@@ -116,6 +118,9 @@ type Game struct {
 	purpleHeld   map[string]bool
 	purplePrimed map[string]bool
 	pressed      map[Point]bool
+	greenImpacts map[string]bool
+	ripples      []greenImpactRipple
+	capturedAt   map[string]time.Time
 	lastDamageAt time.Time
 	hitFlash     map[Point]time.Time
 }
@@ -132,6 +137,9 @@ type compiledLevel struct {
 	winCondition  string
 	redAnimation  string
 	greenFade     bool
+	greenImpact   bool
+	blueTurnGreen bool
+	blueCapture   bool
 	totalDuration time.Duration
 	frames        []compiledFrame
 	scoreUniqs    map[string]struct{}
@@ -147,6 +155,18 @@ type tilePoint struct {
 	present bool
 	kind    int
 	uniq    string
+}
+
+type greenImpactRipple struct {
+	centerX   float64
+	centerY   float64
+	startedAt time.Time
+}
+
+type greenPlatformComponent struct {
+	key     string
+	centerX float64
+	centerY float64
 }
 
 type cloudResponse struct {
@@ -176,9 +196,12 @@ type cloudLevel struct {
 }
 
 type levelRules struct {
-	VictoryCondition       string `json:"victory_condition"`
-	RedFloorAnimation      string `json:"red_floor_animation"`
-	GreenPlatformDisappear bool   `json:"green_platform_disappear"`
+	VictoryCondition          string `json:"victory_condition"`
+	RedFloorAnimation         string `json:"red_floor_animation"`
+	GreenPlatformDisappear    bool   `json:"green_platform_disappear"`
+	GreenPlatformImpactRipple bool   `json:"green_platform_impact_ripple"`
+	BluePlatformTurnGreen     bool   `json:"blue_platform_turn_green"`
+	BluePlatformCaptureArea   bool   `json:"blue_platform_capture_area"`
 }
 
 type rawFrame struct {
@@ -281,6 +304,8 @@ func NewWithSeedForGame(now time.Time, seed int64, playerCount int, difficulty s
 		purpleHeld:   map[string]bool{},
 		purplePrimed: map[string]bool{},
 		pressed:      map[Point]bool{},
+		greenImpacts: map[string]bool{},
+		capturedAt:   map[string]time.Time{},
 		hitFlash:     map[Point]time.Time{},
 	}
 }
@@ -303,6 +328,7 @@ func (g *Game) Press(event whackamole.PressEvent, now time.Time) []whackamole.Ev
 	if !event.Pressed || g.ended || now.Before(g.startedAt) {
 		return nil
 	}
+	g.triggerGreenImpactLocked(pt, now)
 	return g.applyPointLocked(g.pointAtLocked(pt, now), pt, now)
 }
 
@@ -375,6 +401,7 @@ func (g *Game) AudioRefs() AudioRefs {
 }
 
 func (g *Game) tickLocked(now time.Time) {
+	g.pruneRipplesLocked(now)
 	if g.ended {
 		if !g.success && !g.restartAt.IsZero() && !now.Before(g.restartAt) {
 			g.restartFailedLevelLocked(now)
@@ -418,11 +445,7 @@ func (g *Game) hasWonLocked() bool {
 func (g *Game) applyPointLocked(point tilePoint, pt Point, now time.Time) []whackamole.Event {
 	switch point.kind {
 	case 1:
-		if point.uniq != "" && !g.removed[point.uniq] {
-			g.removed[point.uniq] = true
-			delete(g.purpleHeld, point.uniq)
-			delete(g.purplePrimed, point.uniq)
-			g.score++
+		if g.captureBluePlatformLocked(point, pt, now) > 0 {
 			return []whackamole.Event{{Cue: whackamole.CueCoin, Message: "Plataformas punto " + strconv.Itoa(g.score)}}
 		}
 	case 3:
@@ -489,6 +512,9 @@ func (g *Game) restartFailedLevelLocked(now time.Time) {
 	g.removed = map[string]bool{}
 	g.purpleHeld = map[string]bool{}
 	g.purplePrimed = map[string]bool{}
+	g.greenImpacts = map[string]bool{}
+	g.ripples = nil
+	g.capturedAt = map[string]time.Time{}
 	g.lastDamageAt = time.Time{}
 	g.hitFlash = map[Point]time.Time{}
 }
@@ -507,7 +533,8 @@ func (g *Game) colorAtLocked(pt Point, now time.Time) RGB {
 		return g.countdownColorAtLocked(pt, now)
 	}
 	point := g.pointAtLocked(pt, now)
-	return g.colorForPointLocked(pt, point, now)
+	color := g.colorForPointLocked(pt, point, now)
+	return g.greenImpactColorLocked(pt, point, color, now)
 }
 
 func (g *Game) colorForPointLocked(pt Point, point tilePoint, now time.Time) RGB {
@@ -516,6 +543,9 @@ func (g *Game) colorForPointLocked(pt Point, point tilePoint, now time.Time) RGB
 	}
 	if point.kind == 2 && g.level.redAnimation == "parkour_lava" {
 		return lavaColor(pt, now)
+	}
+	if point.kind == 0 && point.uniq != "" && g.removed[point.uniq] && g.level.blueTurnGreen {
+		return g.capturedBlueColorLocked(point.uniq, now)
 	}
 	if point.kind == 0 && g.level.greenFade {
 		return g.greenPlatformColorLocked(pt, now)
@@ -526,6 +556,10 @@ func (g *Game) colorForPointLocked(pt Point, point tilePoint, now time.Time) RGB
 func (g *Game) pointAtLocked(pt Point, now time.Time) tilePoint {
 	point := g.rawPointAtLocked(pt, now)
 	if point.uniq != "" && g.removed[point.uniq] {
+		if g.level.blueTurnGreen && point.kind == 1 {
+			point.kind = 0
+			return point
+		}
 		return tilePoint{}
 	}
 	if point.uniq != "" && g.purplePrimed[point.uniq] {
@@ -554,26 +588,254 @@ func (g *Game) greenPlatformColorLocked(pt Point, now time.Time) RGB {
 	if !point.present || point.kind != 0 {
 		return RGB{}
 	}
-	scale := 1.0
+	color := colorForPoint(point)
 	if len(g.level.frames) > 1 {
 		previous := g.level.frames[(index-1+len(g.level.frames))%len(g.level.frames)].points[pt.Y][pt.X]
 		next := g.level.frames[(index+1)%len(g.level.frames)].points[pt.Y][pt.X]
 		appearWindow := minDuration(greenAppearWindow, frame.duration/2)
 		disappearWindow := minDuration(greenDisappearWindow, frame.duration/2)
 		if (!previous.present || previous.kind != 0) && appearWindow > 0 && elapsed < appearWindow {
-			scale = easeInOut(float64(elapsed) / float64(appearWindow))
+			previousTime := now.Add(-elapsed)
+			previousColor := g.transitionPointColorLocked(pt, previous, previousTime)
+			color = mixRGB(previousColor, color, easeInOut(float64(elapsed)/float64(appearWindow)))
 		}
 		if (!next.present || next.kind != 0) && disappearWindow > 0 {
 			remaining := frame.duration - elapsed
 			if remaining < disappearWindow {
-				fade := easeInOut(float64(remaining) / float64(disappearWindow))
-				if fade < scale {
-					scale = fade
-				}
+				nextTime := now.Add(remaining)
+				nextColor := g.transitionPointColorLocked(pt, next, nextTime)
+				color = mixRGB(color, nextColor, 1-easeInOut(float64(remaining)/float64(disappearWindow)))
 			}
 		}
 	}
-	return scaleRGB(colorForPoint(point), scale)
+	return color
+}
+
+func (g *Game) transitionPointColorLocked(pt Point, point tilePoint, now time.Time) RGB {
+	if !point.present {
+		return RGB{}
+	}
+	if point.kind == 2 && g.level.redAnimation == "parkour_lava" {
+		return lavaColor(pt, now)
+	}
+	return colorForPoint(point)
+}
+
+func (g *Game) capturedBlueColorLocked(uniq string, now time.Time) RGB {
+	blue := colorForPoint(tilePoint{present: true, kind: 1})
+	green := colorForPoint(tilePoint{present: true, kind: 0})
+	startedAt, ok := g.capturedAt[uniq]
+	if !ok || now.Sub(startedAt) >= blueCaptureWindow {
+		return green
+	}
+	if now.Before(startedAt) {
+		return blue
+	}
+	return mixRGB(blue, green, easeInOut(float64(now.Sub(startedAt))/float64(blueCaptureWindow)))
+}
+
+func (g *Game) captureBluePlatformLocked(point tilePoint, pt Point, now time.Time) int {
+	if point.uniq == "" || g.removed[point.uniq] {
+		return 0
+	}
+	uniqs := []string{point.uniq}
+	if g.level.blueCapture {
+		uniqs = g.connectedBluePlatformUniqsLocked(pt, now)
+	}
+	if g.capturedAt == nil {
+		g.capturedAt = map[string]time.Time{}
+	}
+	captured := 0
+	for _, uniq := range uniqs {
+		if uniq == "" || g.removed[uniq] {
+			continue
+		}
+		g.removed[uniq] = true
+		g.capturedAt[uniq] = now
+		delete(g.purpleHeld, uniq)
+		delete(g.purplePrimed, uniq)
+		g.score++
+		captured++
+	}
+	return captured
+}
+
+func (g *Game) connectedBluePlatformUniqsLocked(start Point, now time.Time) []string {
+	frame := g.frameAtLocked(now)
+	if frame == nil || !inBounds(start.X, start.Y) {
+		return nil
+	}
+	first := frame.points[start.Y][start.X]
+	if !first.present || first.kind != 1 {
+		return nil
+	}
+
+	visited := [GridHeight][GridWidth]bool{}
+	queue := []Point{start}
+	visited[start.Y][start.X] = true
+	for len(queue) > 0 {
+		pt := queue[0]
+		queue = queue[1:]
+		for _, next := range []Point{
+			{X: pt.X - 1, Y: pt.Y},
+			{X: pt.X + 1, Y: pt.Y},
+			{X: pt.X, Y: pt.Y - 1},
+			{X: pt.X, Y: pt.Y + 1},
+		} {
+			if !inBounds(next.X, next.Y) || visited[next.Y][next.X] {
+				continue
+			}
+			candidate := frame.points[next.Y][next.X]
+			if !candidate.present || candidate.kind != 1 {
+				continue
+			}
+			visited[next.Y][next.X] = true
+			queue = append(queue, next)
+		}
+	}
+
+	seen := map[string]bool{}
+	uniqs := []string{}
+	for y := 0; y < GridHeight; y++ {
+		for x := 0; x < GridWidth; x++ {
+			if !visited[y][x] {
+				continue
+			}
+			uniq := frame.points[y][x].uniq
+			if uniq == "" || seen[uniq] {
+				continue
+			}
+			seen[uniq] = true
+			uniqs = append(uniqs, uniq)
+		}
+	}
+	return uniqs
+}
+
+func (g *Game) triggerGreenImpactLocked(pt Point, now time.Time) {
+	if !g.level.greenImpact {
+		return
+	}
+	point := g.pointAtLocked(pt, now)
+	if !point.present || point.kind != 0 {
+		return
+	}
+	component, ok := g.greenPlatformComponentLocked(pt, now)
+	if !ok {
+		return
+	}
+	if g.greenImpacts == nil {
+		g.greenImpacts = map[string]bool{}
+	}
+	if g.greenImpacts[component.key] {
+		return
+	}
+	g.greenImpacts[component.key] = true
+	g.ripples = append(g.ripples, greenImpactRipple{
+		centerX:   component.centerX,
+		centerY:   component.centerY,
+		startedAt: now,
+	})
+}
+
+func (g *Game) greenPlatformComponentLocked(start Point, now time.Time) (greenPlatformComponent, bool) {
+	frame := g.frameAtLocked(now)
+	if frame == nil || !inBounds(start.X, start.Y) {
+		return greenPlatformComponent{}, false
+	}
+	first := frame.points[start.Y][start.X]
+	if !first.present || first.kind != 0 {
+		return greenPlatformComponent{}, false
+	}
+
+	visited := [GridHeight][GridWidth]bool{}
+	queue := []Point{start}
+	visited[start.Y][start.X] = true
+	count := 0
+	sumX := 0.0
+	sumY := 0.0
+	for len(queue) > 0 {
+		pt := queue[0]
+		queue = queue[1:]
+		count++
+		sumX += float64(pt.X) + 0.5
+		sumY += float64(pt.Y) + 0.5
+
+		for _, next := range []Point{
+			{X: pt.X - 1, Y: pt.Y},
+			{X: pt.X + 1, Y: pt.Y},
+			{X: pt.X, Y: pt.Y - 1},
+			{X: pt.X, Y: pt.Y + 1},
+		} {
+			if !inBounds(next.X, next.Y) || visited[next.Y][next.X] {
+				continue
+			}
+			candidate := frame.points[next.Y][next.X]
+			if !candidate.present || candidate.kind != 0 {
+				continue
+			}
+			visited[next.Y][next.X] = true
+			queue = append(queue, next)
+		}
+	}
+	if count == 0 {
+		return greenPlatformComponent{}, false
+	}
+
+	var key strings.Builder
+	for y := 0; y < GridHeight; y++ {
+		for x := 0; x < GridWidth; x++ {
+			if visited[y][x] {
+				key.WriteString(strconv.Itoa(x))
+				key.WriteByte(',')
+				key.WriteString(strconv.Itoa(y))
+				key.WriteByte(';')
+			}
+		}
+	}
+	return greenPlatformComponent{
+		key:     key.String(),
+		centerX: sumX / float64(count),
+		centerY: sumY / float64(count),
+	}, true
+}
+
+func (g *Game) greenImpactColorLocked(pt Point, point tilePoint, color RGB, now time.Time) RGB {
+	if !g.level.greenImpact || len(g.ripples) == 0 || !point.present || point.kind != 2 {
+		return color
+	}
+	cellX := float64(pt.X) + 0.5
+	cellY := float64(pt.Y) + 0.5
+	result := color
+	for _, ripple := range g.ripples {
+		age := now.Sub(ripple.startedAt)
+		if age < 0 || age > greenImpactDuration {
+			continue
+		}
+		progress := float64(age) / float64(greenImpactDuration)
+		radius := 0.35 + progress*7.0
+		distance := math.Hypot(cellX-ripple.centerX, cellY-ripple.centerY)
+		ring := 1 - math.Abs(distance-radius)/0.85
+		strength := clampFloat(ring) * (1 - progress)
+		if strength <= 0 {
+			continue
+		}
+		result = mixRGB(result, RGB{R: 255, G: 185, B: 72}, strength*0.7)
+	}
+	return result
+}
+
+func (g *Game) pruneRipplesLocked(now time.Time) {
+	if len(g.ripples) == 0 {
+		return
+	}
+	active := g.ripples[:0]
+	for _, ripple := range g.ripples {
+		if now.Sub(ripple.startedAt) <= greenImpactDuration {
+			active = append(active, ripple)
+		}
+	}
+	g.ripples = active
 }
 
 func (g *Game) frameAtLocked(now time.Time) *compiledFrame {
@@ -697,19 +959,22 @@ func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
 			winCondition = "collect_all"
 		}
 		compiled := compiledLevel{
-			id:           NormalizeLevel(id),
-			settingsHash: strings.TrimSpace(level.SettingsHash),
-			label:        level.Label,
-			description:  level.Description,
-			lives:        level.Life,
-			passScore:    level.PassScore,
-			timeLimit:    time.Duration(level.TimeLimitSeconds) * time.Second,
-			frameTick:    frameTick,
-			winCondition: winCondition,
-			redAnimation: normalizeRedFloorAnimation(level.Rules.RedFloorAnimation),
-			greenFade:    level.Rules.GreenPlatformDisappear,
-			scoreUniqs:   map[string]struct{}{},
-			audio:        normalizeAudioRefs(level),
+			id:            NormalizeLevel(id),
+			settingsHash:  strings.TrimSpace(level.SettingsHash),
+			label:         level.Label,
+			description:   level.Description,
+			lives:         level.Life,
+			passScore:     level.PassScore,
+			timeLimit:     time.Duration(level.TimeLimitSeconds) * time.Second,
+			frameTick:     frameTick,
+			winCondition:  winCondition,
+			redAnimation:  normalizeRedFloorAnimation(level.Rules.RedFloorAnimation),
+			greenFade:     level.Rules.GreenPlatformDisappear,
+			greenImpact:   level.Rules.GreenPlatformImpactRipple,
+			blueTurnGreen: level.Rules.BluePlatformTurnGreen,
+			blueCapture:   level.Rules.BluePlatformCaptureArea,
+			scoreUniqs:    map[string]struct{}{},
+			audio:         normalizeAudioRefs(level),
 		}
 		for _, frame := range level.Frames {
 			repeat := frame.Repeat
@@ -865,6 +1130,15 @@ func scaleRGB(color RGB, scale float64) RGB {
 		R: clampByte(math.Round(float64(color.R) * scale)),
 		G: clampByte(math.Round(float64(color.G) * scale)),
 		B: clampByte(math.Round(float64(color.B) * scale)),
+	}
+}
+
+func mixRGB(from RGB, to RGB, amount float64) RGB {
+	t := clampFloat(amount)
+	return RGB{
+		R: clampByte(math.Round(float64(from.R) + (float64(to.R)-float64(from.R))*t)),
+		G: clampByte(math.Round(float64(from.G) + (float64(to.G)-float64(from.G))*t)),
+		B: clampByte(math.Round(float64(from.B) + (float64(to.B)-float64(from.B))*t)),
 	}
 }
 
