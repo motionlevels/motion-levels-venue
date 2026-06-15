@@ -277,7 +277,7 @@
           {{
             motion_levels_engine_state_before_restart.status != 200
             or (
-              (motion_levels_engine_state_before_restart.json.currentGame | default('')) in ['loop', 'animations', 'ambient-comet', 'ambient-pulse', 'ambient-spark']
+              (motion_levels_engine_state_before_restart.json.currentGame | default('')) in ['loop', 'animations', 'salvapantallas', 'ambient-comet', 'ambient-pulse', 'ambient-spark']
               and (motion_levels_engine_state_before_restart.json.phase | default('')) in ['idle', 'ambient']
             )
           }}
