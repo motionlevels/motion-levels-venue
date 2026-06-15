@@ -1,5 +1,6 @@
 import posthog from "posthog-js";
 import type { Properties } from "posthog-js";
+import { randomUUID } from "./utils";
 
 const defaultPostHogKey = "phc_pmpLzyqQbK6WU3fHtxMUuaSfWF3PA3aYREKpeCLE5Uow";
 // Ingestion goes through the reverse proxy at p.obis.dev to dodge ad blockers.
@@ -29,7 +30,7 @@ function getDeviceID(): string {
   const existing = localStorage.getItem(deviceStorageKey);
   if (existing && uuidPattern.test(existing)) return existing.toLowerCase();
 
-  const generated = globalThis.crypto.randomUUID();
+  const generated = randomUUID();
   localStorage.setItem(deviceStorageKey, generated);
   return generated;
 }

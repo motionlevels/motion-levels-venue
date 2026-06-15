@@ -23,7 +23,7 @@ import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GearIcon,
 import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
 import { defaultFloorAnim, floorAnimations, type FloorAnim, type RGB } from "./floor";
-import { hexToColor, hexToRGB, initials } from "./utils";
+import { hexToColor, hexToRGB, initials, randomUUID } from "./utils";
 import { captureMenuEvent, menuKioskID, setMenuEventForwarder } from "./analytics";
 
 type Player = {
@@ -157,7 +157,7 @@ function playersForCount(count: number): Player[] {
 }
 
 function newVenueSessionID(): string {
-  return crypto.randomUUID();
+  return randomUUID();
 }
 
 function defaultTeamName(date = new Date()): string {
