@@ -297,6 +297,7 @@ func (r *Recorder) closeSessionLocked(reason string) error {
 	raw := r.path
 	compressed := raw + ".zst"
 	sessionID := r.sessionID
+	venueID := r.venueID
 	frameCount := r.frameCount
 	firstFrame := r.firstFrame
 	lastFrame := r.lastFrame
@@ -320,12 +321,13 @@ func (r *Recorder) closeSessionLocked(reason string) error {
 	if r.options.PlatformURL != "" && frameCount > 0 {
 		r.wg.Add(1)
 		go r.uploadWithRetry(compressed, uploadMetadata{
-			SessionID:     sessionID,
-			FrameCount:    frameCount,
-			FirstSequence: firstFrame,
-			LastSequence:  lastFrame,
-			StartedAt:     startedAt,
-			EndedAt:       endedAt,
+			SessionID:      sessionID,
+			VenueSessionID: venueID,
+			FrameCount:     frameCount,
+			FirstSequence:  firstFrame,
+			LastSequence:   lastFrame,
+			StartedAt:      startedAt,
+			EndedAt:        endedAt,
 		})
 	}
 	return nil
@@ -370,12 +372,13 @@ func (r *Recorder) frameDeltasLocked(frame *recordingpb.FrameRecord, keyframe bo
 }
 
 type uploadMetadata struct {
-	SessionID     string
-	FrameCount    uint64
-	FirstSequence uint64
-	LastSequence  uint64
-	StartedAt     time.Time
-	EndedAt       time.Time
+	SessionID      string
+	VenueSessionID string
+	FrameCount     uint64
+	FirstSequence  uint64
+	LastSequence   uint64
+	StartedAt      time.Time
+	EndedAt        time.Time
 }
 
 func (r *Recorder) uploadWithRetry(path string, metadata uploadMetadata) {
@@ -427,17 +430,18 @@ type uploadInitResponse struct {
 
 func (r *Recorder) initUpload(path string, byteSize int64, metadata uploadMetadata) (uploadInitResponse, error) {
 	payload := map[string]any{
-		"sessionId":     metadata.SessionID,
-		"controllerId":  r.options.ControllerID,
-		"fileName":      filepath.Base(path),
-		"contentType":   contentType,
-		"compression":   "zstd",
-		"byteSize":      byteSize,
-		"frameCount":    metadata.FrameCount,
-		"firstSequence": metadata.FirstSequence,
-		"lastSequence":  metadata.LastSequence,
-		"startedAt":     formatTime(metadata.StartedAt),
-		"endedAt":       formatTime(metadata.EndedAt),
+		"sessionId":      metadata.SessionID,
+		"venueSessionId": metadata.VenueSessionID,
+		"controllerId":   r.options.ControllerID,
+		"fileName":       filepath.Base(path),
+		"contentType":    contentType,
+		"compression":    "zstd",
+		"byteSize":       byteSize,
+		"frameCount":     metadata.FrameCount,
+		"firstSequence":  metadata.FirstSequence,
+		"lastSequence":   metadata.LastSequence,
+		"startedAt":      formatTime(metadata.StartedAt),
+		"endedAt":        formatTime(metadata.EndedAt),
 	}
 	var response uploadInitResponse
 	if err := r.postJSON("/api/recording-uploads/init", payload, &response); err != nil {
