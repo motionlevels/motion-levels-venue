@@ -410,7 +410,11 @@ func (r *Recorder) upload(path string, metadata uploadMetadata) error {
 	if err := putObject(r.client, initResp.UploadURL, path, contentType); err != nil {
 		return err
 	}
-	return r.completeUpload(initResp.UploadID, info.Size(), checksum, metadata)
+	if err := r.completeUpload(initResp.UploadID, info.Size(), checksum, metadata); err != nil {
+		return err
+	}
+	removeUploadedReplay(path)
+	return nil
 }
 
 type uploadInitResponse struct {
@@ -526,6 +530,18 @@ func putObject(client *http.Client, uploadURL string, path string, contentType s
 		return fmt.Errorf("upload PUT returned %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	return nil
+}
+
+func removeUploadedReplay(path string) {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintf(os.Stderr, "replay cleanup failed: %v\n", err)
+		return
+	}
+	parent := filepath.Dir(path)
+	if err := os.Remove(parent); err != nil && !errors.Is(err, os.ErrNotExist) {
+		// The directory can legitimately contain retry leftovers or diagnostics.
+		return
+	}
 }
 
 func sha256File(path string) (string, error) {

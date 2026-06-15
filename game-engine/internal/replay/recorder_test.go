@@ -2,7 +2,11 @@ package replay
 
 import (
 	"bufio"
+	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -69,6 +73,83 @@ func TestRecorderWritesCompressedDeltaReplay(t *testing.T) {
 	}
 	if deltaTiles != 1 {
 		t.Fatalf("delta tiles = %d, want 1", deltaTiles)
+	}
+}
+
+func TestRecorderRemovesLocalReplayAfterSuccessfulUpload(t *testing.T) {
+	zstdPath, err := exec.LookPath("zstd")
+	if err != nil {
+		t.Skip("zstd not installed")
+	}
+	var uploadedBytes int
+	var completed bool
+	var platform *httptest.Server
+	platform = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/upload":
+			if r.Method != http.MethodPut {
+				t.Fatalf("upload method = %s, want PUT", r.Method)
+			}
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			uploadedBytes = len(body)
+			w.WriteHeader(http.StatusOK)
+		case "/api/recording-uploads/init":
+			if got := r.Header.Get("authorization"); got != "Bearer test-token" {
+				t.Fatalf("authorization = %q", got)
+			}
+			_ = json.NewEncoder(w).Encode(uploadInitResponse{
+				OK:        true,
+				UploadID:  "upload-1",
+				ObjectKey: "recordings/controller-1/session-1/replay.mlreplay.zst",
+				UploadURL: platform.URL + "/upload",
+			})
+		case "/api/recording-uploads/complete":
+			completed = true
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer platform.Close()
+
+	root := t.TempDir()
+	started := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
+	recorder, err := New(root, Options{
+		ControllerID:     "controller-1",
+		PlatformURL:      platform.URL,
+		PlatformToken:    "test-token",
+		ZstdPath:         zstdPath,
+		KeyframeInterval: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := recorder.Record(&gamepb.GameSessionRecord{
+		SessionId: "session-1",
+		Sequence:  1,
+		UnixNanos: started.UnixNano(),
+		Payload: &gamepb.GameSessionRecord_SessionStarted{SessionStarted: &gamepb.SessionStarted{
+			Game:             "temporada1",
+			Label:            "Temporada 1",
+			StartedUnixNanos: started.UnixNano(),
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := recorder.RecordFrame(testFrame(1, started, 10, 20)); err != nil {
+		t.Fatal(err)
+	}
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if uploadedBytes == 0 || !completed {
+		t.Fatalf("upload did not complete: bytes=%d completed=%t", uploadedBytes, completed)
+	}
+	if _, err := os.Stat(filepath.Join(root, "session-1", "replay.mlreplay.zst")); !os.IsNotExist(err) {
+		t.Fatalf("local replay still exists after upload: %v", err)
 	}
 }
 
