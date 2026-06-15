@@ -1328,8 +1328,9 @@ button.capsule:disabled,
   min-width: 0;
   min-height: 0;
   padding: 16px;
-  display: flex;
-  align-items: center;
+  display: grid;
+  align-content: center;
+  gap: 7px;
 }
 
 .game-body h3 {
@@ -1344,6 +1345,20 @@ button.capsule:disabled,
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   white-space: normal;
+}
+
+.game-card-revision,
+.launch-revision {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(235, 241, 255, 0.42);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---------- Selected game detail ---------- */
@@ -1398,6 +1413,59 @@ button.capsule:disabled,
   font-size: 36px;
   line-height: 0.98;
   letter-spacing: -0.025em;
+}
+
+.game-revision {
+  width: fit-content;
+  color: rgba(235, 241, 255, 0.46);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.game-revision-row {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.game-revision-refresh {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(235, 241, 255, 0.12);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(235, 241, 255, 0.48);
+  cursor: pointer;
+  transition: border-color 140ms var(--ease), color 140ms var(--ease), background-color 140ms var(--ease);
+}
+
+.game-revision-refresh svg {
+  width: 13px;
+  height: 13px;
+}
+
+.game-revision-refresh:not(:disabled):hover {
+  border-color: rgba(54, 217, 255, 0.38);
+  background: rgba(54, 217, 255, 0.08);
+  color: rgba(235, 241, 255, 0.82);
+}
+
+.game-revision-refresh:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.game-revision-refresh:disabled svg {
+  animation: revisionRefreshSpin 800ms linear infinite;
+}
+
+@keyframes revisionRefreshSpin {
+  to { transform: rotate(360deg); }
 }
 
 .detail-copy > p {
@@ -1621,6 +1689,12 @@ button.capsule:disabled,
   gap: 14px;
 }
 
+.season-title-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
 .season-title-row h2 {
   min-width: 0;
   overflow: hidden;
@@ -1824,6 +1898,10 @@ button.capsule:disabled,
   color: #ff6b74;
 }
 
+.launch-revision {
+  color: rgba(235, 241, 255, 0.4);
+}
+
 .launch-difficulty {
   min-width: 0;
   display: grid;
@@ -1901,6 +1979,24 @@ button.capsule:disabled,
 .launch-difficulty-button.active .star-rating .filled {
   color: #f7fbff;
   text-shadow: none;
+}
+
+.btn.primary.play.loading {
+  cursor: progress;
+  opacity: 0.92;
+}
+
+.launch-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  animation: launchSpin 780ms linear infinite;
+}
+
+@keyframes launchSpin {
+  to { transform: rotate(360deg); }
 }
 
 .player-pill {

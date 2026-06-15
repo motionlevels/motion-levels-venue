@@ -262,14 +262,17 @@ func (r *gameRuntime) SelectGameWithDifficulty(game string, players int, difficu
 }
 
 func (r *gameRuntime) SelectGameWithOptions(game string, players int, difficulty string, narrationEnabled *bool) {
-	r.SelectGameWithMetadata(game, players, difficulty, "", narrationEnabled, "", "", nil)
+	r.SelectGameWithMetadata(game, players, difficulty, "", narrationEnabled, "", "", "", nil)
 }
 
-func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficulty string, level string, narrationEnabled *bool, teamName string, venueSessionID string, roster []playerConfig) {
+func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficulty string, level string, narrationEnabled *bool, teamName string, venueSessionID string, platformURL string, roster []playerConfig) {
 	if r == nil {
 		return
 	}
 	cfg := configForSelection(r.base, game, players)
+	if platformURL != "" {
+		cfg.PlatformURL = platformURL
+	}
 	if difficulty != "" {
 		cfg.Difficulty = normalizeDifficulty(difficulty)
 	}
@@ -677,7 +680,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		return status
 	}
 
-	if cfg.Game == "plataformas" || cfg.Game == "parkour2" || cfg.Game == "temporada1-niveles" {
+	if isPlatformRuntimeGame(cfg.Game) {
 		if plataformasGame, ok := game.(*plataformas.Game); ok {
 			snapshot := plataformasGame.Snapshot(gameNow)
 			status.Phase = snapshot.Phase
@@ -690,6 +693,9 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.ActiveTargets = snapshot.ActiveTargets
 			status.Lives = snapshot.Lives
 			status.LivesStart = snapshot.LivesStart
+			if snapshot.Label != "" {
+				status.Label = snapshot.Label
+			}
 			status.Difficulty = snapshot.Difficulty
 			status.Level = snapshot.Level
 			status.LevelNumber = snapshot.LevelNumber
@@ -989,7 +995,7 @@ func (r *gameRuntime) applyLockedWithNarrationReason(cfg config, playAudio bool,
 }
 
 func applyPlataformasAudioConfig(cfg config, game floorGame) config {
-	if cfg.Game == "plataformas" || cfg.Game == "parkour2" || cfg.Game == "temporada1-niveles" {
+	if isPlatformRuntimeGame(cfg.Game) {
 		provider, ok := game.(plataformasAudioProvider)
 		if !ok {
 			return cfg
@@ -1197,6 +1203,9 @@ func (r *gameRuntime) playCountdownLocked(cfg config, now time.Time) {
 
 func shouldPlayCountdownCue(cfg config) bool {
 	if strings.HasPrefix(cfg.Game, "authored-") {
+		return true
+	}
+	if isPlatformRuntimeGame(cfg.Game) {
 		return true
 	}
 	switch cfg.Game {
@@ -1518,12 +1527,20 @@ func (r *gameRuntime) StartDisplaySnapshotRecording(interval time.Duration) {
 }
 
 func recordsLevelAttempts(game string) bool {
+	if isPlatformRuntimeGame(game) {
+		return true
+	}
 	switch game {
 	case "parkour", "parkour2", "plataformas", "temporada1-niveles", "temporada1", "temporada2":
 		return true
 	default:
 		return false
 	}
+}
+
+func isPlatformRuntimeGame(game string) bool {
+	game = normalizeGame(game)
+	return isPlatformLevelGameID(game) || game == "plataformas" || game == "parkour2" || game == "temporada1-niveles"
 }
 
 func (r *gameRuntime) recordPressureInput(event *inputpb.PressureEvent, now time.Time) {
@@ -1670,6 +1687,10 @@ func newUUID() (string, error) {
 }
 
 func makeGame(cfg config, seed int64, now time.Time) floorGame {
+	if isPlatformLevelGameID(cfg.Game) {
+		log.Printf("game: platform-level id=%s players=%d difficulty=%s level=%s", cfg.Game, cfg.PlayerCount, cfg.Difficulty, cfg.Level)
+		return plataformas.NewWithSeedForGame(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL, cfg.Game)
+	}
 	if strings.HasPrefix(cfg.Game, "animation-") {
 		cfg.Level = strings.TrimPrefix(cfg.Game, "animation-")
 		cfg.Game = "animations"
@@ -1904,6 +1925,14 @@ func configForSelection(base config, game string, players int) config {
 		cfg.normalize()
 		return cfg
 	}
+	if isPlatformLevelGameID(cfg.Game) {
+		cfg.PlayerCount = clampInt(players, 1, 6)
+		cfg.Level = plataformas.NormalizeLevel(cfg.Level)
+		cfg.MusicRef = plataformas.DefaultMusicRef
+		cfg.MusicVolume = plataformas.DefaultMusicVolume
+		cfg.normalize()
+		return cfg
+	}
 	switch cfg.Game {
 	case "whack-a-mole":
 		cfg.MusicRef = whackamole.DefaultMusicRef
@@ -1949,6 +1978,9 @@ func configForSelection(base config, game string, players int) config {
 func defaultMusicForGame(game string) (string, float64) {
 	if strings.HasPrefix(normalizeGame(game), "authored-") {
 		return authored.DefaultMusicRef, authored.DefaultMusicVolume
+	}
+	if isPlatformLevelGameID(normalizeGame(game)) {
+		return plataformas.DefaultMusicRef, plataformas.DefaultMusicVolume
 	}
 	switch normalizeGame(game) {
 	case "whack-a-mole":
@@ -2038,7 +2070,7 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 		{
 			Game:        "parkour2",
 			Label:       "Parkour 2.0",
-			Description: "Reto individual editable desde la nube, con animaciones opcionales para lava y plataformas verdes.",
+			Description: "Reto individual editable desde la plataforma, con animaciones opcionales para lava y plataformas verdes.",
 			Music:       plataformas.DefaultMusicRef,
 			Players:     true,
 			MinPlayers:  1,
@@ -2050,7 +2082,7 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 		{
 			Game:        "plataformas",
 			Label:       "Plataformas",
-			Description: "Niveles publicados desde la base de datos en la nube, creados como secuencias reutilizables de fotogramas.",
+			Description: "Niveles publicados desde la plataforma, creados como secuencias reutilizables de fotogramas.",
 			Music:       plataformas.DefaultMusicRef,
 			Players:     true,
 			MinPlayers:  1,
@@ -2062,7 +2094,7 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 		{
 			Game:        "temporada1-niveles",
 			Label:       "Temporada 1 Niveles",
-			Description: "Ruta cooperativa editable desde la nube: puntos azules, peligros rojos y retos clasicos de temporada.",
+			Description: "Ruta cooperativa editable desde la plataforma: puntos azules, peligros rojos y retos clasicos de temporada.",
 			Music:       plataformas.DefaultMusicRef,
 			Players:     true,
 			MinPlayers:  1,
@@ -2132,7 +2164,7 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 		{
 			Game:        "animations",
 			Label:       "Animaciones",
-			Description: "Modo reposo para reproducir animaciones y efectos desde la nube.",
+			Description: "Modo reposo para reproducir animaciones y efectos desde la plataforma.",
 			Music:       loopMusicRef,
 			Players:     false,
 			MinPlayers:  1,

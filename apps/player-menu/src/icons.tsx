@@ -65,6 +65,17 @@ export function RestartIcon() {
   );
 }
 
+export function RefreshIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M49 20A22 22 0 0 0 13 26" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+      <path d="M47 9v14H33" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M15 44a22 22 0 0 0 36-6" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+      <path d="M17 55V41h14" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function GearIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">

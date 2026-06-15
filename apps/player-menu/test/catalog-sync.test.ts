@@ -39,7 +39,7 @@ function catalogEntry(patch: Partial<PlatformGameCatalogEntry> = {}): PlatformGa
     difficulties: ["easy", "medium", "hard", "expert"],
     default_music_ref: "",
     default_music_volume: 0.16,
-    source_kind: "cloud_levels",
+    source_kind: "platform_levels",
     code_editable: false,
     ...patch,
   };

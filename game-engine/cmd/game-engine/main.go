@@ -180,7 +180,7 @@ func (c *config) normalize() {
 	} else if c.Game == "parkour" {
 		c.Level = parkour.NormalizeLevel(c.Level)
 		c.PlayerCount = 1
-	} else if c.Game == "plataformas" || c.Game == "parkour2" || c.Game == "temporada1-niveles" {
+	} else if isPlatformLevelGameID(c.Game) || c.Game == "plataformas" || c.Game == "parkour2" || c.Game == "temporada1-niveles" {
 		c.Level = plataformas.NormalizeLevel(c.Level)
 		if c.Game == "parkour2" {
 			c.PlayerCount = 1
@@ -449,11 +449,15 @@ func clamp01(value float64) float64 {
 }
 
 func normalizeGame(value string) string {
+	value = strings.TrimSpace(value)
 	if strings.HasPrefix(value, "authored-") {
 		return value
 	}
 	if strings.HasPrefix(value, "animation-") {
 		return value
+	}
+	if isPlatformLevelGameID(value) {
+		return strings.ToLower(value)
 	}
 	switch value {
 	case "whack-a-mole", "whackamole", "mole":
@@ -488,6 +492,10 @@ func normalizeGame(value string) string {
 	default:
 		return "animations"
 	}
+}
+
+func isPlatformLevelGameID(value string) bool {
+	return uuidPattern.MatchString(strings.TrimSpace(value))
 }
 
 func normalizeDifficulty(value string) string {

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { controlGame, fetchAnimationPreview, fetchEngineStatus, fetchGameCatalog, fetchMenuState, postMenuEvent, postMenuState, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus, type MenuStateEnvelope, type PlatformGameCatalogEntry } from "./api";
+import { controlGame, fetchAnimationPreview, fetchEngineStatus, fetchGameCatalog, fetchMenuState, platformBaseURL, postMenuEvent, postMenuState, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus, type MenuStateEnvelope, type PlatformGameCatalogEntry } from "./api";
 import { categories, colors, difficulties, games, playerColorNames, playerColors, previewAsset, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
 import {
   catalogDifficultyIDs,
@@ -19,7 +19,7 @@ import {
   rosterForGame,
   supportedDifficultiesForGame,
 } from "./catalogSync";
-import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
+import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, RefreshIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
 import { defaultFloorAnim, floorAnimations, type FloorAnim, type RGB } from "./floor";
@@ -172,8 +172,12 @@ function cleanNameWhitespace(value: string, maxLength: number): string {
   return value.replace(/\s+/g, " ").trim().slice(0, maxLength).trim();
 }
 
-function engineGameID(game: GameCard): string {
+function engineGameID(game: Pick<GameCard, "engineGame" | "id">): string {
   return game.engineGame || game.id;
+}
+
+function runtimeGameID(game: Pick<GameCard, "engineGame" | "id" | "sourceKind">): string {
+  return game.sourceKind === "platform_levels" && isUUID(game.id) ? game.id : engineGameID(game);
 }
 
 function previewAnimationID(game: GameCard): string {
@@ -215,7 +219,7 @@ function animationIsIdleLoop(currentGame: string, phase: string): boolean {
 }
 
 function gameForEngineStatus(engineGame: string, currentMenuGameID: string, catalogGames = games): GameCard | undefined {
-  const matches = catalogGames.filter((game) => engineGameID(game) === engineGame);
+  const matches = catalogGames.filter((game) => runtimeGameID(game) === engineGame || engineGameID(game) === engineGame);
   if (matches.length === 0) return undefined;
   return matches.find((game) => game.id === currentMenuGameID) || matches.find((game) => !game.id.startsWith("featured-")) || matches[0];
 }
@@ -251,11 +255,28 @@ function platformEntryEngineGame(entry: PlatformGameCatalogEntry): string {
   return entry.engine_game || entry.id;
 }
 
+function isPlatformLevelSource(entry: PlatformGameCatalogEntry): boolean {
+  return entry.source_kind === "platform_levels";
+}
+
+function platformEntryMatchesGame(entry: PlatformGameCatalogEntry, game: Pick<GameCard, "engineGame" | "id">): boolean {
+  return entry.id === game.id || platformEntryEngineGame(entry) === engineGameID(game);
+}
+
+function webpPreviewRef(value: string): string {
+  return value.replace(/^preview:/, "").replace(/\.(?:gif|png|webp)(?=($|[?#]))/i, ".webp");
+}
+
 function catalogThumbnailSrc(ref: string | undefined): string | undefined {
   const clean = String(ref || "").trim();
   if (!clean) return undefined;
-  if (/^(?:https?:|data:|blob:|\/)/i.test(clean)) return clean;
-  return previewAsset(clean.replace(/^preview:/, "")) || clean;
+  if (/^data:image\/gif/i.test(clean)) return undefined;
+  if (/^(?:https?:|blob:|\/)/i.test(clean)) return webpPreviewRef(clean);
+  if (/^data:/i.test(clean)) return clean;
+  const assetName = webpPreviewRef(clean);
+  const platformURL = platformBaseURL();
+  if (platformURL) return `${platformURL}/api/game-catalog/thumbnails/${encodeURIComponent(assetName)}?animated=1`;
+  return previewAsset(assetName);
 }
 
 function catalogPreviewAnimation(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, engineGame: string): string | undefined {
@@ -273,10 +294,11 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
   const estimatedDurationSeconds = normalizeEstimatedDurationSeconds(entry.estimated_duration_seconds);
   const levels = supportsLevels && entry.levels && entry.levels.length > 0
     ? entry.levels.map((lvl) => {
-        const fallbackLevel = fallback?.levels?.find((level) => level.id === lvl.id);
-        const levelDifficulties = normalizeDifficultyIDs(lvl.difficulties);
+        const levelID = String(lvl.slug || lvl.id || "").trim();
+        const fallbackLevel = fallback?.levels?.find((level) => level.id === levelID || level.id === lvl.id);
+        const levelDifficulties = normalizeDifficultyIDs(lvl.difficulties?.length ? lvl.difficulties : (lvl.difficulty ? [lvl.difficulty] : []));
         return {
-          id: lvl.id,
+          id: levelID || lvl.id,
           label: lvl.label,
           description: lvl.description,
           difficulties: levelDifficulties.length ? levelDifficulties : fallbackLevel?.difficulties,
@@ -303,13 +325,15 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
     rules: entry.catalog_rules?.length ? entry.catalog_rules : fallback?.rules || ["Configurable desde la página Juegos."],
     featured: typeof entry.catalog_featured === "boolean" ? entry.catalog_featured : fallback?.featured === true || entry.catalog_category === "featured",
     levels,
-    allowDifficultyWithLevels: supportsLevels && (fallback?.allowDifficultyWithLevels || (entry.source_kind === "cloud_levels" && Boolean(levels?.length))),
+    allowDifficultyWithLevels: supportsLevels && (fallback?.allowDifficultyWithLevels || (isPlatformLevelSource(entry) && Boolean(levels?.length))),
     engineGame,
     minPlayers: playerBounds.minPlayers,
     maxPlayers: playerBounds.maxPlayers,
     previewSrc,
     previewAnimation: catalogPreviewAnimation(entry, fallback, engineGame),
     supportsLevels,
+    sourceKind: entry.source_kind || fallback?.sourceKind,
+    revisionHash: entry.revision_hash || fallback?.revisionHash,
     disabled: false,
   };
 }
@@ -318,20 +342,30 @@ function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalo
   if (!catalog) return baseGames;
   const fallbackByID = new Map(baseGames.map((game) => [game.id, game]));
   const fallbackByEngine = new Map(baseGames.map((game) => [engineGameID(game), game]));
+  const baseOrder = new Map(baseGames.map((game, index) => [game.id, index]));
   const catalogOrderByID = new Map(catalog.map((entry) => [entry.id, entry.catalog_order]));
   const catalogOrderByEngine = new Map(catalog.map((entry) => [platformEntryEngineGame(entry), entry.catalog_order]));
-  return catalog
-    .filter((entry) => entry.catalog_enabled !== false)
+  const enabledCatalog = catalog.filter((entry) => entry.catalog_enabled !== false);
+  const platformGames = enabledCatalog
     .map((entry, index) => platformEntryToGameCard(
       entry,
       fallbackByID.get(entry.id) || fallbackByEngine.get(platformEntryEngineGame(entry)),
       index,
-    ))
+    ));
+  const remainingBaseGames = baseGames.filter((game) => (
+    !catalog.some((entry) => platformEntryMatchesGame(entry, game) && entry.catalog_enabled === false)
+    && !enabledCatalog.some((entry) => platformEntryMatchesGame(entry, game))
+  ));
+  return [...platformGames, ...remainingBaseGames]
     .sort((left, right) => {
-      const leftOrder = catalogOrderByID.get(left.id) ?? catalogOrderByEngine.get(engineGameID(left)) ?? 1000;
-      const rightOrder = catalogOrderByID.get(right.id) ?? catalogOrderByEngine.get(engineGameID(right)) ?? 1000;
+      const leftOrder = catalogOrderByID.get(left.id) ?? catalogOrderByEngine.get(engineGameID(left)) ?? 10_000 + (baseOrder.get(left.id) ?? 0);
+      const rightOrder = catalogOrderByID.get(right.id) ?? catalogOrderByEngine.get(engineGameID(right)) ?? 10_000 + (baseOrder.get(right.id) ?? 0);
       return leftOrder - rightOrder || left.label.localeCompare(right.label);
     });
+}
+
+function isPlatformLaunchableSource(game: Pick<GameCard, "sourceKind">): boolean {
+  return game.sourceKind === "code_editable" || game.sourceKind === "platform_levels" || game.sourceKind === "cloud_animations";
 }
 
 function isIndividualCard(game: GameCard): boolean {
@@ -675,6 +709,7 @@ function MenuApp() {
   const [menu, setMenu] = useState<MenuState>(() => loadMenuState());
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [platformCatalog, setPlatformCatalog] = useState<PlatformGameCatalogEntry[] | null>(() => loadCachedPlatformCatalog());
+  const [catalogRefreshing, setCatalogRefreshing] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [keyboardTarget, setKeyboardTarget] = useState<KeyboardTarget | null>(null);
@@ -689,11 +724,14 @@ function MenuApp() {
   const [screenMode, setScreenMode] = useState<ScreenMode>("browse");
   const [remoteSessionRequest, setRemoteSessionRequest] = useState<RemoteSessionRequest | null>(() => remoteSessionRequestFromURL());
   const [launchedGameID, setLaunchedGameID] = useState(menu.selectedGame);
+  const [launchingGameID, setLaunchingGameID] = useState<string | null>(null);
   const [levelBrowserGameID, setLevelBrowserGameID] = useState<string | null>(null);
   const [introUntil, setIntroUntil] = useState(0);
   const [countdownUntil, setCountdownUntil] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const processedFinishedSessions = useRef(new Set<string>());
+  const catalogRefreshInFlight = useRef(false);
+  const platformCatalogRef = useRef(platformCatalog);
   const syncedEngineSession = useRef("");
   const mirroredMenuVersion = useRef(0);
   const venueSessionIDRef = useRef(menu.sessionId);
@@ -712,6 +750,37 @@ function MenuApp() {
   useEffect(() => {
     menuRef.current = menu;
   }, [menu]);
+
+  useEffect(() => {
+    platformCatalogRef.current = platformCatalog;
+  }, [platformCatalog]);
+
+  const refreshPlatformCatalog = useCallback(async (options: { manual?: boolean } = {}) => {
+    if (catalogRefreshInFlight.current) return;
+    catalogRefreshInFlight.current = true;
+    if (options.manual) setCatalogRefreshing(true);
+    try {
+      const next = await fetchGameCatalog();
+      cachePlatformCatalog(next);
+      setPlatformCatalog(next);
+      if (options.manual) {
+        const selectedID = menuRef.current.selectedGame;
+        const selected = next.find((entry) => entry.id === selectedID);
+        setError("");
+        setMessage(selected?.revision_hash ? `Catálogo actualizado · rev ${selected.revision_hash}` : "Catálogo actualizado");
+        captureMenuEvent("catalog_refreshed", {
+          game: selectedID,
+          game_revision: selected?.revision_hash,
+          previous_revision: platformCatalogRef.current?.find((entry) => entry.id === selectedID)?.revision_hash,
+        });
+      }
+    } catch {
+      if (options.manual) setError("No se pudo actualizar el catálogo");
+    } finally {
+      catalogRefreshInFlight.current = false;
+      if (options.manual) setCatalogRefreshing(false);
+    }
+  }, []);
 
   const menuGames = useMemo(
     () => applyPlatformCatalog([...games, ...liveAnimationCards(status?.catalog)], platformCatalog),
@@ -845,19 +914,9 @@ function MenuApp() {
 
   useEffect(() => {
     let cancelled = false;
-    let inFlight = false;
     async function refreshCatalog() {
-      if (cancelled || inFlight) return;
-      inFlight = true;
-      try {
-        const next = await fetchGameCatalog();
-        cachePlatformCatalog(next);
-        if (!cancelled) setPlatformCatalog(next);
-      } catch {
-        if (!cancelled) setPlatformCatalog((current) => current);
-      } finally {
-        inFlight = false;
-      }
+      if (cancelled) return;
+      await refreshPlatformCatalog();
     }
     const refreshOnDemand = () => { void refreshCatalog(); };
     const refreshWhenVisible = () => {
@@ -875,7 +934,7 @@ function MenuApp() {
       window.removeEventListener("focus", refreshOnDemand);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, []);
+  }, [refreshPlatformCatalog]);
 
   useEffect(() => {
     if (screenMode !== "game") return;
@@ -988,7 +1047,7 @@ function MenuApp() {
     if (!status?.sessionId) return;
     const attempts: FinishedLevelAttempt[] = [...(status.finishedLevelAttempts || [])];
     if (status.phase === "finished") {
-      const game = menuGames.find((candidate) => engineGameID(candidate) === status.currentGame);
+      const game = menuGames.find((candidate) => runtimeGameID(candidate) === status.currentGame || engineGameID(candidate) === status.currentGame);
       const finishedLevel = status.level || (game ? selectedLevelFor(game) : "");
       const alreadyHasAttempt = attempts.some((attempt) => attempt.game === status.currentGame && attempt.level === finishedLevel);
       if (game?.levels?.length && finishedLevel && !alreadyHasAttempt) {
@@ -1043,6 +1102,18 @@ function MenuApp() {
   }, [keyboardTarget, colorPickerFor, confirmRemove, confirmResetSession, settingsOpen, teamOpen]);
 
   const availableGames = useMemo(() => new Set((status?.catalog || []).map((entry) => entry.game)), [status]);
+  const platformEnabledGames = useMemo(() => (
+    new Set((platformCatalog || [])
+      .filter((entry) => entry.catalog_enabled !== false)
+      .flatMap((entry) => [entry.id, platformEntryEngineGame(entry)]))
+  ), [platformCatalog]);
+  const isGameLaunchable = useCallback((game: GameCard) => {
+    if (!status) return false;
+    if (availableGames.has(runtimeGameID(game)) || availableGames.has(engineGameID(game))) return true;
+    return isPlatformLaunchableSource(game) && (
+      platformEnabledGames.has(game.id) || platformEnabledGames.has(engineGameID(game))
+    );
+  }, [availableGames, platformEnabledGames, status]);
   const activePlayers = menu.players.filter((player) => player.active);
   const enginePlayers = statusPlayersForDisplay(status);
   const activeCategory = categories.find((category) => category.id === menu.category) || categories[0];
@@ -1414,7 +1485,7 @@ function MenuApp() {
       };
     });
     setLevelBrowserGameID(game?.levels?.length ? game.id : null);
-    if (game && isAmbientCard(game) && !game.disabled && availableGames.has(engineGameID(game))) {
+    if (game && isAmbientCard(game) && !game.disabled && isGameLaunchable(game)) {
       void launch(game.id);
     }
   }
@@ -1509,7 +1580,7 @@ function MenuApp() {
 
   async function launch(gameID = selectedGame.id) {
     const game = menuGames.find((candidate) => candidate.id === gameID);
-    if (!game || game.disabled || !availableGames.has(engineGameID(game))) {
+    if (!game || game.disabled || !isGameLaunchable(game)) {
       captureMenuEvent("start_blocked", {
         engine_game: game ? engineGameID(game) : gameID,
         game: game?.id || gameID,
@@ -1564,6 +1635,7 @@ function MenuApp() {
     setMenu(nextMenu);
     setMessage("Iniciando");
     setError("");
+    setLaunchingGameID(game.id);
     captureMenuEvent("game_started", {
       ambient: isAmbientCard(game),
       category: game.category,
@@ -1581,7 +1653,8 @@ function MenuApp() {
     });
     try {
       const nextStatus = await selectGame({
-        game: engineGameID(game),
+        game: runtimeGameID(game),
+        platformUrl: platformBaseURL() || undefined,
         venueSessionId: nextMenu.sessionId,
         playerCount: Math.max(1, launchRoster.length),
         difficulty: launchDifficulty,
@@ -1617,6 +1690,8 @@ function MenuApp() {
         game: game.id,
       });
       setError(err instanceof Error ? err.message : "No se pudo iniciar el juego");
+    } finally {
+      setLaunchingGameID((current) => (current === game.id ? null : current));
     }
   }
 
@@ -1681,7 +1756,7 @@ function MenuApp() {
   const introActive = screenMode === "game" && introUntil > nowMs;
   const countdownValue = screenMode === "game" && !introActive ? Math.max(0, Math.ceil((countdownUntil - nowMs) / 1000)) : 0;
   const launchIssue = !isAmbientCard(selectedGame) ? rosterIssue?.message || "" : "";
-  const launchStatusMessage = error || launchIssue || message || (isAmbientCard(selectedGame) ? "Ambiente listo" : "Listo para jugar");
+  const launchStatusMessage = launchingGameID === selectedGame.id ? "Cargando juego" : error || launchIssue || message || (isAmbientCard(selectedGame) ? "Ambiente listo" : "Listo para jugar");
 
   function enterBrowserFullscreen() {
     const fullscreenDocument = document as Document & { webkitFullscreenElement?: Element | null };
@@ -1949,9 +2024,9 @@ function MenuApp() {
                 <section key={menu.category} className="games game-grid" aria-label="Juegos">
                   {visibleGames.map((game, index) => {
                     const future = Boolean(game.disabled);
-                    const engineAvailable = availableGames.has(engineGameID(game));
+                    const engineAvailable = isGameLaunchable(game);
                     const selected = menu.selectedGame === game.id;
-                    const active = selected && status?.currentGame === engineGameID(game);
+                    const active = selected && (status?.currentGame === runtimeGameID(game) || status?.currentGame === engineGameID(game));
                     return (
                       <button
                         key={game.id}
@@ -1966,6 +2041,7 @@ function MenuApp() {
                         <Preview src={game.previewSrc} animationID={previewAnimationID(game)} />
                         <div className="game-body">
                           <h3>{game.label}</h3>
+                          {game.revisionHash ? <span className="game-card-revision">rev {game.revisionHash}</span> : null}
                         </div>
                       </button>
                     );
@@ -1984,7 +2060,24 @@ function MenuApp() {
                     <section className="season-summary" aria-label="Juego actual">
                       <span className="micro">Juego actual</span>
                       <div className="season-title-row">
-                        <h2>{selectedGame.label}</h2>
+                        <span className="season-title-main">
+                          <h2>{selectedGame.label}</h2>
+                          {selectedGame.revisionHash ? (
+                            <span className="game-revision-row">
+                              <span className="game-revision">rev {selectedGame.revisionHash}</span>
+                              <button
+                                className="game-revision-refresh"
+                                type="button"
+                                disabled={catalogRefreshing}
+                                title="Actualizar catálogo"
+                                aria-label="Actualizar catálogo"
+                                onClick={() => refreshPlatformCatalog({ manual: true })}
+                              >
+                                <RefreshIcon />
+                              </button>
+                            </span>
+                          ) : null}
+                        </span>
                         <span className="season-progress">
                           {selectedLevelIndex}/{selectedGame.levels?.length}
                         </span>
@@ -2021,6 +2114,21 @@ function MenuApp() {
                   <>
                     <span className="micro">Seleccionado</span>
                     <h2>{selectedGame.label}</h2>
+                    {selectedGame.revisionHash ? (
+                      <span className="game-revision-row">
+                        <span className="game-revision">rev {selectedGame.revisionHash}</span>
+                        <button
+                          className="game-revision-refresh"
+                          type="button"
+                          disabled={catalogRefreshing}
+                          title="Actualizar catálogo"
+                          aria-label="Actualizar catálogo"
+                          onClick={() => refreshPlatformCatalog({ manual: true })}
+                        >
+                          <RefreshIcon />
+                        </button>
+                      </span>
+                    ) : null}
                     <p>{selectedGame.description}</p>
                     <section className="season-facts" aria-label="Resumen de partida">
                       <div>
@@ -2060,6 +2168,7 @@ function MenuApp() {
               <div className="launch-selected">
                 <span className={`launch-status ${error || launchIssue ? "error" : ""}`}>{launchStatusMessage}</span>
                 <strong>{selectedGame.label}</strong>
+                {selectedGame.revisionHash ? <span className="launch-revision">rev {selectedGame.revisionHash}</span> : null}
               </div>
               {usesDifficulty(selectedGame) ? (
                 <div className="launch-difficulty" role="group" aria-label="Dificultad">
@@ -2097,10 +2206,11 @@ function MenuApp() {
               ) : null}
             </div>
             {(() => {
-              const engineAvailable = availableGames.has(engineGameID(selectedGame));
+              const engineAvailable = isGameLaunchable(selectedGame);
               const rosterBlocked = !isAmbientCard(selectedGame) && Boolean(rosterIssue);
               const levelBlocked = Boolean(selectedGame.levels?.length && !isLevelUnlocked(selectedGame, selectedLevelFor(selectedGame), menu));
-              const blocked = selectedGame.disabled || !engineAvailable || rosterBlocked || levelBlocked;
+              const launching = launchingGameID === selectedGame.id;
+              const blocked = launching || selectedGame.disabled || !engineAvailable || rosterBlocked || levelBlocked;
               const blockedLabel = levelBlocked ? "Nivel bloqueado" : rosterBlocked ? "Revisa equipo" : selectedGame.disabled ? "Próximamente" : error ? "Sin conexión" : "No disponible";
               return (
                 <div className="launch-actions">
@@ -2115,8 +2225,13 @@ function MenuApp() {
                       {narrationArmedFor(selectedGame) ? "Narración ON" : "Narración OFF"}
                     </button>
                   ) : null}
-                  <button className="btn primary play" type="button" disabled={blocked} onClick={() => launch()}>
-                    {blocked ? (
+                  <button className={`btn primary play ${launching ? "loading" : ""}`} type="button" disabled={blocked} aria-busy={launching} onClick={() => launch()}>
+                    {launching ? (
+                      <>
+                        <span className="launch-spinner" aria-hidden="true" />
+                        Cargando
+                      </>
+                    ) : blocked ? (
                       blockedLabel
                     ) : (
                       <>

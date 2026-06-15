@@ -76,6 +76,7 @@ type Snapshot struct {
 	Phase            string
 	Difficulty       string
 	Level            string
+	Label            string
 	LevelNumber      int
 	Players          []PlayerSnapshot
 	Score            int
@@ -284,7 +285,7 @@ func NewWithSeedForGame(now time.Time, seed int64, playerCount int, difficulty s
 	diff := NormalizeDifficulty(difficulty)
 	levels, err := fetchLevels(platformURL, diff, gameID)
 	if err != nil {
-		log.Printf("%s: cloud level fetch failed: %v", gameID, err)
+		log.Printf("%s: platform level fetch failed: %v", gameID, err)
 		levels = fallbackCompiledLevels()
 	}
 	selected := selectLevel(levels, NormalizeLevel(level))
@@ -376,6 +377,7 @@ func (g *Game) Snapshot(now time.Time) Snapshot {
 		Phase:            phase,
 		Difficulty:       string(g.difficulty),
 		Level:            g.level.id,
+		Label:            g.level.label,
 		LevelNumber:      levelNumber(g.level.id),
 		Players:          g.playersLocked(),
 		Score:            g.score,
@@ -920,13 +922,27 @@ func fetchLevels(platformURL string, diff Difficulty, gameID string) ([]compiled
 	if cleanGameID == "" {
 		cleanGameID = "plataformas"
 	}
-	endpoint, err := url.Parse(base + "/api/level-games/" + url.PathEscape(cleanGameID) + "/levels")
+	levels, err := fetchLevelsForDifficulty(base, cleanGameID, string(diff))
+	if err == nil {
+		return levels, nil
+	}
+	withoutDifficulty, fallbackErr := fetchLevelsForDifficulty(base, cleanGameID, "")
+	if fallbackErr == nil {
+		return withoutDifficulty, nil
+	}
+	return nil, err
+}
+
+func fetchLevelsForDifficulty(base string, gameID string, difficulty string) ([]compiledLevel, error) {
+	endpoint, err := url.Parse(base + "/api/level-games/" + url.PathEscape(gameID) + "/levels")
 	if err != nil {
 		return nil, err
 	}
-	query := endpoint.Query()
-	query.Set("difficulty", string(diff))
-	endpoint.RawQuery = query.Encode()
+	if difficulty != "" {
+		query := endpoint.Query()
+		query.Set("difficulty", difficulty)
+		endpoint.RawQuery = query.Encode()
+	}
 	client := &http.Client{Timeout: 5 * time.Second}
 	response, err := client.Get(endpoint.String())
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,6 +18,7 @@ var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[
 
 type selectGameRequest struct {
 	Game             string `json:"game"`
+	PlatformURL      string `json:"platformUrl"`
 	VenueSessionID   string `json:"venueSessionId"`
 	PlayerCount      int    `json:"playerCount"`
 	Difficulty       string `json:"difficulty"`
@@ -177,7 +179,7 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, "venueSessionId must be a UUID", http.StatusBadRequest)
 			return
 		}
-		runtime.SelectGameWithMetadata(request.Game, request.PlayerCount, request.Difficulty, request.Level, request.NarrationEnabled, request.TeamName, venueSessionID, players)
+		runtime.SelectGameWithMetadata(request.Game, request.PlayerCount, request.Difficulty, request.Level, request.NarrationEnabled, request.TeamName, venueSessionID, normalizeLaunchPlatformURL(request.PlatformURL), players)
 		writeJSON(w, runtime.Status())
 	})
 	mux.HandleFunc("/api/control", func(w http.ResponseWriter, r *http.Request) {
@@ -256,6 +258,20 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 	return withAPILogging(runtime, withCORS(mux))
+}
+
+func normalizeLaunchPlatformURL(value string) string {
+	clean := strings.TrimRight(strings.TrimSpace(value), "/")
+	if clean == "" {
+		return ""
+	}
+	parsed, err := url.Parse(clean)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return ""
+	}
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
 }
 
 func normalizeOptionalUUID(value string) (string, bool) {

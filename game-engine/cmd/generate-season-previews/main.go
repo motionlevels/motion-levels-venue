@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/gif"
+	"image/png"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
@@ -53,7 +56,7 @@ type previewLevel struct {
 func main() {
 	output := flag.String("output", "apps/player-menu/src/assets/previews", "preview output directory")
 	season := flag.String("season", "all", "season to render: all, temporada1, temporada2")
-	force := flag.Bool("force", false, "overwrite existing GIFs")
+	force := flag.Bool("force", false, "overwrite existing WebP previews")
 	flag.Parse()
 
 	if err := os.MkdirAll(*output, 0o755); err != nil {
@@ -93,32 +96,59 @@ func temporada2PreviewLevels() []previewLevel {
 
 func renderLevels(output string, prefix string, levels []previewLevel, force bool, render renderer, now time.Time) {
 	for index, level := range levels {
-		path := filepath.Join(output, fmt.Sprintf("%s-level-%d.gif", prefix, index+1))
+		path := filepath.Join(output, fmt.Sprintf("%s-level-%d.webp", prefix, index+1))
 		if !force && exists(path) {
 			fmt.Printf("kept %s\n", path)
 			continue
 		}
-		if err := writePreviewGIF(path, level.ID, render, now); err != nil {
+		if err := writePreviewWebP(path, level.ID, render, now); err != nil {
 			fatal(fmt.Errorf("%s %s: %w", prefix, level.ID, err))
 		}
 		fmt.Printf("wrote %s\n", path)
 	}
 }
 
-func writePreviewGIF(path string, level string, render renderer, now time.Time) error {
-	out := &gif.GIF{LoopCount: 0}
+func writePreviewWebP(path string, level string, render renderer, now time.Time) error {
+	frames := make([]*image.Paletted, 0, frameCount)
 	start := now.Add(3300 * time.Millisecond)
 	for frame := 0; frame < frameCount; frame++ {
 		at := start.Add(time.Duration(frame) * 100 * time.Millisecond)
-		out.Image = append(out.Image, renderFrame(render(level, at)))
-		out.Delay = append(out.Delay, delayCS)
+		frames = append(frames, renderFrame(render(level, at)))
 	}
-	file, err := os.Create(path)
+	return writeAnimatedWebP(path, frames, delayCS*10)
+}
+
+func writeAnimatedWebP(path string, frames []*image.Paletted, delayMS int) error {
+	if len(frames) == 0 {
+		return fmt.Errorf("no frames")
+	}
+	dir, err := os.MkdirTemp("", "motion-season-preview-*")
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	return gif.EncodeAll(file, out)
+	defer os.RemoveAll(dir)
+	args := []string{"-loop", "0"}
+	for index, frame := range frames {
+		framePath := filepath.Join(dir, fmt.Sprintf("frame-%04d.png", index))
+		file, err := os.Create(framePath)
+		if err != nil {
+			return err
+		}
+		encodeErr := png.Encode(file, frame)
+		closeErr := file.Close()
+		if encodeErr != nil {
+			return encodeErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		args = append(args, "-d", strconv.Itoa(delayMS), framePath)
+	}
+	args = append(args, "-o", path)
+	if output, err := exec.Command("img2webp", args...).CombinedOutput(); err != nil {
+		return fmt.Errorf("img2webp: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 func renderFrame(frame []animation.RGB) *image.Paletted {

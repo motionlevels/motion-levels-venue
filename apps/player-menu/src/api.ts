@@ -8,7 +8,7 @@ export type EngineGame = {
   maxPlayers: number;
   difficulty: boolean;
   volume: number;
-  levels?: Array<{ id: string; label: string; description: string; difficulties?: string[] }>;
+  levels?: Array<{ id: string; slug?: string; label: string; description: string; difficulty?: string; difficulties?: string[] }>;
 };
 
 export type PlatformGameCatalogEntry = {
@@ -38,8 +38,9 @@ export type PlatformGameCatalogEntry = {
   default_music_volume: number;
   source_kind: string;
   code_editable: boolean;
+  revision_hash?: string;
   game_source?: Record<string, unknown>;
-  levels?: Array<{ id: string; label: string; description: string; difficulties?: string[] }>;
+  levels?: Array<{ id: string; slug?: string; label: string; description: string; difficulty?: string; difficulties?: string[] }>;
 };
 
 export type EngineStatus = {
@@ -91,6 +92,7 @@ export type AnimationPreview = {
 
 export type SelectGameRequest = {
   game: string;
+  platformUrl?: string;
   venueSessionId?: string;
   playerCount: number;
   difficulty?: string;

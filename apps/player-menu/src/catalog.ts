@@ -1,20 +1,20 @@
-import parkourEasyLevel1Preview from "./assets/previews/parkour-easy-level-1.gif";
-import parkourEasyLevel2Preview from "./assets/previews/parkour-easy-level-2.gif";
-import parkourEasyLevel3Preview from "./assets/previews/parkour-easy-level-3.gif";
-import parkourEasyLevel4Preview from "./assets/previews/parkour-easy-level-4.gif";
-import parkourEasyLevel5Preview from "./assets/previews/parkour-easy-level-5.gif";
-import parkourMediumLevel1Preview from "./assets/previews/parkour-medium-level-1.gif";
-import parkourMediumLevel2Preview from "./assets/previews/parkour-medium-level-2.gif";
-import parkourMediumLevel3Preview from "./assets/previews/parkour-medium-level-3.gif";
-import parkourMediumLevel4Preview from "./assets/previews/parkour-medium-level-4.gif";
-import parkourMediumLevel5Preview from "./assets/previews/parkour-medium-level-5.gif";
-import parkourHardLevel1Preview from "./assets/previews/parkour-hard-level-1.gif";
-import parkourHardLevel2Preview from "./assets/previews/parkour-hard-level-2.gif";
-import parkourHardLevel3Preview from "./assets/previews/parkour-hard-level-3.gif";
-import parkourHardLevel4Preview from "./assets/previews/parkour-hard-level-4.gif";
-import parkourHardLevel5Preview from "./assets/previews/parkour-hard-level-5.gif";
+import parkourEasyLevel1Preview from "./assets/previews/parkour-easy-level-1.webp";
+import parkourEasyLevel2Preview from "./assets/previews/parkour-easy-level-2.webp";
+import parkourEasyLevel3Preview from "./assets/previews/parkour-easy-level-3.webp";
+import parkourEasyLevel4Preview from "./assets/previews/parkour-easy-level-4.webp";
+import parkourEasyLevel5Preview from "./assets/previews/parkour-easy-level-5.webp";
+import parkourMediumLevel1Preview from "./assets/previews/parkour-medium-level-1.webp";
+import parkourMediumLevel2Preview from "./assets/previews/parkour-medium-level-2.webp";
+import parkourMediumLevel3Preview from "./assets/previews/parkour-medium-level-3.webp";
+import parkourMediumLevel4Preview from "./assets/previews/parkour-medium-level-4.webp";
+import parkourMediumLevel5Preview from "./assets/previews/parkour-medium-level-5.webp";
+import parkourHardLevel1Preview from "./assets/previews/parkour-hard-level-1.webp";
+import parkourHardLevel2Preview from "./assets/previews/parkour-hard-level-2.webp";
+import parkourHardLevel3Preview from "./assets/previews/parkour-hard-level-3.webp";
+import parkourHardLevel4Preview from "./assets/previews/parkour-hard-level-4.webp";
+import parkourHardLevel5Preview from "./assets/previews/parkour-hard-level-5.webp";
 
-const previewAssets = import.meta.glob("./assets/previews/*.gif", { eager: true, import: "default" }) as Record<string, string>;
+const previewAssets = import.meta.glob("./assets/previews/*.webp", { eager: true, import: "default" }) as Record<string, string>;
 
 export function previewAsset(fileName: string): string | undefined {
   return previewAssets[`./assets/previews/${fileName}`];
@@ -102,6 +102,8 @@ export type GameCard = {
   previewAnimation?: string;
   featured?: boolean;
   supportsLevels?: boolean;
+  sourceKind?: string;
+  revisionHash?: string;
   disabled?: boolean;
 };
 
@@ -116,7 +118,7 @@ export type GameLevel = {
 };
 
 const temporada1Previews = [
-  ...Array.from({ length: 24 }, (_, index) => previewAsset(`temporada1-level-${index + 1}.gif`)),
+  ...Array.from({ length: 24 }, (_, index) => previewAsset(`temporada1-level-${index + 1}.webp`)),
 ];
 
 const temporada1Descriptions = [
@@ -158,7 +160,7 @@ export const plataformasLevels: GameLevel[] = [
     id: "level-1",
     label: "Temporada 1 / Nivel 1",
     description: "Láser N1 migrado al formato editable en la nube.",
-    previewSrc: previewAsset("temporada1-level-1.gif"),
+    previewSrc: previewAsset("temporada1-level-1.webp"),
   },
 ];
 
@@ -200,7 +202,7 @@ export const temporada2Levels: GameLevel[] = temporada2Descriptions.map((descrip
   label: `Nivel ${index + 1}`,
   description,
   difficulties: ["easy"],
-  previewSrc: previewAsset(`temporada2-level-${index + 1}.gif`),
+  previewSrc: previewAsset(`temporada2-level-${index + 1}.webp`),
   previewAnimation: `temporada2-level-${index + 1}`,
 }));
 
@@ -343,7 +345,7 @@ export const games: GameCard[] = [
     maxPlayers: 6,
     mode: "Ambiente",
     audio: "Suave",
-    description: "Modo reposo para reproducir animaciones y efectos desde la nube.",
+    description: "Modo reposo para reproducir animaciones y efectos desde la plataforma.",
     rules: ["Reproduce animaciones en bucle.", "Baldosas con efectos de sonido al pisar.", "Ideal para espera y decoración."],
     engineGame: "animations",
     previewAnimation: "animations",
@@ -500,7 +502,7 @@ export const games: GameCard[] = [
     color: colors.cyan,
     players: "1-6",
     difficulty: "Fácil-Experto",
-    duration: "Niveles en la nube",
+    duration: "Niveles de plataforma",
     estimatedDurationSeconds: 180,
     minPlayers: 1,
     maxPlayers: 6,
@@ -509,9 +511,9 @@ export const games: GameCard[] = [
     mode: "Editor",
     audio: "Música + efectos",
     description: "Niveles creados desde la plataforma: fotogramas editables, música y mecanismos reutilizables para baldosas.",
-    rules: ["El motor descarga los niveles publicados desde la nube.", "Las baldosas azules suman puntos.", "Las rojas hacen daño y las moradas piden doble toque."],
+    rules: ["El motor descarga los niveles publicados desde la plataforma.", "Las baldosas azules suman puntos.", "Las rojas hacen daño y las moradas piden doble toque."],
     engineGame: "plataformas",
-    previewSrc: previewAsset("temporada1-level-1.gif"),
+    previewSrc: previewAsset("temporada1-level-1.webp"),
     previewAnimation: "ambient-pulse",
     allowDifficultyWithLevels: true,
     levels: plataformasLevels,
@@ -523,7 +525,7 @@ export const games: GameCard[] = [
     color: colors.green,
     players: "1",
     difficulty: "Fácil-Experto",
-    duration: "Niveles en la nube",
+    duration: "Niveles de plataforma",
     estimatedDurationSeconds: 120,
     minPlayers: 1,
     maxPlayers: 1,
@@ -532,9 +534,9 @@ export const games: GameCard[] = [
     mode: "Editor",
     audio: "Música + efectos",
     description: "Reto editable inspirado en Parkour, con lava animada y plataformas verdes que pueden desvanecerse por nivel.",
-    rules: ["El motor descarga los niveles publicados desde la nube.", "Las animaciones de plataforma se activan desde el editor.", "Pensado para probar y ajustar rutas de parkour rápido."],
+    rules: ["El motor descarga los niveles publicados desde la plataforma.", "Las animaciones de plataforma se activan desde el editor.", "Pensado para probar y ajustar rutas de parkour rápido."],
     engineGame: "parkour2",
-    previewSrc: previewAsset("temporada1-level-1.gif"),
+    previewSrc: previewAsset("temporada1-level-1.webp"),
     previewAnimation: "ambient-pulse",
     allowDifficultyWithLevels: true,
     levels: plataformasLevels,
@@ -555,9 +557,9 @@ export const games: GameCard[] = [
     mode: "",
     audio: "",
     description: "Ruta cooperativa de 24 niveles con puntos, peligros y retos clásicos de la pista.",
-    rules: ["El motor descarga los niveles publicados desde la nube.", "Las baldosas azules suman puntos.", "Las rojas hacen daño y las moradas piden doble toque."],
+    rules: ["El motor descarga los niveles publicados desde la plataforma.", "Las baldosas azules suman puntos.", "Las rojas hacen daño y las moradas piden doble toque."],
     engineGame: "temporada1-niveles",
-    previewSrc: previewAsset("temporada1-level-1.gif"),
+    previewSrc: previewAsset("temporada1-level-1.webp"),
     previewAnimation: "temporada1-level-1",
     allowDifficultyWithLevels: true,
     levels: temporada1Levels,
@@ -580,7 +582,7 @@ export const games: GameCard[] = [
     description: "Treinta prototipos cooperativos con zonas verdes seguras, peligros rojos móviles, monedas azules y objetivos morados.",
     rules: ["Una dificultad por ahora.", "Recoged todas las monedas para pasar.", "Completad un nivel para desbloquear el siguiente."],
     engineGame: "temporada2",
-    previewSrc: previewAsset("temporada2-level-1.gif"),
+    previewSrc: previewAsset("temporada2-level-1.webp"),
     previewAnimation: "temporada2-level-1",
     allowDifficultyWithLevels: true,
     levels: temporada2Levels,

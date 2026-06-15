@@ -317,6 +317,71 @@ func TestPlataformasRuntimeUsesCloudLevelAudioRefs(t *testing.T) {
 	}
 }
 
+func TestSelectPlatformLevelGameByUUIDUsesLaunchPlatformURL(t *testing.T) {
+	gameID := "8b20d467-b2d1-4d62-9ef3-8455adb61393"
+	var fetchedPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/game-runtime" {
+			w.Header().Set("content-type", "application/json")
+			_, _ = w.Write([]byte(`{"games":[]}`))
+			return
+		}
+		if r.URL.Path == "/api/level-games/animations/levels" {
+			w.Header().Set("content-type", "application/json")
+			_, _ = w.Write([]byte(`{"gameId":"animations","levels":[]}`))
+			return
+		}
+		fetchedPath = r.URL.Path
+		if r.URL.Path != "/api/level-games/"+gameID+"/levels" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("difficulty") != "medium" {
+			t.Fatalf("difficulty = %s", r.URL.Query().Get("difficulty"))
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"gameId":"` + gameID + `",
+			"levels":[{
+				"id":"cloud-uuid-1",
+				"slug":"level-2",
+				"label":"UUID Parkour",
+				"description":"Selected through platform UUID",
+				"difficulty":"medium",
+				"life":5,
+				"pass_score":1,
+				"time_limit_seconds":0,
+				"frame_tick_ms":25,
+				"frames":[{"r":8,"c":[[1,1,1,"coin-a"]]}]
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
+	api := httptest.NewServer(gameAPIHandler(runtime))
+	defer api.Close()
+
+	body := bytes.NewBufferString(`{"game":"` + gameID + `","platformUrl":"` + server.URL + `","playerCount":1,"difficulty":"medium","level":"level-2"}`)
+	response, err := http.Post(api.URL+"/api/select", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("select response = %d", response.StatusCode)
+	}
+	var status runtimeStatus
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status.CurrentGame != gameID || status.Level != "level-2" || status.Label != "UUID Parkour" {
+		t.Fatalf("status = %+v, want UUID platform game", status)
+	}
+	if fetchedPath != "/api/level-games/"+gameID+"/levels" {
+		t.Fatalf("fetched path = %q", fetchedPath)
+	}
+}
+
 func TestGameAPIStatusAndSelect(t *testing.T) {
 	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
 	server := httptest.NewServer(gameAPIHandler(runtime))
