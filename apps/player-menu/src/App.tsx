@@ -2049,7 +2049,6 @@ function MenuApp() {
                         <Preview src={game.previewSrc} animationID={previewAnimationID(game)} />
                         <div className="game-body">
                           <h3>{game.label}</h3>
-                          {game.revisionHash ? <span className="game-card-revision">rev {game.revisionHash}</span> : null}
                         </div>
                       </button>
                     );
@@ -2176,7 +2175,6 @@ function MenuApp() {
               <div className="launch-selected">
                 <span className={`launch-status ${error || launchIssue ? "error" : ""}`}>{launchStatusMessage}</span>
                 <strong>{selectedGame.label}</strong>
-                {selectedGame.revisionHash ? <span className="launch-revision">rev {selectedGame.revisionHash}</span> : null}
               </div>
               {usesDifficulty(selectedGame) ? (
                 <div className="launch-difficulty" role="group" aria-label="Dificultad">

@@ -1347,20 +1347,6 @@ button.capsule:disabled,
   white-space: normal;
 }
 
-.game-card-revision,
-.launch-revision {
-  min-width: 0;
-  overflow: hidden;
-  color: rgba(235, 241, 255, 0.42);
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 850;
-  letter-spacing: 0;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* ---------- Selected game detail ---------- */
 
 .detail-panel {
@@ -1896,10 +1882,6 @@ button.capsule:disabled,
 
 .launch-status.error {
   color: #ff6b74;
-}
-
-.launch-revision {
-  color: rgba(235, 241, 255, 0.4);
 }
 
 .launch-difficulty {
