@@ -270,7 +270,7 @@ func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficult
 		return
 	}
 	cfg := configForSelection(r.base, game, players)
-	if platformURL != "" {
+	if shouldUseLaunchPlatformURL(r.base.PlatformURL, platformURL) {
 		cfg.PlatformURL = platformURL
 	}
 	if difficulty != "" {

@@ -274,6 +274,25 @@ func normalizeLaunchPlatformURL(value string) string {
 	return parsed.String()
 }
 
+func shouldUseLaunchPlatformURL(configured string, requested string) bool {
+	if requested == "" {
+		return false
+	}
+	if strings.TrimSpace(configured) == "" {
+		return true
+	}
+	return !isLoopbackPlatformURL(requested)
+}
+
+func isLoopbackPlatformURL(value string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "localhost" || host == "127.0.0.1" || host == "::1" || strings.HasSuffix(host, ".localhost")
+}
+
 func normalizeOptionalUUID(value string) (string, bool) {
 	value = strings.TrimSpace(value)
 	if value == "" {
