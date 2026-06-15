@@ -35,6 +35,7 @@ type config struct {
 	VenueSessionID         string
 	Difficulty             string
 	Level                  string
+	DurationSeconds        int
 	PlayerCount            int
 	TeamName               string
 	Players                []playerConfig
@@ -82,7 +83,7 @@ func main() {
 	flag.StringVar(&cfg.HTTPAddr, "http", "127.0.0.1:4102", "HTTP address for the game-engine API; empty disables")
 	flag.StringVar(&cfg.ControllerAddr, "controller", "127.0.0.1:4201", "floor-controller frame stream address")
 	flag.StringVar(&cfg.PressureAddr, "pressure-events", "127.0.0.1:4202", "floor-controller pressure event stream address")
-	flag.StringVar(&cfg.Game, "game", "animations", "game to run: animations, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, parkour, parkour2, plataformas, temporada1-niveles, temporada1, temporada2, duel, memory, or patrones")
+	flag.StringVar(&cfg.Game, "game", "salvapantallas", "game to run: salvapantallas, animations, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, parkour, parkour2, plataformas, temporada1-niveles, temporada1, temporada2, duel, memory, or patrones")
 	flag.StringVar(&cfg.Difficulty, "difficulty", "easy", "difficulty for games that support it: easy, medium, hard, expert")
 	flag.StringVar(&cfg.Level, "level", "starter", "level for games that support level selection")
 	flag.IntVar(&cfg.PlayerCount, "players", 1, "number of players for focused games")
@@ -212,6 +213,9 @@ func (c *config) normalize() {
 	if c.DisplaySnapshotFPS < 1 {
 		c.DisplaySnapshotFPS = 1
 	}
+	if c.DurationSeconds < 0 {
+		c.DurationSeconds = 0
+	}
 	if c.ReplayKeyframeInterval <= 0 {
 		c.ReplayKeyframeInterval = 5 * time.Second
 	}
@@ -231,7 +235,7 @@ func (c *config) normalize() {
 	if c.MusicRef == "" || c.MusicRef == loopMusicRef {
 		musicRef, musicVolume := defaultMusicForGame(c.Game)
 		c.MusicRef = musicRef
-		if c.Game != "animations" {
+		if c.Game != "animations" && c.Game != "salvapantallas" {
 			c.MusicVolume = musicVolume
 		}
 	}
@@ -484,10 +488,12 @@ func normalizeGame(value string) string {
 		return "memory"
 	case "patrones", "patterns", "pattern", "reto-patrones":
 		return "patrones"
+	case "salvapantallas", "screensaver", "screen-saver":
+		return "salvapantallas"
 	case "animations", "loop", "ambient-comet", "ambient-pulse", "ambient-spark":
 		return value
 	default:
-		return "animations"
+		return "salvapantallas"
 	}
 }
 

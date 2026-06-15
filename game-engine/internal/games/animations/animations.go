@@ -95,14 +95,16 @@ type AudioRefs struct {
 type Game struct {
 	mu sync.Mutex
 
-	level          CompiledLevel
-	levels         []CompiledLevel
-	rotationSeed   int64
-	rotationEvery  time.Duration
-	rotationIndex  int64
-	startedAt      time.Time
-	pressed        map[Point]bool
-	pressureEvents map[Point]time.Time
+	level             CompiledLevel
+	levels            []CompiledLevel
+	platformURL       string
+	refreshOnRotation bool
+	rotationSeed      int64
+	rotationEvery     time.Duration
+	rotationIndex     int64
+	startedAt         time.Time
+	pressed           map[Point]bool
+	pressureEvents    map[Point]time.Time
 }
 
 type Point struct {
@@ -132,23 +134,41 @@ func NewWithSeed(now time.Time, seed int64, playerCount int, difficulty string, 
 }
 
 func NewRandomRotationWithSeed(now time.Time, seed int64, playerCount int, difficulty string, platformURL string) *Game {
+	return NewScreensaverWithSeed(now, seed, playerCount, difficulty, platformURL, rotationDuration)
+}
+
+func NewScreensaver(now time.Time, playerCount int, difficulty string, platformURL string, rotationEvery time.Duration) *Game {
+	return NewScreensaverWithSeed(now, 0, playerCount, difficulty, platformURL, rotationEvery)
+}
+
+func NewScreensaverWithSeed(now time.Time, seed int64, playerCount int, difficulty string, platformURL string, rotationEvery time.Duration) *Game {
 	_ = playerCount
 	_ = difficulty
-	levels, err := GetOrFetchLevels(platformURL)
+	if rotationEvery <= 0 {
+		rotationEvery = rotationDuration
+	}
+	levels, err := RefreshLevels(platformURL)
 	if err != nil {
 		log.Printf("animations: cloud animation fetch failed: %v", err)
-		levels = fallbackCompiledLevels()
+		if cached, cachedErr := GetOrFetchLevels(platformURL); cachedErr == nil {
+			levels = cached
+		} else {
+			levels = fallbackCompiledLevels()
+		}
 	}
+	levels = screensaverLevels(levels)
 	selected := rotatingLevelAt(levels, seed, 0, -1)
 	return &Game{
-		level:          selected,
-		levels:         levels,
-		rotationSeed:   seed,
-		rotationEvery:  rotationDuration,
-		rotationIndex:  0,
-		startedAt:      now,
-		pressed:        map[Point]bool{},
-		pressureEvents: map[Point]time.Time{},
+		level:             selected,
+		levels:            levels,
+		platformURL:       platformURL,
+		refreshOnRotation: true,
+		rotationSeed:      seed,
+		rotationEvery:     rotationEvery,
+		rotationIndex:     0,
+		startedAt:         now,
+		pressed:           map[Point]bool{},
+		pressureEvents:    map[Point]time.Time{},
 	}
 }
 
@@ -361,11 +381,34 @@ func (g *Game) updateRotationLocked(now time.Time) {
 	if nextRotationIndex == g.rotationIndex {
 		return
 	}
+	if g.refreshOnRotation {
+		if levels, err := RefreshLevels(g.platformURL); err != nil {
+			log.Printf("animations: screensaver refresh failed: %v", err)
+		} else if candidates := screensaverLevels(levels); len(candidates) > 0 {
+			g.levels = candidates
+		}
+	}
 	previous := indexOfLevel(g.levels, g.level.id)
 	g.level = rotatingLevelAt(g.levels, g.rotationSeed, nextRotationIndex, previous)
 	g.rotationIndex = nextRotationIndex
 	g.pressed = map[Point]bool{}
 	g.pressureEvents = map[Point]time.Time{}
+}
+
+func screensaverLevels(levels []CompiledLevel) []CompiledLevel {
+	if len(levels) == 0 {
+		return levels
+	}
+	featured := make([]CompiledLevel, 0, len(levels))
+	for _, level := range levels {
+		if level.featured {
+			featured = append(featured, level)
+		}
+	}
+	if len(featured) > 0 {
+		return featured
+	}
+	return levels
 }
 
 func rotatingLevelAt(levels []CompiledLevel, seed int64, rotationIndex int64, previous int) CompiledLevel {
@@ -542,6 +585,23 @@ func GetOrFetchLevels(platformURL string) ([]CompiledLevel, error) {
 	}
 	cachedLevels = levels
 	cacheExpire = time.Now().Add(2 * time.Second)
+	return levels, nil
+}
+
+func RefreshLevels(platformURL string) ([]CompiledLevel, error) {
+	levels, err := fetchLevels(platformURL)
+	if err != nil {
+		cacheMu.Lock()
+		defer cacheMu.Unlock()
+		if len(cachedLevels) > 0 {
+			return cachedLevels, nil
+		}
+		return nil, err
+	}
+	cacheMu.Lock()
+	cachedLevels = levels
+	cacheExpire = time.Now().Add(2 * time.Second)
+	cacheMu.Unlock()
 	return levels, nil
 }
 

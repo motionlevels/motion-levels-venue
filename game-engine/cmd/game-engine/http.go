@@ -23,6 +23,7 @@ type selectGameRequest struct {
 	PlayerCount      int    `json:"playerCount"`
 	Difficulty       string `json:"difficulty"`
 	Level            string `json:"level"`
+	DurationSeconds  int    `json:"durationSeconds"`
 	NarrationEnabled *bool  `json:"narrationEnabled"`
 	TeamName         string `json:"teamName"`
 	Players          []struct {
@@ -179,7 +180,7 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, "venueSessionId must be a UUID", http.StatusBadRequest)
 			return
 		}
-		runtime.SelectGameWithMetadata(request.Game, request.PlayerCount, request.Difficulty, request.Level, request.NarrationEnabled, request.TeamName, venueSessionID, normalizeLaunchPlatformURL(request.PlatformURL), players)
+		runtime.SelectGameWithMetadata(request.Game, request.PlayerCount, request.Difficulty, request.Level, request.DurationSeconds, request.NarrationEnabled, request.TeamName, venueSessionID, normalizeLaunchPlatformURL(request.PlatformURL), players)
 		writeJSON(w, runtime.Status())
 	})
 	mux.HandleFunc("/api/control", func(w http.ResponseWriter, r *http.Request) {

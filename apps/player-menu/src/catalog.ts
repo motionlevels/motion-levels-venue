@@ -45,7 +45,7 @@ export const playerColors = [
 export const playerColorNames = ["Rojo", "Cian", "Verde", "Rosa", "Azul", "Amarillo", "Naranja", "Morado"];
 export const nameHints = playerColorNames;
 
-export type CategoryID = "featured" | "team" | "versus" | "individual" | "arcade" | "attract";
+export type CategoryID = "featured" | "team" | "versus" | "individual" | "arcade" | "party" | "attract";
 
 export type Category = {
   id: CategoryID;
@@ -61,6 +61,7 @@ export const categories: Category[] = [
   { id: "versus", label: "Competitivos", title: "Cara a cara", color: colors.blue, icon: "⚔️" },
   { id: "individual", label: "Individual", title: "Retos individuales", color: colors.blue, icon: "👤" },
   { id: "arcade", label: "Arcade", title: "Arcade", color: colors.blue, icon: "🎮" },
+  { id: "party", label: "Party", title: "Minijuegos en cadena", color: colors.blue, icon: "🎲" },
   { id: "attract", label: "Ambiente", title: "Modos ambiente", color: colors.blue, icon: "🏞️" },
 ];
 
@@ -93,18 +94,30 @@ export type GameCard = {
   description: string;
   rules: string[];
   levels?: GameLevel[];
+  partyMiniGames?: PartyMiniGame[];
   allowDifficultyWithLevels?: boolean;
   difficulties?: DifficultyID[];
   engineGame?: string;
   maxPlayers?: number;
   minPlayers?: number;
+  thumbnailSrc?: string;
+  thumbnailSrcs?: string[];
   previewSrc?: string;
+  previewSrcs?: string[];
   previewAnimation?: string;
   featured?: boolean;
   supportsLevels?: boolean;
   sourceKind?: string;
   revisionHash?: string;
   disabled?: boolean;
+};
+
+export type PartyMiniGame = {
+  gameId: string;
+  label?: string;
+  difficultyMode?: "inherit" | "override";
+  difficulty?: DifficultyID;
+  level?: string;
 };
 
 export type GameLevel = {
@@ -332,6 +345,24 @@ export const games: GameCard[] = [
     rules: ["El camino se muestra al inicio.", "Al salir se desvanece.", "Pisa la ruta en orden.", "Un fallo obliga a volver al inicio."],
     engineGame: "memory",
     previewAnimation: "memory",
+  },
+  {
+    id: "salvapantallas",
+    label: "Salvapantallas",
+    category: "attract",
+    color: colors.cyan,
+    players: "Todos",
+    difficulty: "Ambiente",
+    duration: "60s",
+    estimatedDurationSeconds: 60,
+    minPlayers: 1,
+    maxPlayers: 1,
+    mode: "Ambiente",
+    audio: "Suave",
+    description: "Modo reposo que rota entre animaciones destacadas; si no hay destacadas usa las visibles.",
+    rules: ["Rota automaticamente cada 60 segundos.", "Usa destacadas primero.", "Actualiza la lista al cambiar de animacion."],
+    engineGame: "salvapantallas",
+    thumbnailSrc: "/motion-levels-icon.webp",
   },
   {
     id: "animations",

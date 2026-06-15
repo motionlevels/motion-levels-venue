@@ -262,10 +262,10 @@ func (r *gameRuntime) SelectGameWithDifficulty(game string, players int, difficu
 }
 
 func (r *gameRuntime) SelectGameWithOptions(game string, players int, difficulty string, narrationEnabled *bool) {
-	r.SelectGameWithMetadata(game, players, difficulty, "", narrationEnabled, "", "", "", nil)
+	r.SelectGameWithMetadata(game, players, difficulty, "", 0, narrationEnabled, "", "", "", nil)
 }
 
-func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficulty string, level string, narrationEnabled *bool, teamName string, venueSessionID string, platformURL string, roster []playerConfig) {
+func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficulty string, level string, durationSeconds int, narrationEnabled *bool, teamName string, venueSessionID string, platformURL string, roster []playerConfig) {
 	if r == nil {
 		return
 	}
@@ -278,6 +278,9 @@ func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficult
 	}
 	if level != "" {
 		cfg.Level = level
+	}
+	if durationSeconds > 0 {
+		cfg.DurationSeconds = durationSeconds
 	}
 	cfg.TeamName = strings.TrimSpace(teamName)
 	cfg.VenueSessionID = strings.TrimSpace(venueSessionID)
@@ -341,7 +344,7 @@ func (r *gameRuntime) ControlGame(action string) {
 	case "toggle_mute":
 		r.setAudioMutedLocked(!r.audioMuted, now)
 	case "exit":
-		r.applyLocked(configForSelection(r.base, "animations", 1), true)
+		r.applyLocked(configForSelection(r.base, "salvapantallas", 1), true)
 	default:
 		return
 	}
@@ -417,9 +420,9 @@ func (r *gameRuntime) HandlePressure(event *inputpb.PressureEvent, fallbackStart
 func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 	if r == nil {
 		return displayStatus{
-			CurrentGame:    "animations",
+			CurrentGame:    "salvapantallas",
 			VenueSessionID: "",
-			Label:          gameLabel("animations"),
+			Label:          gameLabel("salvapantallas"),
 			Phase:          "idle",
 			Lives:          -1,
 		}
@@ -1020,7 +1023,7 @@ func applyPlataformasAudioConfig(cfg config, game floorGame) config {
 		if refs.DefeatCueRef != "" {
 			cfg.DefeatCueRef = refs.DefeatCueRef
 		}
-	} else if cfg.Game == "animations" || strings.HasPrefix(cfg.Game, "animation-") {
+	} else if cfg.Game == "animations" || cfg.Game == "salvapantallas" || strings.HasPrefix(cfg.Game, "animation-") {
 		provider, ok := game.(interface {
 			AudioRefs() animations.AudioRefs
 		})
@@ -1100,7 +1103,7 @@ func (r *gameRuntime) enforceNoPressureTimeoutLocked(now time.Time) {
 		return
 	}
 	log.Printf("game no-pressure timeout: game=%s idle=%s", r.current.Game, now.Sub(r.lastPressure).Round(time.Second))
-	r.applyLockedWithNarrationReason(configForSelection(r.base, "animations", 1), true, narrationAuto, "no pressure timeout")
+	r.applyLockedWithNarrationReason(configForSelection(r.base, "salvapantallas", 1), true, narrationAuto, "no pressure timeout")
 }
 
 func (r *gameRuntime) recordEvent(cue, message string, now time.Time) {
@@ -1729,6 +1732,10 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 	case "animations":
 		log.Printf("game: animations players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 		return animations.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL)
+	case "salvapantallas":
+		rotationEvery := time.Duration(cfg.DurationSeconds) * time.Second
+		log.Printf("game: salvapantallas rotation=%s", rotationEvery)
+		return animations.NewScreensaverWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.PlatformURL, rotationEvery)
 	case "temporada1":
 		log.Printf("game: temporada1 players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 		return temporada1.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level)
@@ -1968,6 +1975,9 @@ func configForSelection(base config, game string, players int) config {
 	case "animations":
 		cfg.PlayerCount = 1
 		cfg.Level = ""
+	case "salvapantallas":
+		cfg.PlayerCount = 1
+		cfg.Level = ""
 	default:
 	}
 	cfg.MusicRef, cfg.MusicVolume = defaultMusicForGame(cfg.Game)
@@ -2160,6 +2170,17 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 			Difficulty:  true,
 			Volume:      patrones.DefaultMusicVolume,
 			Levels:      patronesCatalogLevels(),
+		},
+		{
+			Game:        "salvapantallas",
+			Label:       "Salvapantallas",
+			Description: "Modo reposo que rota entre animaciones destacadas; si no hay destacadas usa las animaciones visibles.",
+			Music:       loopMusicRef,
+			Players:     false,
+			MinPlayers:  1,
+			MaxPlayers:  1,
+			Difficulty:  false,
+			Volume:      0.10,
 		},
 		{
 			Game:        "animations",

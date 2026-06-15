@@ -1,6 +1,8 @@
 package animations
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -238,4 +240,70 @@ func TestRandomRotationSwitchesEveryMinuteWithoutImmediateRepeat(t *testing.T) {
 	if game.level.id == second {
 		t.Fatalf("level repeated after second rotation: %q", game.level.id)
 	}
+}
+
+func TestScreensaverRefreshesAndPrefersFeaturedAnimations(t *testing.T) {
+	resetAnimationLevelCacheForTest(t)
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/level-games/animations/levels" {
+			http.NotFound(w, r)
+			return
+		}
+		requests++
+		featuredSlug := "featured-a"
+		if requests > 1 {
+			featuredSlug = "featured-b"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"levels":[` +
+			testAnimationLevelJSON(featuredSlug, true) + `,` +
+			testAnimationLevelJSON("visible-fallback", false) +
+			`]}`))
+	}))
+	defer server.Close()
+
+	game := NewScreensaverWithSeed(time.Unix(0, 0), 7, 1, "", server.URL, time.Second)
+	if game.level.id != "featured-a" {
+		t.Fatalf("initial screensaver level = %q, want featured-a", game.level.id)
+	}
+	game.updateRotationLocked(time.Unix(1, 0))
+	if game.level.id != "featured-b" {
+		t.Fatalf("rotated screensaver level = %q, want refreshed featured-b", game.level.id)
+	}
+	if requests < 2 {
+		t.Fatalf("platform requests = %d, want at least 2", requests)
+	}
+}
+
+func TestScreensaverFallsBackToVisibleAnimationsWhenNoFeaturedExist(t *testing.T) {
+	levels := []CompiledLevel{{id: "one"}, {id: "two"}}
+	candidates := screensaverLevels(levels)
+	if len(candidates) != len(levels) {
+		t.Fatalf("candidates = %d, want all visible levels", len(candidates))
+	}
+}
+
+func resetAnimationLevelCacheForTest(t *testing.T) {
+	t.Helper()
+	cacheMu.Lock()
+	previousLevels := cachedLevels
+	previousExpire := cacheExpire
+	cachedLevels = nil
+	cacheExpire = time.Time{}
+	cacheMu.Unlock()
+	t.Cleanup(func() {
+		cacheMu.Lock()
+		cachedLevels = previousLevels
+		cacheExpire = previousExpire
+		cacheMu.Unlock()
+	})
+}
+
+func testAnimationLevelJSON(slug string, featured bool) string {
+	featuredJSON := "false"
+	if featured {
+		featuredJSON = "true"
+	}
+	return `{"slug":"` + slug + `","label":"` + slug + `","frame_tick_ms":50,"rules":{"catalog_featured":` + featuredJSON + `,"animation_source":{"type":"procedure","language":"motion-dsl-v1","code":"color = rgb(20, 30, 40)","loop_seconds":2}}}`
 }

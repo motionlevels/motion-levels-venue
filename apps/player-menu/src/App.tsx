@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { controlGame, fetchAnimationPreview, fetchEngineStatus, fetchGameCatalog, fetchMenuState, platformBaseURL, postMenuEvent, postMenuState, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus, type MenuStateEnvelope, type PlatformGameCatalogEntry } from "./api";
-import { categories, colors, difficulties, games, playerColorNames, playerColors, previewAsset, type CategoryID, type DifficultyID, type GameCard } from "./catalog";
+import { categories, colors, difficulties, games, playerColorNames, playerColors, previewAsset, type CategoryID, type DifficultyID, type GameCard, type PartyMiniGame } from "./catalog";
 import {
   catalogDifficultyIDs,
   closestSupportedDifficulty,
@@ -22,7 +22,7 @@ import {
 import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, RefreshIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
-import { defaultFloorAnim, floorAnimations, type FloorAnim, type RGB } from "./floor";
+import { floorAnimations, type FloorAnim, type RGB } from "./floor";
 import { hexToColor, hexToRGB, initials, randomUUID } from "./utils";
 import { captureMenuEvent, menuKioskID, setMenuEventForwarder } from "./analytics";
 
@@ -59,6 +59,12 @@ type FinishedLevelAttempt = NonNullable<EngineStatus["finishedLevelAttempts"]>[n
 type KeyboardTarget = { kind: "team" } | { kind: "player"; id: number };
 type ScreenMode = "browse" | "game";
 type RosterIssue = { message: string; playerIds: Set<number> };
+type PartyRunState = {
+  cumulativeScore: number;
+  index: number;
+  partyGameID: string;
+  sessionId: string;
+};
 type MenuMirrorSnapshot = {
   menu: MenuState;
   screenMode: ScreenMode;
@@ -181,11 +187,20 @@ function runtimeGameID(game: Pick<GameCard, "engineGame" | "id" | "sourceKind">)
 }
 
 function previewAnimationID(game: GameCard): string {
+  if (engineGameID(game) === "salvapantallas") return "";
   return game.previewAnimation || game.id;
 }
 
 function levelPreviewAnimationID(game: GameCard, level?: NonNullable<GameCard["levels"]>[number]): string {
   return level?.previewAnimation || previewAnimationID(game);
+}
+
+function gameThumbnailSrc(game: GameCard): string | undefined {
+  return game.thumbnailSrc || game.previewSrc;
+}
+
+function gameThumbnailSrcs(game: GameCard): string[] {
+  return uniquePreviewSources([...(game.thumbnailSrcs || []), game.thumbnailSrc, game.previewSrc]);
 }
 
 function levelPreviewSrc(game: GameCard, level: NonNullable<GameCard["levels"]>[number] | undefined, difficulty: DifficultyID): string | undefined {
@@ -196,8 +211,16 @@ function isAmbientCard(game: GameCard): boolean {
   return game.category === "attract";
 }
 
+function isPartyCard(game: GameCard): boolean {
+  return game.category === "party";
+}
+
 function isFeaturedCard(game: GameCard): boolean {
   return game.featured === true || game.category === "featured";
+}
+
+function isScreensaverCard(game: Pick<GameCard, "engineGame" | "id">): boolean {
+  return engineGameID(game) === "salvapantallas" || game.id === "salvapantallas";
 }
 
 function gamesForCategory(catalogGames: GameCard[], category: CategoryID): GameCard[] {
@@ -215,10 +238,22 @@ function menuCategoryForGame(game: GameCard, currentCategory: CategoryID): Categ
 }
 
 function animationIsIdleLoop(currentGame: string, phase: string): boolean {
-  return currentGame === "animations" && (phase === "idle" || phase === "ambient");
+  return (
+    currentGame === "salvapantallas"
+    || currentGame === "animations"
+    || currentGame.startsWith("animation-")
+  ) && (phase === "idle" || phase === "ambient");
 }
 
 function gameForEngineStatus(engineGame: string, currentMenuGameID: string, catalogGames = games): GameCard | undefined {
+  const currentMenuGame = catalogGames.find((game) => game.id === currentMenuGameID);
+  if (currentMenuGame && isPartyCard(currentMenuGame)) {
+    const partyMiniGameMatches = (currentMenuGame.partyMiniGames || []).some((_, index) => {
+      const launchGame = partyLaunchGame(currentMenuGame, catalogGames, index);
+      return runtimeGameID(launchGame) === engineGame || engineGameID(launchGame) === engineGame;
+    });
+    if (partyMiniGameMatches) return currentMenuGame;
+  }
   const matches = catalogGames.filter((game) => runtimeGameID(game) === engineGame || engineGameID(game) === engineGame);
   if (matches.length === 0) return undefined;
   return matches.find((game) => game.id === currentMenuGameID) || matches.find((game) => !game.id.startsWith("featured-")) || matches[0];
@@ -263,6 +298,43 @@ function platformEntryMatchesGame(entry: PlatformGameCatalogEntry, game: Pick<Ga
   return entry.id === game.id || platformEntryEngineGame(entry) === engineGameID(game);
 }
 
+function platformPartyMiniGames(entry: PlatformGameCatalogEntry): PartyMiniGame[] | undefined {
+  const source = entry.game_source;
+  if (!source || source.schema !== "motion-party-v1" || source.kind !== "party") return undefined;
+  const rawMiniGames = Array.isArray(source.mini_games) ? source.mini_games : [];
+  const miniGames = rawMiniGames.flatMap((item): PartyMiniGame[] => {
+    const record = typeof item === "string" ? { game_id: item } : item;
+    if (!record || typeof record !== "object" || Array.isArray(record)) return [];
+    const value = record as Record<string, unknown>;
+    const gameId = typeof value.game_id === "string" ? value.game_id.trim() : "";
+    if (!gameId) return [];
+    const difficulty = catalogDifficultyIDs.includes(value.difficulty as DifficultyID) ? value.difficulty as DifficultyID : undefined;
+    const difficultyMode = value.difficulty_mode === "override" && difficulty
+      ? "override"
+      : value.difficulty_mode === "inherit"
+        ? "inherit"
+        : difficulty ? "override" : "inherit";
+    return [{
+      gameId,
+      label: typeof value.label === "string" ? value.label : undefined,
+      difficultyMode,
+      difficulty,
+      level: typeof value.level === "string" ? value.level : undefined,
+    }];
+  });
+  return miniGames.length ? miniGames : undefined;
+}
+
+function partyLaunchGame(game: GameCard, catalogGames: GameCard[], index = 0): GameCard {
+  if (!isPartyCard(game) || !game.partyMiniGames?.length) return game;
+  const miniGame = game.partyMiniGames[index] || game.partyMiniGames[0];
+  return catalogGames.find((candidate) => candidate.id === miniGame.gameId || engineGameID(candidate) === miniGame.gameId) || game;
+}
+
+function scoreFromStatus(status: EngineStatus | null): number {
+  return Math.max(0, Math.round((status?.players || []).reduce((total, player) => total + (Number(player.score) || 0), 0)));
+}
+
 function webpPreviewRef(value: string): string {
   return value.replace(/^preview:/, "").replace(/\.(?:gif|png|webp)(?=($|[?#]))/i, ".webp");
 }
@@ -290,21 +362,42 @@ function catalogThumbnailSrc(ref: string | undefined): string | undefined {
   if (!clean || /^data:/i.test(clean)) return undefined;
   const assetName = webpPreviewRef(clean);
   const platformURL = platformBaseURL();
-  if (platformURL) return `${platformURL}/api/game-catalog/thumbnails/${encodeURIComponent(assetName)}?animated=1`;
+  if (platformURL) return `${platformURL}/api/game-catalog/thumbnails/${encodeURIComponent(assetName)}`;
   return previewAsset(assetName);
 }
 
-function catalogPreviewSrc(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined): string | undefined {
-  if (entry.source_kind === "engine_hardcoded" && fallback?.previewAnimation) {
-    return fallback.previewSrc;
-  }
-  return catalogDirectAssetSrc(entry.catalog_preview_url)
-    || catalogDirectAssetSrc(entry.catalog_thumbnail_url)
-    || catalogThumbnailSrc(entry.catalog_thumbnail_ref)
-    || fallback?.previewSrc;
+function uniquePreviewSources(values: Array<string | undefined>): string[] {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }
 
-function catalogPreviewAnimation(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, engineGame: string): string | undefined {
+function catalogThumbnailMediaSrcs(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined): string[] {
+  return uniquePreviewSources([
+    catalogDirectAssetSrc(entry.catalog_thumbnail_url),
+    catalogThumbnailSrc(entry.catalog_thumbnail_ref),
+    ...(fallback?.thumbnailSrcs || []),
+    fallback?.thumbnailSrc,
+    fallback?.previewSrc,
+  ]);
+}
+
+function catalogPreviewMediaSrcs(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, thumbnailSrcs: string[]): string[] {
+  return uniquePreviewSources([
+    catalogDirectAssetSrc(entry.catalog_preview_url),
+    catalogDirectAssetSrc(entry.catalog_thumbnail_url),
+    ...thumbnailSrcs,
+    ...(fallback?.previewSrcs || []),
+    fallback?.previewSrc,
+  ]);
+}
+
+function catalogPreviewAnimation(
+  entry: PlatformGameCatalogEntry,
+  fallback: GameCard | undefined,
+  engineGame: string,
+  hasPlatformMedia: boolean,
+): string | undefined {
+  if (hasPlatformMedia || isPlatformLevelSource(entry)) return undefined;
+  if (engineGame === "salvapantallas") return undefined;
   const configured = String(entry.catalog_preview_animation || "").trim();
   if (configured) return configured;
   return fallback?.previewAnimation || (entry.source_kind === "cloud_animations" || entry.catalog_category === "attract" ? engineGame : undefined);
@@ -312,11 +405,16 @@ function catalogPreviewAnimation(entry: PlatformGameCatalogEntry, fallback: Game
 
 function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, index: number): GameCard {
   const engineGame = platformEntryEngineGame(entry);
-  const previewSrc = catalogPreviewSrc(entry, fallback);
+  const thumbnailSrcs = catalogThumbnailMediaSrcs(entry, fallback);
+  const previewSrcs = catalogPreviewMediaSrcs(entry, fallback, thumbnailSrcs);
+  const thumbnailSrc = thumbnailSrcs[0];
+  const previewSrc = previewSrcs[0];
+  const hasPlatformMedia = Boolean(catalogDirectAssetSrc(entry.catalog_preview_url) || catalogDirectAssetSrc(entry.catalog_thumbnail_url));
   const playerBounds = platformPlayerBounds(entry);
   const supportedDifficulties = platformSupportedDifficulties(entry, fallback);
   const supportsLevels = platformSupportsLevels(entry, fallback);
   const estimatedDurationSeconds = normalizeEstimatedDurationSeconds(entry.estimated_duration_seconds);
+  const partyMiniGames = platformPartyMiniGames(entry);
   const levels = supportsLevels && entry.levels && entry.levels.length > 0
     ? entry.levels.map((lvl) => {
         const levelID = String(lvl.slug || lvl.id || "").trim();
@@ -334,10 +432,11 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
       })
     : supportsLevels ? fallback?.levels : undefined;
   const duration = platformDurationLabel(entry, fallback) || (levels?.length ? `${levels.length} niveles` : "");
+  const category = partyMiniGames?.length ? "party" : isCategoryID(entry.catalog_category) ? entry.catalog_category : fallback?.category || "arcade";
   return {
     id: entry.id,
     label: entry.label || fallback?.label || engineGame,
-    category: isCategoryID(entry.catalog_category) ? entry.catalog_category : fallback?.category || "arcade",
+    category,
     color: entry.catalog_color || fallback?.color || [colors.cyan, colors.blue, colors.green, colors.violet, colors.orange, colors.yellow][index % 6],
     players: platformPlayerRangeLabel(entry, fallback),
     difficulty: platformDifficultyLabel(entry, fallback),
@@ -350,12 +449,16 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
     rules: entry.catalog_rules?.length ? entry.catalog_rules : fallback?.rules || ["Configurable desde la página Juegos."],
     featured: typeof entry.catalog_featured === "boolean" ? entry.catalog_featured : fallback?.featured === true || entry.catalog_category === "featured",
     levels,
+    partyMiniGames,
     allowDifficultyWithLevels: supportsLevels && (fallback?.allowDifficultyWithLevels || (isPlatformLevelSource(entry) && Boolean(levels?.length))),
     engineGame,
     minPlayers: playerBounds.minPlayers,
     maxPlayers: playerBounds.maxPlayers,
+    thumbnailSrc,
+    thumbnailSrcs,
     previewSrc,
-    previewAnimation: catalogPreviewAnimation(entry, fallback, engineGame),
+    previewSrcs,
+    previewAnimation: catalogPreviewAnimation(entry, fallback, engineGame, hasPlatformMedia),
     supportsLevels,
     sourceKind: entry.source_kind || fallback?.sourceKind,
     revisionHash: entry.revision_hash || fallback?.revisionHash,
@@ -752,10 +855,12 @@ function MenuApp() {
   const [launchedGameID, setLaunchedGameID] = useState(menu.selectedGame);
   const [launchingGameID, setLaunchingGameID] = useState<string | null>(null);
   const [levelBrowserGameID, setLevelBrowserGameID] = useState<string | null>(null);
+  const [partyRun, setPartyRun] = useState<PartyRunState | null>(null);
   const [introUntil, setIntroUntil] = useState(0);
   const [countdownUntil, setCountdownUntil] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const processedFinishedSessions = useRef(new Set<string>());
+  const processedPartyFinishes = useRef(new Set<string>());
   const catalogRefreshInFlight = useRef(false);
   const platformCatalogRef = useRef(platformCatalog);
   const syncedEngineSession = useRef("");
@@ -1111,6 +1216,36 @@ function MenuApp() {
     );
   }, [status, menuGames]);
 
+  useEffect(() => {
+    if (!partyRun || !status || status.phase !== "finished") return;
+    const party = menuGames.find((game) => game.id === partyRun.partyGameID);
+    if (!party?.partyMiniGames?.length) return;
+    const currentMiniGame = partyLaunchGame(party, menuGames, partyRun.index);
+    if (runtimeGameID(currentMiniGame) !== status.currentGame && engineGameID(currentMiniGame) !== status.currentGame) return;
+    const activeSession = status.venueSessionId || status.sessionId;
+    if (partyRun.sessionId && activeSession && partyRun.sessionId !== activeSession) return;
+    const finishKey = `${activeSession || status.sessionId}:${status.currentGame}:${status.level || ""}:${status.elapsedMillis || 0}:${partyRun.index}`;
+    if (processedPartyFinishes.current.has(finishKey)) return;
+    processedPartyFinishes.current.add(finishKey);
+
+    const cumulativeScore = partyRun.cumulativeScore + scoreFromStatus(status);
+    const nextIndex = partyRun.index + 1;
+    if (nextIndex >= party.partyMiniGames.length) {
+      setPartyRun(null);
+      setMessage(`Party terminado · ${cumulativeScore} pts`);
+      return;
+    }
+
+    setPartyRun({
+      cumulativeScore,
+      index: nextIndex,
+      partyGameID: party.id,
+      sessionId: partyRun.sessionId,
+    });
+    setMessage(`Party ${nextIndex + 1}/${party.partyMiniGames.length} · ${cumulativeScore} pts`);
+    void launch(party.id, { partyIndex: nextIndex, partyScore: cumulativeScore });
+  }, [partyRun, status, menuGames]);
+
   // Esc closes the topmost overlay (keyboard first, then dialogs, then the team drawer).
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -1140,11 +1275,13 @@ function MenuApp() {
   const isGameLaunchable = useCallback((game: GameCard) => {
     if (!status) return false;
     if (catalogLoading && isPlatformLaunchableSource(game)) return false;
-    if (availableGames.has(runtimeGameID(game)) || availableGames.has(engineGameID(game))) return true;
+    const launchGame = partyLaunchGame(game, menuGames);
+    if (isScreensaverCard(launchGame)) return true;
+    if (availableGames.has(runtimeGameID(launchGame)) || availableGames.has(engineGameID(launchGame))) return true;
     return isPlatformLaunchableSource(game) && (
       platformEnabledGames.has(game.id) || platformEnabledGames.has(engineGameID(game))
     );
-  }, [availableGames, catalogLoading, platformEnabledGames, status]);
+  }, [availableGames, catalogLoading, menuGames, platformEnabledGames, status]);
   const activePlayers = menu.players.filter((player) => player.active);
   const enginePlayers = statusPlayersForDisplay(status);
   const activeCategory = categories.find((category) => category.id === menu.category) || categories[0];
@@ -1164,6 +1301,7 @@ function MenuApp() {
   const selectedLevelBestTime = selectedLevel ? selectedLevelProgress.bestTimeByLevel[selectedLevel.id] : undefined;
   const selectedLevelBestLabel = selectedLevelBestTime ? formatBestTime(selectedLevelBestTime) : selectedLevelBest ? difficulties.find((difficulty) => difficulty.id === selectedLevelBest)?.label || selectedLevelBest : "Sin superar";
   const selectedGameDurationLabel = selectedGame.duration || estimatedDurationLabel(selectedGame.estimatedDurationSeconds || 0) || "Sin estimar";
+  const selectedPartyMiniGames = isPartyCard(selectedGame) ? selectedGame.partyMiniGames || [] : [];
   const levelDetail = Boolean(selectedGame.levels?.length && selectedLevel);
   const gameActive = screenMode === "game";
   const launchedPlayers = rosterForGame(launchedGame, activePlayers);
@@ -1609,7 +1747,7 @@ function MenuApp() {
     setMessage((current) => (current.startsWith("Narración") ? "" : current));
   }
 
-  async function launch(gameID = selectedGame.id) {
+  async function launch(gameID = selectedGame.id, options: { partyIndex?: number; partyScore?: number } = {}) {
     const game = menuGames.find((candidate) => candidate.id === gameID);
     if (!game || game.disabled || !isGameLaunchable(game)) {
       captureMenuEvent("start_blocked", {
@@ -1620,6 +1758,9 @@ function MenuApp() {
       return;
     }
     let nextMenu = ensurePlayers({ ...menu, selectedGame: game.id });
+    const partyIndex = isPartyCard(game) ? Math.max(0, Math.min((game.partyMiniGames?.length || 1) - 1, options.partyIndex || 0)) : 0;
+    const launchGame = partyLaunchGame(game, menuGames, partyIndex);
+    const partyFirstMiniGame = isPartyCard(game) ? game.partyMiniGames?.[partyIndex] : undefined;
     if (!nextMenu.sessionId) {
       nextMenu = {
         ...nextMenu,
@@ -1644,15 +1785,23 @@ function MenuApp() {
     }
     const playNarration = narrationArmedFor(game, nextMenu);
     const launchRoster = rosterForGame(game, nextMenu.players);
-    const selectedLevelID = selectedLevelFor(game, nextMenu);
-    const launchLevel = game.levels?.find((level) => level.id === selectedLevelID);
-    const launchDifficulty = usesDifficulty(game) ? closestSupportedDifficulty(nextMenu.difficulty, supportedDifficultiesFor(game, launchLevel)) : undefined;
-    if (launchDifficulty && nextMenu.difficulty !== launchDifficulty) {
-      nextMenu = { ...nextMenu, difficulty: launchDifficulty };
+    const selectedLevelID = partyFirstMiniGame?.level || selectedLevelFor(launchGame, nextMenu);
+    const launchLevel = launchGame.levels?.find((level) => level.id === selectedLevelID);
+    const partyParentDifficulty = isPartyCard(game) && usesDifficulty(game)
+      ? closestSupportedDifficulty(nextMenu.difficulty, supportedDifficultiesFor(game))
+      : undefined;
+    const partyChildDifficulty = partyFirstMiniGame?.difficultyMode === "override" && partyFirstMiniGame.difficulty
+      ? partyFirstMiniGame.difficulty
+      : partyParentDifficulty;
+    const requestedDifficulty = partyChildDifficulty || nextMenu.difficulty;
+    const launchDifficulty = usesDifficulty(launchGame) ? closestSupportedDifficulty(requestedDifficulty, supportedDifficultiesFor(launchGame, launchLevel)) : undefined;
+    const menuDifficulty = isPartyCard(game) ? partyParentDifficulty : launchDifficulty;
+    if (menuDifficulty && nextMenu.difficulty !== menuDifficulty) {
+      nextMenu = { ...nextMenu, difficulty: menuDifficulty };
     }
-    if (selectedLevelID && !isLevelUnlocked(game, selectedLevelID, nextMenu)) {
+    if (selectedLevelID && !isLevelUnlocked(launchGame, selectedLevelID, nextMenu)) {
       captureMenuEvent("start_blocked", {
-        engine_game: engineGameID(game),
+        engine_game: engineGameID(launchGame),
         game: game.id,
         level: selectedLevelID,
         level_number: levelNumber(selectedLevelID),
@@ -1664,15 +1813,22 @@ function MenuApp() {
       return;
     }
     setMenu(nextMenu);
-    setMessage("Iniciando");
+    setMessage(isPartyCard(game) && game.partyMiniGames?.length ? `Party ${partyIndex + 1}/${game.partyMiniGames.length}` : "Iniciando");
     setError("");
     setLaunchingGameID(game.id);
+    setPartyRun(isPartyCard(game) ? {
+      cumulativeScore: options.partyScore || 0,
+      index: partyIndex,
+      partyGameID: game.id,
+      sessionId: nextMenu.sessionId,
+    } : null);
     captureMenuEvent("game_started", {
       ambient: isAmbientCard(game),
       category: game.category,
       difficulty: launchDifficulty,
       difficulty_label: launchDifficulty ? difficulties.find((difficulty) => difficulty.id === launchDifficulty)?.label : undefined,
-      engine_game: engineGameID(game),
+      engine_game: engineGameID(launchGame),
+      launch_engine_game: engineGameID(launchGame),
       game: game.id,
       game_label: game.label,
       level: selectedLevelID || undefined,
@@ -1684,13 +1840,14 @@ function MenuApp() {
     });
     try {
       const nextStatus = await selectGame({
-        game: runtimeGameID(game),
+        game: runtimeGameID(launchGame),
         platformUrl: platformBaseURL() || undefined,
         venueSessionId: nextMenu.sessionId,
         playerCount: Math.max(1, launchRoster.length),
         difficulty: launchDifficulty,
         level: selectedLevelID || undefined,
-        narrationEnabled: supportsNarration(game) ? playNarration : false,
+        durationSeconds: launchGame.estimatedDurationSeconds || undefined,
+        narrationEnabled: supportsNarration(launchGame) ? playNarration : false,
         teamName: nextMenu.teamName.trim(),
         players: launchRoster.map((player, index) => ({
           index,
@@ -1699,9 +1856,9 @@ function MenuApp() {
         })),
       });
       setStatus(nextStatus);
-      setMessage("En curso");
+      setMessage(isPartyCard(game) && game.partyMiniGames?.length ? `Party ${partyIndex + 1}/${game.partyMiniGames.length} · ${options.partyScore || 0} pts` : "En curso");
       setLaunchedGameID(game.id);
-      if (supportsNarration(game) && playNarration) {
+      if (supportsNarration(launchGame) && playNarration) {
         setMenu((current) => ({
           ...current,
           narrationArmed: {
@@ -1716,7 +1873,7 @@ function MenuApp() {
       setScreenMode(isAmbientCard(game) ? "browse" : "game");
     } catch (err) {
       captureMenuEvent("start_failed", {
-        engine_game: engineGameID(game),
+        engine_game: engineGameID(launchGame),
         error: err instanceof Error ? err.message : "unknown",
         game: game.id,
       });
@@ -2073,7 +2230,7 @@ function MenuApp() {
                         aria-pressed={selected}
                         onClick={() => selectGameCard(game.id)}
                       >
-                        <Preview src={game.previewSrc} animationID={previewAnimationID(game)} />
+                        <Preview src={gameThumbnailSrc(game)} srcs={gameThumbnailSrcs(game)} animationID={previewAnimationID(game)} />
                         <div className="game-body">
                           <h3>{game.label}</h3>
                         </div>
@@ -2178,17 +2335,40 @@ function MenuApp() {
                         <strong>{selectedGameDurationLabel}</strong>
                       </div>
                     </section>
-                    <div className="detail-rules">
-                      <span className="micro">Reglas rápidas</span>
-                      <ul>
-                        {selectedGame.rules.map((rule) => (
-                          <li key={rule}>{rule}</li>
-                        ))}
-                      </ul>
-                    </div>
+                    {isPartyCard(selectedGame) ? (
+                      <div className="detail-rules">
+                        <span className="micro">Orden party</span>
+                        <ul>
+                          {selectedPartyMiniGames.length ? selectedPartyMiniGames.map((item, index) => {
+                            const miniGame = menuGames.find((candidate) => candidate.id === item.gameId || engineGameID(candidate) === item.gameId);
+                            const difficultyLabel = item.difficultyMode === "override" && item.difficulty
+                              ? difficulties.find((difficulty) => difficulty.id === item.difficulty)?.label
+                              : "hereda";
+                            return (
+                              <li key={`${item.gameId}-${index}`}>
+                                {index + 1}. {miniGame?.label || item.label || item.gameId}{difficultyLabel ? ` · ${difficultyLabel}` : ""}
+                              </li>
+                            );
+                          }) : (
+                            <li>Sin minijuegos configurados todavía.</li>
+                          )}
+                        </ul>
+                      </div>
+                    ) : (
+                      <div className="detail-rules">
+                        <span className="micro">Reglas rápidas</span>
+                        <ul>
+                          {selectedGame.rules.map((rule) => (
+                            <li key={rule}>{rule}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <p className="detail-note">
                       {isAmbientCard(selectedGame)
                         ? "Las animaciones de ambiente se pueden cambiar al instante desde esta pantalla."
+                        : isPartyCard(selectedGame)
+                          ? "El party arranca con el primer minijuego usando el mismo equipo. La puntuación acumulada se conserva en la sesión."
                         : "Revisa equipo y dificultad antes de empezar. La partida se lanza desde el botón principal."}
                     </p>
                   </>
@@ -2866,12 +3046,19 @@ function animFromPreviewFrames(frames: RGB[][]): FloorAnim | null {
   };
 }
 
-function Preview({ animationID, compact = false, src }: { animationID: string; compact?: boolean; src?: string }) {
+function Preview({ animationID, compact = false, src, srcs = [] }: { animationID: string; compact?: boolean; src?: string; srcs?: string[] }) {
   const liveLevelID = previewLevelID(animationID);
   const [livePreview, setLivePreview] = useState<AnimationPreview | null>(null);
+  const [failedSrcs, setFailedSrcs] = useState<string[]>([]);
+  const sourceCandidates = useMemo(() => uniquePreviewSources([src, ...srcs]), [src, srcs]);
+  const usableSrc = sourceCandidates.find((candidate) => !failedSrcs.includes(candidate));
 
   useEffect(() => {
-    if (!liveLevelID || src) return;
+    setFailedSrcs((failed) => failed.filter((candidate) => sourceCandidates.includes(candidate)));
+  }, [sourceCandidates]);
+
+  useEffect(() => {
+    if (!liveLevelID || usableSrc) return;
     let cancelled = false;
     cachedAnimationPreview(liveLevelID)
       .then((preview) => {
@@ -2883,14 +3070,22 @@ function Preview({ animationID, compact = false, src }: { animationID: string; c
     return () => {
       cancelled = true;
     };
-  }, [liveLevelID, src]);
+  }, [liveLevelID, usableSrc]);
 
   const previewFrames = useMemo(() => decodePreviewFrames(livePreview), [livePreview]);
   const liveAnim = useMemo(() => animFromPreviewFrames(previewFrames), [previewFrames]);
-  const anim = liveAnim || floorAnimations[animationID] || defaultFloorAnim;
+  const anim = liveAnim || floorAnimations[animationID];
   return (
     <div className={`preview ${compact ? "compact-preview" : ""}`}>
-      {src ? <img className="preview-media" src={src} alt="" aria-hidden="true" /> : <FloorPreview anim={anim} orientation="landscape" />}
+      {usableSrc ? (
+        <img className="preview-media" src={usableSrc} alt="" aria-hidden="true" onError={() => setFailedSrcs((failed) => failed.includes(usableSrc) ? failed : [...failed, usableSrc])} />
+      ) : anim ? (
+        <FloorPreview anim={anim} orientation="landscape" />
+      ) : (
+        <div className="preview-logo-fallback" aria-hidden="true">
+          <img src="/motion-levels-icon.png" alt="" />
+        </div>
+      )}
     </div>
   );
 }

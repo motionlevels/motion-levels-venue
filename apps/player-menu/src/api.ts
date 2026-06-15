@@ -99,6 +99,7 @@ export type SelectGameRequest = {
   playerCount: number;
   difficulty?: string;
   level?: string;
+  durationSeconds?: number;
   narrationEnabled?: boolean;
   teamName?: string;
   players?: Array<{

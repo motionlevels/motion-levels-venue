@@ -471,8 +471,11 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if len(status.Catalog) != 16 {
-		t.Fatalf("catalog = %d entries, want 16", len(status.Catalog))
+	if len(status.Catalog) != 17 {
+		t.Fatalf("catalog = %d entries, want 17", len(status.Catalog))
+	}
+	if !catalogHasGame(status.Catalog, "salvapantallas") {
+		t.Fatal("catalog missing salvapantallas")
 	}
 	if !catalogHasGame(status.Catalog, "temporada1-niveles") {
 		t.Fatal("catalog missing temporada1-niveles")
@@ -1034,8 +1037,8 @@ func TestGameAPIControlPauseRestartAndExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = response.Body.Close()
-	if runtime.Status().CurrentGame != "animations" {
-		t.Fatalf("exit game = %q, want animations", runtime.Status().CurrentGame)
+	if runtime.Status().CurrentGame != "salvapantallas" {
+		t.Fatalf("exit game = %q, want salvapantallas", runtime.Status().CurrentGame)
 	}
 }
 
@@ -1047,8 +1050,8 @@ func TestRuntimeStopsNonAmbientGameAfterFiveMinutesWithoutPressure(t *testing.T)
 	runtime.mu.Unlock()
 
 	status := runtime.Status()
-	if status.CurrentGame != "animations" {
-		t.Fatalf("game after no-pressure timeout = %q, want animations", status.CurrentGame)
+	if status.CurrentGame != "salvapantallas" {
+		t.Fatalf("game after no-pressure timeout = %q, want salvapantallas", status.CurrentGame)
 	}
 }
 
