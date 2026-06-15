@@ -14,6 +14,7 @@ import {
   rosterForGame,
   supportedDifficultiesForGame,
 } from "../src/catalogSync.ts";
+import { inferPlatformURL } from "../src/api.ts";
 import type { PlatformGameCatalogEntry } from "../src/api.ts";
 import type { GameCard } from "../src/catalog.ts";
 
@@ -47,6 +48,27 @@ function catalogEntry(patch: Partial<PlatformGameCatalogEntry> = {}): PlatformGa
 }
 
 describe("catalog metadata sync", () => {
+  it("uses the public platform catalog when the menu runs on a direct venue host", () => {
+    assert.equal(inferPlatformURL({
+      hostname: "motionlevels-cloud-1",
+      origin: "http://motionlevels-cloud-1",
+      pathname: "/menu/",
+      protocol: "http:",
+    }), "https://platform.motionlevels.obis.dev");
+    assert.equal(inferPlatformURL({
+      hostname: "platform.motionlevels.obis.dev",
+      origin: "https://platform.motionlevels.obis.dev",
+      pathname: "/gateways/motionlevels-cloud-1/menu/",
+      protocol: "https:",
+    }), "https://platform.motionlevels.obis.dev");
+    assert.equal(inferPlatformURL({
+      hostname: "localhost",
+      origin: "http://localhost:4103",
+      pathname: "/menu/",
+      protocol: "http:",
+    }), "http://localhost:4103");
+  });
+
   it("uses structured platform player bounds instead of stale fallback labels", () => {
     const entry = catalogEntry({ min_players: 2, max_players: 5, players_label: "2-5" });
     const fallback = { players: "1-6" };

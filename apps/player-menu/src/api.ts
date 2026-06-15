@@ -127,11 +127,22 @@ export function engineBaseURL(): string {
   return import.meta.env.VITE_GAME_ENGINE_URL || inferEngineURL();
 }
 
-function inferPlatformURL(): string {
-  if (typeof window === "undefined" || !window.location.origin || window.location.protocol === "file:") {
+const publicPlatformURL = "https://platform.motionlevels.obis.dev";
+
+export function inferPlatformURL(location: Pick<Location, "hostname" | "origin" | "pathname" | "protocol"> = window.location): string {
+  if (!location.origin || location.protocol === "file:") {
     return "";
   }
-  return window.location.origin;
+  if (location.pathname.startsWith("/gateways/")) {
+    return location.origin;
+  }
+  const hostname = location.hostname.toLowerCase();
+  const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  const isPlatformHost = hostname === "platform.motionlevels.obis.dev";
+  if (isLocalHost || isPlatformHost) {
+    return location.origin;
+  }
+  return publicPlatformURL;
 }
 
 export function platformBaseURL(): string {
