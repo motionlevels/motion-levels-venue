@@ -23,6 +23,8 @@ export type PlatformGameCatalogEntry = {
   catalog_order: number;
   catalog_thumbnail_ref?: string;
   catalog_preview_animation?: string;
+  catalog_thumbnail_url?: string;
+  catalog_preview_url?: string;
   catalog_rules?: string[];
   players_label: string;
   difficulty_label: string;

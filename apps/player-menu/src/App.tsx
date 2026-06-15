@@ -267,16 +267,38 @@ function webpPreviewRef(value: string): string {
   return value.replace(/^preview:/, "").replace(/\.(?:gif|png|webp)(?=($|[?#]))/i, ".webp");
 }
 
-function catalogThumbnailSrc(ref: string | undefined): string | undefined {
+function platformAssetURL(pathname: string): string {
+  const platformURL = platformBaseURL();
+  if (!platformURL) return pathname;
+  return `${platformURL.replace(/\/$/, "")}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
+}
+
+function catalogDirectAssetSrc(ref: string | undefined): string | undefined {
   const clean = String(ref || "").trim();
   if (!clean) return undefined;
   if (/^data:image\/gif/i.test(clean)) return undefined;
-  if (/^(?:https?:|blob:|\/)/i.test(clean)) return webpPreviewRef(clean);
+  if (/^(?:https?:|blob:)/i.test(clean)) return webpPreviewRef(clean);
   if (/^data:/i.test(clean)) return clean;
+  if (clean.startsWith("/")) return platformAssetURL(webpPreviewRef(clean));
+  return undefined;
+}
+
+function catalogThumbnailSrc(ref: string | undefined): string | undefined {
+  const direct = catalogDirectAssetSrc(ref);
+  if (direct) return direct;
+  const clean = String(ref || "").trim();
+  if (!clean || /^data:/i.test(clean)) return undefined;
   const assetName = webpPreviewRef(clean);
   const platformURL = platformBaseURL();
   if (platformURL) return `${platformURL}/api/game-catalog/thumbnails/${encodeURIComponent(assetName)}?animated=1`;
   return previewAsset(assetName);
+}
+
+function catalogPreviewSrc(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined): string | undefined {
+  return catalogDirectAssetSrc(entry.catalog_preview_url)
+    || catalogDirectAssetSrc(entry.catalog_thumbnail_url)
+    || catalogThumbnailSrc(entry.catalog_thumbnail_ref)
+    || fallback?.previewSrc;
 }
 
 function catalogPreviewAnimation(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, engineGame: string): string | undefined {
@@ -287,7 +309,7 @@ function catalogPreviewAnimation(entry: PlatformGameCatalogEntry, fallback: Game
 
 function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, index: number): GameCard {
   const engineGame = platformEntryEngineGame(entry);
-  const previewSrc = catalogThumbnailSrc(entry.catalog_thumbnail_ref) || fallback?.previewSrc;
+  const previewSrc = catalogPreviewSrc(entry, fallback);
   const playerBounds = platformPlayerBounds(entry);
   const supportedDifficulties = platformSupportedDifficulties(entry, fallback);
   const supportsLevels = platformSupportsLevels(entry, fallback);
@@ -903,8 +925,10 @@ function MenuApp() {
         if (cancelled) return;
         setStatus(next);
         setError("");
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Sin conexión con el motor");
+      } catch {
+        // Never surface the raw browser error (e.g. "Failed to fetch") on the
+        // player-facing kiosk; show a friendly Spanish status instead.
+        if (!cancelled) setError("Sin conexión con el motor");
       }
     }
     refresh();
