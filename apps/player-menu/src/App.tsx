@@ -79,7 +79,7 @@ type RemoteSessionRequest = {
 };
 
 const storageKey = "ml-player-menu-state-v1";
-const platformCatalogStorageKey = "ml-player-menu-platform-catalog-v1";
+const platformCatalogStorageKey = "ml-player-menu-platform-catalog-v2";
 const platformCatalogRefreshMillis = 5000;
 const maxPlayers = 6;
 const maxTeamNameLength = 24;
@@ -710,6 +710,7 @@ function MenuApp() {
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [platformCatalog, setPlatformCatalog] = useState<PlatformGameCatalogEntry[] | null>(() => loadCachedPlatformCatalog());
   const [catalogRefreshing, setCatalogRefreshing] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(() => platformBaseURL() !== "" && platformCatalog === null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [keyboardTarget, setKeyboardTarget] = useState<KeyboardTarget | null>(null);
@@ -758,7 +759,8 @@ function MenuApp() {
   const refreshPlatformCatalog = useCallback(async (options: { manual?: boolean } = {}) => {
     if (catalogRefreshInFlight.current) return;
     catalogRefreshInFlight.current = true;
-    if (options.manual) setCatalogRefreshing(true);
+    if (options.manual || platformCatalogRef.current === null) setCatalogRefreshing(true);
+    if (platformCatalogRef.current === null) setCatalogLoading(true);
     try {
       const next = await fetchGameCatalog();
       cachePlatformCatalog(next);
@@ -778,7 +780,8 @@ function MenuApp() {
       if (options.manual) setError("No se pudo actualizar el catálogo");
     } finally {
       catalogRefreshInFlight.current = false;
-      if (options.manual) setCatalogRefreshing(false);
+      setCatalogRefreshing(false);
+      setCatalogLoading(false);
     }
   }, []);
 
@@ -1109,11 +1112,12 @@ function MenuApp() {
   ), [platformCatalog]);
   const isGameLaunchable = useCallback((game: GameCard) => {
     if (!status) return false;
+    if (catalogLoading && isPlatformLaunchableSource(game)) return false;
     if (availableGames.has(runtimeGameID(game)) || availableGames.has(engineGameID(game))) return true;
     return isPlatformLaunchableSource(game) && (
       platformEnabledGames.has(game.id) || platformEnabledGames.has(engineGameID(game))
     );
-  }, [availableGames, platformEnabledGames, status]);
+  }, [availableGames, catalogLoading, platformEnabledGames, status]);
   const activePlayers = menu.players.filter((player) => player.active);
   const enginePlayers = statusPlayersForDisplay(status);
   const activeCategory = categories.find((category) => category.id === menu.category) || categories[0];
@@ -1756,7 +1760,11 @@ function MenuApp() {
   const introActive = screenMode === "game" && introUntil > nowMs;
   const countdownValue = screenMode === "game" && !introActive ? Math.max(0, Math.ceil((countdownUntil - nowMs) / 1000)) : 0;
   const launchIssue = !isAmbientCard(selectedGame) ? rosterIssue?.message || "" : "";
-  const launchStatusMessage = launchingGameID === selectedGame.id ? "Cargando juego" : error || launchIssue || message || (isAmbientCard(selectedGame) ? "Ambiente listo" : "Listo para jugar");
+  const launchStatusMessage = launchingGameID === selectedGame.id
+    ? "Cargando juego"
+    : catalogLoading && isPlatformLaunchableSource(selectedGame)
+      ? "Sincronizando catálogo"
+      : error || launchIssue || message || (isAmbientCard(selectedGame) ? "Ambiente listo" : "Listo para jugar");
 
   function enterBrowserFullscreen() {
     const fullscreenDocument = document as Document & { webkitFullscreenElement?: Element | null };
@@ -2209,9 +2217,11 @@ function MenuApp() {
               const engineAvailable = isGameLaunchable(selectedGame);
               const rosterBlocked = !isAmbientCard(selectedGame) && Boolean(rosterIssue);
               const levelBlocked = Boolean(selectedGame.levels?.length && !isLevelUnlocked(selectedGame, selectedLevelFor(selectedGame), menu));
+              const catalogBlocked = catalogLoading && isPlatformLaunchableSource(selectedGame);
               const launching = launchingGameID === selectedGame.id;
-              const blocked = launching || selectedGame.disabled || !engineAvailable || rosterBlocked || levelBlocked;
-              const blockedLabel = levelBlocked ? "Nivel bloqueado" : rosterBlocked ? "Revisa equipo" : selectedGame.disabled ? "Próximamente" : error ? "Sin conexión" : "No disponible";
+              const blocked = launching || catalogBlocked || selectedGame.disabled || !engineAvailable || rosterBlocked || levelBlocked;
+              const blockedLabel = catalogBlocked ? "Sincronizando" : levelBlocked ? "Nivel bloqueado" : rosterBlocked ? "Revisa equipo" : selectedGame.disabled ? "Próximamente" : error ? "Sin conexión" : "No disponible";
+              const loadingVisual = launching || catalogBlocked;
               return (
                 <div className="launch-actions">
                   {supportsNarration(selectedGame) ? (
@@ -2225,11 +2235,11 @@ function MenuApp() {
                       {narrationArmedFor(selectedGame) ? "Narración ON" : "Narración OFF"}
                     </button>
                   ) : null}
-                  <button className={`btn primary play ${launching ? "loading" : ""}`} type="button" disabled={blocked} aria-busy={launching} onClick={() => launch()}>
-                    {launching ? (
+                  <button className={`btn primary play ${loadingVisual ? "loading" : ""}`} type="button" disabled={blocked} aria-busy={loadingVisual} onClick={() => launch()}>
+                    {loadingVisual ? (
                       <>
                         <span className="launch-spinner" aria-hidden="true" />
-                        Cargando
+                        {launching ? "Cargando" : "Sincronizando"}
                       </>
                     ) : blocked ? (
                       blockedLabel
