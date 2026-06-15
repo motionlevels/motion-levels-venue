@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   closestSupportedDifficulty,
   platformDifficultyLabel,
+  platformLevelSupportedDifficulties,
   estimatedDurationLabel,
   platformDurationLabel,
   platformPlayerBounds,
@@ -95,6 +96,23 @@ describe("catalog metadata sync", () => {
 
     assert.deepEqual(supportedDifficultiesForGame(game), ["medium", "hard"]);
     assert.deepEqual(supportedDifficultiesForGame(game, { difficulties: ["hard"] }), ["hard"]);
+  });
+
+  it("uses platform level difficulty settings as the supported menu buttons", () => {
+    assert.deepEqual(
+      platformLevelSupportedDifficulties({
+        difficulty: "medium",
+        rules: {
+          difficulty_settings: {
+            easy: { life: 7 },
+            medium: { life: 5 },
+            hard: { life: 3 },
+            expert: { life: 1 },
+          },
+        },
+      }),
+      ["easy", "medium", "hard", "expert"],
+    );
   });
 
   it("never lets level metadata re-enable a difficulty disabled in the game catalog", () => {

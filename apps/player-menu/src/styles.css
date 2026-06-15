@@ -1922,8 +1922,8 @@ button.capsule:disabled,
 }
 
 .launch-difficulty-button .star-rating .filled {
-  color: var(--accent);
-  text-shadow: 0 0 10px rgba(var(--accent-rgb), 0.45);
+  color: var(--difficulty-color, var(--accent));
+  text-shadow: 0 0 10px rgba(var(--difficulty-rgb, var(--accent-rgb)), 0.45);
 }
 
 .launch-difficulty-button:hover:not(:disabled) {

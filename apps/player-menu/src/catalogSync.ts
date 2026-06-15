@@ -79,6 +79,24 @@ export function platformSupportedDifficulties(
   return fallback?.difficulties?.length ? fallback.difficulties : undefined;
 }
 
+export function platformLevelSupportedDifficulties(
+  level: { difficulties?: string[]; difficulty?: string; rules?: Record<string, unknown> },
+  fallback?: Pick<GameLevel, "difficulties">,
+): DifficultyID[] | undefined {
+  const explicit = normalizeDifficultyIDs(level.difficulties);
+  if (explicit.length) return explicit;
+
+  const settings = level.rules?.difficulty_settings;
+  if (settings && typeof settings === "object" && !Array.isArray(settings)) {
+    const configured = normalizeDifficultyIDs(Object.keys(settings));
+    if (configured.length) return configured;
+  }
+
+  const single = normalizeDifficultyIDs(level.difficulty ? [level.difficulty] : []);
+  if (single.length) return single;
+  return fallback?.difficulties?.length ? fallback.difficulties : undefined;
+}
+
 export function platformDifficultyLabel(
   entry: Pick<PlatformGameCatalogEntry, "difficulties" | "difficulty_label">,
   fallback?: Pick<GameCard, "difficulty" | "difficulties">,

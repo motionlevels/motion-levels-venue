@@ -8,9 +8,9 @@ import {
   difficultyRank,
   estimatedDurationLabel,
   normalizeEstimatedDurationSeconds,
-  normalizeDifficultyIDs,
   platformDifficultyLabel,
   platformDurationLabel,
+  platformLevelSupportedDifficulties,
   platformPlayerBounds,
   platformPlayerRangeLabel,
   platformSupportedDifficulties,
@@ -296,12 +296,12 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
     ? entry.levels.map((lvl) => {
         const levelID = String(lvl.slug || lvl.id || "").trim();
         const fallbackLevel = fallback?.levels?.find((level) => level.id === levelID || level.id === lvl.id);
-        const levelDifficulties = normalizeDifficultyIDs(lvl.difficulties?.length ? lvl.difficulties : (lvl.difficulty ? [lvl.difficulty] : []));
+        const levelDifficulties = platformLevelSupportedDifficulties(lvl, fallbackLevel);
         return {
           id: levelID || lvl.id,
           label: lvl.label,
           description: lvl.description,
-          difficulties: levelDifficulties.length ? levelDifficulties : fallbackLevel?.difficulties,
+          difficulties: levelDifficulties,
           previewSrc: fallbackLevel?.previewSrc || fallback?.previewSrc,
           previewByDifficulty: fallbackLevel?.previewByDifficulty,
           previewAnimation: fallbackLevel?.previewAnimation,
@@ -2185,7 +2185,7 @@ function MenuApp() {
                         <button
                           key={difficulty.id}
                           className={`launch-difficulty-button ${effectiveDifficulty === difficulty.id ? "active" : ""} ${supported ? "" : "unavailable"}`}
-                          style={{ "--accent": difficulty.color, "--accent-rgb": hexToRGB(difficulty.color) } as CSSProperties}
+                          style={{ "--difficulty-color": difficulty.color, "--difficulty-rgb": hexToRGB(difficulty.color) } as CSSProperties}
                           type="button"
                           disabled={!supported}
                           aria-pressed={effectiveDifficulty === difficulty.id}
