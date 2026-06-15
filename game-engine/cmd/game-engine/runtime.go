@@ -1020,7 +1020,7 @@ func applyPlataformasAudioConfig(cfg config, game floorGame) config {
 		if refs.DefeatCueRef != "" {
 			cfg.DefeatCueRef = refs.DefeatCueRef
 		}
-	} else if cfg.Game == "animations" || cfg.Game == "animation-random" || strings.HasPrefix(cfg.Game, "animation-") {
+	} else if cfg.Game == "animations" || strings.HasPrefix(cfg.Game, "animation-") {
 		provider, ok := game.(interface {
 			AudioRefs() animations.AudioRefs
 		})
@@ -1729,9 +1729,6 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 	case "animations":
 		log.Printf("game: animations players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 		return animations.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL)
-	case "animation-random":
-		log.Printf("game: animation-random players=%d difficulty=%s", cfg.PlayerCount, cfg.Difficulty)
-		return animations.NewRandomRotationWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.PlatformURL)
 	case "temporada1":
 		log.Printf("game: temporada1 players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 		return temporada1.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level)
@@ -1968,6 +1965,9 @@ func configForSelection(base config, game string, players int) config {
 	case "patrones":
 		cfg.PlayerCount = clampInt(players, 1, 6)
 		cfg.Level = patrones.NormalizeLevel(cfg.Level)
+	case "animations":
+		cfg.PlayerCount = 1
+		cfg.Level = ""
 	default:
 	}
 	cfg.MusicRef, cfg.MusicVolume = defaultMusicForGame(cfg.Game)
@@ -2082,7 +2082,7 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 		{
 			Game:        "plataformas",
 			Label:       "Plataformas",
-			Description: "Niveles publicados desde la plataforma, creados como secuencias reutilizables de fotogramas.",
+			Description: "Niveles visibles desde la plataforma, creados como secuencias reutilizables de fotogramas.",
 			Music:       plataformas.DefaultMusicRef,
 			Players:     true,
 			MinPlayers:  1,
@@ -2165,17 +2165,6 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 			Game:        "animations",
 			Label:       "Animaciones",
 			Description: "Modo reposo para reproducir animaciones y efectos desde la plataforma.",
-			Music:       loopMusicRef,
-			Players:     false,
-			MinPlayers:  1,
-			MaxPlayers:  1,
-			Difficulty:  false,
-			Volume:      0.10,
-		},
-		{
-			Game:        "animation-random",
-			Label:       "Aleatorio 60s",
-			Description: "Modo ambiente que reproduce una animación publicada durante 60 segundos y salta a otra al azar.",
 			Music:       loopMusicRef,
 			Players:     false,
 			MinPlayers:  1,

@@ -36,7 +36,7 @@ func Color(mode string, x, y int, seconds float64) RGB {
 
 func IsAmbientMode(mode string) bool {
 	switch mode {
-	case "animations", "animation-random", "ambient-comet", "ambient-pulse", "ambient-spark":
+	case "animations", "ambient-comet", "ambient-pulse", "ambient-spark":
 		return true
 	default:
 		return false

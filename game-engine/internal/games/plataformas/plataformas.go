@@ -1016,7 +1016,7 @@ func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
 		levels = append(levels, compiled)
 	}
 	if len(levels) == 0 {
-		return nil, fmt.Errorf("no published levels returned")
+		return nil, fmt.Errorf("no visible levels returned")
 	}
 	return levels, nil
 }

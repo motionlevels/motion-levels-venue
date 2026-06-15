@@ -60,6 +60,7 @@ type CompiledLevel struct {
 	settingsHash   string
 	label          string
 	description    string
+	featured       bool
 	frameTick      time.Duration
 	totalDuration  time.Duration
 	frames         []compiledFrame
@@ -72,6 +73,7 @@ type CompiledLevel struct {
 func (cl CompiledLevel) ID() string           { return cl.id }
 func (cl CompiledLevel) Label() string        { return cl.label }
 func (cl CompiledLevel) Description() string  { return cl.description }
+func (cl CompiledLevel) Featured() bool       { return cl.featured }
 func (cl CompiledLevel) MusicRef() string     { return cl.audio.MusicRef }
 func (cl CompiledLevel) MusicVolume() float64 { return cl.audio.MusicVolume }
 
@@ -113,7 +115,6 @@ func New(now time.Time, playerCount int, difficulty string, level string, platfo
 }
 
 func NewWithSeed(now time.Time, seed int64, playerCount int, difficulty string, level string, platformURL string) *Game {
-	_ = seed
 	_ = playerCount
 	_ = difficulty
 	levels, err := GetOrFetchLevels(platformURL)
@@ -121,7 +122,7 @@ func NewWithSeed(now time.Time, seed int64, playerCount int, difficulty string, 
 		log.Printf("animations: cloud animation fetch failed: %v", err)
 		levels = fallbackCompiledLevels()
 	}
-	selected := selectLevel(levels, NormalizeLevel(level))
+	selected := selectLevelForStart(levels, NormalizeLevel(level), seed, now)
 	return &Game{
 		level:          selected,
 		startedAt:      now,
@@ -425,6 +426,7 @@ type cloudLevel struct {
 
 type cloudRules struct {
 	AnimationSource animationSource `json:"animation_source"`
+	CatalogFeatured bool            `json:"catalog_featured"`
 }
 
 type animationSource struct {
@@ -584,6 +586,7 @@ func compileCloudLevels(raw []cloudLevel) ([]CompiledLevel, error) {
 			settingsHash: strings.TrimSpace(level.SettingsHash),
 			label:        level.Label,
 			description:  level.Description,
+			featured:     level.Rules.CatalogFeatured,
 			frameTick:    frameTick,
 			tileEffects:  map[int]compiledTileEffect{},
 			audio:        normalizeAudioRefs(level),
@@ -643,7 +646,7 @@ func compileCloudLevels(raw []cloudLevel) ([]CompiledLevel, error) {
 		levels = append(levels, compiled)
 	}
 	if len(levels) == 0 {
-		return nil, fmt.Errorf("no published animations returned")
+		return nil, fmt.Errorf("no visible animations returned")
 	}
 	return levels, nil
 }
@@ -782,6 +785,26 @@ func selectLevel(levels []CompiledLevel, id string) CompiledLevel {
 		}
 	}
 	return levels[0]
+}
+
+func selectLevelForStart(levels []CompiledLevel, id string, seed int64, now time.Time) CompiledLevel {
+	if len(levels) == 0 {
+		return CompiledLevel{}
+	}
+	if strings.TrimSpace(id) != "" {
+		return selectLevel(levels, id)
+	}
+	candidates := make([]CompiledLevel, 0, len(levels))
+	for _, level := range levels {
+		if level.featured {
+			candidates = append(candidates, level)
+		}
+	}
+	if len(candidates) == 0 {
+		candidates = levels
+	}
+	index := int(uintHashFloat(float64(seed)/9973.0+float64(now.UnixNano()%1_000_000)) % uint32(len(candidates)))
+	return candidates[index]
 }
 
 func PreviewFrames(platformURL string, id string, frameCount int) ([]PreviewFrame, error) {

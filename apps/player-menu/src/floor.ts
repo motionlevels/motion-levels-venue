@@ -117,20 +117,6 @@ const ambientComet: FloorAnim = (x, y, cols, rows, t) => {
   return hsv(baseHue, 0.82, clamp01(glow));
 };
 
-const animationRandom: FloorAnim = (x, y, cols, rows, t) => {
-  const previewSegment = Math.floor(t / 6) % 4;
-  switch (previewSegment) {
-    case 0:
-      return loop(x, y, cols, rows, t);
-    case 1:
-      return ambientComet(x, y, cols, rows, t);
-    case 2:
-      return ambientPulse(x, y, cols, rows, t);
-    default:
-      return ambientSpark(x, y, cols, rows, t);
-  }
-};
-
 // Ambient pulse: soft waves expand from the center with a calmer lobby feel.
 const ambientPulse: FloorAnim = (x, y, cols, rows, t) => {
   const cx = (cols - 1) / 2;
@@ -594,7 +580,6 @@ export const floorAnimations: Record<string, FloorAnim> = {
   "whack-a-mole": whackAMole,
   "simon-dice": simonDice,
   animations: loop,
-  "animation-random": animationRandom,
   "ambient-comet": ambientComet,
   "ambient-pulse": ambientPulse,
   "ambient-spark": ambientSpark,

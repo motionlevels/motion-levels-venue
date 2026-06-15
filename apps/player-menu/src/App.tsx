@@ -239,8 +239,8 @@ function liveAnimationCards(catalog: EngineGame[] | undefined): GameCard[] {
       duration: "Bucle",
       mode: "Ambiente",
       audio: entry.music ? "Música" : "Suave",
-      description: entry.description || "Animación publicada desde el editor.",
-      rules: ["Animación publicada desde el editor.", "Se actualiza desde el motor sin reiniciar el menú."],
+      description: entry.description || "Animación visible desde el editor.",
+      rules: ["Animación visible desde el editor.", "Se actualiza desde el motor sin reiniciar el menú."],
       engineGame: entry.game,
       previewAnimation: entry.game,
       featured: false,
@@ -295,6 +295,9 @@ function catalogThumbnailSrc(ref: string | undefined): string | undefined {
 }
 
 function catalogPreviewSrc(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined): string | undefined {
+  if (entry.source_kind === "engine_hardcoded" && fallback?.previewAnimation) {
+    return fallback.previewSrc;
+  }
   return catalogDirectAssetSrc(entry.catalog_preview_url)
     || catalogDirectAssetSrc(entry.catalog_thumbnail_url)
     || catalogThumbnailSrc(entry.catalog_thumbnail_ref)
@@ -343,7 +346,7 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
     estimatedDurationSeconds,
     mode: entry.mode_label || fallback?.mode || "",
     audio: entry.audio_label || fallback?.audio || "",
-    description: entry.description || fallback?.description || "Juego publicado desde el catálogo.",
+    description: entry.description || fallback?.description || "Juego visible desde el catálogo.",
     rules: entry.catalog_rules?.length ? entry.catalog_rules : fallback?.rules || ["Configurable desde la página Juegos."],
     featured: typeof entry.catalog_featured === "boolean" ? entry.catalog_featured : fallback?.featured === true || entry.catalog_category === "featured",
     levels,

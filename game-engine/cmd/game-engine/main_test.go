@@ -471,11 +471,8 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if len(status.Catalog) != 17 {
-		t.Fatalf("catalog = %d entries, want 17", len(status.Catalog))
-	}
-	if !catalogHasGame(status.Catalog, "animation-random") {
-		t.Fatal("catalog missing animation-random")
+	if len(status.Catalog) != 16 {
+		t.Fatalf("catalog = %d entries, want 16", len(status.Catalog))
 	}
 	if !catalogHasGame(status.Catalog, "temporada1-niveles") {
 		t.Fatal("catalog missing temporada1-niveles")
