@@ -212,7 +212,7 @@ function isAmbientCard(game: GameCard): boolean {
 }
 
 function isPartyCard(game: GameCard): boolean {
-  return game.category === "party";
+  return Boolean(game.partyMiniGames?.length) || String(game.category) === "party";
 }
 
 function isFeaturedCard(game: GameCard): boolean {
@@ -221,6 +221,13 @@ function isFeaturedCard(game: GameCard): boolean {
 
 function isScreensaverCard(game: Pick<GameCard, "engineGame" | "id">): boolean {
   return engineGameID(game) === "salvapantallas" || game.id === "salvapantallas";
+}
+
+function isLegacyAnimationsAggregate(value: Pick<GameCard, "engineGame" | "id"> | PlatformGameCatalogEntry): boolean {
+  if ("engine_game" in value) {
+    return value.id === "animations" || platformEntryEngineGame(value) === "animations";
+  }
+  return value.id === "animations" || engineGameID(value) === "animations";
 }
 
 function gamesForCategory(catalogGames: GameCard[], category: CategoryID): GameCard[] {
@@ -432,7 +439,10 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
       })
     : supportsLevels ? fallback?.levels : undefined;
   const duration = platformDurationLabel(entry, fallback) || (levels?.length ? `${levels.length} niveles` : "");
-  const category = partyMiniGames?.length ? "party" : isCategoryID(entry.catalog_category) ? entry.catalog_category : fallback?.category || "arcade";
+  const fallbackCategory = String(fallback?.category || "") === "party" ? "versus" : fallback?.category;
+  const category = partyMiniGames?.length
+    ? "versus"
+    : isCategoryID(entry.catalog_category) ? entry.catalog_category : fallbackCategory || "arcade";
   return {
     id: entry.id,
     label: entry.label || fallback?.label || engineGame,
@@ -473,7 +483,7 @@ function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalo
   const baseOrder = new Map(baseGames.map((game, index) => [game.id, index]));
   const catalogOrderByID = new Map(catalog.map((entry) => [entry.id, entry.catalog_order]));
   const catalogOrderByEngine = new Map(catalog.map((entry) => [platformEntryEngineGame(entry), entry.catalog_order]));
-  const enabledCatalog = catalog.filter((entry) => entry.catalog_enabled !== false);
+  const enabledCatalog = catalog.filter((entry) => entry.catalog_enabled !== false && !isLegacyAnimationsAggregate(entry));
   const platformGames = enabledCatalog
     .map((entry, index) => platformEntryToGameCard(
       entry,
@@ -481,7 +491,8 @@ function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalo
       index,
     ));
   const remainingBaseGames = baseGames.filter((game) => (
-    !catalog.some((entry) => platformEntryMatchesGame(entry, game) && entry.catalog_enabled === false)
+    !isLegacyAnimationsAggregate(game)
+    && !catalog.some((entry) => platformEntryMatchesGame(entry, game) && entry.catalog_enabled === false)
     && !enabledCatalog.some((entry) => platformEntryMatchesGame(entry, game))
   ));
   return [...platformGames, ...remainingBaseGames]

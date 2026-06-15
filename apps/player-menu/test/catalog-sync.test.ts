@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   closestSupportedDifficulty,
   platformDifficultyLabel,
@@ -17,6 +20,9 @@ import {
 import { inferPlatformURL } from "../src/api.ts";
 import type { PlatformGameCatalogEntry } from "../src/api.ts";
 import type { GameCard } from "../src/catalog.ts";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function catalogEntry(patch: Partial<PlatformGameCatalogEntry> = {}): PlatformGameCatalogEntry {
   return {
@@ -171,5 +177,23 @@ describe("catalog metadata sync", () => {
   it("keeps legacy category defaults for static cards without structured bounds", () => {
     assert.deepEqual(playerBoundsForGame({ id: "solo", category: "individual" }), { minPlayers: 1, maxPlayers: 1 });
     assert.deepEqual(playerBoundsForGame({ id: "duel", category: "versus" }), { minPlayers: 2, maxPlayers: 4 });
+  });
+
+  it("does not expose the retired aggregate animations launcher", () => {
+    const catalogSource = fs.readFileSync(path.resolve(__dirname, "../src/catalog.ts"), "utf8");
+    const staticGamesSource = catalogSource
+      .slice(catalogSource.indexOf("export const games: GameCard[] = ["))
+      .split("\n];")[0];
+
+    assert.equal(/id:\s*"animations"/.test(staticGamesSource), false);
+    assert.match(staticGamesSource, /id:\s*"salvapantallas"[\s\S]*?engineGame:\s*"salvapantallas"/);
+  });
+
+  it("keeps party inside the competitive menu category", () => {
+    const catalogSource = fs.readFileSync(path.resolve(__dirname, "../src/catalog.ts"), "utf8");
+
+    assert.equal(/\|\s*"party"/.test(catalogSource), false);
+    assert.equal(/id:\s*"party"/.test(catalogSource), false);
+    assert.match(catalogSource, /id:\s*"versus"[\s\S]*?label:\s*"Competitivos"/);
   });
 });

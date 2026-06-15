@@ -245,12 +245,16 @@ func TestRandomRotationSwitchesEveryMinuteWithoutImmediateRepeat(t *testing.T) {
 func TestScreensaverRefreshesAndPrefersFeaturedAnimations(t *testing.T) {
 	resetAnimationLevelCacheForTest(t)
 	requests := 0
+	releaseFirst := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/level-games/animations/levels" {
 			http.NotFound(w, r)
 			return
 		}
 		requests++
+		if requests == 1 {
+			<-releaseFirst
+		}
 		featuredSlug := "featured-a"
 		if requests > 1 {
 			featuredSlug = "featured-b"
@@ -264,16 +268,37 @@ func TestScreensaverRefreshesAndPrefersFeaturedAnimations(t *testing.T) {
 	defer server.Close()
 
 	game := NewScreensaverWithSeed(time.Unix(0, 0), 7, 1, "", server.URL, time.Second)
-	if game.level.id != "featured-a" {
-		t.Fatalf("initial screensaver level = %q, want featured-a", game.level.id)
+	if game.level.id != "salvapantallas" {
+		t.Fatalf("initial screensaver fallback = %q, want salvapantallas", game.level.id)
 	}
+	close(releaseFirst)
+	waitForScreensaverLevel(t, game, "featured-a")
+
+	game.mu.Lock()
 	game.updateRotationLocked(time.Unix(1, 0))
-	if game.level.id != "featured-b" {
-		t.Fatalf("rotated screensaver level = %q, want refreshed featured-b", game.level.id)
-	}
+	game.mu.Unlock()
+	waitForScreensaverLevel(t, game, "featured-b")
 	if requests < 2 {
 		t.Fatalf("platform requests = %d, want at least 2", requests)
 	}
+}
+
+func waitForScreensaverLevel(t *testing.T, game *Game, want string) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		game.mu.Lock()
+		got := game.level.id
+		game.mu.Unlock()
+		if got == want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	game.mu.Lock()
+	got := game.level.id
+	game.mu.Unlock()
+	t.Fatalf("screensaver level = %q, want %q", got, want)
 }
 
 func TestScreensaverFallsBackToVisibleAnimationsWhenNoFeaturedExist(t *testing.T) {

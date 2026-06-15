@@ -45,7 +45,7 @@ export const playerColors = [
 export const playerColorNames = ["Rojo", "Cian", "Verde", "Rosa", "Azul", "Amarillo", "Naranja", "Morado"];
 export const nameHints = playerColorNames;
 
-export type CategoryID = "featured" | "team" | "versus" | "individual" | "arcade" | "party" | "attract";
+export type CategoryID = "featured" | "team" | "versus" | "individual" | "arcade" | "attract";
 
 export type Category = {
   id: CategoryID;
@@ -61,7 +61,6 @@ export const categories: Category[] = [
   { id: "versus", label: "Competitivos", title: "Cara a cara", color: colors.blue, icon: "⚔️" },
   { id: "individual", label: "Individual", title: "Retos individuales", color: colors.blue, icon: "👤" },
   { id: "arcade", label: "Arcade", title: "Arcade", color: colors.blue, icon: "🎮" },
-  { id: "party", label: "Party", title: "Minijuegos en cadena", color: colors.blue, icon: "🎲" },
   { id: "attract", label: "Ambiente", title: "Modos ambiente", color: colors.blue, icon: "🏞️" },
 ];
 
@@ -363,23 +362,6 @@ export const games: GameCard[] = [
     rules: ["Rota automaticamente cada 60 segundos.", "Usa destacadas primero.", "Actualiza la lista al cambiar de animacion."],
     engineGame: "salvapantallas",
     thumbnailSrc: "/motion-levels-icon.webp",
-  },
-  {
-    id: "animations",
-    label: "Animaciones",
-    category: "attract",
-    color: colors.cyan,
-    players: "Todos",
-    difficulty: "Ambiente",
-    duration: "Bucle",
-    minPlayers: 1,
-    maxPlayers: 6,
-    mode: "Ambiente",
-    audio: "Suave",
-    description: "Modo reposo para reproducir animaciones y efectos desde la plataforma.",
-    rules: ["Reproduce animaciones en bucle.", "Baldosas con efectos de sonido al pisar.", "Ideal para espera y decoración."],
-    engineGame: "animations",
-    previewAnimation: "animations",
   },
   {
     id: "saltos",

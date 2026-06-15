@@ -197,12 +197,21 @@ type cloudLevel struct {
 }
 
 type levelRules struct {
-	VictoryCondition          string `json:"victory_condition"`
-	RedFloorAnimation         string `json:"red_floor_animation"`
-	GreenPlatformDisappear    bool   `json:"green_platform_disappear"`
-	GreenPlatformImpactRipple bool   `json:"green_platform_impact_ripple"`
-	BluePlatformTurnGreen     bool   `json:"blue_platform_turn_green"`
-	BluePlatformCaptureArea   bool   `json:"blue_platform_capture_area"`
+	VictoryCondition          string                       `json:"victory_condition"`
+	DifficultySettings        map[string]difficultySetting `json:"difficulty_settings"`
+	RedFloorAnimation         string                       `json:"red_floor_animation"`
+	GreenPlatformDisappear    bool                         `json:"green_platform_disappear"`
+	GreenPlatformImpactRipple bool                         `json:"green_platform_impact_ripple"`
+	BluePlatformTurnGreen     bool                         `json:"blue_platform_turn_green"`
+	BluePlatformCaptureArea   bool                         `json:"blue_platform_capture_area"`
+}
+
+type difficultySetting struct {
+	Life                     int     `json:"life"`
+	FrameDurationMS          int     `json:"frame_duration_ms"`
+	GameplayLives            int     `json:"gameplay_lives"`
+	GameplayTimeLimitSeconds int     `json:"gameplay_time_limit_seconds"`
+	SpeedMultiplier          float64 `json:"speed_multiplier"`
 }
 
 type rawFrame struct {
@@ -970,6 +979,28 @@ func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
 		if frameTick <= 0 {
 			frameTick = tickDuration
 		}
+		lives := level.Life
+		timeLimit := time.Duration(level.TimeLimitSeconds) * time.Second
+		if settings, ok := level.Rules.DifficultySettings[strings.ToLower(strings.TrimSpace(level.Difficulty))]; ok {
+			if settings.Life > 0 {
+				lives = settings.Life
+			}
+			if settings.GameplayLives > 0 {
+				lives = settings.GameplayLives
+			}
+			if settings.GameplayTimeLimitSeconds > 0 {
+				timeLimit = time.Duration(settings.GameplayTimeLimitSeconds) * time.Second
+			}
+			if settings.FrameDurationMS > 0 {
+				frameTick = time.Duration(settings.FrameDurationMS) * time.Millisecond
+			}
+			if settings.SpeedMultiplier > 0 {
+				frameTick = time.Duration(float64(frameTick) / settings.SpeedMultiplier)
+				if frameTick < 10*time.Millisecond {
+					frameTick = 10 * time.Millisecond
+				}
+			}
+		}
 		winCondition := strings.TrimSpace(level.Rules.VictoryCondition)
 		if winCondition != "score_at_least" {
 			winCondition = "collect_all"
@@ -979,9 +1010,9 @@ func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
 			settingsHash:  strings.TrimSpace(level.SettingsHash),
 			label:         level.Label,
 			description:   level.Description,
-			lives:         level.Life,
+			lives:         lives,
 			passScore:     level.PassScore,
-			timeLimit:     time.Duration(level.TimeLimitSeconds) * time.Second,
+			timeLimit:     timeLimit,
 			frameTick:     frameTick,
 			winCondition:  winCondition,
 			redAnimation:  normalizeRedFloorAnimation(level.Rules.RedFloorAnimation),

@@ -102,6 +102,7 @@ type Game struct {
 	rotationSeed      int64
 	rotationEvery     time.Duration
 	rotationIndex     int64
+	refreshInFlight   bool
 	startedAt         time.Time
 	pressed           map[Point]bool
 	pressureEvents    map[Point]time.Time
@@ -147,18 +148,13 @@ func NewScreensaverWithSeed(now time.Time, seed int64, playerCount int, difficul
 	if rotationEvery <= 0 {
 		rotationEvery = rotationDuration
 	}
-	levels, err := RefreshLevels(platformURL)
-	if err != nil {
-		log.Printf("animations: cloud animation fetch failed: %v", err)
-		if cached, cachedErr := GetOrFetchLevels(platformURL); cachedErr == nil {
-			levels = cached
-		} else {
-			levels = fallbackCompiledLevels()
-		}
+	levels := CachedLevels()
+	if len(levels) == 0 {
+		levels = screensaverFallbackLevels()
 	}
 	levels = screensaverLevels(levels)
 	selected := rotatingLevelAt(levels, seed, 0, -1)
-	return &Game{
+	game := &Game{
 		level:             selected,
 		levels:            levels,
 		platformURL:       platformURL,
@@ -170,6 +166,8 @@ func NewScreensaverWithSeed(now time.Time, seed int64, playerCount int, difficul
 		pressed:           map[Point]bool{},
 		pressureEvents:    map[Point]time.Time{},
 	}
+	game.startRefresh()
+	return game
 }
 
 func (g *Game) Press(event whackamole.PressEvent, now time.Time) []whackamole.Event {
@@ -382,17 +380,43 @@ func (g *Game) updateRotationLocked(now time.Time) {
 		return
 	}
 	if g.refreshOnRotation {
-		if levels, err := RefreshLevels(g.platformURL); err != nil {
-			log.Printf("animations: screensaver refresh failed: %v", err)
-		} else if candidates := screensaverLevels(levels); len(candidates) > 0 {
-			g.levels = candidates
-		}
+		g.startRefreshLocked()
 	}
 	previous := indexOfLevel(g.levels, g.level.id)
 	g.level = rotatingLevelAt(g.levels, g.rotationSeed, nextRotationIndex, previous)
 	g.rotationIndex = nextRotationIndex
 	g.pressed = map[Point]bool{}
 	g.pressureEvents = map[Point]time.Time{}
+}
+
+func (g *Game) startRefresh() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.startRefreshLocked()
+}
+
+func (g *Game) startRefreshLocked() {
+	if !g.refreshOnRotation || g.refreshInFlight || strings.TrimSpace(g.platformURL) == "" {
+		return
+	}
+	g.refreshInFlight = true
+	platformURL := g.platformURL
+	go func() {
+		levels, err := RefreshLevels(platformURL)
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		g.refreshInFlight = false
+		if err != nil {
+			log.Printf("animations: screensaver refresh failed: %v", err)
+			return
+		}
+		if candidates := screensaverLevels(levels); len(candidates) > 0 {
+			g.levels = candidates
+			if indexOfLevel(g.levels, g.level.id) < 0 {
+				g.level = rotatingLevelAt(g.levels, g.rotationSeed, g.rotationIndex, -1)
+			}
+		}
+	}()
 }
 
 func screensaverLevels(levels []CompiledLevel) []CompiledLevel {
@@ -569,6 +593,17 @@ var (
 	cachedLevels []CompiledLevel
 	cacheExpire  time.Time
 )
+
+func CachedLevels() []CompiledLevel {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	if len(cachedLevels) == 0 {
+		return nil
+	}
+	levels := make([]CompiledLevel, len(cachedLevels))
+	copy(levels, cachedLevels)
+	return levels
+}
 
 func GetOrFetchLevels(platformURL string) ([]CompiledLevel, error) {
 	cacheMu.Lock()
@@ -986,6 +1021,26 @@ func fallbackCompiledLevels() []CompiledLevel {
 		compiled.frames = append(compiled.frames, next)
 	}
 
+	return []CompiledLevel{compiled}
+}
+
+func screensaverFallbackLevels() []CompiledLevel {
+	compiled := CompiledLevel{
+		id:            "salvapantallas",
+		label:         "Salvapantallas",
+		description:   "Esperando animaciones visibles de la plataforma.",
+		frameTick:     50 * time.Millisecond,
+		totalDuration: time.Second,
+		tileEffects: map[int]compiledTileEffect{
+			0: {label: "Reposo", color: RGB{}, press: "safe"},
+		},
+		audio: AudioRefs{
+			MusicRef:    DefaultMusicRef,
+			MusicVolume: DefaultMusicVolume,
+		},
+	}
+	next := compiledFrame{duration: time.Second}
+	compiled.frames = append(compiled.frames, next)
 	return []CompiledLevel{compiled}
 }
 

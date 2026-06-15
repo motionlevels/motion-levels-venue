@@ -126,6 +126,39 @@ func TestParkourLavaRuleAnimatesRedTiles(t *testing.T) {
 	}
 }
 
+func TestDifficultySettingsOverrideRuntimeTimingAndLimits(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:             "level-1",
+		Label:            "Tuned difficulty",
+		Difficulty:       string(DifficultyMedium),
+		Life:             5,
+		TimeLimitSeconds: 30,
+		FrameTickMS:      40,
+		Rules: levelRules{DifficultySettings: map[string]difficultySetting{
+			string(DifficultyMedium): {
+				Life:                     4,
+				GameplayLives:            8,
+				GameplayTimeLimitSeconds: 90,
+				FrameDurationMS:          50,
+				SpeedMultiplier:          2,
+			},
+		}},
+		Frames: []rawFrame{{Repeat: 2, Cells: []cellTuple{{X: 5, Y: 5, Kind: 0}}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := levels[0].lives; got != 8 {
+		t.Fatalf("lives = %d, want gameplay override", got)
+	}
+	if got := levels[0].timeLimit; got != 90*time.Second {
+		t.Fatalf("timeLimit = %s, want 90s", got)
+	}
+	if got := levels[0].frameTick; got != 25*time.Millisecond {
+		t.Fatalf("frameTick = %s, want speed-adjusted 25ms", got)
+	}
+}
+
 func TestGreenPlatformDisappearRuleTransitionsToNextFrameColor(t *testing.T) {
 	levels, err := compileCloudLevels([]cloudLevel{{
 		Slug:        "level-1",
