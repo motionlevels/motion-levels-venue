@@ -56,6 +56,7 @@
     motion_levels_health_urls:
       - http://127.0.0.1/controller/status
       - http://127.0.0.1/engine/api/status
+      - http://127.0.0.1/stack.json
       - http://127.0.0.1/menu/
       - http://127.0.0.1/display/
       - http://127.0.0.1:4101/status
@@ -199,6 +200,34 @@
         mode: "0644"
         remote_src: true
         force: false
+
+    - name: Resolve local deployed stack revision
+      ansible.builtin.command:
+        cmd: git rev-parse --short=7 HEAD
+        chdir: "{{ motion_levels_repo_root }}"
+      delegate_to: localhost
+      register: motion_levels_stack_revision
+      changed_when: false
+
+    - name: Resolve local deployed stack commit date
+      ansible.builtin.command:
+        cmd: git show -s --format=%cI HEAD
+        chdir: "{{ motion_levels_repo_root }}"
+      delegate_to: localhost
+      register: motion_levels_stack_commit_at
+      changed_when: false
+
+    - name: Install deployed stack metadata
+      ansible.builtin.copy:
+        dest: /etc/motion-levels/stack.json
+        mode: "0644"
+        content: |
+          {
+            "revision": "{{ motion_levels_stack_revision.stdout }}",
+            "commit_at": "{{ motion_levels_stack_commit_at.stdout }}",
+            "deployed_at": "{{ ansible_date_time.iso8601 }}",
+            "target": "{{ inventory_hostname }}"
+          }
 
     - name: Check platform env exists
       ansible.builtin.stat:

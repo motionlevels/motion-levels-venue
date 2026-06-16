@@ -28,6 +28,11 @@
 		reverse_proxy 127.0.0.1:4104
 	}
 
+	handle /stack.json {
+		root * /etc/motion-levels
+		file_server
+	}
+
 	redir /status /engine/api/status
 	redir / /menu/
 }
