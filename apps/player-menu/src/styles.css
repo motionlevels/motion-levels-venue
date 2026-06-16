@@ -1904,10 +1904,9 @@ button.capsule:disabled,
 
 .level-mode-panel {
   min-width: 0;
-  padding: 12px;
+  padding: 8px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
   align-items: stretch;
   border: 1px solid rgba(var(--accent-rgb), 0.24);
   border-radius: var(--r-sm);
@@ -1916,37 +1915,9 @@ button.capsule:disabled,
     rgba(7, 12, 20, 0.72);
 }
 
-.level-mode-copy {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: baseline;
-  gap: 5px;
-}
-
-.level-mode-copy .micro {
-  grid-column: 1;
-}
-
-.level-mode-copy strong {
-  grid-column: 2;
-  color: var(--text);
-  font-size: 20px;
-  line-height: 1;
-}
-
-.level-mode-copy p {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--soft);
-  font-size: 14px;
-  font-weight: 750;
-  line-height: 1.28;
-}
-
 .level-mode-toggle {
   min-width: 0;
-  min-height: 84px;
+  min-height: 70px;
   padding: 4px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1958,7 +1929,7 @@ button.capsule:disabled,
 
 .level-mode-toggle button {
   min-width: 0;
-  min-height: 76px;
+  min-height: 62px;
   padding: 8px 12px;
   display: grid;
   place-items: center;

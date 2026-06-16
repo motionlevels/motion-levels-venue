@@ -1552,15 +1552,11 @@ function MenuApp() {
   const selectedLevelProgress = progressFor(selectedGame, menu);
   const selectedLevelMode = levelModeFor(selectedGame, menu);
   const selectedChallengeRun = challengeRunFor(selectedGame, menu);
-  const selectedChallengeNext = challengeNextLevel(selectedGame, menu);
   const selectedLevelIndex = selectedLevel && selectedGame.levels?.length ? selectedGame.levels.findIndex((level) => level.id === selectedLevel.id) + 1 : 0;
   const selectedLevelDisplayLabel = playerLevelLabel(selectedLevel, selectedLevelIndex > 0 ? selectedLevelIndex - 1 : undefined);
-  const selectedChallengeNextIndex = selectedChallengeNext && selectedGame.levels?.length ? selectedGame.levels.findIndex((level) => level.id === selectedChallengeNext.id) : -1;
-  const selectedChallengeNextLabel = playerLevelLabel(selectedChallengeNext || selectedLevel, selectedChallengeNextIndex);
   const selectedLevelBest = selectedLevel ? selectedLevelProgress.bestByLevel[selectedLevel.id] : undefined;
   const selectedLevelBestTime = selectedLevel ? selectedLevelProgress.bestTimeByLevel[selectedLevel.id] : undefined;
   const selectedLevelBestLabel = selectedLevelBestTime ? formatBestTime(selectedLevelBestTime) : selectedLevelBest ? difficulties.find((difficulty) => difficulty.id === selectedLevelBest)?.label || selectedLevelBest : "Sin superar";
-  const selectedLevelModeLabel = selectedLevelMode === "challenge" ? "Reto" : "Libre";
   const selectedChallengeProgressLabel = selectedGame.levels?.length
     ? `${Object.keys(selectedChallengeRun?.completedLevels || {}).length}/${selectedGame.levels.length}`
     : "0/0";
@@ -2627,15 +2623,6 @@ function MenuApp() {
                       </div>
                     </section>
                     <section className="level-mode-panel" aria-label="Modo de niveles">
-                      <div className="level-mode-copy">
-                        <span className="micro">Modo</span>
-                        <strong>{selectedLevelModeLabel}</strong>
-                        <p>
-                          {selectedLevelMode === "challenge"
-                            ? `Completa los niveles en orden. Siguiente: ${selectedChallengeNextLabel}.`
-                            : "Elige cualquier nivel para practicar sin afectar el ranking."}
-                        </p>
-                      </div>
                       <div className="level-mode-toggle" role="group" aria-label="Cambiar modo de niveles">
                         <button
                           className={selectedLevelMode === "challenge" ? "active" : ""}
