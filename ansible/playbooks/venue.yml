@@ -46,10 +46,10 @@
     motion_levels_services:
       - motion-levels-floor-controller.service
       - motion-levels-game-engine.service
-      - motion-levels-player-display.service
-      - motion-levels-player-menu.service
       - motion-levels-kiosk.service
     motion_levels_old_services:
+      - motion-levels-player-menu.service
+      - motion-levels-player-display.service
       - motion-levels-player-tv.service
       - motion-levels-camera-helper.service
       - motion-levels.service
@@ -61,8 +61,6 @@
       - http://127.0.0.1/display/
       - http://127.0.0.1:4101/status
       - http://127.0.0.1:4102/api/status
-      - http://127.0.0.1:4103/
-      - http://127.0.0.1:4104/
     motion_levels_sync_items:
       - src: go.mod
         dest: "{{ motion_levels_remote_src }}/"
@@ -268,6 +266,15 @@
         state: stopped
       loop: "{{ motion_levels_old_services }}"
       failed_when: false
+
+    - name: Remove retired frontend static service units
+      ansible.builtin.file:
+        path: "/etc/systemd/system/{{ item }}"
+        state: absent
+      loop:
+        - motion-levels-player-menu.service
+        - motion-levels-player-display.service
+      notify: Reload systemd
 
     - name: Install systemd service units
       ansible.builtin.copy:

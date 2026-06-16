@@ -127,12 +127,6 @@ write_files:
       # Motion Levels local appliance defaults.
       MOTION_LEVELS_CONTROLLER_HTTP=127.0.0.1:4101
       MOTION_LEVELS_ENGINE_HTTP=127.0.0.1:4102
-      MOTION_LEVELS_PLAYER_MENU_HTTP=127.0.0.1:4103
-      MOTION_LEVELS_PLAYER_MENU_HOST=127.0.0.1
-      MOTION_LEVELS_PLAYER_MENU_PORT=4103
-      MOTION_LEVELS_PLAYER_DISPLAY_HTTP=127.0.0.1:4104
-      MOTION_LEVELS_PLAYER_DISPLAY_HOST=127.0.0.1
-      MOTION_LEVELS_PLAYER_DISPLAY_PORT=4104
 
       MOTION_LEVELS_CONTROLLER_FRAMES=127.0.0.1:4201
       MOTION_LEVELS_CONTROLLER_INPUT_EVENTS=127.0.0.1:4202
@@ -169,37 +163,61 @@ write_files:
     permissions: '0644'
     content: |
       :80 {
-      	encode zstd gzip
+        encode zstd gzip
 
-      	handle_path /controller/* {
-      		reverse_proxy 127.0.0.1:4101
-      	}
+        handle_path /controller/* {
+          reverse_proxy 127.0.0.1:4101
+        }
 
-      	handle /controller {
-      		rewrite * /
-      		reverse_proxy 127.0.0.1:4101
-      	}
+        handle /controller {
+          rewrite * /
+          reverse_proxy 127.0.0.1:4101
+        }
 
-      	handle /ws {
-      		reverse_proxy 127.0.0.1:4101
-      	}
+        handle /ws {
+          reverse_proxy 127.0.0.1:4101
+        }
 
-      	handle_path /engine/* {
-      		reverse_proxy 127.0.0.1:4102
-      	}
+        handle_path /engine/* {
+          reverse_proxy 127.0.0.1:4102
+        }
 
-      	redir /menu /menu/
-      	handle_path /menu/* {
-      		reverse_proxy 127.0.0.1:4103
-      	}
+        handle /motion-levels-icon.png {
+          root * /opt/motion-levels/rebuild/apps/player-menu/dist
+          header Cache-Control "public, max-age=31536000, immutable"
+          file_server
+        }
 
-      	redir /display /display/
-      	handle_path /display/* {
-      		reverse_proxy 127.0.0.1:4104
-      	}
+        handle /motion-levels-icon.webp {
+          root * /opt/motion-levels/rebuild/apps/player-menu/dist
+          header Cache-Control "public, max-age=31536000, immutable"
+          file_server
+        }
 
-      	redir /status /engine/api/status
-      	redir / /menu/
+        redir /menu /menu/
+        handle_path /menu/* {
+          root * /opt/motion-levels/rebuild/apps/player-menu/dist
+          @menu_assets path /assets/*
+          header @menu_assets Cache-Control "public, max-age=31536000, immutable"
+          @menu_index path / /index.html
+          header @menu_index Cache-Control "no-cache"
+          try_files {path} {path}/ /index.html
+          file_server
+        }
+
+        redir /display /display/
+        handle_path /display/* {
+          root * /opt/motion-levels/rebuild/apps/player-display/dist
+          @display_assets path /assets/*
+          header @display_assets Cache-Control "public, max-age=31536000, immutable"
+          @display_index path / /index.html
+          header @display_index Cache-Control "no-cache"
+          try_files {path} {path}/ /index.html
+          file_server
+        }
+
+        redir /status /engine/api/status
+        redir / /menu/
       }
 
   # 3a. Xwrapper configuration to allow xinit/Xorg running from systemd service
@@ -299,57 +317,15 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
-  # 6. Systemd unit: player-menu
-  - path: /etc/systemd/system/motion-levels-player-menu.service
-    owner: root:root
-    permissions: '0644'
-    content: |
-      [Unit]
-      Description=Motion Levels player menu web app
-      After=network-online.target
-      Wants=network-online.target
-
-      [Service]
-      Type=simple
-      EnvironmentFile=/etc/motion-levels/motion-levels.env
-      WorkingDirectory=/opt/motion-levels/rebuild/apps/player-menu/dist
-      ExecStart=/usr/bin/python3 -m http.server ${MOTION_LEVELS_PLAYER_MENU_PORT} --bind ${MOTION_LEVELS_PLAYER_MENU_HOST} --directory /opt/motion-levels/rebuild/apps/player-menu/dist
-      Restart=always
-      RestartSec=2
-
-      [Install]
-      WantedBy=multi-user.target
-
-  # 7. Systemd unit: player-display
-  - path: /etc/systemd/system/motion-levels-player-display.service
-    owner: root:root
-    permissions: '0644'
-    content: |
-      [Unit]
-      Description=Motion Levels player display web app
-      After=network-online.target
-      Wants=network-online.target
-
-      [Service]
-      Type=simple
-      EnvironmentFile=/etc/motion-levels/motion-levels.env
-      WorkingDirectory=/opt/motion-levels/rebuild/apps/player-display/dist
-      ExecStart=/usr/bin/python3 -m http.server ${MOTION_LEVELS_PLAYER_DISPLAY_PORT} --bind ${MOTION_LEVELS_PLAYER_DISPLAY_HOST} --directory /opt/motion-levels/rebuild/apps/player-display/dist
-      Restart=always
-      RestartSec=2
-
-      [Install]
-      WantedBy=multi-user.target
-
-  # 8. Systemd unit: kiosk
+  # 6. Systemd unit: kiosk
   - path: /etc/systemd/system/motion-levels-kiosk.service
     owner: root:root
     permissions: '0644'
     content: |
       [Unit]
       Description=Motion Levels HDMI kiosk browser
-      After=network-online.target sound.target caddy.service motion-levels-player-display.service motion-levels-game-engine.service
-      Wants=network-online.target sound.target caddy.service motion-levels-player-display.service motion-levels-game-engine.service
+      After=network-online.target sound.target caddy.service motion-levels-game-engine.service
+      Wants=network-online.target sound.target caddy.service motion-levels-game-engine.service
       Conflicts=getty@tty7.service display-manager.service
       
       [Service]

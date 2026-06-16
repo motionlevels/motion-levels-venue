@@ -5,6 +5,8 @@ UNIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SYSTEMD_DIR="/etc/systemd/system"
 
 old_services=(
+  motion-levels-player-menu.service
+  motion-levels-player-display.service
   motion-levels-player-tv.service
   motion-levels-camera-helper.service
   motion-levels.service
@@ -13,8 +15,6 @@ old_services=(
 new_services=(
   motion-levels-floor-controller.service
   motion-levels-game-engine.service
-  motion-levels-player-menu.service
-  motion-levels-player-display.service
   motion-levels-kiosk.service
 )
 
@@ -45,6 +45,7 @@ install -m 0755 "$UNIT_DIR/motion-levels-player-kiosk" /usr/local/bin/motion-lev
 for service in "${old_services[@]}"; do
   systemctl stop "$service" 2>/dev/null || true
   systemctl disable "$service" 2>/dev/null || true
+  rm -f "$SYSTEMD_DIR/$service"
 done
 
 for service in "${new_services[@]}"; do
