@@ -43,16 +43,36 @@ type MenuState = {
   selectedGame: string;
   difficulty: DifficultyID;
   selectedLevels: Record<string, string>;
+  levelModes: Record<string, LevelMode>;
   levelProgress: Record<string, LevelProgress>;
+  challengeRuns: Record<string, ChallengeRun>;
   nextPlayerId: number;
   narrationArmed: Record<string, boolean>;
   operatorUnlockLevels: boolean;
 };
 
+type LevelMode = "challenge" | "free";
+
 type LevelProgress = {
   unlockedThrough: number;
   bestByLevel: Record<string, DifficultyID>;
   bestTimeByLevel: Record<string, number>;
+};
+
+type ChallengeRun = {
+  difficulty: DifficultyID;
+  startedUnixMillis: number;
+  completedLevels: Record<string, number>;
+  totalElapsedMillis: number;
+};
+
+type ChallengeCompletion = {
+  key: string;
+  difficulty: DifficultyID;
+  gameID: string;
+  gameLabel: string;
+  levelCount: number;
+  totalElapsedMillis: number;
 };
 
 type FinishedLevelAttempt = NonNullable<EngineStatus["finishedLevelAttempts"]>[number];
@@ -84,6 +104,7 @@ type RemoteSessionRequest = {
   startsAt: string;
 };
 
+const emptyPreviewSources: string[] = [];
 const storageKey = "ml-player-menu-state-v1";
 const platformCatalogStorageKey = "ml-player-menu-platform-catalog-v2";
 const platformCatalogRefreshMillis = 5000;
@@ -95,7 +116,7 @@ const noPressureSessionLimitMillis = 60 * 60 * 1000;
 const keyboardLetterRows = ["qwertyuiop", "asdfghjklñ", "zxcvbnm"];
 const keyboardNumberRows = ["1234567890", "-_/&()'\"", ".,!?"];
 const keyboardAccentRows = ["áéíóúü", "àèìòù", "äëïöüñ"];
-const envUnlockLevels = import.meta.env.DEV || import.meta.env.VITE_UNLOCK_LEVELS === "1";
+const envUnlockLevels = import.meta.env.VITE_UNLOCK_LEVELS === "1";
 const operatorSettingsPin = /^\d{6}$/.test(import.meta.env.VITE_DEV_SETTINGS_PIN || "") ? import.meta.env.VITE_DEV_SETTINGS_PIN || "" : "739481";
 const defaultPlayers: Player[] = [{ id: 1, name: "", color: playerColors[0], active: true }];
 const teamNameStarts = ["Rayo", "Neón", "Pulso", "Láser", "Cumbre", "Órbita", "Turbo", "Brillo", "Salto", "Ritmo", "Chispa", "Fuego"];
@@ -423,20 +444,23 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
   const estimatedDurationSeconds = normalizeEstimatedDurationSeconds(entry.estimated_duration_seconds);
   const partyMiniGames = platformPartyMiniGames(entry);
   const levels = supportsLevels && entry.levels && entry.levels.length > 0
-    ? entry.levels.map((lvl) => {
-        const levelID = String(lvl.slug || lvl.id || "").trim();
+    ? Array.from(entry.levels.reduce((byID, lvl) => {
+        const levelID = String(lvl.slug || lvl.id || "").trim() || String(lvl.id || "").trim();
+        if (!levelID) return byID;
         const fallbackLevel = fallback?.levels?.find((level) => level.id === levelID || level.id === lvl.id);
         const levelDifficulties = platformLevelSupportedDifficulties(lvl, fallbackLevel);
-        return {
-          id: levelID || lvl.id,
-          label: lvl.label,
-          description: lvl.description,
-          difficulties: levelDifficulties,
-          previewSrc: fallbackLevel?.previewSrc || fallback?.previewSrc,
-          previewByDifficulty: fallbackLevel?.previewByDifficulty,
-          previewAnimation: fallbackLevel?.previewAnimation,
-        };
-      })
+        const existing = byID.get(levelID);
+        byID.set(levelID, {
+          id: levelID,
+          label: existing?.label || lvl.label,
+          description: existing?.description || lvl.description,
+          difficulties: Array.from(new Set([...(existing?.difficulties || []), ...(levelDifficulties || [])])),
+          previewSrc: existing?.previewSrc || fallbackLevel?.previewSrc || fallback?.previewSrc,
+          previewByDifficulty: existing?.previewByDifficulty || fallbackLevel?.previewByDifficulty,
+          previewAnimation: existing?.previewAnimation || fallbackLevel?.previewAnimation,
+        });
+        return byID;
+      }, new Map<string, NonNullable<GameCard["levels"]>[number]>()).values())
     : supportsLevels ? fallback?.levels : undefined;
   const duration = platformDurationLabel(entry, fallback) || (levels?.length ? `${levels.length} niveles` : "");
   const fallbackCategory = String(fallback?.category || "") === "party" ? "versus" : fallback?.category;
@@ -528,6 +552,14 @@ function levelNumber(levelID: string): number {
   return Number.isFinite(value) && value > 0 ? value : 1;
 }
 
+function playerLevelLabel(level: NonNullable<GameCard["levels"]>[number] | undefined, index?: number): string {
+  if (!level) return "Nivel";
+  const label = String(level.label || "").trim();
+  if (label && !/^level[-_\s]?\d+$/i.test(label)) return label;
+  const number = typeof index === "number" && index >= 0 ? index + 1 : levelNumber(level.id);
+  return `Nivel ${number}`;
+}
+
 function supportedDifficultiesFor(game: GameCard, level?: NonNullable<GameCard["levels"]>[number]): DifficultyID[] {
   if (!usesDifficulty(game)) return [...catalogDifficultyIDs];
   return supportedDifficultiesForGame(game, level);
@@ -543,6 +575,41 @@ function progressFor(game: GameCard, state: MenuState): LevelProgress {
   return { unlockedThrough: progress?.unlockedThrough || 1, bestByLevel: progress?.bestByLevel || {}, bestTimeByLevel: progress?.bestTimeByLevel || {} };
 }
 
+function levelModeFor(game: GameCard, state: MenuState): LevelMode {
+  if (!game.levels?.length) return "free";
+  return state.levelModes[game.id] === "free" ? "free" : "challenge";
+}
+
+function challengeRunFor(game: GameCard, state: MenuState): ChallengeRun | null {
+  const run = state.challengeRuns[game.id];
+  if (!run || typeof run !== "object") return null;
+  return {
+    difficulty: difficulties.some((candidate) => candidate.id === run.difficulty) ? run.difficulty : state.difficulty,
+    startedUnixMillis: Number(run.startedUnixMillis) || 0,
+    completedLevels: run.completedLevels || {},
+    totalElapsedMillis: Number(run.totalElapsedMillis) || 0,
+  };
+}
+
+function challengeNextLevel(game: GameCard, state: MenuState): NonNullable<GameCard["levels"]>[number] | null {
+  if (!game.levels?.length) return null;
+  const completed = challengeRunFor(game, state)?.completedLevels || {};
+  return game.levels.find((level) => !completed[level.id]) || game.levels[0] || null;
+}
+
+function challengeTotalElapsed(completedLevels: Record<string, number>): number {
+  return Object.values(completedLevels).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0);
+}
+
+function emptyChallengeRun(difficulty: DifficultyID, startedUnixMillis = Date.now()): ChallengeRun {
+  return {
+    difficulty,
+    startedUnixMillis,
+    completedLevels: {},
+    totalElapsedMillis: 0,
+  };
+}
+
 function unlockLevelsEnabled(state: MenuState): boolean {
   return envUnlockLevels || state.operatorUnlockLevels;
 }
@@ -550,7 +617,8 @@ function unlockLevelsEnabled(state: MenuState): boolean {
 function isLevelUnlocked(game: GameCard, levelID: string, state: MenuState): boolean {
   if (!game.levels?.length) return true;
   if (unlockLevelsEnabled(state)) return true;
-  return levelNumber(levelID) <= progressFor(game, state).unlockedThrough;
+  if (levelModeFor(game, state) === "free") return true;
+  return challengeNextLevel(game, state)?.id === levelID;
 }
 
 function difficultyColor(difficulty?: DifficultyID): string {
@@ -601,23 +669,120 @@ function recordLevelCompletion(
   const previous = progressFor(game, state);
   const nextBest = { ...previous.bestByLevel };
   const nextBestTime = { ...previous.bestTimeByLevel };
+  let selectedLevels = state.selectedLevels;
+  let challengeRuns = state.challengeRuns;
   if (success) {
     nextBest[levelID] = higherDifficulty(nextBest[levelID], difficulty);
     if (elapsedMillis > 0 && (!nextBestTime[levelID] || elapsedMillis < nextBestTime[levelID])) {
       nextBestTime[levelID] = elapsedMillis;
     }
+
+    if (levelModeFor(game, state) === "challenge") {
+      const expectedLevel = challengeNextLevel(game, state);
+      if (expectedLevel?.id === levelID) {
+        const previousRun = challengeRunFor(game, state) || emptyChallengeRun(difficulty);
+        const completedLevels = {
+          ...previousRun.completedLevels,
+          [levelID]: Math.max(0, elapsedMillis || 0),
+        };
+        const nextRun: ChallengeRun = {
+          ...previousRun,
+          difficulty,
+          completedLevels,
+          totalElapsedMillis: challengeTotalElapsed(completedLevels),
+        };
+        const nextLevel = game.levels.find((level) => !completedLevels[level.id]);
+        if (nextLevel) {
+          challengeRuns = {
+            ...challengeRuns,
+            [game.id]: nextRun,
+          };
+          selectedLevels = {
+            ...selectedLevels,
+            [game.id]: nextLevel.id,
+          };
+        } else {
+          const { [game.id]: _completedRun, ...remainingRuns } = challengeRuns;
+          challengeRuns = remainingRuns;
+          selectedLevels = {
+            ...selectedLevels,
+            [game.id]: defaultLevelID(game),
+          };
+        }
+      }
+    }
   }
   return {
     ...state,
+    selectedLevels,
+    challengeRuns,
     levelProgress: {
       ...state.levelProgress,
       [game.id]: {
-        unlockedThrough: Math.min(game.levels.length, Math.max(previous.unlockedThrough || 1, finishedNumber + 1)),
+        unlockedThrough: success ? Math.min(game.levels.length, Math.max(previous.unlockedThrough || 1, finishedNumber + 1)) : previous.unlockedThrough,
         bestByLevel: nextBest,
         bestTimeByLevel: nextBestTime,
       },
     },
   };
+}
+
+function challengeCompletionForAttempt(
+  state: MenuState,
+  game: GameCard,
+  levelID: string,
+  success: boolean,
+  difficulty: DifficultyID,
+  elapsedMillis: number,
+): ChallengeCompletion | null {
+  if (!success || !game.levels?.length || levelModeFor(game, state) !== "challenge") return null;
+  const expectedLevel = challengeNextLevel(game, state);
+  if (expectedLevel?.id !== levelID) return null;
+  const previousRun = challengeRunFor(game, state) || emptyChallengeRun(difficulty);
+  const completedLevels = {
+    ...previousRun.completedLevels,
+    [levelID]: Math.max(0, elapsedMillis || 0),
+  };
+  if (!game.levels.every((level) => completedLevels[level.id] !== undefined)) return null;
+  const totalElapsedMillis = challengeTotalElapsed(completedLevels);
+  return {
+    key: `${state.sessionId || "local"}:${game.id}:${difficulty}:${game.levels.length}:${totalElapsedMillis}`,
+    difficulty,
+    gameID: game.id,
+    gameLabel: game.label,
+    levelCount: game.levels.length,
+    totalElapsedMillis,
+  };
+}
+
+function normalizeLevelModes(value: unknown): Record<string, LevelMode> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter((entry): entry is [string, LevelMode] => typeof entry[0] === "string" && (entry[1] === "challenge" || entry[1] === "free")),
+  );
+}
+
+function normalizeChallengeRuns(value: unknown): Record<string, ChallengeRun> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const runs: Record<string, ChallengeRun> = {};
+  for (const [gameID, run] of Object.entries(value as Record<string, unknown>)) {
+    if (!run || typeof run !== "object" || Array.isArray(run)) continue;
+    const source = run as Partial<ChallengeRun>;
+    const completedLevels = source.completedLevels && typeof source.completedLevels === "object" && !Array.isArray(source.completedLevels)
+      ? Object.fromEntries(
+          Object.entries(source.completedLevels)
+            .map(([levelID, elapsed]) => [levelID, Math.max(0, Math.round(Number(elapsed) || 0))]),
+        )
+      : {};
+    runs[gameID] = {
+      difficulty: difficulties.some((candidate) => candidate.id === source.difficulty) ? (source.difficulty as DifficultyID) : "easy",
+      startedUnixMillis: Math.max(0, Math.round(Number(source.startedUnixMillis) || 0)),
+      completedLevels,
+      totalElapsedMillis: challengeTotalElapsed(completedLevels),
+    };
+  }
+  return runs;
 }
 
 function loadMenuState(): MenuState {
@@ -626,7 +791,9 @@ function loadMenuState(): MenuState {
     if (saved && typeof saved === "object") {
       const narrationArmed = saved.narrationArmed && typeof saved.narrationArmed === "object" ? saved.narrationArmed : {};
       const selectedLevels = saved.selectedLevels && typeof saved.selectedLevels === "object" ? saved.selectedLevels : {};
+      const levelModes = normalizeLevelModes(saved.levelModes);
       const levelProgress = saved.levelProgress && typeof saved.levelProgress === "object" ? saved.levelProgress : {};
+      const challengeRuns = normalizeChallengeRuns(saved.challengeRuns);
       const savedPlayers = Array.isArray(saved.players) ? saved.players : [];
       const cleanedPlayers = savedPlayers.map((player, index) => ({
         id: Number(player?.id) || index + 1,
@@ -655,7 +822,9 @@ function loadMenuState(): MenuState {
         category: savedGame?.category || savedCategory,
         selectedGame: savedGame?.id || "featured-lava",
         selectedLevels,
+        levelModes,
         levelProgress,
+        challengeRuns,
         players: wasOldUntouchedDefault ? defaultPlayers : cleanedPlayers,
         nextPlayerId: wasOldUntouchedDefault ? 1 : saved.nextPlayerId || 0,
         narrationArmed,
@@ -675,7 +844,9 @@ function loadMenuState(): MenuState {
     selectedGame: "featured-lava",
     difficulty: "easy",
     selectedLevels: {},
+    levelModes: {},
     levelProgress: {},
+    challengeRuns: {},
     nextPlayerId: 1,
     narrationArmed: {},
     operatorUnlockLevels: envUnlockLevels,
@@ -871,6 +1042,7 @@ function MenuApp() {
   const [countdownUntil, setCountdownUntil] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const processedFinishedSessions = useRef(new Set<string>());
+  const processedChallengeCompletions = useRef(new Set<string>());
   const processedPartyFinishes = useRef(new Set<string>());
   const catalogRefreshInFlight = useRef(false);
   const platformCatalogRef = useRef(platformCatalog);
@@ -1212,7 +1384,7 @@ function MenuApp() {
     }
 
     const pending = attempts
-      .map((attempt) => ({ attempt, game: menuGames.find((candidate) => engineGameID(candidate) === attempt.game) }))
+      .map((attempt) => ({ attempt, game: menuGames.find((candidate) => engineGameID(candidate) === attempt.game || runtimeGameID(candidate) === attempt.game) }))
       .filter(({ attempt, game }) => game?.levels?.length && attempt.level && !processedFinishedSessions.current.has(attempt.attemptId));
     if (pending.length === 0) return;
 
@@ -1222,7 +1394,24 @@ function MenuApp() {
     setMenu((current) =>
       pending.reduce((next, { attempt, game }) => {
         if (!game?.levels?.length) return next;
-        return recordLevelCompletion(next, game, attempt.level, attempt.success, difficultyFromEngine(attempt.difficulty, next.difficulty), attempt.elapsedMillis || 0);
+        const difficulty = difficultyFromEngine(attempt.difficulty, next.difficulty);
+        const completion = challengeCompletionForAttempt(next, game, attempt.level, attempt.success, difficulty, attempt.elapsedMillis || 0);
+        if (completion && !processedChallengeCompletions.current.has(completion.key)) {
+          processedChallengeCompletions.current.add(completion.key);
+          captureMenuEvent("challenge_completed", {
+            difficulty: completion.difficulty,
+            engine_game: engineGameID(game),
+            game: completion.gameID,
+            game_label: completion.gameLabel,
+            level_count: completion.levelCount,
+            score: completion.totalElapsedMillis,
+            score_kind: "time",
+            total_elapsed_millis: completion.totalElapsedMillis,
+            total_elapsed_seconds: Math.round(completion.totalElapsedMillis / 1000),
+            venue_session_id: next.sessionId,
+          });
+        }
+        return recordLevelCompletion(next, game, attempt.level, attempt.success, difficulty, attempt.elapsedMillis || 0);
       }, current),
     );
   }, [status, menuGames]);
@@ -1307,10 +1496,20 @@ function MenuApp() {
   const effectiveDifficulty = closestSupportedDifficulty(menu.difficulty, selectedSupportedDifficulties);
   const selectedDifficulty = difficulties.find((difficulty) => difficulty.id === effectiveDifficulty) || difficulties[0];
   const selectedLevelProgress = progressFor(selectedGame, menu);
-  const selectedLevelIndex = selectedLevel ? levelNumber(selectedLevel.id) : 0;
+  const selectedLevelMode = levelModeFor(selectedGame, menu);
+  const selectedChallengeRun = challengeRunFor(selectedGame, menu);
+  const selectedChallengeNext = challengeNextLevel(selectedGame, menu);
+  const selectedLevelIndex = selectedLevel && selectedGame.levels?.length ? selectedGame.levels.findIndex((level) => level.id === selectedLevel.id) + 1 : 0;
+  const selectedLevelDisplayLabel = playerLevelLabel(selectedLevel, selectedLevelIndex > 0 ? selectedLevelIndex - 1 : undefined);
+  const selectedChallengeNextIndex = selectedChallengeNext && selectedGame.levels?.length ? selectedGame.levels.findIndex((level) => level.id === selectedChallengeNext.id) : -1;
+  const selectedChallengeNextLabel = playerLevelLabel(selectedChallengeNext || selectedLevel, selectedChallengeNextIndex);
   const selectedLevelBest = selectedLevel ? selectedLevelProgress.bestByLevel[selectedLevel.id] : undefined;
   const selectedLevelBestTime = selectedLevel ? selectedLevelProgress.bestTimeByLevel[selectedLevel.id] : undefined;
   const selectedLevelBestLabel = selectedLevelBestTime ? formatBestTime(selectedLevelBestTime) : selectedLevelBest ? difficulties.find((difficulty) => difficulty.id === selectedLevelBest)?.label || selectedLevelBest : "Sin superar";
+  const selectedLevelModeLabel = selectedLevelMode === "challenge" ? "Reto" : "Libre";
+  const selectedChallengeProgressLabel = selectedGame.levels?.length
+    ? `${Object.keys(selectedChallengeRun?.completedLevels || {}).length}/${selectedGame.levels.length}`
+    : "0/0";
   const selectedGameDurationLabel = selectedGame.duration || estimatedDurationLabel(selectedGame.estimatedDurationSeconds || 0) || "Sin estimar";
   const selectedPartyMiniGames = isPartyCard(selectedGame) ? selectedGame.partyMiniGames || [] : [];
   const levelDetail = Boolean(selectedGame.levels?.length && selectedLevel);
@@ -1338,7 +1537,7 @@ function MenuApp() {
 
   useEffect(() => {
     if (menu.difficulty !== effectiveDifficulty) {
-      setMenu((current) => ({ ...current, difficulty: effectiveDifficulty }));
+      setMenu((current) => (current.difficulty === effectiveDifficulty ? current : { ...current, difficulty: effectiveDifficulty }));
     }
   }, [effectiveDifficulty, menu.difficulty]);
 
@@ -1475,7 +1674,9 @@ function MenuApp() {
       selectedGame: defaultGame.id,
       difficulty: "easy",
       selectedLevels: defaultSelectedLevels,
+      levelModes: current.levelModes,
       levelProgress: {},
+      challengeRuns: {},
       nextPlayerId: Math.max(0, ...nextPlayers.map((player) => player.id)),
       narrationArmed: {},
     }));
@@ -1523,7 +1724,9 @@ function MenuApp() {
       selectedGame: defaultGame.id,
       difficulty: "easy",
       selectedLevels: defaultSelectedLevels,
+      levelModes: current.levelModes,
       levelProgress: {},
+      challengeRuns: {},
       nextPlayerId: 1,
       narrationArmed: {},
     }));
@@ -1673,7 +1876,35 @@ function MenuApp() {
   function selectedLevelFor(game: GameCard, state = menu): string {
     if (!game.levels?.length) return "";
     const selected = state.selectedLevels[game.id] || defaultLevelID(game);
-    return isLevelUnlocked(game, selected, state) ? selected : defaultLevelID(game);
+    if (isLevelUnlocked(game, selected, state)) return selected;
+    return challengeNextLevel(game, state)?.id || defaultLevelID(game);
+  }
+
+  function setLevelMode(game: GameCard, mode: LevelMode) {
+    if (!game.levels?.length) return;
+    if (levelModeFor(game, menu) === mode) return;
+    captureMenuEvent("level_mode_changed", {
+      engine_game: engineGameID(game),
+      game: game.id,
+      mode,
+    });
+    setMenu((current) => {
+      const nextLevelModes = {
+        ...current.levelModes,
+        [game.id]: mode,
+      };
+      const nextChallengeRuns = { ...current.challengeRuns };
+      delete nextChallengeRuns[game.id];
+      return {
+        ...current,
+        levelModes: nextLevelModes,
+        challengeRuns: nextChallengeRuns,
+        selectedLevels: {
+          ...current.selectedLevels,
+          [game.id]: mode === "challenge" ? defaultLevelID(game) : selectedLevelFor(game, current),
+        },
+      };
+    });
   }
 
   function setSelectedLevel(game: GameCard, levelID: string) {
@@ -1706,6 +1937,8 @@ function MenuApp() {
 
   function renderLevelOption(game: GameCard, level: NonNullable<GameCard["levels"]>[number]) {
     const active = selectedLevelFor(game) === level.id;
+    const levelIndex = game.levels?.findIndex((candidate) => candidate.id === level.id) ?? -1;
+    const levelLabel = playerLevelLabel(level, levelIndex);
     const progress = progressFor(game, menu);
     const bestDifficulty = progress.bestByLevel[level.id];
     const locked = !isLevelUnlocked(game, level.id, menu);
@@ -1720,13 +1953,14 @@ function MenuApp() {
         disabled={locked}
         aria-checked={active}
         aria-disabled={locked}
+        aria-label={`${levelLabel}${locked ? ", bloqueado en modo reto" : ""}`}
         onClick={() => setSelectedLevel(game, level.id)}
       >
         <Preview src={levelPreviewSrc(game, level, previewDifficulty)} animationID={levelPreviewAnimationID(game, level)} compact />
         <span className="level-footer">
-          <strong>{level.label}</strong>
+          <strong>{levelLabel}</strong>
           {locked ? (
-            <span className="level-state locked-label">Bloqueado</span>
+            <span className="level-state locked-label">{levelModeFor(game, menu) === "challenge" ? "Reto" : "Bloqueado"}</span>
           ) : (
             <span className={`level-state ${bestDifficulty ? "rated" : "unrated"}`}>
               <StarRating difficulty={bestDifficulty} label="Mejor dificultad" muted={!bestDifficulty} />
@@ -1810,6 +2044,22 @@ function MenuApp() {
     if (menuDifficulty && nextMenu.difficulty !== menuDifficulty) {
       nextMenu = { ...nextMenu, difficulty: menuDifficulty };
     }
+    const challengeDifficulty = (launchDifficulty || nextMenu.difficulty) as DifficultyID;
+    const startsChallengeRun = Boolean(
+      launchGame.levels?.length
+      && selectedLevelID
+      && levelModeFor(launchGame, nextMenu) === "challenge"
+      && !challengeRunFor(launchGame, nextMenu)
+    );
+    if (startsChallengeRun) {
+      nextMenu = {
+        ...nextMenu,
+        challengeRuns: {
+          ...nextMenu.challengeRuns,
+          [launchGame.id]: emptyChallengeRun(challengeDifficulty),
+        },
+      };
+    }
     if (selectedLevelID && !isLevelUnlocked(launchGame, selectedLevelID, nextMenu)) {
       captureMenuEvent("start_blocked", {
         engine_game: engineGameID(launchGame),
@@ -1845,10 +2095,21 @@ function MenuApp() {
       level: selectedLevelID || undefined,
       level_label: launchLevel?.label,
       level_number: selectedLevelID ? levelNumber(selectedLevelID) : undefined,
+      level_mode: launchGame.levels?.length ? levelModeFor(launchGame, nextMenu) : undefined,
       narration_enabled: supportsNarration(game) ? playNarration : false,
       player_count: launchRoster.length,
       venue_session_id: nextMenu.sessionId,
     });
+    if (startsChallengeRun) {
+      captureMenuEvent("challenge_started", {
+        difficulty: challengeDifficulty,
+        engine_game: engineGameID(launchGame),
+        game: launchGame.id,
+        game_label: launchGame.label,
+        level_count: launchGame.levels?.length || 0,
+        venue_session_id: nextMenu.sessionId,
+      });
+    }
     try {
       const nextStatus = await selectGame({
         game: runtimeGameID(launchGame),
@@ -2289,8 +2550,39 @@ function MenuApp() {
                     <section className="season-level-row" aria-label="Nivel seleccionado">
                       <span className="micro">Nivel</span>
                       <div>
-                        <strong>{selectedLevel.label}</strong>
+                        <strong>{selectedLevelDisplayLabel}</strong>
                         <p>{selectedLevel.description}</p>
+                      </div>
+                    </section>
+                    <section className="level-mode-panel" aria-label="Modo de niveles">
+                      <div className="level-mode-copy">
+                        <span className="micro">Modo</span>
+                        <strong>{selectedLevelModeLabel}</strong>
+                        <p>
+                          {selectedLevelMode === "challenge"
+                            ? `Completa los niveles en orden. Siguiente: ${selectedChallengeNextLabel}.`
+                            : "Elige cualquier nivel para practicar sin afectar el ranking."}
+                        </p>
+                      </div>
+                      <div className="level-mode-toggle" role="group" aria-label="Cambiar modo de niveles">
+                        <button
+                          className={selectedLevelMode === "challenge" ? "active" : ""}
+                          type="button"
+                          aria-pressed={selectedLevelMode === "challenge"}
+                          onClick={() => setLevelMode(selectedGame, "challenge")}
+                        >
+                          <span>Reto</span>
+                          <small>{selectedChallengeProgressLabel}</small>
+                        </button>
+                        <button
+                          className={selectedLevelMode === "free" ? "active" : ""}
+                          type="button"
+                          aria-pressed={selectedLevelMode === "free"}
+                          onClick={() => setLevelMode(selectedGame, "free")}
+                        >
+                          <span>Libre</span>
+                          <small>todos</small>
+                        </button>
                       </div>
                     </section>
                     <section className="season-facts" aria-label="Resumen de partida">
@@ -3057,7 +3349,7 @@ function animFromPreviewFrames(frames: RGB[][]): FloorAnim | null {
   };
 }
 
-function Preview({ animationID, compact = false, src, srcs = [] }: { animationID: string; compact?: boolean; src?: string; srcs?: string[] }) {
+function Preview({ animationID, compact = false, src, srcs = emptyPreviewSources }: { animationID: string; compact?: boolean; src?: string; srcs?: string[] }) {
   const liveLevelID = previewLevelID(animationID);
   const [livePreview, setLivePreview] = useState<AnimationPreview | null>(null);
   const [failedSrcs, setFailedSrcs] = useState<string[]>([]);
@@ -3065,7 +3357,10 @@ function Preview({ animationID, compact = false, src, srcs = [] }: { animationID
   const usableSrc = sourceCandidates.find((candidate) => !failedSrcs.includes(candidate));
 
   useEffect(() => {
-    setFailedSrcs((failed) => failed.filter((candidate) => sourceCandidates.includes(candidate)));
+    setFailedSrcs((failed) => {
+      const next = failed.filter((candidate) => sourceCandidates.includes(candidate));
+      return next.length === failed.length ? failed : next;
+    });
   }, [sourceCandidates]);
 
   useEffect(() => {
@@ -3089,7 +3384,16 @@ function Preview({ animationID, compact = false, src, srcs = [] }: { animationID
   return (
     <div className={`preview ${compact ? "compact-preview" : ""}`}>
       {usableSrc ? (
-        <img className="preview-media" src={usableSrc} alt="" aria-hidden="true" onError={() => setFailedSrcs((failed) => failed.includes(usableSrc) ? failed : [...failed, usableSrc])} />
+        <img
+          className="preview-media"
+          src={usableSrc}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          draggable={false}
+          loading={compact ? "lazy" : "eager"}
+          onError={() => setFailedSrcs((failed) => failed.includes(usableSrc) ? failed : [...failed, usableSrc])}
+        />
       ) : anim ? (
         <FloorPreview anim={anim} orientation="landscape" />
       ) : (

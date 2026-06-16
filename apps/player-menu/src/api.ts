@@ -33,6 +33,8 @@ export type PlatformGameCatalogEntry = {
   supports_levels: boolean;
   mode_label: string;
   audio_label: string;
+  narration_text?: string;
+  narration_audio_ref?: string;
   min_players: number;
   max_players: number;
   difficulties?: string[];

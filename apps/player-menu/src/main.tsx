@@ -21,18 +21,19 @@ function KioskViewport({ children }: { children: ReactNode }) {
   const [scale, setScale] = useState(kioskScale);
 
   useEffect(() => {
-    const update = () => setScale(kioskScale());
+    const update = () => {
+      const next = kioskScale();
+      setScale((current) => (Math.abs(current - next) < 0.001 ? current : next));
+    };
     const viewport = window.visualViewport;
     window.addEventListener("resize", update);
     window.addEventListener("orientationchange", update);
     viewport?.addEventListener("resize", update);
-    viewport?.addEventListener("scroll", update);
     update();
     return () => {
       window.removeEventListener("resize", update);
       window.removeEventListener("orientationchange", update);
       viewport?.removeEventListener("resize", update);
-      viewport?.removeEventListener("scroll", update);
     };
   }, []);
 

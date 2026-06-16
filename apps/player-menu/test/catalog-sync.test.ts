@@ -196,4 +196,11 @@ describe("catalog metadata sync", () => {
     assert.equal(/id:\s*"party"/.test(catalogSource), false);
     assert.match(catalogSource, /id:\s*"versus"[\s\S]*?label:\s*"Competitivos"/);
   });
+
+  it("keeps catalog preview media cheap to decode", () => {
+    const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
+
+    assert.match(appSource, /decoding="async"/);
+    assert.match(appSource, /loading=\{compact \? "lazy" : "eager"\}/);
+  });
 });
