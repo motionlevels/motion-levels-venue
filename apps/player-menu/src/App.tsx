@@ -71,6 +71,7 @@ type ChallengeCompletion = {
   difficulty: DifficultyID;
   gameID: string;
   gameLabel: string;
+  revisionHash: string | null;
   levelCount: number;
   totalElapsedMillis: number;
 };
@@ -109,6 +110,7 @@ const storageKey = "ml-player-menu-state-v1";
 const platformCatalogStorageKey = "ml-player-menu-platform-catalog-v2";
 const platformCatalogRefreshMillis = 5000;
 const menuBuildLabel = `${__MENU_BUILD_REVISION__} · ${formatMenuBuildDate(__MENU_BUILD_DATE__)}`;
+const menuBuildDateLabel = formatMenuBuildDate(__MENU_BUILD_DATE__);
 const maxPlayers = 6;
 const maxTeamNameLength = 24;
 const maxPlayerNameLength = 12;
@@ -766,6 +768,7 @@ function challengeCompletionForAttempt(
     difficulty,
     gameID: game.id,
     gameLabel: game.label,
+    revisionHash: game.revisionHash || null,
     levelCount: game.levels.length,
     totalElapsedMillis,
   };
@@ -1419,7 +1422,9 @@ function MenuApp() {
             engine_game: engineGameID(game),
             game: completion.gameID,
             game_label: completion.gameLabel,
+            game_revision: completion.revisionHash,
             level_count: completion.levelCount,
+            revision_hash: completion.revisionHash,
             score: completion.totalElapsedMillis,
             score_kind: "time",
             total_elapsed_millis: completion.totalElapsedMillis,
@@ -2122,7 +2127,9 @@ function MenuApp() {
         engine_game: engineGameID(launchGame),
         game: launchGame.id,
         game_label: launchGame.label,
+        game_revision: launchGame.revisionHash || null,
         level_count: launchGame.levels?.length || 0,
+        revision_hash: launchGame.revisionHash || null,
         venue_session_id: nextMenu.sessionId,
       });
     }
@@ -2271,7 +2278,7 @@ function MenuApp() {
           <button className="brand-mark" type="button" aria-label="Pantalla completa" title="Pantalla completa" onClick={enterBrowserFullscreen} />
           <div className="brand-copy">
             <b>Motion Levels</b>
-            <span>Quiosco · {menuBuildLabel}</span>
+            <span>Quiosco</span>
           </div>
         </div>
         <nav className="category-tabs top-category-tabs" aria-label="Categorías de juegos">
@@ -2357,9 +2364,6 @@ function MenuApp() {
           >
             <GearIcon />
           </button>
-          <span className="menu-build-chip" title={`Menu desplegado ${menuBuildLabel}`}>
-            menu {menuBuildLabel}
-          </span>
         </div>
       </header>
 
@@ -3015,14 +3019,27 @@ function OperatorSettingsDialog({
     <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Ajustes" onClick={onClose}>
       <div className="modal settings-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-head">
-          <strong>Ajustes</strong>
+          <div>
+            <span className="micro">Quiosco</span>
+            <strong>Ajustes</strong>
+          </div>
           <button className="icon-button" type="button" aria-label="Cerrar ajustes" onClick={onClose}>
             <CloseIcon />
           </button>
         </div>
 
+        <section className="settings-version-card" aria-label="Versión del menú">
+          <span className="micro">Versión del menú</span>
+          <strong>menu {__MENU_BUILD_REVISION__}</strong>
+          <small title={__MENU_BUILD_DATE__}>Desplegado {menuBuildDateLabel}</small>
+        </section>
+
         {unlocked ? (
           <section className="settings-section" aria-label="Opciones de operador">
+            <div className="settings-copy">
+              <span className="micro">Operador</span>
+              <p>Opciones protegidas para mantenimiento y pruebas.</p>
+            </div>
             <button className={`settings-toggle ${levelsUnlocked ? "active" : ""}`} type="button" onClick={onToggleLevels} disabled={envUnlockLevels} aria-pressed={levelsUnlocked}>
               <span>
                 <strong>Dev: niveles abiertos</strong>
@@ -3035,7 +3052,10 @@ function OperatorSettingsDialog({
           </section>
         ) : (
           <section className="pin-panel" aria-label="PIN operador">
-            <span className="micro">PIN operador</span>
+            <div className="settings-copy">
+              <span className="micro">Operador</span>
+              <p>Introduce el PIN solo para desbloquear opciones de mantenimiento.</p>
+            </div>
             <div className={`pin-dots ${error ? "error" : ""}`} aria-label={`${pin.length} de 6 dígitos`}>
               {Array.from({ length: 6 }, (_, index) => (
                 <span key={index} className={index < pin.length ? "filled" : ""} />
