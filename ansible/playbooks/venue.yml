@@ -201,6 +201,13 @@
         remote_src: true
         force: false
 
+    - name: Ensure platform asset cache env is configured
+      ansible.builtin.lineinfile:
+        path: /etc/motion-levels/motion-levels.env
+        regexp: '^MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR='
+        line: MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR=/var/lib/motion-levels/platform-asset-cache
+        mode: "0644"
+
     - name: Resolve local deployed stack revision
       ansible.builtin.command:
         cmd: git rev-parse --short=7 HEAD
