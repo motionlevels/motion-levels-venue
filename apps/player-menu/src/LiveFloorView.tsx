@@ -9,6 +9,7 @@ const IDLE: [number, number, number] = [13, 19, 30];
 const IDLE_CSS = `rgb(${IDLE[0]}, ${IDLE[1]}, ${IDLE[2]})`;
 
 type ConnectionState = "connecting" | "live" | "error";
+type LiveFloorOrientation = "portrait" | "landscape";
 
 type PressureMessage = {
   type?: string;
@@ -43,7 +44,7 @@ function controllerWebSocketURL(): string {
   return `${protocol}://${host}:${controllerPort}/ws`;
 }
 
-export function LiveFloorView({ interactive = false }: { interactive?: boolean }) {
+export function LiveFloorView({ interactive = false, orientation = "landscape" }: { interactive?: boolean; orientation?: LiveFloorOrientation }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const frameRef = useRef<Uint8Array | null>(null);
@@ -58,8 +59,9 @@ export function LiveFloorView({ interactive = false }: { interactive?: boolean }
     if (!canvas) return;
     const targetCanvas = canvas;
 
-    const displayCols = FLOOR_ROWS;
-    const displayRows = FLOOR_COLS;
+    const landscape = orientation === "landscape";
+    const displayCols = landscape ? FLOOR_ROWS : FLOOR_COLS;
+    const displayRows = landscape ? FLOOR_COLS : FLOOR_ROWS;
     const width = displayCols * PITCH + GAP;
     const height = displayRows * PITCH + GAP;
     targetCanvas.width = width;
@@ -99,7 +101,7 @@ export function LiveFloorView({ interactive = false }: { interactive?: boolean }
       }
       drawFloorCanvas({
         canvas: targetCanvas,
-        ...floorDisplayCells(FLOOR_COLS, FLOOR_ROWS, cells, "clockwise", IDLE_CSS),
+        ...floorDisplayCells(FLOOR_COLS, FLOOR_ROWS, cells, landscape ? "clockwise" : "data", IDLE_CSS),
         emptyColor: "#05070a",
         tileSize: LIT,
         gapSize: GAP,
@@ -190,7 +192,7 @@ export function LiveFloorView({ interactive = false }: { interactive?: boolean }
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, []);
+  }, [orientation]);
 
   function pressureFromPointer(event: ReactPointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
@@ -201,6 +203,10 @@ export function LiveFloorView({ interactive = false }: { interactive?: boolean }
     const canvasY = ((event.clientY - rect.top) / rect.height) * canvas.height;
     const displayX = Math.floor((canvasX - GAP) / PITCH);
     const displayY = Math.floor((canvasY - GAP) / PITCH);
+    if (orientation === "portrait") {
+      if (displayX < 0 || displayX >= FLOOR_COLS || displayY < 0 || displayY >= FLOOR_ROWS) return null;
+      return { x: displayX, y: displayY };
+    }
     if (displayX < 0 || displayX >= FLOOR_ROWS || displayY < 0 || displayY >= FLOOR_COLS) return null;
     return { x: displayY, y: FLOOR_ROWS - 1 - displayX };
   }
@@ -228,7 +234,7 @@ export function LiveFloorView({ interactive = false }: { interactive?: boolean }
   }
 
   return (
-    <div className={`live-floor ${connection} ${interactive ? "interactive" : ""}`}>
+    <div className={`live-floor ${connection} ${orientation} ${interactive ? "interactive" : ""}`}>
       <canvas
         ref={canvasRef}
         className="live-floor-canvas"

@@ -2294,7 +2294,7 @@ button.capsule:disabled,
 }
 
 .game-control-screen.with-levels .game-control-main {
-  grid-template-columns: minmax(0, 1.04fr) minmax(320px, 0.52fr) minmax(430px, 0.72fr);
+  grid-template-columns: minmax(270px, 0.42fr) minmax(320px, 0.48fr) minmax(520px, 1fr);
 }
 
 .game-control-preview,
@@ -2354,8 +2354,8 @@ button.capsule:disabled,
 
 .live-floor-canvas {
   display: block;
-  width: calc(100% - 28px) !important;
-  height: auto !important;
+  width: calc(100% - 28px);
+  height: auto;
   max-width: calc(100% - 28px);
   max-height: calc(100% - 28px);
   image-rendering: pixelated;

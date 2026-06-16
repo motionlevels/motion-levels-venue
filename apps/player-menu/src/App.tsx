@@ -3328,7 +3328,7 @@ function GameControlScreen({
     <section className={`game-control-screen ${hasLevels ? "with-levels" : ""}`} style={{ "--c": game.color, "--crgb": hexToRGB(game.color) } as CSSProperties}>
       <div className="game-control-main">
         <div className="game-control-preview">
-          <LiveFloorView />
+          <LiveFloorView orientation={hasLevels ? "portrait" : "landscape"} />
           {introActive ? (
             <div className="countdown-overlay narration" aria-live="polite">
               <span>Narración</span>
