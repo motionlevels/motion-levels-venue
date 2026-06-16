@@ -225,7 +225,7 @@
           {
             "revision": "{{ motion_levels_stack_revision.stdout }}",
             "commit_at": "{{ motion_levels_stack_commit_at.stdout }}",
-            "deployed_at": "{{ ansible_date_time.iso8601 }}",
+            "deployed_at": "{{ ansible_facts['date_time']['iso8601'] }}",
             "target": "{{ inventory_hostname }}"
           }
 
