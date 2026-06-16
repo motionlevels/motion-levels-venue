@@ -2368,7 +2368,7 @@ func gameLabel(game string) string {
 			return entry.Label
 		}
 	}
-	return "Animation loop"
+	return "Salvapantallas"
 }
 
 func defaultDisplayPlayers(cfg config) []displayPlayer {

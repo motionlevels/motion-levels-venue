@@ -172,14 +172,13 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 		t.Fatalf("memory music = %q %.2f, want %q %.2f", memory.MusicRef, memory.MusicVolume, memorychallenge.DefaultMusicRef, memorychallenge.DefaultMusicVolume)
 	}
 
-	loop := configForSelection(base, "loop", 6)
-	if loop.Game != "loop" {
-		t.Fatalf("loop game = %q", loop.Game)
+	screensaver := configForSelection(base, "salvapantallas", 6)
+	if screensaver.Game != "salvapantallas" {
+		t.Fatalf("screensaver game = %q", screensaver.Game)
 	}
-	if loop.MusicRef != "Motion/canciones/Background01.mp3" {
-		t.Fatalf("loop music = %q, want Background01", loop.MusicRef)
+	if screensaver.MusicRef != "Motion/canciones/Background01.mp3" {
+		t.Fatalf("screensaver music = %q, want Background01", screensaver.MusicRef)
 	}
-
 	comet := configForSelection(base, "ambient-comet", 1)
 	if comet.Game != "ambient-comet" {
 		t.Fatalf("ambient game = %q, want ambient-comet", comet.Game)
@@ -916,16 +915,16 @@ func TestPlatformSyncPostsSessionSnapshot(t *testing.T) {
 }
 
 func TestAmbientSelectionChangesRenderedFrame(t *testing.T) {
-	runtime := newGameRuntime(config{Brightness: 100, PlayerCount: 1, Game: "loop"}, nil, nil)
+	runtime := newGameRuntime(config{Brightness: 100, PlayerCount: 1, Game: "salvapantallas"}, nil, nil)
 	now := time.Now()
-	loopFrame := makeFrame(1, now, 0, runtime)
+	screensaverFrame := makeFrame(1, now, 0, runtime)
 
 	runtime.SelectGameWithDifficulty("ambient-spark", 1, "")
 	sparkFrame := makeFrame(2, now.Add(500*time.Millisecond), 0.5, runtime)
 
 	var different bool
-	for i := range loopFrame.Tiles {
-		left := loopFrame.Tiles[i]
+	for i := range screensaverFrame.Tiles {
+		left := screensaverFrame.Tiles[i]
 		right := sparkFrame.Tiles[i]
 		if left.R != right.R || left.G != right.G || left.B != right.B {
 			different = true
@@ -933,7 +932,7 @@ func TestAmbientSelectionChangesRenderedFrame(t *testing.T) {
 		}
 	}
 	if !different {
-		t.Fatal("ambient-spark frame matched loop frame exactly")
+		t.Fatal("ambient-spark frame matched screensaver frame exactly")
 	}
 	if runtime.Status().CurrentGame != "ambient-spark" {
 		t.Fatalf("status game = %q, want ambient-spark", runtime.Status().CurrentGame)
@@ -1110,10 +1109,10 @@ func TestNarrationAutoPlaysOnceAndCanReplay(t *testing.T) {
 	}
 	backend := &recordingBackend{}
 	player := audio.NewPlayer(dir, backend)
-	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "loop"}, player, nil)
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "salvapantallas"}, player, nil)
 
 	runtime.SelectGameWithDifficulty("lava", 1, "easy")
-	runtime.SelectGameWithDifficulty("loop", 1, "")
+	runtime.SelectGameWithDifficulty("salvapantallas", 1, "")
 	runtime.SelectGameWithDifficulty("lava", 1, "easy")
 	narrationPath := filepath.Join(dir, "Motion/narraciones/lava-intro.mp3")
 	backend.waitForCount(t, narrationPath, 1)
@@ -1129,7 +1128,7 @@ func TestSelectGameCanSkipOrForceNarration(t *testing.T) {
 	}
 	backend := &recordingBackend{}
 	player := audio.NewPlayer(dir, backend)
-	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "loop"}, player, nil)
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "salvapantallas"}, player, nil)
 	runtime.base.NarrationCueRef = "cue.mp3"
 	cuePath := filepath.Join(dir, "cue.mp3")
 
@@ -1154,7 +1153,7 @@ func TestAudioMuteToggleSuppressesCues(t *testing.T) {
 	}
 	backend := &recordingBackend{}
 	player := audio.NewPlayer(dir, backend)
-	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "loop", NarrationCueRef: "cue.mp3"}, player, nil)
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "salvapantallas", NarrationCueRef: "cue.mp3"}, player, nil)
 	cuePath := filepath.Join(dir, "cue.mp3")
 	backend.waitForCount(t, cuePath, 1)
 
@@ -1194,7 +1193,7 @@ func TestFirstNarrationHoldsLavaCountdown(t *testing.T) {
 
 	backend := &recordingBackend{}
 	player := audio.NewPlayer(dir, backend)
-	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "loop"}, player, nil)
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "salvapantallas"}, player, nil)
 	runtime.base.NarrationCueRef = narrationRef
 	runtime.base.CountdownCueRef = countdownRef
 	runtime.base.CountdownVolume = 0.9
@@ -1215,7 +1214,7 @@ func TestFirstNarrationHoldsLavaCountdown(t *testing.T) {
 	}
 	backend.waitForCount(t, countdownPath, 1)
 
-	runtime.SelectGameWithDifficulty("loop", 1, "")
+	runtime.SelectGameWithDifficulty("salvapantallas", 1, "")
 	runtime.SelectGameWithDifficulty("lava", 1, "easy")
 	status = runtime.DisplayStatus(time.Now())
 	if status.Phase == "intro" || status.IntroRemainingMillis != 0 {
@@ -1240,7 +1239,7 @@ func TestWhackAMoleCountdownPlaysAfterPlayersAreReady(t *testing.T) {
 	runtime := newGameRuntime(config{
 		Brightness:      80,
 		PlayerCount:     1,
-		Game:            "loop",
+		Game:            "salvapantallas",
 		CountdownCueRef: countdownRef,
 		StartCueRef:     "",
 		MusicRef:        "",

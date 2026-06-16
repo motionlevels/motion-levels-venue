@@ -24,7 +24,7 @@ The defaults are:
 - game-engine API: `http://127.0.0.1:4102/api/status`
 - controller frame stream: `127.0.0.1:4201`
 - pressure event stream: `127.0.0.1:4202`
-- game: `loop`
+- game: `salvapantallas`
 - desired-state frame rate: `20fps`
 - brightness: `80%`
 

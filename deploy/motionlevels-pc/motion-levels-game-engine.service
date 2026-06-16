@@ -12,7 +12,7 @@ ExecStart=/opt/motion-levels/rebuild/bin/game-engine \
   -http ${MOTION_LEVELS_ENGINE_HTTP} \
   -controller ${MOTION_LEVELS_CONTROLLER_FRAMES} \
   -pressure-events ${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS} \
-  -game loop \
+  -game salvapantallas \
   -fps ${MOTION_LEVELS_ENGINE_FPS} \
   -brightness ${MOTION_LEVELS_ENGINE_BRIGHTNESS} \
   -audio=true \

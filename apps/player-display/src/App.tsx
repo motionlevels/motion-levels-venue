@@ -4,7 +4,7 @@ import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./ap
 import { colorCSS, colorRGB, difficultyLabelES, eventMessageES, formatClock, gameTitleES, phaseLabel, playerLabelES } from "./utils";
 
 const emptyStatus: DisplayStatus = {
-  currentGame: "loop",
+  currentGame: "salvapantallas",
   label: "Motion Levels",
   phase: "idle",
   difficulty: "easy",

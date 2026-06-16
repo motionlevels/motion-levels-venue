@@ -6,8 +6,8 @@
 //
 // Each animation is a pure function of tile coordinates and time, returning an RGB triple
 // in 0..255. These are placeholders meant to *showcase* each game's identity until the real
-// per-game preview frames are wired up; `loop` is a direct port of the engine's real attract
-// loop, and whack-a-mole reuses the engine's real player colors.
+// per-game preview frames are wired up; the rainbow preview is a local attract
+// animation, and whack-a-mole reuses the engine's real player colors.
 
 export const FLOOR_COLS = 16;
 export const FLOOR_ROWS = 32;
@@ -90,9 +90,8 @@ function hash(n: number): number {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-// Attract loop: direct port of engine animation.LoopColor (16 wide x 32 tall, portrait), so
-// the rainbow flows exactly as it does in the real idle mode on the floor.
-const loop: FloorAnim = (x, y, cols, rows, t) => {
+// Local rainbow attract preview for cards that do not have generated assets yet.
+const rainbowPreview: FloorAnim = (x, y, cols, rows, t) => {
   const widthPhase = x / cols;
   const heightPhase = y / rows;
   const hue = mod(widthPhase * 0.55 + heightPhase * 0.35 + t * 0.1, 1);
@@ -574,12 +573,12 @@ function temporada2Preview(level: number): FloorAnim {
   };
 }
 
-export const defaultFloorAnim = loop;
+export const defaultFloorAnim = rainbowPreview;
 
 export const floorAnimations: Record<string, FloorAnim> = {
   "whack-a-mole": whackAMole,
   "simon-dice": simonDice,
-  animations: loop,
+  animations: rainbowPreview,
   "ambient-comet": ambientComet,
   "ambient-pulse": ambientPulse,
   "ambient-spark": ambientSpark,

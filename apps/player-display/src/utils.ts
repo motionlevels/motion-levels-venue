@@ -57,7 +57,7 @@ const gameTitlesES: Record<string, string> = {
   temporada2: "Temporada 2",
   duel: "Duelo",
   memory: "Reto de memoria",
-  loop: "Arcoíris",
+  salvapantallas: "Salvapantallas",
   "ambient-comet": "Cometas",
   "ambient-pulse": "Pulso",
   "ambient-spark": "Chispas",

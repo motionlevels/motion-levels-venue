@@ -490,7 +490,7 @@ func normalizeGame(value string) string {
 		return "patrones"
 	case "salvapantallas", "screensaver", "screen-saver":
 		return "salvapantallas"
-	case "animations", "loop", "ambient-comet", "ambient-pulse", "ambient-spark":
+	case "animations", "ambient-comet", "ambient-pulse", "ambient-spark":
 		return value
 	default:
 		return "salvapantallas"
