@@ -2859,7 +2859,7 @@ function MenuApp() {
               const launchDisabled = blocked && !rosterAction;
               const readyLabel = isAmbientCard(selectedGame) ? "Activar ambiente" : "Empezar partida";
               const unavailableByEngine = !engineAvailable || Boolean(error);
-              const blockedLabel = catalogBlocked ? "Sincronizando" : levelBlocked ? "Nivel bloqueado" : rosterBlocked ? "Revisa equipo" : selectedGame.disabled ? "Próximamente" : unavailableByEngine ? readyLabel : "No disponible";
+              const blockedLabel = catalogBlocked ? "Sincronizando" : levelBlocked ? "Nivel bloqueado" : rosterBlocked ? "Jugadores" : selectedGame.disabled ? "Próximamente" : unavailableByEngine ? readyLabel : "No disponible";
               const loadingVisual = launching || catalogBlocked;
               const handleLaunchAction = () => {
                 if (rosterAction) {
@@ -2886,7 +2886,7 @@ function MenuApp() {
                       {narrationArmedFor(selectedGame) ? "Narración ON" : "Narración OFF"}
                     </button>
                   ) : null}
-                  <button className={`btn primary play ${loadingVisual ? "loading" : ""}`} type="button" disabled={launchDisabled} aria-busy={loadingVisual} onClick={handleLaunchAction}>
+                  <button className={`btn primary play ${loadingVisual ? "loading" : ""} ${rosterAction ? "roster-action" : ""}`} type="button" disabled={launchDisabled} aria-busy={loadingVisual} onClick={handleLaunchAction}>
                     {loadingVisual ? (
                       <>
                         <span className="launch-spinner" aria-hidden="true" />
