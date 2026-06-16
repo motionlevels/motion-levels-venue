@@ -1055,16 +1055,17 @@ button.capsule:disabled,
 .tab {
   min-height: 68px;
   min-width: 0;
-  padding: 0 16px;
+  padding: 0 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 11px;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 18px;
   color: var(--soft);
   font-size: 18px;
   font-weight: 900;
+  letter-spacing: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1078,10 +1079,12 @@ button.capsule:disabled,
 
 .tab-icon {
   flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
   line-height: 1;
-  opacity: 0.72;
+  opacity: 0.78;
 }
 
 .tab svg,
@@ -1089,6 +1092,8 @@ button.capsule:disabled,
   width: 26px;
   height: 26px;
   flex: 0 0 auto;
+  display: block;
+  overflow: visible;
 }
 
 .tab:hover:not(.active) {
@@ -1187,10 +1192,6 @@ button.capsule:disabled,
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
-}
-
-.tab.active svg {
-  opacity: 1;
 }
 
 .games {
@@ -3435,9 +3436,15 @@ button.capsule:disabled,
     border-radius: var(--r-lg);
   }
 
-  .tab svg {
-    width: 34px;
-    height: 34px;
+  .tab-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .tab svg,
+  .tab-icon svg {
+    width: 30px;
+    height: 30px;
   }
 
   .games {
@@ -3722,6 +3729,17 @@ button.capsule:disabled,
     font-size: 14px;
     flex: 0 0 auto;
     scroll-snap-align: start;
+  }
+
+  .tab-icon {
+    width: 23px;
+    height: 23px;
+  }
+
+  .tab svg,
+  .tab-icon svg {
+    width: 20px;
+    height: 20px;
   }
 
   .games {
