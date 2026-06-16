@@ -2629,23 +2629,25 @@ function MenuApp() {
                   </>
                 ) : (
                   <>
-                    <span className="micro">Seleccionado</span>
+                    <div className="detail-heading-row">
+                      <span className="micro">Seleccionado</span>
+                      {selectedGame.revisionHash ? (
+                        <span className="game-revision-row">
+                          <span className="game-revision">rev {selectedGame.revisionHash}</span>
+                          <button
+                            className="game-revision-refresh"
+                            type="button"
+                            disabled={catalogRefreshing}
+                            title="Actualizar catálogo"
+                            aria-label="Actualizar catálogo"
+                            onClick={() => refreshPlatformCatalog({ manual: true })}
+                          >
+                            <RefreshIcon />
+                          </button>
+                        </span>
+                      ) : null}
+                    </div>
                     <h2>{selectedGame.label}</h2>
-                    {selectedGame.revisionHash ? (
-                      <span className="game-revision-row">
-                        <span className="game-revision">rev {selectedGame.revisionHash}</span>
-                        <button
-                          className="game-revision-refresh"
-                          type="button"
-                          disabled={catalogRefreshing}
-                          title="Actualizar catálogo"
-                          aria-label="Actualizar catálogo"
-                          onClick={() => refreshPlatformCatalog({ manual: true })}
-                        >
-                          <RefreshIcon />
-                        </button>
-                      </span>
-                    ) : null}
                     <p>{selectedGame.description}</p>
                     <section className="season-facts" aria-label="Resumen de partida">
                       <div>
@@ -3028,62 +3030,64 @@ function OperatorSettingsDialog({
           </button>
         </div>
 
-        <section className="settings-version-card" aria-label="Versión del menú">
-          <span className="micro">Versión del menú</span>
-          <strong>menu {__MENU_BUILD_REVISION__}</strong>
-          <small title={__MENU_BUILD_DATE__}>Desplegado {menuBuildDateLabel}</small>
-        </section>
+        <div className="settings-content">
+          <section className="settings-version-card" aria-label="Versión del menú">
+            <span className="micro">Versión del menú</span>
+            <strong>menu {__MENU_BUILD_REVISION__}</strong>
+            <small title={__MENU_BUILD_DATE__}>Desplegado {menuBuildDateLabel}</small>
+          </section>
 
-        {unlocked ? (
-          <section className="settings-section" aria-label="Opciones de operador">
-            <div className="settings-copy">
-              <span className="micro">Operador</span>
-              <p>Opciones protegidas para mantenimiento y pruebas.</p>
-            </div>
-            <button className={`settings-toggle ${levelsUnlocked ? "active" : ""}`} type="button" onClick={onToggleLevels} disabled={envUnlockLevels} aria-pressed={levelsUnlocked}>
-              <span>
-                <strong>Dev: niveles abiertos</strong>
-                <small>{envUnlockLevels ? "Activado por entorno" : levelsUnlocked ? "Todos los niveles visibles" : "Progreso normal"}</small>
-              </span>
-              <span className="switch-track" aria-hidden="true">
-                <span />
-              </span>
-            </button>
-          </section>
-        ) : (
-          <section className="pin-panel" aria-label="PIN operador">
-            <div className="settings-copy">
-              <span className="micro">Operador</span>
-              <p>Introduce el PIN solo para desbloquear opciones de mantenimiento.</p>
-            </div>
-            <div className={`pin-dots ${error ? "error" : ""}`} aria-label={`${pin.length} de 6 dígitos`}>
-              {Array.from({ length: 6 }, (_, index) => (
-                <span key={index} className={index < pin.length ? "filled" : ""} />
-              ))}
-            </div>
-            {error ? <p className="pin-error">{error}</p> : <p className="pin-error placeholder">{"\u00a0"}</p>}
-            <div className="pin-keypad" aria-label="Teclado PIN">
-              {"123456789".split("").map((digit) => (
-                <button key={digit} className="pin-key" type="button" onClick={() => onTypeDigit(digit)}>
-                  {digit}
+          {unlocked ? (
+            <section className="settings-section" aria-label="Opciones de operador">
+              <div className="settings-copy">
+                <span className="micro">Operador</span>
+                <p>Opciones protegidas para mantenimiento y pruebas.</p>
+              </div>
+              <button className={`settings-toggle ${levelsUnlocked ? "active" : ""}`} type="button" onClick={onToggleLevels} disabled={envUnlockLevels} aria-pressed={levelsUnlocked}>
+                <span>
+                  <strong>Dev: niveles abiertos</strong>
+                  <small>{envUnlockLevels ? "Activado por entorno" : levelsUnlocked ? "Todos los niveles visibles" : "Progreso normal"}</small>
+                </span>
+                <span className="switch-track" aria-hidden="true">
+                  <span />
+                </span>
+              </button>
+            </section>
+          ) : (
+            <section className="pin-panel" aria-label="PIN operador">
+              <div className="settings-copy">
+                <span className="micro">Operador</span>
+                <p>Introduce el PIN solo para desbloquear opciones de mantenimiento.</p>
+              </div>
+              <div className={`pin-dots ${error ? "error" : ""}`} aria-label={`${pin.length} de 6 dígitos`}>
+                {Array.from({ length: 6 }, (_, index) => (
+                  <span key={index} className={index < pin.length ? "filled" : ""} />
+                ))}
+              </div>
+              {error ? <p className="pin-error">{error}</p> : <p className="pin-error placeholder">{"\u00a0"}</p>}
+              <div className="pin-keypad" aria-label="Teclado PIN">
+                {"123456789".split("").map((digit) => (
+                  <button key={digit} className="pin-key" type="button" onClick={() => onTypeDigit(digit)}>
+                    {digit}
+                  </button>
+                ))}
+                <button className="pin-key secondary" type="button" onClick={onClear}>
+                  C
                 </button>
-              ))}
-              <button className="pin-key secondary" type="button" onClick={onClear}>
-                C
+                <button className="pin-key" type="button" onClick={() => onTypeDigit("0")}>
+                  0
+                </button>
+                <button className="pin-key secondary" type="button" onClick={onBackspace} aria-label="Borrar dígito">
+                  <BackspaceIcon />
+                </button>
+              </div>
+              <button className="btn primary settings-submit" type="button" onClick={onSubmit} disabled={pin.length !== 6}>
+                <CheckIcon />
+                Entrar
               </button>
-              <button className="pin-key" type="button" onClick={() => onTypeDigit("0")}>
-                0
-              </button>
-              <button className="pin-key secondary" type="button" onClick={onBackspace} aria-label="Borrar dígito">
-                <BackspaceIcon />
-              </button>
-            </div>
-            <button className="btn primary settings-submit" type="button" onClick={onSubmit} disabled={pin.length !== 6}>
-              <CheckIcon />
-              Entrar
-            </button>
-          </section>
-        )}
+            </section>
+          )}
+        </div>
       </div>
     </div>
   );

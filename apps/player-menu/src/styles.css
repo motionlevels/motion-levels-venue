@@ -1471,6 +1471,18 @@ button.capsule:disabled,
   letter-spacing: -0.025em;
 }
 
+.detail-heading-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.detail-heading-row .game-revision-row {
+  flex: 0 0 auto;
+}
+
 .game-revision {
   width: fit-content;
   color: rgba(235, 241, 255, 0.46);
@@ -1522,6 +1534,14 @@ button.capsule:disabled,
 
 @keyframes revisionRefreshSpin {
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 900px) {
+  .detail-heading-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
 }
 
 .detail-copy > p {
@@ -2844,12 +2864,17 @@ button.capsule:disabled,
 }
 
 .settings-modal {
-  width: min(560px, 100%);
-  padding: 22px;
-  border-color: rgba(var(--accent-rgb), 0.28);
+  width: min(780px, 100%);
+  padding: 30px;
+  border-color: rgba(var(--accent-rgb), 0.38);
   background:
-    radial-gradient(84% 54% at 50% -12%, rgba(var(--accent-rgb), 0.15), transparent 72%),
-    linear-gradient(180deg, rgba(18, 26, 38, 0.98), rgba(10, 15, 23, 0.98));
+    radial-gradient(80% 48% at 20% -8%, rgba(var(--accent-rgb), 0.2), transparent 68%),
+    radial-gradient(62% 38% at 88% 0%, rgba(78, 132, 255, 0.14), transparent 72%),
+    linear-gradient(180deg, rgba(18, 27, 42, 0.985), rgba(7, 12, 20, 0.985));
+  box-shadow:
+    0 30px 110px -34px rgba(0, 0, 0, 0.95),
+    0 0 0 1px rgba(var(--accent-rgb), 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.075);
 }
 
 @keyframes modalIn {
@@ -2862,14 +2887,30 @@ button.capsule:disabled,
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 22px;
 }
 
 .modal-head strong {
   display: block;
-  font-size: 24px;
-  font-weight: 850;
-  letter-spacing: -0.01em;
+  margin-top: 3px;
+  font-size: 34px;
+  font-weight: 950;
+  line-height: 0.96;
+  letter-spacing: -0.025em;
+}
+
+.settings-modal .icon-button {
+  width: 82px;
+  height: 82px;
+  border-radius: 26px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025)),
+    rgba(255, 255, 255, 0.035);
+}
+
+.settings-modal .icon-button svg {
+  width: 36px;
+  height: 36px;
 }
 
 .modal-body {
@@ -2886,30 +2927,50 @@ button.capsule:disabled,
   gap: 12px;
 }
 
+.settings-content {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 18px;
+}
+
 .pin-panel,
 .settings-section {
+  min-width: 0;
   display: grid;
-  gap: 14px;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid rgba(235, 241, 255, 0.105);
+  border-radius: 26px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)),
+    rgba(5, 9, 16, 0.56);
 }
 
 .settings-version-card {
-  margin-bottom: 14px;
-  padding: 14px 16px;
+  min-height: 100%;
+  padding: 20px;
   display: grid;
-  gap: 5px;
-  border: 1px solid rgba(var(--accent-rgb), 0.24);
-  border-radius: var(--r-md);
+  align-content: start;
+  gap: 10px;
+  border: 1px solid rgba(var(--accent-rgb), 0.34);
+  border-radius: 26px;
   background:
-    linear-gradient(180deg, rgba(var(--accent-rgb), 0.11), rgba(var(--accent-rgb), 0.035)),
-    rgba(7, 12, 20, 0.8);
+    radial-gradient(circle at 20% 0%, rgba(var(--accent-rgb), 0.22), transparent 58%),
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.12), rgba(var(--accent-rgb), 0.035)),
+    rgba(7, 12, 22, 0.86);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 18px 44px -32px rgba(var(--accent-rgb), 0.75);
 }
 
 .settings-version-card strong {
   color: var(--text);
   font-family: var(--mono);
-  font-size: 22px;
+  font-size: 25px;
   font-weight: 900;
-  line-height: 1;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
 }
 
 .settings-version-card small,
@@ -2923,26 +2984,42 @@ button.capsule:disabled,
 
 .settings-copy {
   display: grid;
-  gap: 5px;
+  gap: 7px;
 }
 
 .pin-dots {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 10px;
+  gap: 8px;
 }
 
 .pin-dots span {
-  height: 16px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-pill);
-  background: rgba(255, 255, 255, 0.06);
+  position: relative;
+  height: 42px;
+  border: 1px solid rgba(235, 241, 255, 0.16);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.015)),
+    rgba(0, 0, 0, 0.22);
 }
 
 .pin-dots span.filled {
-  border-color: rgba(var(--accent-rgb), 0.8);
+  border-color: rgba(var(--accent-rgb), 0.58);
+  background:
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.2), rgba(var(--accent-rgb), 0.08)),
+    rgba(0, 0, 0, 0.22);
+  box-shadow:
+    0 0 0 1px rgba(var(--accent-rgb), 0.1),
+    0 0 20px -9px rgba(var(--accent-rgb), 0.9);
+}
+
+.pin-dots span.filled::after {
+  content: "";
+  position: absolute;
+  inset: 13px;
+  border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 18px -8px rgba(var(--accent-rgb), 0.9);
+  box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.85);
 }
 
 .pin-dots.error span {
@@ -2964,44 +3041,70 @@ button.capsule:disabled,
 .pin-keypad {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 10px;
 }
 
 .pin-key {
-  min-height: 58px;
+  min-height: 72px;
   display: grid;
   place-items: center;
   border: 1px solid var(--line);
-  border-radius: var(--r-sm);
+  border-radius: 20px;
   color: var(--text);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025)),
-    rgba(9, 15, 24, 0.78);
-  font-size: 28px;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.032)),
+    rgba(12, 18, 29, 0.84);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 2px 0 rgba(0, 0, 0, 0.24);
+  font-size: 34px;
   font-weight: 950;
   cursor: pointer;
+  transition: transform 90ms var(--ease), border-color 120ms var(--ease), background 120ms var(--ease), box-shadow 120ms var(--ease);
 }
 
 .pin-key:hover {
   border-color: var(--line-strong);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05)),
     rgba(9, 15, 24, 0.9);
+}
+
+.pin-key:active {
+  transform: translateY(1px) scale(0.985);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .pin-key.secondary {
   color: var(--soft);
-  font-size: 22px;
+  font-size: 24px;
 }
 
 .pin-key svg {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
 }
 
 .settings-submit {
   width: 100%;
-  min-height: 54px;
+  min-height: 66px;
+  border-radius: 22px;
+  font-size: 24px;
+}
+
+@media (max-width: 760px) {
+  .settings-modal {
+    width: min(560px, 100%);
+    padding: 22px;
+  }
+
+  .settings-content {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-version-card {
+    min-height: 0;
+  }
 }
 
 .settings-toggle {
