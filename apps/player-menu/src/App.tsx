@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { controlGame, fetchAnimationPreview, fetchEngineStatus, fetchGameCatalog, fetchMenuState, platformBaseURL, postMenuEvent, postMenuState, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus, type MenuStateEnvelope, type PlatformGameCatalogEntry } from "./api";
 import { categories, colors, difficulties, games, playerColorNames, playerColors, previewAsset, type CategoryID, type DifficultyID, type GameCard, type PartyMiniGame } from "./catalog";
 import {
@@ -681,6 +681,14 @@ function formatBestTime(ms?: number): string {
   const seconds = Math.floor((totalTenths % 600) / 10);
   const tenths = totalTenths % 10;
   return minutes > 0 ? `${minutes}:${String(seconds).padStart(2, "0")}.${tenths}` : `${seconds}.${tenths}s`;
+}
+
+function formatRuntimeTime(ms?: number): string {
+  if (!ms || ms <= 0) return "0s";
+  const totalSeconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes > 0 ? `${minutes}:${String(seconds).padStart(2, "0")}` : `${seconds}s`;
 }
 
 function starCountForDifficulty(difficulty?: DifficultyID): number {
@@ -1567,6 +1575,8 @@ function MenuApp() {
   const displayPlayers = gameActive && enginePlayers.length > 0 ? enginePlayers : launchedPlayers;
   const headerPlayers = gameActive && enginePlayers.length > 0 ? enginePlayers : activePlayers;
   const launchedLevel = launchedGame.levels?.find((level) => level.id === (status?.level || selectedLevelFor(launchedGame)));
+  const launchedSupportedDifficulties = supportedDifficultiesFor(launchedGame, launchedLevel);
+  const launchedDifficulty = closestSupportedDifficulty(menu.difficulty, launchedSupportedDifficulties);
   const launchedModeLabel = isAmbientCard(launchedGame) ? "Ambiente" : launchedLevel?.label || selectedDifficulty.label;
   const pickerPlayer = menu.players.find((player) => player.id === colorPickerFor) || null;
   const removePlayer = menu.players.find((player) => player.id === confirmRemove) || null;
@@ -2041,6 +2051,44 @@ function MenuApp() {
     );
   }
 
+  function renderActiveLevelOption(game: GameCard, level: NonNullable<GameCard["levels"]>[number], options: {
+    activeLevelID: string;
+    selectable: boolean;
+    onSelect: (levelID: string) => void;
+  }) {
+    const active = options.activeLevelID === level.id;
+    const levelIndex = game.levels?.findIndex((candidate) => candidate.id === level.id) ?? -1;
+    const levelLabel = playerLevelLabel(level, levelIndex);
+    const progress = progressFor(game, menu);
+    const bestDifficulty = progress.bestByLevel[level.id];
+    const previewDifficulty = closestSupportedDifficulty(menu.difficulty, supportedDifficultiesFor(game, level));
+    return (
+      <button
+        key={level.id}
+        className={`level-option active-game-level ${active ? "active" : ""} ${bestDifficulty ? "passed" : ""} ${options.selectable ? "" : "readonly"}`}
+        style={{ "--level-color": difficultyColor(bestDifficulty), "--level-rgb": hexToRGB(difficultyColor(bestDifficulty)), "--c": game.color, "--crgb": hexToRGB(game.color) } as CSSProperties}
+        type="button"
+        role="radio"
+        aria-checked={active}
+        aria-label={`${levelLabel}${options.selectable ? "" : ", solo lectura durante reto"}`}
+        disabled={!options.selectable}
+        onClick={() => options.onSelect(level.id)}
+      >
+        <Preview src={levelPreviewSrc(game, level, previewDifficulty)} animationID={levelPreviewAnimationID(game, level)} compact />
+        <span className="level-footer">
+          <strong>{levelLabel}</strong>
+          {active ? (
+            <span className="level-state rated">Actual</span>
+          ) : (
+            <span className={`level-state ${bestDifficulty ? "rated" : "unrated"}`}>
+              <StarRating difficulty={bestDifficulty} label="Mejor dificultad" muted={!bestDifficulty} />
+            </span>
+          )}
+        </span>
+      </button>
+    );
+  }
+
   function narrationArmedFor(game: GameCard, state = menu): boolean {
     if (!supportsNarration(game)) return false;
     return state.narrationArmed[game.id] ?? true;
@@ -2417,10 +2465,33 @@ function MenuApp() {
           players={displayPlayers}
           allPlayers={displayPlayers.length > 0 ? displayPlayers : menu.players}
           modeLabel={launchedModeLabel}
+          levelMode={levelModeFor(launchedGame, menu)}
+          selectedLevelID={selectedLevelFor(launchedGame)}
+          challengeRun={challengeRunFor(launchedGame, menu)}
+          difficulty={launchedDifficulty}
+          supportedDifficulties={launchedSupportedDifficulties}
+          renderLevelOption={(level, options) => renderActiveLevelOption(launchedGame, level, options)}
           ambient={isAmbientCard(launchedGame)}
           introActive={introActive}
           countdownValue={countdownValue}
           error={error}
+          onDifficultyChange={(difficulty) => {
+            captureMenuEvent("difficulty_changed", {
+              difficulty,
+              engine_game: engineGameID(launchedGame),
+              game: launchedGame.id,
+              level: selectedLevelFor(launchedGame),
+              source: "active_game",
+            });
+            setMenu((current) => ({ ...current, difficulty }));
+          }}
+          onLevelSelect={(levelID) => setSelectedLevel(launchedGame, levelID)}
+          onNextLevel={() => {
+            const levels = launchedGame.levels || [];
+            const currentIndex = Math.max(0, levels.findIndex((level) => level.id === selectedLevelFor(launchedGame)));
+            const nextLevel = levels[(currentIndex + 1) % levels.length];
+            if (nextLevel) setSelectedLevel(launchedGame, nextLevel.id);
+          }}
           onPauseToggle={() => sendGameControl(status?.paused ? "resume" : "pause")}
           onRestart={() => restartLaunchedGame()}
           narrationSupported={supportsNarration(launchedGame)}
@@ -3168,10 +3239,19 @@ function GameControlScreen({
   players,
   allPlayers,
   modeLabel,
+  levelMode,
+  selectedLevelID,
+  challengeRun,
+  difficulty,
+  supportedDifficulties,
+  renderLevelOption,
   ambient,
   introActive,
   countdownValue,
   error,
+  onDifficultyChange,
+  onLevelSelect,
+  onNextLevel,
   onPauseToggle,
   onRestart,
   narrationSupported,
@@ -3184,10 +3264,19 @@ function GameControlScreen({
   players: Player[];
   allPlayers: Player[];
   modeLabel: string;
+  levelMode: LevelMode;
+  selectedLevelID: string;
+  challengeRun: ChallengeRun | null;
+  difficulty: DifficultyID;
+  supportedDifficulties: DifficultyID[];
+  renderLevelOption: (level: NonNullable<GameCard["levels"]>[number], options: { activeLevelID: string; selectable: boolean; onSelect: (levelID: string) => void }) => ReactNode;
   ambient: boolean;
   introActive: boolean;
   countdownValue: number;
   error: string;
+  onDifficultyChange: (difficulty: DifficultyID) => void;
+  onLevelSelect: (levelID: string) => void;
+  onNextLevel: () => void;
   onPauseToggle: () => void;
   onRestart: () => void;
   narrationSupported: boolean;
@@ -3196,8 +3285,25 @@ function GameControlScreen({
   onExit: () => void;
 }) {
   const paused = Boolean(status?.paused);
+  const levelModeFree = levelMode === "free";
+  const levels = game.levels || [];
+  const hasLevels = levels.length > 0;
+  const currentLevelID = status?.level || selectedLevelID || levels[0]?.id || "";
+  const currentLevel = levels.find((level) => level.id === currentLevelID);
+  const currentLevelIndex = currentLevel ? levels.findIndex((level) => level.id === currentLevel.id) : -1;
+  const pendingLevel = levels.find((level) => level.id === selectedLevelID);
+  const totalMillis = Math.max(0, Math.round((game.estimatedDurationSeconds || 0) * 1000));
+  const elapsedMillis = Math.max(0, Math.round(status?.elapsedMillis || 0));
+  const remainingMillis = totalMillis > 0 ? Math.max(0, totalMillis - elapsedMillis) : 0;
+  const timeLabel = totalMillis > 0 ? formatRuntimeTime(remainingMillis) : formatRuntimeTime(elapsedMillis);
+  const timeCaption = totalMillis > 0 ? "Restante" : "Tiempo";
+  const score = scoreFromStatus(status);
+  const difficultyLabel = difficulties.find((candidate) => candidate.id === difficulty)?.label || difficulty;
+  const completedCount = Object.keys(challengeRun?.completedLevels || {}).length;
+  const progressLabel = hasLevels ? `${completedCount}/${levels.length}` : "0/0";
+  const phaseLabel = ambient ? "Animación en curso" : introActive ? "Narración inicial" : countdownValue > 0 ? "Preparando salida" : paused ? "Pausado" : "En curso";
   return (
-    <section className="game-control-screen" style={{ "--c": game.color, "--crgb": hexToRGB(game.color) } as CSSProperties}>
+    <section className={`game-control-screen ${hasLevels ? "with-levels" : ""}`} style={{ "--c": game.color, "--crgb": hexToRGB(game.color) } as CSSProperties}>
       <div className="game-control-main">
         <div className="game-control-preview">
           <LiveFloorView />
@@ -3217,14 +3323,62 @@ function GameControlScreen({
         </div>
 
         <div className="game-control-copy">
-          <span className="micro">{ambient ? "Ambiente activo" : "Juego activo"}</span>
-          <h2>{game.label}</h2>
-          <p>{ambient ? "Animación en curso" : introActive ? "Narración inicial" : countdownValue > 0 ? "Preparando una salida segura" : paused ? "El juego está pausado" : "Ronda en curso"}</p>
+          <div className="game-control-heading">
+            <span className="micro">{ambient ? "Ambiente activo" : hasLevels ? (levelModeFree ? "Modo libre" : "Reto en curso") : "Juego activo"}</span>
+            <h2>{game.label}</h2>
+            <p>{phaseLabel}</p>
+          </div>
           <div className="control-meta">
             <span>{ambient ? "Todos los jugadores" : `${players.length || 1} ${players.length === 1 ? "jugador" : "jugadores"}`}</span>
-            <span>{modeLabel}</span>
-            <span>{status?.currentGame || engineGameID(game)}</span>
+            <span>{hasLevels && currentLevel ? playerLevelLabel(currentLevel, currentLevelIndex) : modeLabel}</span>
+            <span>{difficultyLabel}</span>
           </div>
+          {!ambient ? (
+            <div className="active-game-stats" aria-label="Estado de partida">
+              <div>
+                <span>{timeCaption}</span>
+                <strong>{timeLabel}</strong>
+              </div>
+              <div>
+                <span>Puntos</span>
+                <strong>{score}</strong>
+              </div>
+              {hasLevels ? (
+                <div>
+                  <span>{levelModeFree ? "Nivel listo" : "Progreso"}</span>
+                  <strong>{levelModeFree && pendingLevel ? playerLevelLabel(pendingLevel, levels.findIndex((level) => level.id === pendingLevel.id)) : progressLabel}</strong>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {hasLevels && levelModeFree ? (
+            <div className="active-free-controls">
+              <div className="active-difficulty-row" role="group" aria-label="Dificultad">
+                {difficulties.map((candidate) => {
+                  const supported = supportedDifficulties.includes(candidate.id);
+                  return (
+                    <button
+                      key={candidate.id}
+                      className={`active-difficulty ${difficulty === candidate.id ? "active" : ""}`}
+                      style={{ "--difficulty-color": candidate.color, "--difficulty-rgb": hexToRGB(candidate.color) } as CSSProperties}
+                      type="button"
+                      disabled={!supported}
+                      aria-pressed={difficulty === candidate.id}
+                      onClick={() => {
+                        if (supported) onDifficultyChange(candidate.id);
+                      }}
+                    >
+                      <span>{candidate.label}</span>
+                      <StarRating difficulty={candidate.id} label={candidate.label} />
+                    </button>
+                  );
+                })}
+              </div>
+              <button className="btn active-next-level" type="button" onClick={onNextLevel}>
+                Siguiente nivel
+              </button>
+            </div>
+          ) : null}
           {!ambient ? <div className="control-roster">
             {players.slice(0, 6).map((player) => (
               <span key={player.id} className="player-pill" style={{ "--pc": player.color } as CSSProperties}>
@@ -3235,6 +3389,17 @@ function GameControlScreen({
           </div> : null}
           {error ? <div className="message error">{error}</div> : null}
         </div>
+        {hasLevels ? (
+          <section className="active-level-rail" aria-label={levelModeFree ? "Elegir nivel" : "Niveles del reto"} role="radiogroup">
+            <div className="active-level-rail-heading">
+              <span className="micro">{levelModeFree ? "Cambiar nivel" : "Nivel actual"}</span>
+              <strong>{levelModeFree ? "Todos los niveles" : progressLabel}</strong>
+            </div>
+            <div className="active-level-grid">
+              {levels.map((level) => renderLevelOption(level, { activeLevelID: levelModeFree ? selectedLevelID : currentLevelID, selectable: levelModeFree, onSelect: onLevelSelect }))}
+            </div>
+          </section>
+        ) : null}
       </div>
 
       <div className="game-control-actions">
