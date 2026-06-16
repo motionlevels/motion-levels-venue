@@ -91,6 +91,61 @@ export function GearIcon() {
   );
 }
 
+export function StarIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="m32 7 7 15 16 2-12 11 3 16-14-8-14 8 3-16L9 24l16-2Z" fill="none" stroke="currentColor" strokeWidth="5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function TeamIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="25" cy="22" r="9" fill="none" stroke="currentColor" strokeWidth="5" />
+      <circle cx="43" cy="25" r="7" fill="none" stroke="currentColor" strokeWidth="5" />
+      <path d="M10 51c2-12 9-18 19-18s17 6 19 18" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+      <path d="M39 40c7 1 12 5 14 12" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function VersusIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M17 14h14l-8 14h12L15 52l6-17H10Z" fill="none" stroke="currentColor" strokeWidth="5" strokeLinejoin="round" />
+      <path d="M47 50H33l8-14H29l20-24-6 17h11Z" fill="none" stroke="currentColor" strokeWidth="5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function UserIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="22" r="11" fill="none" stroke="currentColor" strokeWidth="5" />
+      <path d="M14 53c3-13 9-19 18-19s15 6 18 19" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function GamepadIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M18 25h28c7 0 12 6 12 14 0 7-4 12-9 12-4 0-7-3-10-7H25c-3 4-6 7-10 7-5 0-9-5-9-12 0-8 5-14 12-14Z" fill="none" stroke="currentColor" strokeWidth="5" strokeLinejoin="round" />
+      <path d="M21 34v10M16 39h10M42 38h0M50 38h0" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function SparkIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M32 8v14M32 42v14M8 32h14M42 32h14M19 19l8 8M37 37l8 8M45 19l-8 8M27 37l-8 8" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+      <circle cx="32" cy="32" r="6" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function CloseIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">

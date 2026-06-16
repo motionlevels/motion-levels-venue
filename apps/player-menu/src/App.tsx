@@ -19,7 +19,7 @@ import {
   rosterForGame,
   supportedDifficultiesForGame,
 } from "./catalogSync";
-import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, RefreshIcon, RestartIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
+import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GamepadIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, RefreshIcon, RestartIcon, SparkIcon, StarIcon, TeamIcon, UserIcon, VersusIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
 import { floorAnimations, type FloorAnim, type RGB } from "./floor";
@@ -147,6 +147,14 @@ function clampInteger(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
+function playerRangeLabel(game: GameCard): string {
+  const bounds = playerBoundsForGame(game);
+  if (game.players && !/^\d+(?:-\d+)?$/.test(game.players.trim())) return game.players;
+  const count = bounds.minPlayers === bounds.maxPlayers ? String(bounds.minPlayers) : `${bounds.minPlayers}-${bounds.maxPlayers}`;
+  const plural = bounds.maxPlayers === 1 ? "jugador" : "jugadores";
+  return `${count} ${plural}`;
+}
+
 function remoteSessionRequestFromURL(): RemoteSessionRequest | null {
   if (typeof window === "undefined") return null;
   const params = new URLSearchParams(window.location.search);
@@ -256,6 +264,25 @@ function isPartyCard(game: GameCard): boolean {
 
 function isFeaturedCard(game: GameCard): boolean {
   return game.featured === true || game.category === "featured";
+}
+
+function categoryIcon(categoryID: CategoryID) {
+  switch (categoryID) {
+    case "featured":
+      return <StarIcon />;
+    case "team":
+      return <TeamIcon />;
+    case "versus":
+      return <VersusIcon />;
+    case "individual":
+      return <UserIcon />;
+    case "arcade":
+      return <GamepadIcon />;
+    case "attract":
+      return <SparkIcon />;
+    default:
+      return <StarIcon />;
+  }
 }
 
 function isScreensaverCard(game: Pick<GameCard, "engineGame" | "id">): boolean {
@@ -1050,6 +1077,8 @@ function MenuApp() {
   const [settingsUnlocked, setSettingsUnlocked] = useState(false);
   const [settingsPin, setSettingsPin] = useState("");
   const [settingsError, setSettingsError] = useState("");
+  const [settingsPinFailures, setSettingsPinFailures] = useState(0);
+  const [settingsLockoutUntil, setSettingsLockoutUntil] = useState(0);
   const [teamOpen, setTeamOpen] = useState(false);
   const [screenMode, setScreenMode] = useState<ScreenMode>("browse");
   const [remoteSessionRequest, setRemoteSessionRequest] = useState<RemoteSessionRequest | null>(() => remoteSessionRequestFromURL());
@@ -1546,9 +1575,7 @@ function MenuApp() {
   const menuPlayerCount = activePlayers.length || 1;
   const headerPlayerCount = headerPlayers.length || 1;
   const playerCountLabel = `${headerPlayerCount} ${headerPlayerCount === 1 ? "jugador" : "jugadores"}`;
-  const selectedGamePlayerBounds = playerBoundsForGame(selectedGame);
-  const selectedGamePlayerCount = Math.min(menuPlayerCount, selectedGamePlayerBounds.maxPlayers);
-  const selectedGamePlayerCountLabel = `${selectedGamePlayerCount} ${selectedGamePlayerCount === 1 ? "jugador" : "jugadores"}`;
+  const selectedGamePlayerRangeLabel = playerRangeLabel(selectedGame);
   const rosterIssue = useMemo(() => gameRosterIssue(selectedGame, menu.players), [selectedGame, menu.players]);
 
   useEffect(() => {
@@ -1787,6 +1814,8 @@ function MenuApp() {
     setSettingsUnlocked(false);
     setSettingsPin("");
     setSettingsError("");
+    setSettingsPinFailures(0);
+    setSettingsLockoutUntil(0);
   }
 
   function closeSettings() {
@@ -1794,6 +1823,8 @@ function MenuApp() {
     setSettingsUnlocked(false);
     setSettingsPin("");
     setSettingsError("");
+    setSettingsPinFailures(0);
+    setSettingsLockoutUntil(0);
   }
 
   function setOperatorUnlockLevels(enabled: boolean) {
@@ -1805,19 +1836,38 @@ function MenuApp() {
   }
 
   function submitSettingsPin(pin = settingsPin) {
+    if (Date.now() < settingsLockoutUntil) return;
     if (pin === operatorSettingsPin) {
       setSettingsUnlocked(true);
       setSettingsPin("");
       setSettingsError("");
+      setSettingsPinFailures(0);
+      setSettingsLockoutUntil(0);
       captureMenuEvent("settings_unlocked");
       return;
     }
+    const nextFailures = settingsPinFailures + 1;
     setSettingsPin("");
-    setSettingsError("Código incorrecto");
-    captureMenuEvent("settings_pin_failed");
+    setSettingsPinFailures(nextFailures);
+    if (nextFailures >= 3) {
+      const lockoutUntil = Date.now() + 15000;
+      setSettingsLockoutUntil(lockoutUntil);
+      setSettingsError("Demasiados intentos. Espera 15 segundos.");
+      window.setTimeout(() => {
+        setSettingsPinFailures(0);
+        setSettingsLockoutUntil(0);
+        setSettingsError("");
+      }, 15000);
+    } else {
+      setSettingsError(`Código incorrecto · intento ${nextFailures}/3`);
+    }
+    captureMenuEvent("settings_pin_failed", {
+      failures: nextFailures,
+    });
   }
 
   function typeSettingsPinDigit(digit: string) {
+    if (Date.now() < settingsLockoutUntil) return;
     setSettingsError("");
     setSettingsPin((current) => {
       const next = `${current}${digit}`.slice(0, 6);
@@ -2314,8 +2364,8 @@ function MenuApp() {
                 setLevelBrowserGameID(null);
               }}
             >
-              <span className="tab-emoji" aria-hidden="true">
-                {category.icon}
+              <span className="tab-icon" aria-hidden="true">
+                {categoryIcon(category.id)}
               </span>
               <span>{category.label}</span>
             </button>
@@ -2508,7 +2558,7 @@ function MenuApp() {
                   {levelBrowserGame.levels.map((level) => renderLevelOption(levelBrowserGame, level))}
                 </section>
               ) : (
-                <section key={menu.category} className="games game-grid" aria-label="Juegos">
+                <section key={menu.category} className={`games game-grid count-${Math.min(visibleGames.length, 5)}`} aria-label="Juegos">
                   {visibleGames.map((game, index) => {
                     const future = Boolean(game.disabled);
                     const engineAvailable = isGameLaunchable(game);
@@ -2611,7 +2661,7 @@ function MenuApp() {
                     <section className="season-facts" aria-label="Resumen de partida">
                       <div>
                         <span>{isIndividualCard(selectedGame) ? "Jugador" : "Equipo"}</span>
-                        <strong>{selectedGamePlayerCountLabel}</strong>
+                        <strong>{selectedGamePlayerRangeLabel}</strong>
                       </div>
                       <div>
                         <span>Dificultad</span>
@@ -2652,7 +2702,7 @@ function MenuApp() {
                     <section className="season-facts" aria-label="Resumen de partida">
                       <div>
                         <span>{isIndividualCard(selectedGame) ? "Jugador" : "Equipo"}</span>
-                        <strong>{selectedGamePlayerCountLabel}</strong>
+                        <strong>{selectedGamePlayerRangeLabel}</strong>
                       </div>
                       <div>
                         <span>Dificultad</span>
@@ -2686,19 +2736,12 @@ function MenuApp() {
                       <div className="detail-rules">
                         <span className="micro">Reglas rápidas</span>
                         <ul>
-                          {selectedGame.rules.map((rule) => (
+                          {selectedGame.rules.slice(0, 3).map((rule) => (
                             <li key={rule}>{rule}</li>
                           ))}
                         </ul>
                       </div>
                     )}
-                    <p className="detail-note">
-                      {isAmbientCard(selectedGame)
-                        ? "Las animaciones de ambiente se pueden cambiar al instante desde esta pantalla."
-                        : isPartyCard(selectedGame)
-                          ? "El party arranca con el primer minijuego usando el mismo equipo. La puntuación acumulada se conserva en la sesión."
-                        : "Revisa equipo y dificultad antes de empezar. La partida se lanza desde el botón principal."}
-                    </p>
                   </>
                 )}
               </div>
@@ -2753,7 +2796,9 @@ function MenuApp() {
               const catalogBlocked = catalogLoading && isPlatformLaunchableSource(selectedGame);
               const launching = launchingGameID === selectedGame.id;
               const blocked = launching || catalogBlocked || selectedGame.disabled || !engineAvailable || rosterBlocked || levelBlocked;
-              const blockedLabel = catalogBlocked ? "Sincronizando" : levelBlocked ? "Nivel bloqueado" : rosterBlocked ? "Revisa equipo" : selectedGame.disabled ? "Próximamente" : error ? "Sin conexión" : "No disponible";
+              const readyLabel = isAmbientCard(selectedGame) ? "Activar ambiente" : "Empezar partida";
+              const unavailableByEngine = !engineAvailable || Boolean(error);
+              const blockedLabel = catalogBlocked ? "Sincronizando" : levelBlocked ? "Nivel bloqueado" : rosterBlocked ? "Revisa equipo" : selectedGame.disabled ? "Próximamente" : unavailableByEngine ? readyLabel : "No disponible";
               const loadingVisual = launching || catalogBlocked;
               return (
                 <div className="launch-actions">
@@ -2779,7 +2824,7 @@ function MenuApp() {
                     ) : (
                       <>
                         <PlayIcon />
-                        {isAmbientCard(selectedGame) ? "Reproducir" : "Empezar"}
+                        {readyLabel}
                       </>
                     )}
                   </button>
@@ -2830,6 +2875,7 @@ function MenuApp() {
           unlocked={settingsUnlocked}
           pin={settingsPin}
           error={settingsError}
+          lockedOut={Date.now() < settingsLockoutUntil}
           levelsUnlocked={levelsUnlocked}
           envUnlockLevels={envUnlockLevels}
           onTypeDigit={typeSettingsPinDigit}
@@ -2996,6 +3042,7 @@ function OperatorSettingsDialog({
   unlocked,
   pin,
   error,
+  lockedOut,
   levelsUnlocked,
   envUnlockLevels,
   onTypeDigit,
@@ -3008,6 +3055,7 @@ function OperatorSettingsDialog({
   unlocked: boolean;
   pin: string;
   error: string;
+  lockedOut: boolean;
   levelsUnlocked: boolean;
   envUnlockLevels: boolean;
   onTypeDigit: (digit: string) => void;
@@ -3039,6 +3087,10 @@ function OperatorSettingsDialog({
 
           {unlocked ? (
             <section className="settings-section" aria-label="Opciones de operador">
+              <div className="operator-unlocked-banner">
+                <CheckIcon />
+                <span>Modo operador desbloqueado</span>
+              </div>
               <div className="settings-copy">
                 <span className="micro">Operador</span>
                 <p>Opciones protegidas para mantenimiento y pruebas.</p>
@@ -3067,21 +3119,21 @@ function OperatorSettingsDialog({
               {error ? <p className="pin-error">{error}</p> : <p className="pin-error placeholder">{"\u00a0"}</p>}
               <div className="pin-keypad" aria-label="Teclado PIN">
                 {"123456789".split("").map((digit) => (
-                  <button key={digit} className="pin-key" type="button" onClick={() => onTypeDigit(digit)}>
+                  <button key={digit} className="pin-key" type="button" onClick={() => onTypeDigit(digit)} disabled={lockedOut}>
                     {digit}
                   </button>
                 ))}
-                <button className="pin-key secondary" type="button" onClick={onClear}>
+                <button className="pin-key secondary" type="button" onClick={onClear} disabled={lockedOut}>
                   C
                 </button>
-                <button className="pin-key" type="button" onClick={() => onTypeDigit("0")}>
+                <button className="pin-key" type="button" onClick={() => onTypeDigit("0")} disabled={lockedOut}>
                   0
                 </button>
-                <button className="pin-key secondary" type="button" onClick={onBackspace} aria-label="Borrar dígito">
+                <button className="pin-key secondary" type="button" onClick={onBackspace} aria-label="Borrar dígito" disabled={lockedOut}>
                   <BackspaceIcon />
                 </button>
               </div>
-              <button className="btn primary settings-submit" type="button" onClick={onSubmit} disabled={pin.length !== 6}>
+              <button className="btn primary settings-submit" type="button" onClick={onSubmit} disabled={lockedOut || pin.length !== 6}>
                 <CheckIcon />
                 Entrar
               </button>
