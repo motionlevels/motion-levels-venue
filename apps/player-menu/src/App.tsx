@@ -251,6 +251,11 @@ function levelPreviewSrc(game: GameCard, level: NonNullable<GameCard["levels"]>[
   return level?.previewByDifficulty?.[difficulty] || level?.previewSrc || game.previewSrc || game.thumbnailSrc;
 }
 
+function partyPreviewGridSize(count: number): number {
+  if (count <= 1) return 1;
+  return Math.ceil(Math.sqrt(count));
+}
+
 function isMotionLevelsLogoSrc(src: string | undefined): boolean {
   return Boolean(src && /(?:^|\/)motion-levels-icon\.(?:webp|png)(?:$|[?#])/i.test(src));
 }
@@ -2089,6 +2094,19 @@ function MenuApp() {
     );
   }
 
+  function renderPartyPreview(game: GameCard) {
+    if (!isPartyCard(game) || !game.partyMiniGames?.length) {
+      return <Preview src={gameThumbnailSrc(game)} srcs={gameThumbnailSrcs(game)} animationID={previewAnimationID(game)} />;
+    }
+    return (
+      <PartyPreview
+        game={game}
+        catalogGames={menuGames}
+        difficulty={menu.difficulty}
+      />
+    );
+  }
+
   function narrationArmedFor(game: GameCard, state = menu): boolean {
     if (!supportsNarration(game)) return false;
     return state.narrationArmed[game.id] ?? true;
@@ -2639,7 +2657,7 @@ function MenuApp() {
                         aria-pressed={selected}
                         onClick={() => selectGameCard(game.id)}
                       >
-                        <Preview src={gameThumbnailSrc(game)} srcs={gameThumbnailSrcs(game)} animationID={previewAnimationID(game)} />
+                        {renderPartyPreview(game)}
                         <div className="game-body">
                           <h3>{game.label}</h3>
                         </div>
@@ -2652,7 +2670,9 @@ function MenuApp() {
 
             <aside className={`panel detail-panel ${levelDetail ? "level-detail-panel" : ""}`} style={{ "--c": selectedGame.color, "--crgb": hexToRGB(selectedGame.color) } as CSSProperties} aria-label="Juego seleccionado">
               <div className="detail-preview">
-                <Preview src={levelPreviewSrc(selectedGame, selectedLevel, effectiveDifficulty)} animationID={levelPreviewAnimationID(selectedGame, selectedLevel)} />
+                {isPartyCard(selectedGame) ? renderPartyPreview(selectedGame) : (
+                  <Preview src={levelPreviewSrc(selectedGame, selectedLevel, effectiveDifficulty)} animationID={levelPreviewAnimationID(selectedGame, selectedLevel)} />
+                )}
               </div>
               <div className="detail-copy">
                 {levelDetail && selectedLevel ? (
@@ -3589,6 +3609,43 @@ function animFromPreviewFrames(frames: RGB[][]): FloorAnim | null {
     const frame = frames[Math.floor(t * 12) % frames.length] || frames[0];
     return frame[y * cols + x] || [0, 0, 0];
   };
+}
+
+function PartyPreview({ catalogGames, difficulty, game }: { catalogGames: GameCard[]; difficulty: DifficultyID; game: GameCard }) {
+  const miniGames = game.partyMiniGames || [];
+  const gridSize = partyPreviewGridSize(miniGames.length);
+  return (
+    <div
+      className="preview party-preview"
+      style={{ "--party-grid": gridSize, "--party-count": miniGames.length } as CSSProperties}
+      aria-hidden="true"
+    >
+      {miniGames.map((item, index) => {
+        const miniGame = catalogGames.find((candidate) => candidate.id === item.gameId || engineGameID(candidate) === item.gameId);
+        const levelID = item.level || (miniGame?.levels?.length ? defaultLevelID(miniGame) : "");
+        const level = miniGame?.levels?.find((candidate) => candidate.id === levelID);
+        const previewDifficulty = miniGame
+          ? closestSupportedDifficulty(
+            item.difficultyMode === "override" && item.difficulty ? item.difficulty : difficulty,
+            supportedDifficultiesFor(miniGame, level),
+          )
+          : difficulty;
+        const previewSrc = miniGame && level ? levelPreviewSrc(miniGame, level, previewDifficulty) : miniGame ? gameThumbnailSrc(miniGame) : undefined;
+        const previewSrcs = miniGame && !level ? gameThumbnailSrcs(miniGame) : emptyPreviewSources;
+        const animationID = miniGame && level ? levelPreviewAnimationID(miniGame, level) : miniGame ? previewAnimationID(miniGame) : "";
+        const color = miniGame?.color || game.color;
+        return (
+          <div
+            key={`${item.gameId}-${item.level || ""}-${index}`}
+            className="party-preview-tile"
+            style={{ "--c": color, "--crgb": hexToRGB(color) } as CSSProperties}
+          >
+            <Preview src={previewSrc} srcs={previewSrcs} animationID={animationID} compact />
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function Preview({ animationID, compact = false, src, srcs = emptyPreviewSources }: { animationID: string; compact?: boolean; src?: string; srcs?: string[] }) {
