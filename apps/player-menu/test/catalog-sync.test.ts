@@ -15,6 +15,7 @@ import {
   platformSupportsLevels,
   playerBoundsForGame,
   rosterForGame,
+  shouldPreferCatalogFallbackPreviewAnimation,
   supportedDifficultiesForGame,
 } from "../src/catalogSync.ts";
 import { inferPlatformURL } from "../src/api.ts";
@@ -202,5 +203,42 @@ describe("catalog metadata sync", () => {
 
     assert.match(appSource, /decoding="async"/);
     assert.match(appSource, /loading=\{compact \? "lazy" : "eager"\}/);
+  });
+
+  it("prefers authored preview animations for engine games without static preview art", () => {
+    const lavaFallback = { previewAnimation: "lava" };
+
+    assert.equal(
+      shouldPreferCatalogFallbackPreviewAnimation(
+        catalogEntry({
+          catalog_preview_url: "/api/game-catalog/previews/lava.webp",
+          catalog_thumbnail_url: "/api/game-catalog/thumbnails/lava.webp",
+          source_kind: "engine_hardcoded",
+          supports_levels: false,
+        }),
+        lavaFallback,
+      ),
+      true,
+    );
+    assert.equal(
+      shouldPreferCatalogFallbackPreviewAnimation(
+        catalogEntry({
+          source_kind: "platform_levels",
+          supports_levels: true,
+        }),
+        lavaFallback,
+      ),
+      false,
+    );
+    assert.equal(
+      shouldPreferCatalogFallbackPreviewAnimation(
+        catalogEntry({
+          source_kind: "engine_hardcoded",
+          supports_levels: false,
+        }),
+        { previewAnimation: "parkour", thumbnailSrc: "/previews/parkour.webp" },
+      ),
+      false,
+    );
   });
 });

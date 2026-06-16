@@ -17,6 +17,7 @@ import {
   platformSupportsLevels,
   playerBoundsForGame,
   rosterForGame,
+  shouldPreferCatalogFallbackPreviewAnimation,
   supportedDifficultiesForGame,
 } from "./catalogSync";
 import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GamepadIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, RefreshIcon, RestartIcon, SparkIcon, StarIcon, TeamIcon, UserIcon, VersusIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
@@ -468,21 +469,24 @@ function catalogPreviewAnimation(
   fallback: GameCard | undefined,
   engineGame: string,
   hasPlatformMedia: boolean,
+  preferFallbackAnimation: boolean,
 ): string | undefined {
-  if (hasPlatformMedia || isPlatformLevelSource(entry)) return undefined;
   if (engineGame === "salvapantallas") return undefined;
   const configured = String(entry.catalog_preview_animation || "").trim();
+  if (preferFallbackAnimation) return configured || fallback?.previewAnimation;
+  if (hasPlatformMedia || isPlatformLevelSource(entry)) return undefined;
   if (configured) return configured;
   return fallback?.previewAnimation || (entry.source_kind === "cloud_animations" || entry.catalog_category === "attract" ? engineGame : undefined);
 }
 
 function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, index: number): GameCard {
   const engineGame = platformEntryEngineGame(entry);
-  const thumbnailSrcs = catalogThumbnailMediaSrcs(entry, fallback);
-  const previewSrcs = catalogPreviewMediaSrcs(entry, fallback, thumbnailSrcs);
+  const preferFallbackAnimation = shouldPreferCatalogFallbackPreviewAnimation(entry, fallback);
+  const thumbnailSrcs = preferFallbackAnimation ? [] : catalogThumbnailMediaSrcs(entry, fallback);
+  const previewSrcs = preferFallbackAnimation ? [] : catalogPreviewMediaSrcs(entry, fallback, thumbnailSrcs);
   const thumbnailSrc = thumbnailSrcs[0];
   const previewSrc = previewSrcs[0];
-  const hasPlatformMedia = Boolean(catalogDirectAssetSrc(entry.catalog_preview_url) || catalogDirectAssetSrc(entry.catalog_thumbnail_url));
+  const hasPlatformMedia = !preferFallbackAnimation && Boolean(catalogDirectAssetSrc(entry.catalog_preview_url) || catalogDirectAssetSrc(entry.catalog_thumbnail_url));
   const playerBounds = platformPlayerBounds(entry);
   const supportedDifficulties = platformSupportedDifficulties(entry, fallback);
   const supportsLevels = platformSupportsLevels(entry, fallback);
@@ -537,7 +541,7 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
     thumbnailSrcs,
     previewSrc,
     previewSrcs,
-    previewAnimation: catalogPreviewAnimation(entry, fallback, engineGame, hasPlatformMedia),
+    previewAnimation: catalogPreviewAnimation(entry, fallback, engineGame, hasPlatformMedia, preferFallbackAnimation),
     supportsLevels,
     sourceKind: entry.source_kind || fallback?.sourceKind,
     revisionHash: entry.revision_hash || fallback?.revisionHash,

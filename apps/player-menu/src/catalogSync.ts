@@ -46,6 +46,21 @@ export function platformSupportsLevels(
   return fallback?.supportsLevels === true;
 }
 
+export function shouldPreferCatalogFallbackPreviewAnimation(
+  entry: Pick<PlatformGameCatalogEntry, "source_kind">,
+  fallback?: Pick<GameCard, "previewAnimation" | "previewSrc" | "previewSrcs" | "thumbnailSrc" | "thumbnailSrcs">,
+): boolean {
+  return Boolean(
+    fallback?.previewAnimation
+    && !fallback.thumbnailSrc
+    && !fallback.thumbnailSrcs?.length
+    && !fallback.previewSrc
+    && !fallback.previewSrcs?.length
+    && entry.source_kind !== "platform_levels"
+    && entry.source_kind !== "cloud_animations",
+  );
+}
+
 export function normalizeDifficultyIDs(value: unknown): DifficultyID[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<DifficultyID>();
