@@ -2798,10 +2798,24 @@ function MenuApp() {
               const catalogBlocked = catalogLoading && isPlatformLaunchableSource(selectedGame);
               const launching = launchingGameID === selectedGame.id;
               const blocked = launching || catalogBlocked || selectedGame.disabled || !engineAvailable || rosterBlocked || levelBlocked;
+              const rosterAction = rosterBlocked && !launching && !catalogBlocked && !selectedGame.disabled && !levelBlocked;
+              const launchDisabled = blocked && !rosterAction;
               const readyLabel = isAmbientCard(selectedGame) ? "Activar ambiente" : "Empezar partida";
               const unavailableByEngine = !engineAvailable || Boolean(error);
               const blockedLabel = catalogBlocked ? "Sincronizando" : levelBlocked ? "Nivel bloqueado" : rosterBlocked ? "Revisa equipo" : selectedGame.disabled ? "Próximamente" : unavailableByEngine ? readyLabel : "No disponible";
               const loadingVisual = launching || catalogBlocked;
+              const handleLaunchAction = () => {
+                if (rosterAction) {
+                  captureMenuEvent("team_opened", {
+                    player_count: activePlayers.length,
+                    reason: "roster_blocked",
+                    selected_game: selectedGame.id,
+                  });
+                  setTeamOpen(true);
+                  return;
+                }
+                void launch();
+              };
               return (
                 <div className="launch-actions">
                   {supportsNarration(selectedGame) ? (
@@ -2815,7 +2829,7 @@ function MenuApp() {
                       {narrationArmedFor(selectedGame) ? "Narración ON" : "Narración OFF"}
                     </button>
                   ) : null}
-                  <button className={`btn primary play ${loadingVisual ? "loading" : ""}`} type="button" disabled={blocked} aria-busy={loadingVisual} onClick={() => launch()}>
+                  <button className={`btn primary play ${loadingVisual ? "loading" : ""}`} type="button" disabled={launchDisabled} aria-busy={loadingVisual} onClick={handleLaunchAction}>
                     {loadingVisual ? (
                       <>
                         <span className="launch-spinner" aria-hidden="true" />
