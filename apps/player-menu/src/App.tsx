@@ -237,7 +237,11 @@ function gameThumbnailSrcs(game: GameCard): string[] {
 }
 
 function levelPreviewSrc(game: GameCard, level: NonNullable<GameCard["levels"]>[number] | undefined, difficulty: DifficultyID): string | undefined {
-  return level?.previewByDifficulty?.[difficulty] || level?.previewSrc || game.previewSrc;
+  return level?.previewByDifficulty?.[difficulty] || level?.previewSrc || game.previewSrc || game.thumbnailSrc;
+}
+
+function isMotionLevelsLogoSrc(src: string | undefined): boolean {
+  return Boolean(src && /(?:^|\/)motion-levels-icon\.(?:webp|png)(?:$|[?#])/i.test(src));
 }
 
 function isAmbientCard(game: GameCard): boolean {
@@ -3396,11 +3400,12 @@ function Preview({ animationID, compact = false, src, srcs = emptyPreviewSources
   const previewFrames = useMemo(() => decodePreviewFrames(livePreview), [livePreview]);
   const liveAnim = useMemo(() => animFromPreviewFrames(previewFrames), [previewFrames]);
   const anim = liveAnim || floorAnimations[animationID];
+  const logoMedia = isMotionLevelsLogoSrc(usableSrc);
   return (
-    <div className={`preview ${compact ? "compact-preview" : ""}`}>
+    <div className={`preview ${compact ? "compact-preview" : ""} ${logoMedia ? "logo-preview" : ""}`}>
       {usableSrc ? (
         <img
-          className="preview-media"
+          className={`preview-media ${logoMedia ? "logo-preview-media" : ""}`}
           src={usableSrc}
           alt=""
           aria-hidden="true"
@@ -3413,7 +3418,7 @@ function Preview({ animationID, compact = false, src, srcs = emptyPreviewSources
         <FloorPreview anim={anim} orientation="landscape" />
       ) : (
         <div className="preview-logo-fallback" aria-hidden="true">
-          <img src="/motion-levels-icon.png" alt="" />
+          <img src="/motion-levels-icon.webp" alt="" />
         </div>
       )}
     </div>
