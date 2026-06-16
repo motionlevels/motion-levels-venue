@@ -2594,25 +2594,27 @@ function MenuApp() {
                 {levelDetail && selectedLevel ? (
                   <>
                     <section className="season-summary" aria-label="Juego actual">
-                      <span className="micro">Juego actual</span>
+                      <div className="detail-heading-row">
+                        <span className="micro">Juego actual</span>
+                        {selectedGame.revisionHash ? (
+                          <span className="game-revision-row">
+                            <span className="game-revision">rev {selectedGame.revisionHash}</span>
+                            <button
+                              className="game-revision-refresh"
+                              type="button"
+                              disabled={catalogRefreshing}
+                              title="Actualizar catálogo"
+                              aria-label="Actualizar catálogo"
+                              onClick={() => refreshPlatformCatalog({ manual: true })}
+                            >
+                              <RefreshIcon />
+                            </button>
+                          </span>
+                        ) : null}
+                      </div>
                       <div className="season-title-row">
                         <span className="season-title-main">
                           <h2>{selectedGame.label}</h2>
-                          {selectedGame.revisionHash ? (
-                            <span className="game-revision-row">
-                              <span className="game-revision">rev {selectedGame.revisionHash}</span>
-                              <button
-                                className="game-revision-refresh"
-                                type="button"
-                                disabled={catalogRefreshing}
-                                title="Actualizar catálogo"
-                                aria-label="Actualizar catálogo"
-                                onClick={() => refreshPlatformCatalog({ manual: true })}
-                              >
-                                <RefreshIcon />
-                              </button>
-                            </span>
-                          ) : null}
                         </span>
                         <span className="season-progress">
                           {selectedLevelIndex}/{selectedGame.levels?.length}
