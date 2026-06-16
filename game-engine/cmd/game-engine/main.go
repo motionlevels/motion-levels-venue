@@ -65,6 +65,7 @@ type config struct {
 	DisplaySnapshotFPS     int
 	PlatformURL            string
 	PlatformToken          string
+	PlatformAssetCacheDir  string
 	PlatformSyncInterval   time.Duration
 	VenueIdleTimeout       time.Duration
 	ControllerID           string
@@ -113,6 +114,7 @@ func main() {
 	flag.IntVar(&cfg.DisplaySnapshotFPS, "display-snapshot-fps", 4, "display snapshots per second to write into game session recordings")
 	flag.StringVar(&cfg.PlatformURL, "platform-url", os.Getenv("MOTION_LEVELS_PLATFORM_URL"), "platform base URL for session ingest; empty disables")
 	flag.StringVar(&cfg.PlatformToken, "platform-token", os.Getenv("MOTION_LEVELS_PLATFORM_TOKEN"), "platform bearer token for session ingest; can also use MOTION_LEVELS_PLATFORM_TOKEN")
+	flag.StringVar(&cfg.PlatformAssetCacheDir, "platform-asset-cache", nonEmptyEnv("MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR", "/var/lib/motion-levels/platform-asset-cache"), "directory for cached platform preview assets")
 	flag.DurationVar(&cfg.PlatformSyncInterval, "platform-sync-interval", time.Second, "how often to publish session state to the platform")
 	flag.DurationVar(&cfg.VenueIdleTimeout, "venue-session-idle-timeout", defaultVenueIdleLimit, "end the venue session after this much inactivity; 0 keeps the built-in default")
 	flag.StringVar(&cfg.ControllerID, "controller-id", "", "stable controller UUID to attach platform session records to")
@@ -255,6 +257,13 @@ func displaySnapshotInterval(fps int) time.Duration {
 		fps = 1
 	}
 	return time.Duration(float64(time.Second) / float64(fps))
+}
+
+func nonEmptyEnv(key string, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func (c config) audioPlayer() (*audio.Player, error) {

@@ -142,6 +142,7 @@ write_files:
       MOTION_LEVELS_LED_BROADCAST_PORT=4626
 
       MOTION_LEVELS_PLATFORM_URL=https://platform.motionlevels.obis.dev
+      MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR=/var/lib/motion-levels/platform-asset-cache
       MOTION_LEVELS_CONTROLLER_LABEL=Venue Floor 1
       MOTION_LEVELS_CONTROLLER_HOSTNAME=motionlevels-1
       MOTION_LEVELS_RECORDING_UPLOAD_PLATFORM_URL=https://platform.motionlevels.obis.dev
@@ -286,6 +287,7 @@ write_files:
         -replay-zstd-path /usr/bin/zstd \
         -display-snapshot-fps ${MOTION_LEVELS_DISPLAY_SNAPSHOT_FPS} \
         -platform-url ${MOTION_LEVELS_PLATFORM_URL} \
+        -platform-asset-cache ${MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR} \
         -platform-sync-interval 1s \
         -controller-label "${MOTION_LEVELS_CONTROLLER_LABEL}" \
         -controller-hostname ${MOTION_LEVELS_CONTROLLER_HOSTNAME} \

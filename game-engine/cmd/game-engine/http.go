@@ -1,11 +1,15 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -105,7 +109,8 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 		if frameCount <= 0 {
 			frameCount = 16
 		}
-		frames, err := animations.PreviewFrames(runtime.base.PlatformURL, level, frameCount)
+		revision := strings.TrimSpace(r.URL.Query().Get("revision"))
+		frames, err := cachedAnimationPreviewFrames(runtime.base.PlatformURL, runtime.base.PlatformAssetCacheDir, level, revision, frameCount)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
@@ -259,6 +264,51 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 	return withAPILogging(runtime, withCORS(mux))
+}
+
+type cachedAnimationPreviewPayload struct {
+	CachedAt string                    `json:"cachedAt"`
+	Frames   []animations.PreviewFrame `json:"frames"`
+	Level    string                    `json:"level"`
+	Revision string                    `json:"revision"`
+}
+
+func cachedAnimationPreviewFrames(platformURL string, cacheRoot string, level string, revision string, frameCount int) ([]animations.PreviewFrame, error) {
+	if strings.TrimSpace(revision) == "" || strings.TrimSpace(cacheRoot) == "" {
+		return animations.PreviewFrames(platformURL, level, frameCount)
+	}
+	cachePath := animationPreviewCachePath(cacheRoot, level, revision, frameCount)
+	if bytes, err := os.ReadFile(cachePath); err == nil {
+		var payload cachedAnimationPreviewPayload
+		if err := json.Unmarshal(bytes, &payload); err == nil && len(payload.Frames) > 0 && payload.Revision == revision {
+			return payload.Frames, nil
+		}
+	}
+	frames, err := animations.PreviewFrames(platformURL, level, frameCount)
+	if err != nil {
+		return nil, err
+	}
+	payload := cachedAnimationPreviewPayload{
+		CachedAt: time.Now().UTC().Format(time.RFC3339),
+		Frames:   frames,
+		Level:    animations.NormalizeLevel(level),
+		Revision: revision,
+	}
+	if bytes, err := json.Marshal(payload); err == nil {
+		if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err == nil {
+			if err := os.WriteFile(cachePath, bytes, 0o644); err != nil {
+				log.Printf("animation preview cache write: %v", err)
+			}
+		} else {
+			log.Printf("animation preview cache mkdir: %v", err)
+		}
+	}
+	return frames, nil
+}
+
+func animationPreviewCachePath(cacheRoot string, level string, revision string, frameCount int) string {
+	sum := sha256.Sum256([]byte(animations.NormalizeLevel(level) + "\x00" + revision + "\x00" + strconv.Itoa(frameCount)))
+	return filepath.Join(cacheRoot, "animation-previews", hex.EncodeToString(sum[:])+".json")
 }
 
 func normalizeLaunchPlatformURL(value string) string {

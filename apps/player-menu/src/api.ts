@@ -8,7 +8,7 @@ export type EngineGame = {
   maxPlayers: number;
   difficulty: boolean;
   volume: number;
-  levels?: Array<{ id: string; slug?: string; label: string; description: string; difficulty?: string; difficulties?: string[]; rules?: Record<string, unknown> }>;
+  levels?: Array<{ id: string; slug?: string; label: string; description: string; difficulty?: string; difficulties?: string[]; rules?: Record<string, unknown>; status?: string; settings_hash?: string; updated_at?: string }>;
 };
 
 export type PlatformGameCatalogEntry = {
@@ -44,7 +44,7 @@ export type PlatformGameCatalogEntry = {
   code_editable: boolean;
   revision_hash?: string;
   game_source?: Record<string, unknown>;
-  levels?: Array<{ id: string; slug?: string; label: string; description: string; difficulty?: string; difficulties?: string[]; rules?: Record<string, unknown> }>;
+  levels?: Array<{ id: string; slug?: string; label: string; description: string; difficulty?: string; difficulties?: string[]; rules?: Record<string, unknown>; status?: string; settings_hash?: string; updated_at?: string }>;
 };
 
 export type EngineStatus = {
@@ -173,8 +173,9 @@ export async function fetchGameCatalog(): Promise<PlatformGameCatalogEntry[]> {
   return Array.isArray(payload.games) ? payload.games : [];
 }
 
-export async function fetchAnimationPreview(level: string, frames = 16): Promise<AnimationPreview> {
+export async function fetchAnimationPreview(level: string, frames = 16, revision?: string): Promise<AnimationPreview> {
   const params = new URLSearchParams({ level, frames: String(frames) });
+  if (revision) params.set("revision", revision);
   const response = await fetch(`${engineBaseURL()}/api/animation-preview?${params.toString()}`);
   if (!response.ok) {
     throw new Error(await response.text());

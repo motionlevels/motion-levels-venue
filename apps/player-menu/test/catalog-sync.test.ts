@@ -18,6 +18,7 @@ import {
   shouldPreferCatalogFallbackPreviewAnimation,
   supportedDifficultiesForGame,
 } from "../src/catalogSync.ts";
+import { platformAnimationCards } from "../src/animationCatalog.ts";
 import { inferPlatformURL } from "../src/api.ts";
 import type { PlatformGameCatalogEntry } from "../src/api.ts";
 import type { GameCard } from "../src/catalog.ts";
@@ -188,6 +189,43 @@ describe("catalog metadata sync", () => {
 
     assert.equal(/id:\s*"animations"/.test(staticGamesSource), false);
     assert.match(staticGamesSource, /id:\s*"salvapantallas"[\s\S]*?engineGame:\s*"salvapantallas"/);
+  });
+
+  it("expands published cloud animations into Ambiente cards without drafts", () => {
+    const cards = platformAnimationCards([
+      catalogEntry({
+        id: "animations",
+        engine_game: "animations",
+        source_kind: "cloud_animations",
+        catalog_enabled: false,
+        default_music_ref: "Motion/canciones/Ambient.mp3",
+        revision_hash: "game-rev",
+        levels: [
+          {
+            id: "11111111-1111-4111-8111-111111111111",
+            slug: "aurora",
+            label: "Aurora",
+            description: "Loop suave",
+            status: "published",
+            settings_hash: "level-rev",
+          },
+          {
+            id: "22222222-2222-4222-8222-222222222222",
+            slug: "draft-loop",
+            label: "Draft loop",
+            description: "Todavía oculto",
+            status: "draft",
+            settings_hash: "draft-rev",
+          },
+        ],
+      }),
+    ]);
+
+    assert.deepEqual(cards.map((card) => card.id), ["animation-aurora"]);
+    assert.equal(cards[0].category, "attract");
+    assert.equal(cards[0].engineGame, "animation-aurora");
+    assert.equal(cards[0].previewAnimation, "animation-aurora");
+    assert.equal(cards[0].previewRevisionHash, "level-rev");
   });
 
   it("keeps party inside the competitive menu category", () => {

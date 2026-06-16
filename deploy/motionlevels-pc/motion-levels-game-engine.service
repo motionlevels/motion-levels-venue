@@ -23,6 +23,7 @@ ExecStart=/opt/motion-levels/rebuild/bin/game-engine \
   -replay-zstd-path /usr/bin/zstd \
   -display-snapshot-fps ${MOTION_LEVELS_DISPLAY_SNAPSHOT_FPS} \
   -platform-url ${MOTION_LEVELS_PLATFORM_URL} \
+  -platform-asset-cache ${MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR} \
   -platform-sync-interval 1s \
   -controller-label "${MOTION_LEVELS_CONTROLLER_LABEL}" \
   -controller-hostname ${MOTION_LEVELS_CONTROLLER_HOSTNAME} \

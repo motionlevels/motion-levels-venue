@@ -26,6 +26,7 @@ import { LiveFloorView } from "./LiveFloorView";
 import { floorAnimations, type FloorAnim, type RGB } from "./floor";
 import { hexToColor, hexToRGB, initials, randomUUID } from "./utils";
 import { captureMenuEvent, menuKioskID, setMenuEventForwarder } from "./analytics";
+import { platformAnimationCards } from "./animationCatalog";
 
 type Player = {
   id: number;
@@ -338,8 +339,8 @@ function gameForEngineStatus(engineGame: string, currentMenuGameID: string, cata
   return matches.find((game) => game.id === currentMenuGameID) || matches.find((game) => !game.id.startsWith("featured-")) || matches[0];
 }
 
-function liveAnimationCards(catalog: EngineGame[] | undefined): GameCard[] {
-  const existingEngineGames = new Set(games.map(engineGameID));
+function liveAnimationCards(catalog: EngineGame[] | undefined, existingGames: GameCard[] = games): GameCard[] {
+  const existingEngineGames = new Set(existingGames.map(engineGameID));
   const animationColors = [colors.cyan, colors.blue, colors.green, colors.violet, colors.orange, colors.yellow];
   return (catalog || [])
     .filter((entry) => entry.game.startsWith("animation-") && !existingEngineGames.has(entry.game))
@@ -1163,10 +1164,10 @@ function MenuApp() {
     }
   }, []);
 
-  const menuGames = useMemo(
-    () => applyPlatformCatalog([...games, ...liveAnimationCards(status?.catalog)], platformCatalog),
-    [platformCatalog, status?.catalog],
-  );
+  const menuGames = useMemo(() => {
+    const platformAnimations = platformAnimationCards(platformCatalog);
+    return applyPlatformCatalog([...games, ...platformAnimations, ...liveAnimationCards(status?.catalog, [...games, ...platformAnimations])], platformCatalog);
+  }, [platformCatalog, status?.catalog]);
 
   useEffect(() => {
     if (!platformCatalog || !menuGames.length) return;
@@ -1545,6 +1546,7 @@ function MenuApp() {
     const launchGame = partyLaunchGame(game, menuGames);
     if (isScreensaverCard(launchGame)) return true;
     if (availableGames.has(runtimeGameID(launchGame)) || availableGames.has(engineGameID(launchGame))) return true;
+    if (game.sourceKind === "cloud_animations" && engineGameID(game).startsWith("animation-")) return true;
     return isPlatformLaunchableSource(game) && (
       platformEnabledGames.has(game.id) || platformEnabledGames.has(engineGameID(game))
     );
@@ -2096,7 +2098,7 @@ function MenuApp() {
 
   function renderPartyPreview(game: GameCard) {
     if (!isPartyCard(game) || !game.partyMiniGames?.length) {
-      return <Preview src={gameThumbnailSrc(game)} srcs={gameThumbnailSrcs(game)} animationID={previewAnimationID(game)} />;
+      return <Preview src={gameThumbnailSrc(game)} srcs={gameThumbnailSrcs(game)} animationID={previewAnimationID(game)} revisionHash={game.previewRevisionHash} />;
     }
     return (
       <PartyPreview
@@ -2671,7 +2673,7 @@ function MenuApp() {
             <aside className={`panel detail-panel ${levelDetail ? "level-detail-panel" : ""}`} style={{ "--c": selectedGame.color, "--crgb": hexToRGB(selectedGame.color) } as CSSProperties} aria-label="Juego seleccionado">
               <div className="detail-preview">
                 {isPartyCard(selectedGame) ? renderPartyPreview(selectedGame) : (
-                  <Preview src={levelPreviewSrc(selectedGame, selectedLevel, effectiveDifficulty)} animationID={levelPreviewAnimationID(selectedGame, selectedLevel)} />
+                  <Preview src={levelPreviewSrc(selectedGame, selectedLevel, effectiveDifficulty)} animationID={levelPreviewAnimationID(selectedGame, selectedLevel)} revisionHash={selectedGame.previewRevisionHash} />
                 )}
               </div>
               <div className="detail-copy">
@@ -3569,11 +3571,11 @@ function TouchKeyboard({
 
 const animationPreviewCache = new Map<string, Promise<AnimationPreview>>();
 
-function cachedAnimationPreview(level: string): Promise<AnimationPreview> {
-  const key = level.trim().toLowerCase();
+function cachedAnimationPreview(level: string, revisionHash?: string): Promise<AnimationPreview> {
+  const key = `${level.trim().toLowerCase()}@${revisionHash || "live"}`;
   const cached = animationPreviewCache.get(key);
   if (cached) return cached;
-  const request = fetchAnimationPreview(key).catch((error) => {
+  const request = fetchAnimationPreview(level, 16, revisionHash).catch((error) => {
     animationPreviewCache.delete(key);
     throw error;
   });
@@ -3640,7 +3642,7 @@ function PartyPreview({ catalogGames, difficulty, game }: { catalogGames: GameCa
             className="party-preview-tile"
             style={{ "--c": color, "--crgb": hexToRGB(color) } as CSSProperties}
           >
-            <Preview src={previewSrc} srcs={previewSrcs} animationID={animationID} compact />
+            <Preview src={previewSrc} srcs={previewSrcs} animationID={animationID} revisionHash={miniGame?.previewRevisionHash} compact />
           </div>
         );
       })}
@@ -3648,7 +3650,7 @@ function PartyPreview({ catalogGames, difficulty, game }: { catalogGames: GameCa
   );
 }
 
-function Preview({ animationID, compact = false, src, srcs = emptyPreviewSources }: { animationID: string; compact?: boolean; src?: string; srcs?: string[] }) {
+function Preview({ animationID, compact = false, revisionHash, src, srcs = emptyPreviewSources }: { animationID: string; compact?: boolean; revisionHash?: string; src?: string; srcs?: string[] }) {
   const liveLevelID = previewLevelID(animationID);
   const [livePreview, setLivePreview] = useState<AnimationPreview | null>(null);
   const [failedSrcs, setFailedSrcs] = useState<string[]>([]);
@@ -3665,7 +3667,7 @@ function Preview({ animationID, compact = false, src, srcs = emptyPreviewSources
   useEffect(() => {
     if (!liveLevelID || usableSrc) return;
     let cancelled = false;
-    cachedAnimationPreview(liveLevelID)
+    cachedAnimationPreview(liveLevelID, revisionHash)
       .then((preview) => {
         if (!cancelled) setLivePreview(preview);
       })
@@ -3675,7 +3677,7 @@ function Preview({ animationID, compact = false, src, srcs = emptyPreviewSources
     return () => {
       cancelled = true;
     };
-  }, [liveLevelID, usableSrc]);
+  }, [liveLevelID, revisionHash, usableSrc]);
 
   const previewFrames = useMemo(() => decodePreviewFrames(livePreview), [livePreview]);
   const liveAnim = useMemo(() => animFromPreviewFrames(previewFrames), [previewFrames]);
