@@ -1564,7 +1564,6 @@ function MenuApp() {
   const selectedChallengeProgressLabel = selectedGame.levels?.length
     ? `${Object.keys(selectedChallengeRun?.completedLevels || {}).length}/${selectedGame.levels.length}`
     : "0/0";
-  const selectedGameDurationLabel = selectedGame.duration || estimatedDurationLabel(selectedGame.estimatedDurationSeconds || 0) || "Sin estimar";
   const selectedPartyMiniGames = isPartyCard(selectedGame) ? selectedGame.partyMiniGames || [] : [];
   const levelDetail = Boolean(selectedGame.levels?.length && selectedLevel);
   const gameActive = screenMode === "game";
@@ -2670,16 +2669,8 @@ function MenuApp() {
                         <strong>{selectedGamePlayerRangeLabel}</strong>
                       </div>
                       <div>
-                        <span>Dificultad</span>
-                        <strong>{selectedDifficulty.label}</strong>
-                      </div>
-                      <div>
                         <span>Mejor</span>
                         <strong>{selectedLevelBestLabel}</strong>
-                      </div>
-                      <div>
-                        <span>Duración</span>
-                        <strong>{selectedGameDurationLabel}</strong>
                       </div>
                     </section>
                   </>
@@ -2711,12 +2702,8 @@ function MenuApp() {
                         <strong>{selectedGamePlayerRangeLabel}</strong>
                       </div>
                       <div>
-                        <span>Dificultad</span>
-                        <strong>{selectedDifficulty.label}</strong>
-                      </div>
-                      <div>
-                        <span>Duración</span>
-                        <strong>{selectedGameDurationLabel}</strong>
+                        <span>Mejor</span>
+                        <strong>Sin superar</strong>
                       </div>
                     </section>
                     {isPartyCard(selectedGame) ? (
