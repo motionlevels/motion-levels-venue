@@ -982,6 +982,7 @@ button.capsule:disabled,
   min-width: 0;
   display: flex;
   align-items: stretch;
+  justify-content: flex-end;
   gap: 12px;
 }
 
@@ -2073,21 +2074,6 @@ button.capsule:disabled,
   gap: 12px;
 }
 
-.launch-copy {
-  min-width: 0;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(220px, 0.72fr) minmax(390px, 1fr);
-  align-items: stretch;
-  gap: 10px;
-  overflow: hidden;
-}
-
-.launch-copy.ambient {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.launch-selected,
 .launch-difficulty-button {
   min-height: 96px;
   border: 1px solid var(--line);
@@ -2096,57 +2082,6 @@ button.capsule:disabled,
     linear-gradient(180deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.022)),
     rgba(9, 15, 24, 0.74);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.launch-selected {
-  min-width: 0;
-  padding: 10px 18px;
-  display: grid;
-  align-content: center;
-  gap: 3px;
-  overflow: hidden;
-}
-
-.launch-selected strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text);
-  font-size: 24px;
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: -0.015em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.launch-status {
-  min-width: 0;
-  overflow: hidden;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #9fd9ff;
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1.1;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.launch-status::before {
-  content: "";
-  width: 9px;
-  height: 9px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 16px currentColor;
-}
-
-.launch-status.error {
-  color: #ff6b74;
 }
 
 .launch-difficulty {
@@ -4109,10 +4044,6 @@ button.capsule:disabled,
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .launch-copy {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
 }
 
 @media (max-width: 0px) {
@@ -4141,10 +4072,6 @@ button.capsule:disabled,
   .launch-bar {
     grid-template-columns: 1fr;
     min-height: 138px;
-  }
-
-  .launch-copy {
-    grid-template-columns: 1fr;
   }
 
   .launch-team {

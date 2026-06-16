@@ -2292,12 +2292,6 @@ function MenuApp() {
   const introActive = screenMode === "game" && introUntil > nowMs;
   const countdownValue = screenMode === "game" && !introActive ? Math.max(0, Math.ceil((countdownUntil - nowMs) / 1000)) : 0;
   const launchIssue = !isAmbientCard(selectedGame) ? rosterIssue?.message || "" : "";
-  const launchStatusMessage = launchingGameID === selectedGame.id
-    ? "Cargando juego"
-    : catalogLoading && isPlatformLaunchableSource(selectedGame)
-      ? "Sincronizando catálogo"
-      : error || launchIssue || message || (isAmbientCard(selectedGame) ? "Ambiente listo" : "Listo para jugar");
-
   function enterBrowserFullscreen() {
     const fullscreenDocument = document as Document & { webkitFullscreenElement?: Element | null };
     if (document.fullscreenElement || fullscreenDocument.webkitFullscreenElement) return;
@@ -2742,46 +2736,40 @@ function MenuApp() {
           </section>
 
           <section className="panel launch-bar" aria-label="Resumen de inicio">
-            <div className={`launch-copy ${isAmbientCard(selectedGame) ? "ambient" : ""}`}>
-              <div className="launch-selected">
-                <span className={`launch-status ${error || launchIssue ? "error" : ""}`}>{launchStatusMessage}</span>
-                <strong>{selectedGame.label}</strong>
+            {usesDifficulty(selectedGame) ? (
+              <div className="launch-difficulty" role="group" aria-label="Dificultad">
+                {difficulties.map((difficulty) => (
+                  (() => {
+                    const supported = selectedSupportedDifficulties.includes(difficulty.id);
+                    return (
+                      <button
+                        key={difficulty.id}
+                        className={`launch-difficulty-button ${effectiveDifficulty === difficulty.id ? "active" : ""} ${supported ? "" : "unavailable"}`}
+                        style={{ "--difficulty-color": difficulty.color, "--difficulty-rgb": hexToRGB(difficulty.color) } as CSSProperties}
+                        type="button"
+                        disabled={!supported}
+                        aria-pressed={effectiveDifficulty === difficulty.id}
+                        aria-disabled={!supported}
+                        title={supported ? undefined : "No disponible en este nivel"}
+                        onClick={() => {
+                          if (!supported) return;
+                          captureMenuEvent("difficulty_changed", {
+                            difficulty: difficulty.id,
+                            engine_game: engineGameID(selectedGame),
+                            game: selectedGame.id,
+                            level: selectedLevel?.id || undefined,
+                          });
+                          setMenu((current) => ({ ...current, difficulty: difficulty.id }));
+                        }}
+                      >
+                        <span className="difficulty-label">{difficulty.label}</span>
+                        <StarRating difficulty={difficulty.id} label={difficulty.label} />
+                      </button>
+                    );
+                  })()
+                ))}
               </div>
-              {usesDifficulty(selectedGame) ? (
-                <div className="launch-difficulty" role="group" aria-label="Dificultad">
-                  {difficulties.map((difficulty) => (
-                    (() => {
-                      const supported = selectedSupportedDifficulties.includes(difficulty.id);
-                      return (
-                        <button
-                          key={difficulty.id}
-                          className={`launch-difficulty-button ${effectiveDifficulty === difficulty.id ? "active" : ""} ${supported ? "" : "unavailable"}`}
-                          style={{ "--difficulty-color": difficulty.color, "--difficulty-rgb": hexToRGB(difficulty.color) } as CSSProperties}
-                          type="button"
-                          disabled={!supported}
-                          aria-pressed={effectiveDifficulty === difficulty.id}
-                          aria-disabled={!supported}
-                          title={supported ? undefined : "No disponible en este nivel"}
-                          onClick={() => {
-                            if (!supported) return;
-                            captureMenuEvent("difficulty_changed", {
-                              difficulty: difficulty.id,
-                              engine_game: engineGameID(selectedGame),
-                              game: selectedGame.id,
-                              level: selectedLevel?.id || undefined,
-                            });
-                            setMenu((current) => ({ ...current, difficulty: difficulty.id }));
-                          }}
-                        >
-                          <span className="difficulty-label">{difficulty.label}</span>
-                          <StarRating difficulty={difficulty.id} label={difficulty.label} />
-                        </button>
-                      );
-                    })()
-                  ))}
-                </div>
-              ) : null}
-            </div>
+            ) : null}
             {(() => {
               const engineAvailable = isGameLaunchable(selectedGame);
               const rosterBlocked = !isAmbientCard(selectedGame) && Boolean(rosterIssue);
