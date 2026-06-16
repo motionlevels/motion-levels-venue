@@ -7,6 +7,18 @@
     motion_levels_repo_root: "{{ playbook_dir }}/../.."
     motion_levels_skip_tests: "{{ lookup('env', 'SKIP_TESTS') | default('0', true) }}"
   tasks:
+    - name: Install player menu dependencies
+      ansible.builtin.command:
+        cmd: npm ci --prefix apps/player-menu
+        chdir: "{{ motion_levels_repo_root }}"
+      changed_when: false
+
+    - name: Install player display dependencies
+      ansible.builtin.command:
+        cmd: npm ci --prefix apps/player-display
+        chdir: "{{ motion_levels_repo_root }}"
+      changed_when: false
+
     - name: Run repository tests
       ansible.builtin.command:
         cmd: go test ./...

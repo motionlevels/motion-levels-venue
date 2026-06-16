@@ -15,3 +15,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare const __MENU_BUILD_REVISION__: string;
+declare const __MENU_BUILD_DATE__: string;

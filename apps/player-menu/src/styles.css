@@ -399,6 +399,19 @@ body {
   display: none;
 }
 
+.menu-build-chip {
+  max-width: 190px;
+  color: rgba(216, 226, 242, 0.42);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .title-stack {
   text-align: left;
 }
@@ -1414,9 +1427,11 @@ button.capsule:disabled,
 .detail-copy {
   min-height: 0;
   padding: 20px;
-  display: grid;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   gap: 12px;
+  overflow: hidden;
 }
 
 .level-detail-panel {
@@ -1425,6 +1440,7 @@ button.capsule:disabled,
 
 .level-detail-panel .detail-copy {
   padding: 16px;
+  display: grid;
   grid-template-rows: auto auto auto;
   align-content: start;
   gap: 10px;
@@ -1665,8 +1681,11 @@ button.capsule:disabled,
 
 .detail-rules {
   min-height: 0;
+  flex: 1 1 auto;
   display: grid;
   gap: 8px;
+  align-content: start;
+  overflow: hidden;
 }
 
 .detail-rules ul {
@@ -1676,6 +1695,7 @@ button.capsule:disabled,
   display: grid;
   gap: 8px;
   list-style: none;
+  overflow: hidden;
 }
 
 .detail-rules li {
@@ -1911,18 +1931,19 @@ button.capsule:disabled,
 
 .season-facts {
   min-width: 0;
+  flex: 0 0 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
 .season-facts div {
   min-width: 0;
-  min-height: 78px;
-  padding: 12px 14px;
+  min-height: 60px;
+  padding: 10px 12px;
   display: grid;
   align-content: center;
-  gap: 7px;
+  gap: 5px;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   background:
@@ -1967,7 +1988,7 @@ button.capsule:disabled,
 
 .season-facts strong {
   color: var(--text);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1;
 }
 
@@ -3673,24 +3694,24 @@ button.capsule:disabled,
   }
 
   .detail-copy {
-    padding: 26px;
-    gap: 14px;
+    padding: 24px 26px;
+    gap: 12px;
   }
 
   .detail-copy h2 {
-    font-size: 54px;
+    font-size: 46px;
   }
 
   .detail-copy > p {
-    font-size: 22px;
+    font-size: 18px;
   }
 
   .detail-rules li {
-    font-size: 19px;
+    font-size: 16px;
   }
 
   .detail-note {
-    font-size: 17px !important;
+    font-size: 14px !important;
   }
 
   .launch-bar {

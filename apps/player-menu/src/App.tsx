@@ -108,6 +108,7 @@ const emptyPreviewSources: string[] = [];
 const storageKey = "ml-player-menu-state-v1";
 const platformCatalogStorageKey = "ml-player-menu-platform-catalog-v2";
 const platformCatalogRefreshMillis = 5000;
+const menuBuildLabel = `${__MENU_BUILD_REVISION__} · ${formatMenuBuildDate(__MENU_BUILD_DATE__)}`;
 const maxPlayers = 6;
 const maxTeamNameLength = 24;
 const maxPlayerNameLength = 12;
@@ -126,6 +127,17 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 
 function isUUID(value: unknown): value is string {
   return typeof value === "string" && uuidPattern.test(value.trim());
+}
+
+function formatMenuBuildDate(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "build local";
+  return new Intl.DateTimeFormat("es", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+  }).format(date);
 }
 
 function clampInteger(value: number, min: number, max: number): number {
@@ -2255,7 +2267,7 @@ function MenuApp() {
           <button className="brand-mark" type="button" aria-label="Pantalla completa" title="Pantalla completa" onClick={enterBrowserFullscreen} />
           <div className="brand-copy">
             <b>Motion Levels</b>
-            <span>Quiosco</span>
+            <span>Quiosco · {menuBuildLabel}</span>
           </div>
         </div>
         <nav className="category-tabs top-category-tabs" aria-label="Categorías de juegos">
@@ -2341,6 +2353,9 @@ function MenuApp() {
           >
             <GearIcon />
           </button>
+          <span className="menu-build-chip" title={`Menu desplegado ${menuBuildLabel}`}>
+            menu {menuBuildLabel}
+          </span>
         </div>
       </header>
 
