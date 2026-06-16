@@ -198,6 +198,21 @@ describe("catalog metadata sync", () => {
     assert.match(catalogSource, /id:\s*"versus"[\s\S]*?label:\s*"Competitivos"/);
   });
 
+  it("keeps hidden cooperative prototypes out of the player-facing fallback catalog", () => {
+    const catalogSource = fs.readFileSync(path.resolve(__dirname, "../src/catalog.ts"), "utf8");
+    const staticGamesSource = catalogSource
+      .slice(catalogSource.indexOf("export const games: GameCard[] = ["))
+      .split("\n];")[0];
+    const memoryEntry = staticGamesSource.match(/id:\s*"memory-lights"[\s\S]*?engineGame:\s*"memory"/);
+
+    for (const id of ["plataformas", "temporada2", "patrones"]) {
+      assert.equal(new RegExp(`id:\\s*"${id}"`).test(staticGamesSource), false);
+    }
+    assert.ok(memoryEntry, "memory challenge should remain player-facing");
+    assert.match(memoryEntry[0], /category:\s*"team"/);
+    assert.match(memoryEntry[0], /featured:\s*true/);
+  });
+
   it("keeps catalog preview media cheap to decode", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
 
