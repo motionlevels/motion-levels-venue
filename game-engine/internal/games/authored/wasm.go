@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
+	"sync"
 	"time"
 
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
@@ -13,12 +15,17 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
+const wasmCallTimeout = 200 * time.Millisecond
+
 type WASMGame struct {
+	mu      sync.Mutex
 	ctx     context.Context
 	runtime wazero.Runtime
 	module  api.Module
 	entry   CatalogEntry
 	players []playerInfo
+	failed  bool
+	failErr error
 }
 
 type wasmInitRequest struct {
@@ -89,7 +96,7 @@ func NewWASMWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount 
 		return nil, fmt.Errorf("decode wasm_base64: %w", err)
 	}
 	ctx := context.Background()
-	runtime := wazero.NewRuntime(ctx)
+	runtime := wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfig().WithCloseOnContextDone(true))
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, runtime); err != nil {
 		_ = runtime.Close(ctx)
 		return nil, fmt.Errorf("instantiate wasi: %w", err)
@@ -134,7 +141,7 @@ func (g *WASMGame) Label() string {
 }
 
 func (g *WASMGame) Press(event whackamole.PressEvent, now time.Time) []whackamole.Event {
-	if g == nil {
+	if g == nil || g.isFailed() {
 		return nil
 	}
 	raw, err := g.call("press", wasmPressRequest{NowUnixNS: now.UnixNano(), X: event.X, Y: event.Y, Pressed: event.Pressed})
@@ -153,14 +160,14 @@ func (g *WASMGame) Press(event whackamole.PressEvent, now time.Time) []whackamol
 }
 
 func (g *WASMGame) Tick(now time.Time) {
-	if g == nil {
+	if g == nil || g.isFailed() {
 		return
 	}
 	_, _ = g.call("tick", wasmTimeRequest{NowUnixNS: now.UnixNano()})
 }
 
 func (g *WASMGame) Render(now time.Time) []RGB {
-	if g == nil {
+	if g == nil || g.isFailed() {
 		return nil
 	}
 	g.Tick(now)
@@ -185,9 +192,15 @@ func (g *WASMGame) Snapshot(now time.Time) Snapshot {
 	if g == nil {
 		return Snapshot{}
 	}
+	if g.isFailed() {
+		return Snapshot{Phase: "failed", Players: g.defaultPlayers(), Lives: -1}
+	}
 	g.Tick(now)
 	raw, err := g.call("snapshot", wasmTimeRequest{NowUnixNS: now.UnixNano()})
 	if err != nil || len(raw) == 0 {
+		if g.isFailed() {
+			return Snapshot{Phase: "failed", Players: g.defaultPlayers(), Lives: -1}
+		}
 		return Snapshot{Phase: "running", Players: g.defaultPlayers()}
 	}
 	var snapshot wasmSnapshotResponse
@@ -230,10 +243,23 @@ func (g *WASMGame) defaultPlayers() []PlayerSnapshot {
 	return out
 }
 
-func (g *WASMGame) call(name string, input any) ([]byte, error) {
+func (g *WASMGame) call(name string, input any) (out []byte, err error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.failed {
+		return nil, g.failErr
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("motion-go wasm %s panic: %v", name, recovered)
+			g.failLocked(err)
+		}
+	}()
 	fn := g.module.ExportedFunction(name)
 	if fn == nil {
-		return nil, fmt.Errorf("motion-go wasm missing export %q", name)
+		err := fmt.Errorf("motion-go wasm missing export %q", name)
+		g.failLocked(err)
+		return nil, err
 	}
 	payload, err := json.Marshal(input)
 	if err != nil {
@@ -241,13 +267,21 @@ func (g *WASMGame) call(name string, input any) ([]byte, error) {
 	}
 	ptr, err := g.alloc(uint32(len(payload)))
 	if err != nil {
+		err = fmt.Errorf("motion-go wasm %s alloc: %w", name, err)
+		g.failLocked(err)
 		return nil, err
 	}
 	if !g.module.Memory().Write(ptr, payload) {
-		return nil, fmt.Errorf("motion-go wasm memory write failed")
+		err := fmt.Errorf("motion-go wasm memory write failed")
+		g.failLocked(err)
+		return nil, err
 	}
-	results, err := fn.Call(g.ctx, uint64(ptr), uint64(len(payload)))
+	callCtx, cancel := context.WithTimeout(g.ctx, wasmCallTimeout)
+	defer cancel()
+	results, err := fn.Call(callCtx, uint64(ptr), uint64(len(payload)))
 	if err != nil {
+		err = fmt.Errorf("motion-go wasm %s: %w", name, err)
+		g.failLocked(err)
 		return nil, err
 	}
 	if len(results) == 0 || results[0] == 0 {
@@ -256,7 +290,9 @@ func (g *WASMGame) call(name string, input any) ([]byte, error) {
 	outPtr, outLen := unpackPtrLen(results[0])
 	out, ok := g.module.Memory().Read(outPtr, outLen)
 	if !ok {
-		return nil, fmt.Errorf("motion-go wasm memory read failed")
+		err := fmt.Errorf("motion-go wasm memory read failed")
+		g.failLocked(err)
+		return nil, err
 	}
 	return append([]byte(nil), out...), nil
 }
@@ -266,7 +302,9 @@ func (g *WASMGame) alloc(size uint32) (uint32, error) {
 	if alloc == nil {
 		return 0, fmt.Errorf("motion-go wasm missing export \"alloc\"")
 	}
-	results, err := alloc.Call(g.ctx, uint64(size))
+	callCtx, cancel := context.WithTimeout(g.ctx, wasmCallTimeout)
+	defer cancel()
+	results, err := alloc.Call(callCtx, uint64(size))
 	if err != nil {
 		return 0, err
 	}
@@ -274,6 +312,27 @@ func (g *WASMGame) alloc(size uint32) (uint32, error) {
 		return 0, fmt.Errorf("motion-go wasm alloc returned no pointer")
 	}
 	return uint32(results[0]), nil
+}
+
+func (g *WASMGame) isFailed() bool {
+	if g == nil {
+		return true
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.failed
+}
+
+func (g *WASMGame) failLocked(err error) {
+	if g == nil || g.failed {
+		return
+	}
+	g.failed = true
+	g.failErr = err
+	log.Printf("motion-go wasm game %q disabled after runtime failure: %v", g.entry.EngineGame, err)
+	closeCtx, cancel := context.WithTimeout(context.Background(), wasmCallTimeout)
+	defer cancel()
+	_ = g.runtime.Close(closeCtx)
 }
 
 func unpackPtrLen(value uint64) (uint32, uint32) {

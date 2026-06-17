@@ -608,19 +608,29 @@ func CachedLevels() []CompiledLevel {
 
 func GetOrFetchLevels(platformURL string) ([]CompiledLevel, error) {
 	cacheMu.Lock()
-	defer cacheMu.Unlock()
 	if time.Now().Before(cacheExpire) && len(cachedLevels) > 0 {
-		return cachedLevels, nil
+		levels := make([]CompiledLevel, len(cachedLevels))
+		copy(levels, cachedLevels)
+		cacheMu.Unlock()
+		return levels, nil
 	}
+	cacheMu.Unlock()
+
 	levels, err := fetchLevels(platformURL)
 	if err != nil {
+		cacheMu.Lock()
+		defer cacheMu.Unlock()
 		if len(cachedLevels) > 0 {
-			return cachedLevels, nil
+			levels := make([]CompiledLevel, len(cachedLevels))
+			copy(levels, cachedLevels)
+			return levels, nil
 		}
 		return nil, err
 	}
+	cacheMu.Lock()
 	cachedLevels = levels
 	cacheExpire = time.Now().Add(levelCacheDuration)
+	cacheMu.Unlock()
 	return levels, nil
 }
 

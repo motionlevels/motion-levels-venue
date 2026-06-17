@@ -75,6 +75,12 @@ type gameResponse struct {
 	Game CatalogEntry `json:"game"`
 }
 
+var (
+	catalogMu     sync.Mutex
+	cachedCatalog []CatalogEntry
+	catalogExpire time.Time
+)
+
 type PlayerSnapshot struct {
 	Index int
 	Label string
@@ -149,12 +155,34 @@ type flash struct {
 }
 
 func FetchCatalog(platformURL string) ([]CatalogEntry, error) {
+	catalogMu.Lock()
+	if time.Now().Before(catalogExpire) && len(cachedCatalog) > 0 {
+		out := copyCatalog(cachedCatalog)
+		catalogMu.Unlock()
+		return out, nil
+	}
+	catalogMu.Unlock()
+	return RefreshCatalog(platformURL)
+}
+
+func CachedCatalog() []CatalogEntry {
+	catalogMu.Lock()
+	defer catalogMu.Unlock()
+	return copyCatalog(cachedCatalog)
+}
+
+func RefreshCatalog(platformURL string) ([]CatalogEntry, error) {
 	endpoint, err := runtimeEndpoint(platformURL, "")
 	if err != nil {
 		return nil, err
 	}
 	var payload catalogResponse
 	if err := getJSON(endpoint, &payload); err != nil {
+		catalogMu.Lock()
+		defer catalogMu.Unlock()
+		if len(cachedCatalog) > 0 {
+			return copyCatalog(cachedCatalog), nil
+		}
 		return nil, err
 	}
 	out := make([]CatalogEntry, 0, len(payload.Games))
@@ -164,7 +192,20 @@ func FetchCatalog(platformURL string) ([]CatalogEntry, error) {
 			out = append(out, game)
 		}
 	}
+	catalogMu.Lock()
+	cachedCatalog = copyCatalog(out)
+	catalogExpire = time.Now().Add(30 * time.Second)
+	catalogMu.Unlock()
 	return out, nil
+}
+
+func copyCatalog(entries []CatalogEntry) []CatalogEntry {
+	if len(entries) == 0 {
+		return nil
+	}
+	out := make([]CatalogEntry, len(entries))
+	copy(out, entries)
+	return out
 }
 
 func FetchGame(platformURL, engineGame string) (CatalogEntry, error) {
@@ -180,7 +221,29 @@ func FetchGame(platformURL, engineGame string) (CatalogEntry, error) {
 	if payload.Game.EngineGame == "" || (payload.Game.GameSource.Schema != "motion-game-v1" && payload.Game.GameSource.Schema != "motion-go-v1") {
 		return CatalogEntry{}, fmt.Errorf("authored game %q has no supported game source", engineGame)
 	}
+	cacheCatalogEntry(payload.Game)
 	return payload.Game, nil
+}
+
+func cacheCatalogEntry(entry CatalogEntry) {
+	if strings.TrimSpace(entry.EngineGame) == "" {
+		return
+	}
+	catalogMu.Lock()
+	defer catalogMu.Unlock()
+	for index, cached := range cachedCatalog {
+		if cached.EngineGame == entry.EngineGame {
+			cachedCatalog[index] = entry
+			if catalogExpire.Before(time.Now()) {
+				catalogExpire = time.Now().Add(30 * time.Second)
+			}
+			return
+		}
+	}
+	cachedCatalog = append(cachedCatalog, entry)
+	if catalogExpire.Before(time.Now()) {
+		catalogExpire = time.Now().Add(30 * time.Second)
+	}
 }
 
 func NewWithSeed(now time.Time, seed int64, engineGame string, playerCount int, players []whackamole.PlayerConfig, platformURL string) (RuntimeGame, error) {

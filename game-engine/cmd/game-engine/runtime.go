@@ -250,7 +250,25 @@ func newGameRuntime(cfg config, audioPlayer *audio.Player, recorder gameRecordWr
 		runtime.venueIdleTimeout = defaultVenueIdleLimit
 	}
 	runtime.applyLocked(cfg, true)
+	runtime.refreshCloudCatalogs()
 	return runtime
+}
+
+func (r *gameRuntime) refreshCloudCatalogs() {
+	if r == nil || strings.TrimSpace(r.base.PlatformURL) == "" {
+		return
+	}
+	platformURL := r.base.PlatformURL
+	go func() {
+		if _, err := authored.RefreshCatalog(platformURL); err != nil {
+			log.Printf("authored catalog refresh failed: %v", err)
+		}
+	}()
+	go func() {
+		if _, err := animations.RefreshLevels(platformURL); err != nil {
+			log.Printf("animation catalog refresh failed: %v", err)
+		}
+	}()
 }
 
 func (r *gameRuntime) SelectGame(game string, players int) {
@@ -2251,38 +2269,32 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 	}
 
 	if platformURL != "" {
-		authoredGames, err := authored.FetchCatalog(platformURL)
-		if err == nil {
-			for _, game := range authoredGames {
-				entries = append(entries, gameCatalogEntry{
-					Game:        game.EngineGame,
-					Label:       game.Label,
-					Description: game.Description,
-					Music:       nonEmptyString(game.DefaultMusicRef, authored.DefaultMusicRef),
-					Players:     true,
-					MinPlayers:  clampInt(game.MinPlayers, 1, 6),
-					MaxPlayers:  max(clampInt(game.MinPlayers, 1, 6), clampInt(game.MaxPlayers, 1, 6)),
-					Difficulty:  false,
-					Volume:      nonZeroFloat(game.DefaultMusicVolume, authored.DefaultMusicVolume),
-				})
-			}
+		for _, game := range authored.CachedCatalog() {
+			entries = append(entries, gameCatalogEntry{
+				Game:        game.EngineGame,
+				Label:       game.Label,
+				Description: game.Description,
+				Music:       nonEmptyString(game.DefaultMusicRef, authored.DefaultMusicRef),
+				Players:     true,
+				MinPlayers:  clampInt(game.MinPlayers, 1, 6),
+				MaxPlayers:  max(clampInt(game.MinPlayers, 1, 6), clampInt(game.MaxPlayers, 1, 6)),
+				Difficulty:  false,
+				Volume:      nonZeroFloat(game.DefaultMusicVolume, authored.DefaultMusicVolume),
+			})
 		}
 
-		levels, err := animations.GetOrFetchLevels(platformURL)
-		if err == nil {
-			for _, level := range levels {
-				entries = append(entries, gameCatalogEntry{
-					Game:        "animation-" + level.ID(),
-					Label:       level.Label(),
-					Description: level.Description(),
-					Music:       level.MusicRef(),
-					Players:     false,
-					MinPlayers:  1,
-					MaxPlayers:  1,
-					Difficulty:  false,
-					Volume:      level.MusicVolume(),
-				})
-			}
+		for _, level := range animations.CachedLevels() {
+			entries = append(entries, gameCatalogEntry{
+				Game:        "animation-" + level.ID(),
+				Label:       level.Label(),
+				Description: level.Description(),
+				Music:       level.MusicRef(),
+				Players:     false,
+				MinPlayers:  1,
+				MaxPlayers:  1,
+				Difficulty:  false,
+				Volume:      level.MusicVolume(),
+			})
 		}
 	}
 
