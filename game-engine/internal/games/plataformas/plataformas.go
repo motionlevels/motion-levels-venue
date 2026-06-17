@@ -57,8 +57,10 @@ type LevelInfo struct {
 type AudioRefs struct {
 	MusicRef         string
 	MusicVolume      float64
+	NarrationCueRef  string
 	CoinCueRef       string
 	DoubleCoinCueRef string
+	StartCueRef      string
 	DamageCueRef     string
 	WinCueRef        string
 	DefeatCueRef     string
@@ -137,8 +139,8 @@ type compiledLevel struct {
 	frameTick        time.Duration
 	winCondition     string
 	redAnimation     string
-	victoryAnimation string
-	defeatAnimation  string
+	victoryAnimations []string
+	defeatAnimations  []string
 	greenFade        bool
 	greenImpact      bool
 	blueTurnGreen    bool
@@ -190,6 +192,8 @@ type cloudLevel struct {
 	Rules            levelRules `json:"rules"`
 	MusicRef         string     `json:"music_ref"`
 	MusicVolume      *float64   `json:"music_volume"`
+	NarrationCueRef  string     `json:"narration_cue_ref"`
+	StartCueRef      string     `json:"start_cue_ref"`
 	CoinCueRef       string     `json:"coin_cue_ref"`
 	DoubleCoinCueRef string     `json:"double_coin_cue_ref"`
 	DamageCueRef     string     `json:"damage_cue_ref"`
@@ -203,6 +207,7 @@ type levelRules struct {
 	VictoryAnimation          string                       `json:"victory_animation"`
 	VictoryAnimations         []string                     `json:"victory_animations"`
 	DefeatAnimation           string                       `json:"defeat_animation"`
+	DefeatAnimations          []string                     `json:"defeat_animations"`
 	DifficultySettings        map[string]difficultySetting `json:"difficulty_settings"`
 	RedFloorAnimation         string                       `json:"red_floor_animation"`
 	GreenPlatformDisappear    bool                         `json:"green_platform_disappear"`
@@ -538,9 +543,9 @@ func (g *Game) restartFailedLevelLocked(now time.Time) {
 func (g *Game) colorAtLocked(pt Point, now time.Time) RGB {
 	if g.ended {
 		if g.success {
-			return resultAnimationColor(g.level.victoryAnimation, pt, now, g.endedAt)
+			return resultAnimationColor(chosenResultAnimation(g.level.victoryAnimations, "victory-pulse", g.endedAt), pt, now, g.endedAt)
 		}
-		return resultAnimationColor(g.level.defeatAnimation, pt, now, g.endedAt)
+		return resultAnimationColor(chosenResultAnimation(g.level.defeatAnimations, "defeat-pulse", g.endedAt), pt, now, g.endedAt)
 	}
 	if until, ok := g.hitFlash[pt]; ok && now.Before(until) {
 		return RGB{R: 255, G: 236, B: 82}
@@ -1014,8 +1019,8 @@ func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
 			frameTick:        frameTick,
 			winCondition:     winCondition,
 			redAnimation:     normalizeRedFloorAnimation(level.Rules.RedFloorAnimation),
-			victoryAnimation: normalizeResultAnimation(firstNonEmpty(level.Rules.VictoryAnimations, level.Rules.VictoryAnimation), "victory-pulse"),
-			defeatAnimation:  normalizeResultAnimation(level.Rules.DefeatAnimation, "defeat-pulse"),
+			victoryAnimations: normalizeResultAnimationList(level.Rules.VictoryAnimations, level.Rules.VictoryAnimation, "victory-pulse"),
+			defeatAnimations:  normalizeResultAnimationList(level.Rules.DefeatAnimations, level.Rules.DefeatAnimation, "defeat-pulse"),
 			greenFade:        level.Rules.GreenPlatformDisappear,
 			greenImpact:      level.Rules.GreenPlatformImpactRipple,
 			blueTurnGreen:    level.Rules.BluePlatformTurnGreen,
@@ -1055,6 +1060,8 @@ func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
 func normalizeAudioRefs(level cloudLevel) AudioRefs {
 	audio := AudioRefs{
 		MusicRef:         strings.TrimSpace(level.MusicRef),
+		NarrationCueRef:  strings.TrimSpace(level.NarrationCueRef),
+		StartCueRef:      strings.TrimSpace(level.StartCueRef),
 		CoinCueRef:       strings.TrimSpace(level.CoinCueRef),
 		DoubleCoinCueRef: strings.TrimSpace(level.DoubleCoinCueRef),
 		DamageCueRef:     strings.TrimSpace(level.DamageCueRef),
@@ -1309,6 +1316,43 @@ func normalizeResultAnimation(value string, fallback string) string {
 	default:
 		return clean
 	}
+}
+
+func normalizeResultAnimationList(values []string, legacy string, fallback string) []string {
+	unique := map[string]struct{}{}
+	result := []string{}
+	for _, value := range values {
+		normalized := normalizeResultAnimation(value, "")
+		if normalized == "" {
+			continue
+		}
+		if _, ok := unique[normalized]; ok {
+			continue
+		}
+		unique[normalized] = struct{}{}
+		result = append(result, normalized)
+	}
+	legacyNormalized := normalizeResultAnimation(legacy, "")
+	if legacyNormalized != "" {
+		if _, ok := unique[legacyNormalized]; !ok {
+			result = append(result, legacyNormalized)
+		}
+	}
+	if len(result) == 0 {
+		return []string{fallback}
+	}
+	return result
+}
+
+func chosenResultAnimation(values []string, fallback string, endedAt time.Time) string {
+	if len(values) == 0 {
+		return fallback
+	}
+	if len(values) == 1 {
+		return normalizeResultAnimation(values[0], fallback)
+	}
+	index := hashInt(int(endedAt.UnixNano())) % len(values)
+	return normalizeResultAnimation(values[index], fallback)
 }
 
 func firstNonEmpty(values []string, fallback string) string {

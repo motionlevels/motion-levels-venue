@@ -33,6 +33,7 @@ func TestFetchesCloudLevelAndScoresCoin(t *testing.T) {
 				"frame_tick_ms":25,
 				"music_ref":"Motion/canciones/Musica8.mp3",
 				"music_volume":0.31,
+				"narration_cue_ref":"Motion/narraciones/nivel-uno.mp3",
 				"coin_cue_ref":"Motion/sonidos/coin.wav",
 				"double_coin_cue_ref":"Motion/sonidos/coin-doble.wav",
 				"damage_cue_ref":"Motion/sonidos/fallo.mp3",
@@ -57,6 +58,9 @@ func TestFetchesCloudLevelAndScoresCoin(t *testing.T) {
 	audio := game.AudioRefs()
 	if audio.MusicRef != "Motion/canciones/Musica8.mp3" || audio.MusicVolume != 0.31 {
 		t.Fatalf("audio music = %+v, want custom music", audio)
+	}
+	if audio.NarrationCueRef != "Motion/narraciones/nivel-uno.mp3" {
+		t.Fatalf("narration cue = %q, want custom narration", audio.NarrationCueRef)
 	}
 	if audio.DoubleCoinCueRef != "Motion/sonidos/coin-doble.wav" {
 		t.Fatalf("double coin cue = %q, want custom cue", audio.DoubleCoinCueRef)

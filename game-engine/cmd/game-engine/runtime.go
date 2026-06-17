@@ -950,14 +950,18 @@ func (r *gameRuntime) applyLockedWithNarrationReason(cfg config, playAudio bool,
 		})
 	}
 	cfg.normalize()
+	r.rngSeed = now.UnixNano()
+	game := makeGame(cfg, r.rngSeed, now)
+	cfg = applyPlataformasAudioConfig(cfg, game)
 	introHold := time.Duration(0)
 	if playAudio && r.shouldNarrateLocked(cfg, mode) {
 		introHold = r.narrationHoldDurationLocked(cfg)
 	}
 	gameNow := now.Add(introHold)
-	r.rngSeed = now.UnixNano()
-	game := makeGame(cfg, r.rngSeed, gameNow)
-	cfg = applyPlataformasAudioConfig(cfg, game)
+	if introHold > 0 {
+		game = makeGame(cfg, r.rngSeed, gameNow)
+		cfg = applyPlataformasAudioConfig(cfg, game)
+	}
 	label := gameLabel(cfg.Game)
 	if labeled, ok := game.(interface{ Label() string }); ok {
 		label = labeled.Label()
@@ -1007,6 +1011,12 @@ func applyPlataformasAudioConfig(cfg config, game floorGame) config {
 		if refs.MusicRef != "" {
 			cfg.MusicRef = refs.MusicRef
 			cfg.MusicVolume = clamp01(refs.MusicVolume)
+		}
+		if refs.StartCueRef != "" {
+			cfg.StartCueRef = refs.StartCueRef
+		}
+		if refs.NarrationCueRef != "" {
+			cfg.NarrationCueRef = refs.NarrationCueRef
 		}
 		if refs.CoinCueRef != "" {
 			cfg.CoinCueRef = refs.CoinCueRef
@@ -1158,14 +1168,15 @@ func (r *gameRuntime) playNarrationLocked(cfg config, now time.Time, force bool)
 	if r.audio == nil || r.audioMuted || cfg.NarrationCueRef == "" {
 		return
 	}
-	if !force && r.narrated[cfg.Game] {
+	key := narrationKey(cfg)
+	if !force && r.narrated[key] {
 		return
 	}
 	if err := r.audio.PlayCue(cfg.NarrationCueRef, cfg.NarrationVolume); err != nil {
 		log.Printf("narration cue: %v", err)
 		return
 	}
-	r.narrated[cfg.Game] = true
+	r.narrated[key] = true
 	r.recordAudioCueLocked("narration", cfg.NarrationCueRef, cfg.NarrationVolume, now)
 }
 
@@ -1238,8 +1249,19 @@ func (r *gameRuntime) shouldNarrateLocked(cfg config, mode narrationMode) bool {
 	case narrationForce:
 		return true
 	default:
-		return !r.narrated[cfg.Game]
+		return !r.narrated[narrationKey(cfg)]
 	}
+}
+
+func narrationKey(cfg config) string {
+	ref := strings.TrimSpace(cfg.NarrationCueRef)
+	if ref == "" {
+		return normalizeGame(cfg.Game)
+	}
+	if level := strings.TrimSpace(cfg.Level); level != "" {
+		return normalizeGame(cfg.Game) + "\x00" + level + "\x00" + ref
+	}
+	return normalizeGame(cfg.Game) + "\x00" + ref
 }
 
 func (r *gameRuntime) narrationHoldDurationLocked(cfg config) time.Duration {
