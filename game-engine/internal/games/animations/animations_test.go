@@ -309,6 +309,29 @@ func TestScreensaverFallsBackToVisibleAnimationsWhenNoFeaturedExist(t *testing.T
 	}
 }
 
+func TestFetchLevelsRequestsSummaryPayload(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/level-games/animations/levels" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("summary"); got != "1" {
+			t.Fatalf("summary query = %q, want 1", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"levels":[` + testAnimationLevelJSON("featured-a", true) + `]}`))
+	}))
+	defer server.Close()
+
+	levels, err := fetchLevels(server.URL)
+	if err != nil {
+		t.Fatalf("fetchLevels returned error: %v", err)
+	}
+	if len(levels) != 1 || levels[0].id != "featured-a" {
+		t.Fatalf("levels = %+v, want featured-a", levels)
+	}
+}
+
 func resetAnimationLevelCacheForTest(t *testing.T) {
 	t.Helper()
 	cacheMu.Lock()

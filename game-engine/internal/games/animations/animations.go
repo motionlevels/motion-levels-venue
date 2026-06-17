@@ -28,6 +28,7 @@ const (
 	DefaultDamageCueRef = "Motion/sonidos/fallo.mp3"
 	DefaultWinCueRef    = "Motion/sonidos/victoria.mp3"
 	levelCacheDuration  = 60 * time.Second
+	levelFetchTimeout   = 20 * time.Second
 )
 
 type RGB = animation.RGB
@@ -660,7 +661,10 @@ func fetchLevels(platformURL string) ([]CompiledLevel, error) {
 	if err != nil {
 		return nil, err
 	}
-	client := &http.Client{Timeout: 5 * time.Second}
+	query := endpoint.Query()
+	query.Set("summary", "1")
+	endpoint.RawQuery = query.Encode()
+	client := &http.Client{Timeout: levelFetchTimeout}
 	response, err := client.Get(endpoint.String())
 	if err != nil {
 		return nil, err
