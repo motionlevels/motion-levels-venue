@@ -27,6 +27,7 @@ const (
 	DefaultCoinCueRef   = "Motion/sonidos/coin.wav"
 	DefaultDamageCueRef = "Motion/sonidos/fallo.mp3"
 	DefaultWinCueRef    = "Motion/sonidos/victoria.mp3"
+	levelCacheDuration  = 60 * time.Second
 )
 
 type RGB = animation.RGB
@@ -619,7 +620,7 @@ func GetOrFetchLevels(platformURL string) ([]CompiledLevel, error) {
 		return nil, err
 	}
 	cachedLevels = levels
-	cacheExpire = time.Now().Add(2 * time.Second)
+	cacheExpire = time.Now().Add(levelCacheDuration)
 	return levels, nil
 }
 
@@ -635,7 +636,7 @@ func RefreshLevels(platformURL string) ([]CompiledLevel, error) {
 	}
 	cacheMu.Lock()
 	cachedLevels = levels
-	cacheExpire = time.Now().Add(2 * time.Second)
+	cacheExpire = time.Now().Add(levelCacheDuration)
 	cacheMu.Unlock()
 	return levels, nil
 }

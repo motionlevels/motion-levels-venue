@@ -127,24 +127,26 @@ type Game struct {
 }
 
 type compiledLevel struct {
-	id            string
-	settingsHash  string
-	label         string
-	description   string
-	lives         int
-	passScore     int
-	timeLimit     time.Duration
-	frameTick     time.Duration
-	winCondition  string
-	redAnimation  string
-	greenFade     bool
-	greenImpact   bool
-	blueTurnGreen bool
-	blueCapture   bool
-	totalDuration time.Duration
-	frames        []compiledFrame
-	scoreUniqs    map[string]struct{}
-	audio         AudioRefs
+	id               string
+	settingsHash     string
+	label            string
+	description      string
+	lives            int
+	passScore        int
+	timeLimit        time.Duration
+	frameTick        time.Duration
+	winCondition     string
+	redAnimation     string
+	victoryAnimation string
+	defeatAnimation  string
+	greenFade        bool
+	greenImpact      bool
+	blueTurnGreen    bool
+	blueCapture      bool
+	totalDuration    time.Duration
+	frames           []compiledFrame
+	scoreUniqs       map[string]struct{}
+	audio            AudioRefs
 }
 
 type compiledFrame struct {
@@ -198,6 +200,9 @@ type cloudLevel struct {
 
 type levelRules struct {
 	VictoryCondition          string                       `json:"victory_condition"`
+	VictoryAnimation          string                       `json:"victory_animation"`
+	VictoryAnimations         []string                     `json:"victory_animations"`
+	DefeatAnimation           string                       `json:"defeat_animation"`
 	DifficultySettings        map[string]difficultySetting `json:"difficulty_settings"`
 	RedFloorAnimation         string                       `json:"red_floor_animation"`
 	GreenPlatformDisappear    bool                         `json:"green_platform_disappear"`
@@ -533,9 +538,9 @@ func (g *Game) restartFailedLevelLocked(now time.Time) {
 func (g *Game) colorAtLocked(pt Point, now time.Time) RGB {
 	if g.ended {
 		if g.success {
-			return successColor(pt, now)
+			return resultAnimationColor(g.level.victoryAnimation, pt, now, g.endedAt)
 		}
-		return g.failureColorAtLocked(pt, now)
+		return resultAnimationColor(g.level.defeatAnimation, pt, now, g.endedAt)
 	}
 	if until, ok := g.hitFlash[pt]; ok && now.Before(until) {
 		return RGB{R: 255, G: 236, B: 82}
@@ -873,13 +878,6 @@ func (g *Game) framePositionAtLocked(now time.Time) (*compiledFrame, int, time.D
 	return &g.level.frames[last], last, g.level.frames[last].duration
 }
 
-func (g *Game) failureColorAtLocked(pt Point, now time.Time) RGB {
-	if int(now.Sub(g.endedAt)/(120*time.Millisecond))%2 == 0 {
-		return RGB{R: 255, G: 22, B: 34}
-	}
-	return RGB{}
-}
-
 func (g *Game) countdownColorAtLocked(pt Point, now time.Time) RGB {
 	if len(g.level.frames) == 0 {
 		return RGB{}
@@ -1006,22 +1004,24 @@ func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
 			winCondition = "collect_all"
 		}
 		compiled := compiledLevel{
-			id:            NormalizeLevel(id),
-			settingsHash:  strings.TrimSpace(level.SettingsHash),
-			label:         level.Label,
-			description:   level.Description,
-			lives:         lives,
-			passScore:     level.PassScore,
-			timeLimit:     timeLimit,
-			frameTick:     frameTick,
-			winCondition:  winCondition,
-			redAnimation:  normalizeRedFloorAnimation(level.Rules.RedFloorAnimation),
-			greenFade:     level.Rules.GreenPlatformDisappear,
-			greenImpact:   level.Rules.GreenPlatformImpactRipple,
-			blueTurnGreen: level.Rules.BluePlatformTurnGreen,
-			blueCapture:   level.Rules.BluePlatformCaptureArea,
-			scoreUniqs:    map[string]struct{}{},
-			audio:         normalizeAudioRefs(level),
+			id:               NormalizeLevel(id),
+			settingsHash:     strings.TrimSpace(level.SettingsHash),
+			label:            level.Label,
+			description:      level.Description,
+			lives:            lives,
+			passScore:        level.PassScore,
+			timeLimit:        timeLimit,
+			frameTick:        frameTick,
+			winCondition:     winCondition,
+			redAnimation:     normalizeRedFloorAnimation(level.Rules.RedFloorAnimation),
+			victoryAnimation: normalizeResultAnimation(firstNonEmpty(level.Rules.VictoryAnimations, level.Rules.VictoryAnimation), "victory-pulse"),
+			defeatAnimation:  normalizeResultAnimation(level.Rules.DefeatAnimation, "defeat-pulse"),
+			greenFade:        level.Rules.GreenPlatformDisappear,
+			greenImpact:      level.Rules.GreenPlatformImpactRipple,
+			blueTurnGreen:    level.Rules.BluePlatformTurnGreen,
+			blueCapture:      level.Rules.BluePlatformCaptureArea,
+			scoreUniqs:       map[string]struct{}{},
+			audio:            normalizeAudioRefs(level),
 		}
 		for _, frame := range level.Frames {
 			repeat := frame.Repeat
@@ -1221,9 +1221,141 @@ func easeInOut(t float64) float64 {
 	return t * t * (3 - 2*t)
 }
 
-func successColor(pt Point, now time.Time) RGB {
-	pulse := 0.72 + 0.28*float64((pt.X+pt.Y+int(now.UnixMilli()/90))%4)/3
-	return RGB{R: byte(20 * pulse), G: byte(255 * pulse), B: byte(80 * pulse)}
+func resultAnimationColor(name string, pt Point, now time.Time, started time.Time) RGB {
+	elapsed := now.Sub(started)
+	progress := math.Mod(math.Max(0, elapsed.Seconds())/1.25, 1)
+	cx := float64(GridWidth-1) / 2
+	cy := float64(GridHeight-1) / 2
+	dist := math.Hypot((float64(pt.X)-cx)/cx, (float64(pt.Y)-cy)/cy)
+	switch normalizeResultAnimation(name, "victory-pulse") {
+	case "victory-confetti":
+		return victoryConfettiColor(pt, progress)
+	case "victory-wave":
+		wave := 0.5 + 0.5*math.Sin((float64(pt.X)/float64(GridWidth-1)+float64(pt.Y)/float64(GridHeight-1)-progress*2.6)*math.Pi*2)
+		return hsvColor(0.48+wave*0.08, 0.82, 0.12+wave*0.82)
+	case "victory-spark":
+		seed := hashInt(pt.X*13 + pt.Y*29 + int(progress*18)*71)
+		if seed%100 > 86 {
+			return RGB{R: 248, G: 250, B: 252}
+		}
+		return hsvColor(0.11, 0.88, 0.08+0.42*math.Max(0, math.Sin((progress+float64(seed%100)/100)*math.Pi)))
+	case "defeat-sweep":
+		head := progress * float64(GridHeight+8)
+		distance := math.Abs(float64(pt.Y) - head)
+		if distance < 2.4 {
+			return RGB{R: 255, G: 32, B: 56}
+		}
+		return scaleRGB(RGB{R: 255, G: 22, B: 34}, math.Max(0, 0.22-distance*0.018))
+	case "defeat-static":
+		seed := hashInt(pt.X*23 + pt.Y*41 + int(progress*20)*97)
+		if seed%100 > 70 {
+			return RGB{R: 255, G: byte(16 + seed%40), B: byte(24 + seed%24)}
+		}
+		return RGB{}
+	case "defeat-pulse":
+		if int(elapsed/(120*time.Millisecond))%2 == 0 {
+			return RGB{R: 255, G: 22, B: 34}
+		}
+		return RGB{}
+	default:
+		ring := math.Max(0, 1-math.Abs(dist-progress*1.45)*4.2)
+		pulse := 0.16 + math.Pow(ring, 1.6)*0.84
+		return RGB{R: byte(20 * pulse), G: byte(255 * pulse), B: byte(80 * pulse)}
+	}
+}
+
+func victoryConfettiColor(pt Point, progress float64) RGB {
+	centerX := float64(GridWidth-1) / 2
+	centerY := float64(GridHeight-1) / 2
+	dist := math.Hypot((float64(pt.X)-centerX)/centerX, (float64(pt.Y)-centerY)/centerY)
+	glow := 0.12 + 0.14*math.Max(0, 1-dist) + 0.04*math.Sin(progress*math.Pi*2)
+	base := hsvColor(0.38, 0.78, glow)
+	lane := pt.X/3 + pt.Y/2
+	seed := hashInt(pt.X*37 + pt.Y*73 + lane*101)
+	fall := math.Mod(float64(pt.Y)+progress*float64(GridHeight+10)+float64(seed%13)/3, 10)
+	if fall > 2.1 {
+		return base
+	}
+	stagger := math.Mod(float64(pt.X)+float64(seed%9)+progress*7, 6)
+	if stagger > 2.8 {
+		return base
+	}
+	colors := []RGB{
+		{R: 255, G: 214, B: 64},
+		{R: 80, G: 220, B: 255},
+		{R: 255, G: 86, B: 184},
+		{R: 98, G: 255, B: 126},
+		{R: 255, G: 126, B: 55},
+	}
+	color := colors[seed%len(colors)]
+	flash := 0.9 + 0.1*math.Sin(progress*math.Pi*2+float64(seed%360))
+	return scaleRGB(color, flash)
+}
+
+func normalizeResultAnimation(value string, fallback string) string {
+	clean := strings.TrimSpace(value)
+	if clean == "" {
+		return fallback
+	}
+	switch clean {
+	case "pulse":
+		return "victory-pulse"
+	case "confetti":
+		return "victory-confetti"
+	case "wave":
+		return "victory-wave"
+	case "spark":
+		return "victory-spark"
+	default:
+		return clean
+	}
+}
+
+func firstNonEmpty(values []string, fallback string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return fallback
+}
+
+func hashInt(value int) int {
+	x := uint32(value) + 0x9e3779b9
+	x ^= x >> 16
+	x *= 0x85ebca6b
+	x ^= x >> 13
+	x *= 0xc2b2ae35
+	x ^= x >> 16
+	return int(x & 0x7fffffff)
+}
+
+func hsvColor(h, s, v float64) RGB {
+	h = math.Mod(h, 1)
+	if h < 0 {
+		h += 1
+	}
+	i := int(h * 6)
+	f := h*6 - float64(i)
+	p := v * (1 - s)
+	q := v * (1 - f*s)
+	t := v * (1 - (1-f)*s)
+	var r, g, b float64
+	switch i % 6 {
+	case 0:
+		r, g, b = v, t, p
+	case 1:
+		r, g, b = q, v, p
+	case 2:
+		r, g, b = p, v, t
+	case 3:
+		r, g, b = p, q, v
+	case 4:
+		r, g, b = t, p, v
+	default:
+		r, g, b = v, p, q
+	}
+	return RGB{R: clampByte(r * 255), G: clampByte(g * 255), B: clampByte(b * 255)}
 }
 
 func playerColor(index int) RGB {

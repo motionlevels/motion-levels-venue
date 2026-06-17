@@ -586,6 +586,10 @@ function isPlatformLaunchableSource(game: Pick<GameCard, "sourceKind">): boolean
   return game.sourceKind === "code_editable" || game.sourceKind === "platform_levels" || game.sourceKind === "cloud_animations";
 }
 
+function canLaunchWhileCatalogRefreshes(game: GameCard): boolean {
+  return isAmbientCard(game) || game.sourceKind === "cloud_animations" || engineGameID(game).startsWith("animation-");
+}
+
 function isIndividualCard(game: GameCard): boolean {
   return game.category === "individual";
 }
@@ -1542,7 +1546,7 @@ function MenuApp() {
   ), [platformCatalog]);
   const isGameLaunchable = useCallback((game: GameCard) => {
     if (!status) return false;
-    if (catalogLoading && isPlatformLaunchableSource(game)) return false;
+    if (catalogLoading && isPlatformLaunchableSource(game) && !canLaunchWhileCatalogRefreshes(game)) return false;
     const launchGame = partyLaunchGame(game, menuGames);
     if (isScreensaverCard(launchGame)) return true;
     if (availableGames.has(runtimeGameID(launchGame)) || availableGames.has(engineGameID(launchGame))) return true;
@@ -2854,12 +2858,16 @@ function MenuApp() {
               const engineAvailable = isGameLaunchable(selectedGame);
               const rosterBlocked = !isAmbientCard(selectedGame) && Boolean(rosterIssue);
               const levelBlocked = Boolean(selectedGame.levels?.length && !isLevelUnlocked(selectedGame, selectedLevelFor(selectedGame), menu));
-              const catalogBlocked = catalogLoading && isPlatformLaunchableSource(selectedGame);
+              const catalogBlocked = catalogLoading && isPlatformLaunchableSource(selectedGame) && !canLaunchWhileCatalogRefreshes(selectedGame);
               const launching = launchingGameID === selectedGame.id;
+              const ambientActive = isAmbientCard(selectedGame) && Boolean(status) && (
+                status?.currentGame === runtimeGameID(selectedGame)
+                || status?.currentGame === engineGameID(selectedGame)
+              );
               const blocked = launching || catalogBlocked || selectedGame.disabled || !engineAvailable || rosterBlocked || levelBlocked;
               const rosterAction = rosterBlocked && !launching && !catalogBlocked && !selectedGame.disabled && !levelBlocked;
-              const launchDisabled = blocked && !rosterAction;
-              const readyLabel = isAmbientCard(selectedGame) ? "Activar ambiente" : "Empezar partida";
+              const launchDisabled = (blocked && !rosterAction) || ambientActive;
+              const readyLabel = isAmbientCard(selectedGame) ? (ambientActive ? "Ambiente activo" : "Activar ambiente") : "Empezar partida";
               const unavailableByEngine = !engineAvailable || Boolean(error);
               const blockedLabel = catalogBlocked ? "Sincronizando" : levelBlocked ? "Nivel bloqueado" : rosterBlocked ? "Jugadores" : selectedGame.disabled ? "Próximamente" : unavailableByEngine ? readyLabel : "No disponible";
               const loadingVisual = launching || catalogBlocked;
@@ -2893,6 +2901,11 @@ function MenuApp() {
                       <>
                         <span className="launch-spinner" aria-hidden="true" />
                         {launching ? "Cargando" : "Sincronizando"}
+                      </>
+                    ) : ambientActive ? (
+                      <>
+                        <CheckIcon />
+                        {readyLabel}
                       </>
                     ) : blocked ? (
                       blockedLabel
