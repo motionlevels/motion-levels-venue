@@ -6,24 +6,37 @@
   vars:
     motion_levels_repo_root: "{{ playbook_dir }}/../.."
     motion_levels_skip_tests: "{{ lookup('env', 'SKIP_TESTS') | default('0', true) }}"
+    motion_levels_deploy_mode: "{{ lookup('env', 'MOTION_LEVELS_DEPLOY_MODE') | default('all', true) }}"
+    motion_levels_frontend_modes: ["all", "frontends"]
+    motion_levels_runtime_modes: ["all", "runtime"]
   tasks:
+    - name: Validate venue deploy mode
+      ansible.builtin.assert:
+        that:
+          - motion_levels_deploy_mode in ["all", "frontends", "runtime"]
+        fail_msg: "motion_levels_deploy_mode must be one of: all, frontends, runtime"
+
     - name: Install player menu dependencies
       ansible.builtin.command:
         cmd: npm ci --prefix apps/player-menu
         chdir: "{{ motion_levels_repo_root }}"
       changed_when: false
+      when: motion_levels_deploy_mode in motion_levels_frontend_modes
 
     - name: Install player display dependencies
       ansible.builtin.command:
         cmd: npm ci --prefix apps/player-display
         chdir: "{{ motion_levels_repo_root }}"
       changed_when: false
+      when: motion_levels_deploy_mode in motion_levels_frontend_modes
 
     - name: Run repository tests
       ansible.builtin.command:
         cmd: go test ./...
         chdir: "{{ motion_levels_repo_root }}"
-      when: motion_levels_skip_tests != "1"
+      when:
+        - motion_levels_skip_tests != "1"
+        - motion_levels_deploy_mode in motion_levels_runtime_modes
       changed_when: false
 
     - name: Build player menu
@@ -31,18 +44,23 @@
         cmd: npm run build --prefix apps/player-menu
         chdir: "{{ motion_levels_repo_root }}"
       changed_when: true
+      when: motion_levels_deploy_mode in motion_levels_frontend_modes
 
     - name: Build player display
       ansible.builtin.command:
         cmd: npm run build --prefix apps/player-display
         chdir: "{{ motion_levels_repo_root }}"
       changed_when: true
+      when: motion_levels_deploy_mode in motion_levels_frontend_modes
 
 - name: Deploy Motion Levels venue stack
   hosts: motion_levels_venues
   gather_facts: true
   vars:
     motion_levels_repo_root: "{{ playbook_dir }}/../.."
+    motion_levels_deploy_mode: "{{ lookup('env', 'MOTION_LEVELS_DEPLOY_MODE') | default('all', true) }}"
+    motion_levels_frontend_modes: ["all", "frontends"]
+    motion_levels_runtime_modes: ["all", "runtime"]
     motion_levels_services:
       - motion-levels-floor-controller.service
       - motion-levels-game-engine.service
@@ -61,7 +79,14 @@
       - http://127.0.0.1/display/
       - http://127.0.0.1:4101/status
       - http://127.0.0.1:4102/api/status
-    motion_levels_sync_items:
+    motion_levels_frontend_health_urls:
+      - http://127.0.0.1/stack.json
+      - http://127.0.0.1/menu/
+      - http://127.0.0.1/display/
+    motion_levels_common_sync_items:
+      - src: deploy/
+        dest: "{{ motion_levels_remote_src }}/deploy/"
+    motion_levels_runtime_sync_items:
       - src: go.mod
         dest: "{{ motion_levels_remote_src }}/"
       - src: go.sum
@@ -76,8 +101,7 @@
         dest: "{{ motion_levels_remote_src }}/content/"
       - src: content/
         dest: "{{ motion_levels_remote_root }}/content/"
-      - src: deploy/
-        dest: "{{ motion_levels_remote_src }}/deploy/"
+    motion_levels_frontend_sync_items:
       - src: apps/player-menu/
         dest: "{{ motion_levels_remote_src }}/apps/player-menu/"
       - src: apps/player-display/
@@ -97,6 +121,12 @@
       - --exclude=*.pbstream.*
       - --exclude=.DS_Store
   tasks:
+    - name: Validate venue deploy mode
+      ansible.builtin.assert:
+        that:
+          - motion_levels_deploy_mode in ["all", "frontends", "runtime"]
+        fail_msg: "motion_levels_deploy_mode must be one of: all, frontends, runtime"
+
     - name: Install runtime packages
       ansible.builtin.apt:
         name:
@@ -114,7 +144,9 @@
           - alsa-utils
         state: present
         update_cache: true
-      when: ansible_facts.os_family == "Debian"
+      when:
+        - ansible_facts.os_family == "Debian"
+        - motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Create deployment directories
       ansible.builtin.file:
@@ -139,13 +171,17 @@
       register: motion_levels_go_check
       failed_when: false
       changed_when: false
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Resolve Go architecture
       ansible.builtin.set_fact:
         motion_levels_go_arch: "{{ 'arm64' if ansible_facts.architecture in ['aarch64', 'arm64'] else 'amd64' }}"
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Install Go
-      when: "'go' ~ motion_levels_go_version not in motion_levels_go_check.stdout"
+      when:
+        - motion_levels_deploy_mode in motion_levels_runtime_modes
+        - "'go' ~ motion_levels_go_version not in (motion_levels_go_check.stdout | default(''))"
       block:
         - name: Download Go toolchain
           ansible.builtin.get_url:
@@ -171,25 +207,33 @@
         archive: true
         delete: true
         rsync_opts: "{{ motion_levels_rsync_opts }}"
-      loop: "{{ motion_levels_sync_items }}"
+      loop: >-
+        {{
+          motion_levels_common_sync_items
+          + (motion_levels_runtime_sync_items if motion_levels_deploy_mode in motion_levels_runtime_modes else [])
+          + (motion_levels_frontend_sync_items if motion_levels_deploy_mode in motion_levels_frontend_modes else [])
+        }}
 
     - name: Run focused remote Go tests
       ansible.builtin.command:
         cmd: "{{ motion_levels_go_bin }} test ./game-engine/cmd/game-engine ./floor-controller/cmd/floor-controller ./game-engine/internal/games/saltos ./game-engine/internal/games/temporada1"
         chdir: "{{ motion_levels_remote_src }}"
       changed_when: false
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Build game engine binary
       ansible.builtin.command:
         cmd: "{{ motion_levels_go_bin }} build -o {{ motion_levels_remote_root }}/bin/game-engine ./game-engine/cmd/game-engine"
         chdir: "{{ motion_levels_remote_src }}"
       changed_when: true
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Build floor controller binary
       ansible.builtin.command:
         cmd: "{{ motion_levels_go_bin }} build -o {{ motion_levels_remote_root }}/bin/floor-controller ./floor-controller/cmd/floor-controller"
         chdir: "{{ motion_levels_remote_src }}"
       changed_when: true
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Install default motion-levels env if missing
       ansible.builtin.copy:
@@ -198,6 +242,7 @@
         mode: "0644"
         remote_src: true
         force: false
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Ensure platform asset cache env is configured
       ansible.builtin.lineinfile:
@@ -205,6 +250,7 @@
         regexp: '^MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR='
         line: MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR=/var/lib/motion-levels/platform-asset-cache
         mode: "0644"
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Resolve local deployed stack revision
       ansible.builtin.command:
@@ -238,11 +284,14 @@
       ansible.builtin.stat:
         path: /etc/motion-levels/platform.env
       register: motion_levels_platform_env
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Warn when platform env is missing
       ansible.builtin.debug:
         msg: "/etc/motion-levels/platform.env is missing; platform sync and recording uploads need MOTION_LEVELS_PLATFORM_TOKEN."
-      when: not motion_levels_platform_env.stat.exists
+      when:
+        - motion_levels_deploy_mode in motion_levels_runtime_modes
+        - not (motion_levels_platform_env.stat.exists | default(false))
 
     - name: Install Caddy config
       ansible.builtin.copy:
@@ -251,6 +300,7 @@
         mode: "0644"
         remote_src: true
       notify: Restart caddy
+      when: motion_levels_deploy_mode in motion_levels_frontend_modes
 
     - name: Install kiosk player script
       ansible.builtin.copy:
@@ -258,6 +308,7 @@
         dest: /usr/local/bin/motion-levels-player-kiosk
         mode: "0755"
         remote_src: true
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Disable old services
       ansible.builtin.systemd_service:
@@ -266,6 +317,7 @@
         state: stopped
       loop: "{{ motion_levels_old_services }}"
       failed_when: false
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Remove retired frontend static service units
       ansible.builtin.file:
@@ -275,6 +327,7 @@
         - motion-levels-player-menu.service
         - motion-levels-player-display.service
       notify: Reload systemd
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Install systemd service units
       ansible.builtin.copy:
@@ -286,6 +339,7 @@
       notify:
         - Reload systemd
         - Restart motion levels services
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Flush unit/config handlers before validation
       ansible.builtin.meta: flush_handlers
@@ -300,22 +354,26 @@
         name: "{{ item }}"
         enabled: true
       loop: "{{ motion_levels_services }}"
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Validate Caddy config
       ansible.builtin.command:
         cmd: caddy validate --config /etc/caddy/Caddyfile
       changed_when: false
+      when: motion_levels_deploy_mode in motion_levels_frontend_modes
 
     - name: Ensure caddy is running
       ansible.builtin.systemd_service:
         name: caddy
         state: started
+      when: motion_levels_deploy_mode in motion_levels_frontend_modes
 
     - name: Ensure Motion Levels services are running
       ansible.builtin.systemd_service:
         name: "{{ item }}"
         state: started
       loop: "{{ motion_levels_services }}"
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Read game engine state before activating rebuilt services
       ansible.builtin.uri:
@@ -325,6 +383,7 @@
       register: motion_levels_engine_state_before_restart
       failed_when: false
       changed_when: false
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Decide whether rebuilt services can be activated now
       ansible.builtin.set_fact:
@@ -336,13 +395,16 @@
               and (motion_levels_engine_state_before_restart.json.phase | default('')) in ['idle', 'ambient']
             )
           }}
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Activate rebuilt Motion Levels services when venue is idle
       ansible.builtin.systemd_service:
         name: "{{ item }}"
         state: restarted
       loop: "{{ motion_levels_services }}"
-      when: motion_levels_can_restart_now
+      when:
+        - motion_levels_deploy_mode in motion_levels_runtime_modes
+        - motion_levels_can_restart_now | default(false)
 
     - name: Keep rebuilt Motion Levels services staged while a session is active
       ansible.builtin.debug:
@@ -350,7 +412,9 @@
           Rebuilt services were staged but not restarted because the engine is running
           {{ motion_levels_engine_state_before_restart.json.currentGame | default('unknown') }}
           in {{ motion_levels_engine_state_before_restart.json.phase | default('unknown') }}.
-      when: not motion_levels_can_restart_now
+      when:
+        - motion_levels_deploy_mode in motion_levels_runtime_modes
+        - not (motion_levels_can_restart_now | default(false))
 
     - name: Wait for local service health
       ansible.builtin.uri:
@@ -360,7 +424,7 @@
       until: motion_levels_health.status == 200
       retries: 80
       delay: 1
-      loop: "{{ motion_levels_health_urls }}"
+      loop: "{{ motion_levels_frontend_health_urls if motion_levels_deploy_mode == 'frontends' else motion_levels_health_urls }}"
 
   handlers:
     - name: Reload systemd
