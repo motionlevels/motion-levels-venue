@@ -37,6 +37,7 @@
     }
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
     "@motion-levels/core": "file:../../packages/core",
     "@motion-levels/design-tokens": "file:../../packages/design-tokens",
     "@motion-levels/floor-view": "file:../../packages/floor-view",
