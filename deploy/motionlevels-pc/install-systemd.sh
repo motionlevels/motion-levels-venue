@@ -26,8 +26,6 @@ fi
 mkdir -p \
   /etc/motion-levels \
   /etc/caddy \
-  /opt/motion-levels/rebuild/var/floor-controller/recordings \
-  /opt/motion-levels/rebuild/var/game-engine/replays \
   /var/lib/motion-levels
 
 if command -v apt-get >/dev/null 2>&1 && ! command -v caddy >/dev/null 2>&1; then

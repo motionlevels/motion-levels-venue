@@ -36,6 +36,8 @@ type Options struct {
 	ZstdPath          string
 	KeyframeInterval  time.Duration
 	UploadHTTPTimeout time.Duration
+	MaxLocalBytes     int64
+	RemoveLocalOnly   bool
 }
 
 type Recorder struct {
@@ -47,7 +49,9 @@ type Recorder struct {
 	client       *http.Client
 	file         *os.File
 	writer       *bufio.Writer
+	counter      *countingWriter
 	sessionID    string
+	skippedID    string
 	venueID      string
 	path         string
 	activePath   string
@@ -60,6 +64,17 @@ type Recorder struct {
 	endedAt      time.Time
 	lastKeyframe time.Time
 	previous     []tileState
+}
+
+type countingWriter struct {
+	w io.Writer
+	n int64
+}
+
+func (w *countingWriter) Write(p []byte) (int, error) {
+	n, err := w.w.Write(p)
+	w.n += int64(n)
+	return n, err
 }
 
 type tileState struct {
@@ -111,6 +126,9 @@ func (r *Recorder) Record(record *gamepb.GameSessionRecord) error {
 	now := unixNanosTime(record.GetUnixNanos())
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if sessionID == r.skippedID {
+		return nil
+	}
 	if err := r.ensureSessionLocked(sessionID, record.GetVenueSessionId(), now); err != nil {
 		return err
 	}
@@ -134,6 +152,9 @@ func (r *Recorder) Record(record *gamepb.GameSessionRecord) error {
 	}); err != nil {
 		return err
 	}
+	if err := r.enforceLocalLimitLocked(); err != nil {
+		return err
+	}
 	if ended != nil {
 		reason := strings.TrimSpace(ended.GetReason())
 		if reason == "" {
@@ -148,10 +169,14 @@ func (r *Recorder) RecordFrame(frame *recordingpb.FrameRecord) error {
 	if r == nil || frame == nil || strings.TrimSpace(frame.GetSessionId()) == "" {
 		return nil
 	}
+	sessionID := strings.TrimSpace(frame.GetSessionId())
 	now := unixNanosTime(frame.GetUnixNanos())
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if err := r.ensureSessionLocked(frame.GetSessionId(), frame.GetVenueSessionId(), now); err != nil {
+	if sessionID == r.skippedID {
+		return nil
+	}
+	if err := r.ensureSessionLocked(sessionID, frame.GetVenueSessionId(), now); err != nil {
 		return err
 	}
 	if r.frameCount == 0 {
@@ -166,7 +191,7 @@ func (r *Recorder) RecordFrame(frame *recordingpb.FrameRecord) error {
 		r.lastKeyframe = now
 	}
 	r.sequence++
-	return pbstream.Write(r.writer, &replaypb.ReplayRecord{
+	if err := pbstream.Write(r.writer, &replaypb.ReplayRecord{
 		SessionId:      r.sessionID,
 		VenueSessionId: r.venueID,
 		Sequence:       r.sequence,
@@ -182,7 +207,10 @@ func (r *Recorder) RecordFrame(frame *recordingpb.FrameRecord) error {
 			ControllerPresentedUnixNanos: frame.GetControllerPresentedUnixNanos(),
 			Tiles:                        deltas,
 		}},
-	})
+	}); err != nil {
+		return err
+	}
+	return r.enforceLocalLimitLocked()
 }
 
 func (r *Recorder) Close() error {
@@ -207,6 +235,12 @@ func (r *Recorder) ensureSessionLocked(sessionID string, venueID string, now tim
 		}
 		return nil
 	}
+	if r.skippedID != "" && r.skippedID != sessionID {
+		r.skippedID = ""
+	}
+	if r.skippedID == sessionID {
+		return nil
+	}
 	if err := r.closeSessionLocked("session_changed"); err != nil {
 		return err
 	}
@@ -220,8 +254,10 @@ func (r *Recorder) ensureSessionLocked(sessionID string, venueID string, now tim
 	if err != nil {
 		return err
 	}
+	counter := &countingWriter{w: file}
 	r.file = file
-	r.writer = bufio.NewWriterSize(file, 1<<20)
+	r.counter = counter
+	r.writer = bufio.NewWriterSize(counter, 1<<20)
 	r.sessionID = sessionID
 	r.venueID = strings.TrimSpace(venueID)
 	r.path = base
@@ -235,7 +271,7 @@ func (r *Recorder) ensureSessionLocked(sessionID string, venueID string, now tim
 	r.endedAt = now
 	r.lastKeyframe = time.Time{}
 	r.previous = nil
-	return pbstream.Write(r.writer, &replaypb.ReplayRecord{
+	if err := pbstream.Write(r.writer, &replaypb.ReplayRecord{
 		SessionId:      sessionID,
 		VenueSessionId: r.venueID,
 		Sequence:       r.sequence,
@@ -245,7 +281,10 @@ func (r *Recorder) ensureSessionLocked(sessionID string, venueID string, now tim
 			ControllerId:     r.options.ControllerID,
 			StartedUnixNanos: now.UnixNano(),
 		}},
-	})
+	}); err != nil {
+		return err
+	}
+	return r.enforceLocalLimitLocked()
 }
 
 func (r *Recorder) writeHeaderFieldsLocked(started *gamepb.SessionStarted) {
@@ -313,6 +352,7 @@ func (r *Recorder) closeSessionLocked(reason string) error {
 	endedAt := r.endedAt
 	r.file = nil
 	r.writer = nil
+	r.counter = nil
 	r.sessionID = ""
 	r.venueID = ""
 	r.path = ""
@@ -337,6 +377,54 @@ func (r *Recorder) closeSessionLocked(reason string) error {
 			StartedAt:      startedAt,
 			EndedAt:        endedAt,
 		})
+	} else if r.options.RemoveLocalOnly {
+		removeUploadedReplay(compressed)
+	}
+	return nil
+}
+
+func (r *Recorder) enforceLocalLimitLocked() error {
+	if r == nil || r.file == nil || r.options.MaxLocalBytes <= 0 {
+		return nil
+	}
+	size := int64(0)
+	if r.counter != nil {
+		size += r.counter.n
+	}
+	if r.writer != nil {
+		size += int64(r.writer.Buffered())
+	}
+	if size <= r.options.MaxLocalBytes {
+		return nil
+	}
+	return r.dropSessionLocked(fmt.Sprintf("local replay exceeded %d bytes", r.options.MaxLocalBytes))
+}
+
+func (r *Recorder) dropSessionLocked(reason string) error {
+	sessionID := r.sessionID
+	active := r.activePath
+	if r.writer != nil {
+		_ = r.writer.Flush()
+	}
+	if r.file != nil {
+		_ = r.file.Close()
+	}
+	r.file = nil
+	r.writer = nil
+	r.counter = nil
+	r.sessionID = ""
+	r.venueID = ""
+	r.path = ""
+	r.activePath = ""
+	r.previous = nil
+	r.skippedID = sessionID
+	if active != "" {
+		_ = os.Remove(active)
+		parent := filepath.Dir(active)
+		_ = os.Remove(parent)
+	}
+	if sessionID != "" {
+		fmt.Fprintf(os.Stderr, "replay recording disabled for session %s: %s\n", sessionID, reason)
 	}
 	return nil
 }
@@ -402,6 +490,7 @@ func (r *Recorder) uploadWithRetry(path string, metadata uploadMetadata) {
 	}
 	if last != nil {
 		fmt.Fprintf(os.Stderr, "replay upload failed: %v\n", last)
+		removeUploadedReplay(path)
 	}
 }
 

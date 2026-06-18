@@ -8,9 +8,9 @@ import (
 	"math"
 	"net"
 	"os"
-	"time"
-
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
@@ -62,6 +62,8 @@ type config struct {
 	ReplayRecordingPath    string
 	ReplayKeyframeInterval time.Duration
 	ReplayZstdPath         string
+	ReplayMaxLocalBytes    int64
+	ReplayKeepLocal        bool
 	DisplaySnapshotFPS     int
 	AuthoredRuntime        string
 	PlatformURL            string
@@ -112,6 +114,8 @@ func main() {
 	flag.StringVar(&cfg.ReplayRecordingPath, "record-replay", "game-recordings", "directory for unified .mlreplay.zst session recordings; empty disables replay recording")
 	flag.DurationVar(&cfg.ReplayKeyframeInterval, "replay-keyframe-interval", 5*time.Second, "maximum time between full replay floor keyframes")
 	flag.StringVar(&cfg.ReplayZstdPath, "replay-zstd-path", "zstd", "path to zstd executable for replay compression")
+	flag.Int64Var(&cfg.ReplayMaxLocalBytes, "replay-max-local-bytes", int64Env("MOTION_LEVELS_REPLAY_MAX_LOCAL_BYTES", 512*1024*1024), "maximum bytes for one active local replay file before discarding it; 0 disables the cap")
+	flag.BoolVar(&cfg.ReplayKeepLocal, "replay-keep-local", true, "keep replay files locally when platform upload is not configured")
 	flag.IntVar(&cfg.DisplaySnapshotFPS, "display-snapshot-fps", 4, "display snapshots per second to write into game session recordings")
 	flag.StringVar(&cfg.AuthoredRuntime, "authored-runtime", "auto", "runtime for motion-go-v1 games: auto, native, or wasm")
 	flag.StringVar(&cfg.PlatformURL, "platform-url", os.Getenv("MOTION_LEVELS_PLATFORM_URL"), "platform base URL for session ingest; empty disables")
@@ -154,6 +158,8 @@ func main() {
 		ZstdPath:          cfg.ReplayZstdPath,
 		KeyframeInterval:  cfg.ReplayKeyframeInterval,
 		UploadHTTPTimeout: 5 * time.Minute,
+		MaxLocalBytes:     cfg.ReplayMaxLocalBytes,
+		RemoveLocalOnly:   !cfg.ReplayKeepLocal,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -272,6 +278,18 @@ func nonEmptyEnv(key string, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func int64Env(key string, fallback int64) int64 {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 func (c config) audioPlayer() (*audio.Player, error) {

@@ -229,6 +229,64 @@ func TestRecorderRemovesLocalReplayAfterSuccessfulUpload(t *testing.T) {
 	}
 }
 
+func TestRecorderRemovesLocalReplayWhenPlatformUploadIsNotConfigured(t *testing.T) {
+	zstdPath, err := exec.LookPath("zstd")
+	if err != nil {
+		t.Skip("zstd not installed")
+	}
+	root := t.TempDir()
+	started := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
+	recorder, err := New(root, Options{
+		ControllerID:     "controller-1",
+		ZstdPath:         zstdPath,
+		KeyframeInterval: time.Hour,
+		RemoveLocalOnly:  true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := recorder.RecordFrame(testFrame(1, started.Add(20*time.Millisecond), 10, 20)); err != nil {
+		t.Fatal(err)
+	}
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "session-1", "replay.mlreplay.zst")); !os.IsNotExist(err) {
+		t.Fatalf("local-only replay still exists after close: %v", err)
+	}
+}
+
+func TestRecorderDropsSessionWhenLocalReplayExceedsCap(t *testing.T) {
+	root := t.TempDir()
+	started := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
+	recorder, err := New(root, Options{
+		ControllerID:     "controller-1",
+		KeyframeInterval: time.Hour,
+		MaxLocalBytes:    256,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := uint64(1); i <= 20; i++ {
+		if err := recorder.RecordFrame(testFrame(i, started.Add(time.Duration(i)*20*time.Millisecond), 10, uint32(20+i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
+	sessionDir := filepath.Join(root, "session-1")
+	if _, err := os.Stat(filepath.Join(sessionDir, "replay.mlreplay.open")); !os.IsNotExist(err) {
+		t.Fatalf("active replay still exists after local cap: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sessionDir, "replay.mlreplay")); !os.IsNotExist(err) {
+		t.Fatalf("raw replay exists after local cap: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sessionDir, "replay.mlreplay.zst")); !os.IsNotExist(err) {
+		t.Fatalf("compressed replay exists after local cap: %v", err)
+	}
+}
+
 func testFrame(sequence uint64, now time.Time, r uint32, changedB uint32) *recordingpb.FrameRecord {
 	tiles := []*recordingpb.TileState{
 		{X: 0, Y: 0, R: r, G: 0, B: 0},

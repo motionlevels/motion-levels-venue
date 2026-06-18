@@ -60,21 +60,22 @@ The display app is visual-only for now. Low-latency music and cue playback stay
 owned by the Go game-engine process and use the game-engine PC's default audio
 output, usually the HDMI TV.
 
-## Session Recordings
+## Replay Recordings
 
-The game-engine writes authoritative session logs by default:
+Venue deployments do not keep durable replay files on the appliance. The
+platform is the durable storage owner for recordings and replay playback.
 
-```txt
-game-recordings/YYYYMMDDTHHMMSSZ.game.pbstream
-```
+The game-engine can write unified replay files when explicitly enabled with
+`-record-replay`. This creates temporary local `.mlreplay.open` files while a
+session is active, compresses them to `.mlreplay.zst` on close, uploads them to
+the configured platform, and removes the local copy after upload. The default
+appliance service uses `/run/motion-levels-game-engine/replays`, which is tmpfs,
+so the upload spool never persists on the venue disk. `-replay-max-local-bytes`
+caps a single active local replay file and discards the session replay if that
+cap is exceeded. Venue services also pass `-replay-keep-local=false`, so a
+missing or failed platform upload cannot accumulate replay files locally.
 
-These files use protobuf `GameSessionRecord` messages from
-`packages/contracts/gamepb/game.proto`, written as length-delimited pbstream
-records. Active files end in `.open` and are renamed into place after a clean
-close; startup recovery finalizes leftover `.open` files so a crash does not
-leave data invisible.
-
-The session log records:
+The replay stream can include:
 
 - session start/end, including `session_id` and RNG seed
 - accepted menu selections from the game-engine API point of view
@@ -86,17 +87,19 @@ The session log records:
 - semantic level attempt start/finish records for multi-level games such as
   `temporada1`; these include level id/number, difficulty, timestamps, result,
   score, lives, elapsed time, and active target counts
+- floor frames as compressed deltas plus periodic keyframes
 
 Important flags:
 
-- `-record-sessions`: directory or `.game.pbstream` file path. Empty disables
-  session recording.
-- `-session-segment-bytes`: max bytes per segment before rotation.
+- `-record-replay`: directory for temporary unified `.mlreplay.zst` recordings.
+  Empty disables local replay recording.
+- `-replay-max-local-bytes`: maximum size for one active local `.open` replay
+  before discarding it.
+- `-replay-keep-local`: whether to keep replay files when platform upload is not
+  configured. Venue services set this to `false`.
+- `-platform-url` and `MOTION_LEVELS_PLATFORM_TOKEN`: required for upload to
+  platform storage.
 - `-display-snapshot-fps`: how often display snapshots are recorded.
-
-The floor-controller still owns physical frame recordings. Session replay should
-join game-engine `.game.pbstream` files with controller frame recordings by
-time range and, later, by an explicit shared `session_id`.
 
 ### Whack-a-mole
 

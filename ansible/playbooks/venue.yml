@@ -127,6 +127,15 @@
           - motion_levels_deploy_mode in ["all", "frontends", "runtime"]
         fail_msg: "motion_levels_deploy_mode must be one of: all, frontends, runtime"
 
+    - name: Remove legacy venue-local recording files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ motion_levels_remote_root }}/var/floor-controller/recordings"
+        - "{{ motion_levels_remote_root }}/var/game-engine/replays"
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+
     - name: Install runtime packages
       ansible.builtin.apt:
         name:
@@ -159,8 +168,6 @@
         - "{{ motion_levels_remote_root }}/bin"
         - "{{ motion_levels_remote_root }}/apps/player-menu"
         - "{{ motion_levels_remote_root }}/apps/player-display"
-        - "{{ motion_levels_remote_root }}/var/floor-controller/recordings"
-        - "{{ motion_levels_remote_root }}/var/game-engine/replays"
         - /etc/motion-levels
         - /etc/caddy
         - /var/lib/motion-levels
