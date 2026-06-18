@@ -18,6 +18,10 @@
 		reverse_proxy 127.0.0.1:4102
 	}
 
+	handle /cam/* {
+		reverse_proxy 127.0.0.1:8020
+	}
+
 	handle /motion-levels-icon.png {
 		root * /opt/motion-levels/rebuild/apps/player-menu/dist
 		header Cache-Control "public, max-age=31536000, immutable"

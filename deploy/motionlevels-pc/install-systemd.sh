@@ -8,13 +8,13 @@ old_services=(
   motion-levels-player-menu.service
   motion-levels-player-display.service
   motion-levels-player-tv.service
-  motion-levels-camera-helper.service
   motion-levels.service
 )
 
 new_services=(
   motion-levels-floor-controller.service
   motion-levels-game-engine.service
+  motion-levels-camera-helper.service
   motion-levels-kiosk.service
 )
 
@@ -28,9 +28,9 @@ mkdir -p \
   /etc/caddy \
   /var/lib/motion-levels
 
-if command -v apt-get >/dev/null 2>&1 && ! command -v caddy >/dev/null 2>&1; then
+if command -v apt-get >/dev/null 2>&1; then
   apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y caddy
+  DEBIAN_FRONTEND=noninteractive apt-get install -y caddy python3-opencv
 fi
 
 if [ ! -f /etc/motion-levels/motion-levels.env ]; then

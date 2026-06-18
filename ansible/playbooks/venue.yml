@@ -64,6 +64,7 @@
     motion_levels_services:
       - motion-levels-floor-controller.service
       - motion-levels-game-engine.service
+      - motion-levels-camera-helper.service
       - motion-levels-kiosk.service
     motion_levels_old_services:
       - motion-levels-player-menu.service
@@ -143,6 +144,7 @@
           - curl
           - libasound2-dev
           - pkg-config
+          - python3-opencv
           - rsync
           - zstd
           - xinit
