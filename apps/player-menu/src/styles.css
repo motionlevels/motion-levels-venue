@@ -2653,15 +2653,17 @@ button.capsule:disabled,
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  align-content: start;
+  grid-auto-rows: minmax(94px, 1fr);
+  align-content: stretch;
   gap: 8px;
   overflow: auto;
   padding-right: 4px;
 }
 
 .active-game-level {
-  min-height: 94px;
-  grid-template-rows: 62px 32px;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) 34px;
 }
 
 .active-game-level .level-footer {
