@@ -2293,7 +2293,8 @@ button.capsule:disabled,
 }
 
 .game-control-screen.with-levels .game-control-main {
-  grid-template-columns: minmax(270px, 0.42fr) minmax(320px, 0.48fr) minmax(520px, 1fr);
+  grid-template-columns: minmax(230px, 0.34fr) minmax(280px, 0.38fr) minmax(660px, 1.28fr);
+  gap: 14px;
 }
 
 .game-control-preview,
@@ -2444,9 +2445,9 @@ button.capsule:disabled,
 }
 
 .game-control-screen.with-levels .game-control-copy {
-  padding: 22px;
+  padding: 18px;
   align-content: start;
-  gap: 14px;
+  gap: 11px;
 }
 
 .game-control-heading {
@@ -2466,7 +2467,7 @@ button.capsule:disabled,
 }
 
 .game-control-screen.with-levels .game-control-copy h2 {
-  font-size: 48px;
+  font-size: 42px;
 }
 
 .game-control-copy p {
@@ -2478,7 +2479,7 @@ button.capsule:disabled,
 }
 
 .game-control-screen.with-levels .game-control-copy p {
-  font-size: 20px;
+  font-size: 17px;
 }
 
 .control-meta,
@@ -2561,7 +2562,7 @@ button.capsule:disabled,
 
 .active-difficulty {
   min-width: 0;
-  min-height: 66px;
+  min-height: 58px;
   padding: 8px;
   display: grid;
   align-content: center;
@@ -2601,8 +2602,16 @@ button.capsule:disabled,
   filter: grayscale(0.9);
 }
 
+.game-control-screen.with-levels .game-control-copy .active-lock-note {
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .active-next-level {
-  min-height: 52px;
+  min-height: 46px;
   justify-content: center;
   border-radius: var(--r-sm);
   font-size: 16px;
@@ -2612,10 +2621,10 @@ button.capsule:disabled,
 .active-level-rail {
   min-width: 0;
   min-height: 0;
-  padding: 16px;
+  padding: 12px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 12px;
+  gap: 10px;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
@@ -2635,7 +2644,7 @@ button.capsule:disabled,
 
 .active-level-rail-heading strong {
   color: var(--text);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 950;
   line-height: 1;
 }
@@ -2643,16 +2652,35 @@ button.capsule:disabled,
 .active-level-grid {
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-content: start;
-  gap: 10px;
+  gap: 8px;
   overflow: auto;
   padding-right: 4px;
 }
 
 .active-game-level {
-  min-height: 118px;
-  grid-template-rows: 78px 40px;
+  min-height: 94px;
+  grid-template-rows: 62px 32px;
+}
+
+.active-game-level .level-footer {
+  padding: 0 9px;
+  gap: 8px;
+}
+
+.active-game-level strong {
+  font-size: 14px;
+}
+
+.active-game-level .level-state {
+  min-height: 20px;
+  padding: 0 7px;
+  font-size: 10px;
+}
+
+.active-game-level .star-rating {
+  font-size: 11px;
 }
 
 .active-game-level.readonly {

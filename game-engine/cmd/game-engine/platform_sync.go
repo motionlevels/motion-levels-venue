@@ -205,6 +205,9 @@ func (s *platformSyncer) syncOnce(now time.Time) error {
 	if status.SessionID == "" {
 		return nil
 	}
+	if isAmbientActivityGame(status.CurrentGame) || isAmbientActivityGame(display.CurrentGame) {
+		return nil
+	}
 	if currentSessionID := s.runtime.SessionID(); currentSessionID != "" && currentSessionID != status.SessionID {
 		return nil
 	}

@@ -116,7 +116,8 @@ func (r *Recorder) Record(record *gamepb.GameSessionRecord) error {
 	}
 	r.sequence++
 	r.eventCount++
-	if ended := record.GetSessionEnded(); ended != nil {
+	ended := record.GetSessionEnded()
+	if ended != nil {
 		if ended.EndedUnixNanos > 0 {
 			r.endedAt = time.Unix(0, ended.EndedUnixNanos).UTC()
 		}
@@ -124,13 +125,23 @@ func (r *Recorder) Record(record *gamepb.GameSessionRecord) error {
 	if started := record.GetSessionStarted(); started != nil {
 		r.writeHeaderFieldsLocked(started)
 	}
-	return pbstream.Write(r.writer, &replaypb.ReplayRecord{
+	if err := pbstream.Write(r.writer, &replaypb.ReplayRecord{
 		SessionId:      r.sessionID,
 		VenueSessionId: r.venueID,
 		Sequence:       r.sequence,
 		UnixNanos:      record.GetUnixNanos(),
 		Payload:        &replaypb.ReplayRecord_GameRecord{GameRecord: record},
-	})
+	}); err != nil {
+		return err
+	}
+	if ended != nil {
+		reason := strings.TrimSpace(ended.GetReason())
+		if reason == "" {
+			reason = "session_ended"
+		}
+		return r.closeSessionLocked(reason)
+	}
+	return nil
 }
 
 func (r *Recorder) RecordFrame(frame *recordingpb.FrameRecord) error {
@@ -151,9 +162,6 @@ func (r *Recorder) RecordFrame(frame *recordingpb.FrameRecord) error {
 	r.endedAt = now
 	keyframe := r.shouldKeyframeLocked(now)
 	deltas := r.frameDeltasLocked(frame, keyframe)
-	if len(deltas) == 0 && !keyframe {
-		return nil
-	}
 	if keyframe {
 		r.lastKeyframe = now
 	}

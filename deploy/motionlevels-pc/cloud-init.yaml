@@ -139,7 +139,8 @@ write_files:
       MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR=/var/lib/motion-levels/platform-asset-cache
       MOTION_LEVELS_CONTROLLER_LABEL=Venue Floor 1
       MOTION_LEVELS_CONTROLLER_HOSTNAME=motionlevels-1
-      MOTION_LEVELS_RECORDING_UPLOAD_PLATFORM_URL=https://platform.motionlevels.obis.dev
+      # Controller frame recording is opt-in; leave upload disabled by default.
+      MOTION_LEVELS_RECORDING_UPLOAD_PLATFORM_URL=
       MOTION_LEVELS_LIVE_PUSH_PLATFORM_URL=https://platform.motionlevels.obis.dev
       MOTION_LEVELS_LIVE_PUSH_FPS=5
       MOTION_LEVELS_LIVE_PUSH_TIMEOUT=10s
@@ -251,14 +252,14 @@ write_files:
         -broadcast-ip ${MOTION_LEVELS_LED_BROADCAST_IP} \
         -broadcast-port ${MOTION_LEVELS_LED_BROADCAST_PORT} \
         -controller-id-file /opt/motion-levels/rebuild/var/floor-controller/controller-id \
-        -record-frames /opt/motion-levels/rebuild/var/floor-controller/recordings \
+        -record-frames "" \
         -record-compression none \
         -record-post-compression zstd \
         -record-segment-bytes 268435456 \
         -record-segment-duration 10m \
         -record-delete-raw-after 1h \
         -record-max-pending-raw-bytes 4294967296 \
-        -record-upload-platform-url ${MOTION_LEVELS_RECORDING_UPLOAD_PLATFORM_URL} \
+        -record-upload-platform-url "" \
         -record-upload-queue-size 256 \
         -record-upload-timeout 5m \
         -zstd-path /usr/bin/zstd \

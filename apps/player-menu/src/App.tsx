@@ -326,6 +326,17 @@ function animationIsIdleLoop(currentGame: string, phase: string): boolean {
   ) && (phase === "idle" || phase === "ambient");
 }
 
+function isStoppedRuntimePhase(status: EngineStatus | null): boolean {
+  const phase = (status?.phase || "").toLowerCase();
+  return phase === "finished" || phase === "idle" || phase === "ambient";
+}
+
+function isLevelRuntimeActive(status: EngineStatus | null, game: GameCard): boolean {
+  if (!status || !game.levels?.length || isAmbientCard(game)) return false;
+  if (animationIsIdleLoop(status.currentGame, status.phase)) return false;
+  return !isStoppedRuntimePhase(status);
+}
+
 function gameForEngineStatus(engineGame: string, currentMenuGameID: string, catalogGames = games): GameCard | undefined {
   const currentMenuGame = catalogGames.find((game) => game.id === currentMenuGameID);
   if (currentMenuGame && isPartyCard(currentMenuGame)) {
@@ -637,7 +648,7 @@ function progressFor(game: GameCard, state: MenuState): LevelProgress {
 
 function levelModeFor(game: GameCard, state: MenuState): LevelMode {
   if (!game.levels?.length) return "free";
-  return state.levelModes[game.id] === "free" ? "free" : "challenge";
+  return state.levelModes[game.id] === "challenge" ? "challenge" : "free";
 }
 
 function challengeRunFor(game: GameCard, state: MenuState): ChallengeRun | null {
@@ -1096,6 +1107,7 @@ function MenuApp() {
   const [colorPickerFor, setColorPickerFor] = useState<number | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<number | null>(null);
   const [confirmResetSession, setConfirmResetSession] = useState(false);
+  const [pendingLevelSwitch, setPendingLevelSwitch] = useState<{ gameID: string; levelID: string } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsUnlocked, setSettingsUnlocked] = useState(false);
   const [settingsPin, setSettingsPin] = useState("");
@@ -1260,6 +1272,7 @@ function MenuApp() {
       setColorPickerFor(null);
       setConfirmRemove(null);
       setConfirmResetSession(false);
+      setPendingLevelSwitch(null);
       setSettingsOpen(false);
     }
 
@@ -1430,6 +1443,7 @@ function MenuApp() {
     setColorPickerFor(null);
     setConfirmRemove(null);
     setConfirmResetSession(false);
+    setPendingLevelSwitch(null);
   }, [screenMode]);
 
   useEffect(() => {
@@ -1532,12 +1546,13 @@ function MenuApp() {
       else if (colorPickerFor !== null) setColorPickerFor(null);
       else if (confirmRemove !== null) setConfirmRemove(null);
       else if (confirmResetSession) setConfirmResetSession(false);
+      else if (pendingLevelSwitch) setPendingLevelSwitch(null);
       else if (settingsOpen) setSettingsOpen(false);
       else if (teamOpen) setTeamOpen(false);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [keyboardTarget, colorPickerFor, confirmRemove, confirmResetSession, settingsOpen, teamOpen]);
+  }, [keyboardTarget, colorPickerFor, confirmRemove, confirmResetSession, pendingLevelSwitch, settingsOpen, teamOpen]);
 
   const availableGames = useMemo(() => new Set((status?.catalog || []).map((entry) => entry.game)), [status]);
   const platformEnabledGames = useMemo(() => (
@@ -1590,6 +1605,9 @@ function MenuApp() {
   const launchedSupportedDifficulties = supportedDifficultiesFor(launchedGame, launchedLevel);
   const launchedDifficulty = closestSupportedDifficulty(menu.difficulty, launchedSupportedDifficulties);
   const launchedModeLabel = isAmbientCard(launchedGame) ? "Ambiente" : launchedLevel?.label || selectedDifficulty.label;
+  const launchedLevelActive = isLevelRuntimeActive(status, launchedGame);
+  const pendingLevelSwitchGame = pendingLevelSwitch ? menuGames.find((game) => game.id === pendingLevelSwitch.gameID) || null : null;
+  const pendingLevelSwitchLevel = pendingLevelSwitchGame?.levels?.find((level) => level.id === pendingLevelSwitch?.levelID) || null;
   const pickerPlayer = menu.players.find((player) => player.id === colorPickerFor) || null;
   const removePlayer = menu.players.find((player) => player.id === confirmRemove) || null;
   const connectionState = error ? "connection-off" : status ? "connection-on" : "connection-pending";
@@ -1762,6 +1780,7 @@ function MenuApp() {
     setColorPickerFor(null);
     setConfirmRemove(null);
     setConfirmResetSession(false);
+    setPendingLevelSwitch(null);
   }
 
   async function closeSession(reason = "manual") {
@@ -1803,6 +1822,7 @@ function MenuApp() {
     setColorPickerFor(null);
     setConfirmRemove(null);
     setConfirmResetSession(false);
+    setPendingLevelSwitch(null);
     setTeamOpen(false);
     setLevelBrowserGameID(null);
     setScreenMode("browse");
@@ -2135,7 +2155,7 @@ function MenuApp() {
     setMessage((current) => (current.startsWith("Narración") ? "" : current));
   }
 
-  async function launch(gameID = selectedGame.id, options: { partyIndex?: number; partyScore?: number } = {}) {
+  async function launch(gameID = selectedGame.id, options: { difficulty?: DifficultyID; levelID?: string; partyIndex?: number; partyScore?: number } = {}) {
     const game = menuGames.find((candidate) => candidate.id === gameID);
     if (!game || game.disabled || !isGameLaunchable(game)) {
       captureMenuEvent("start_blocked", {
@@ -2149,6 +2169,19 @@ function MenuApp() {
     const partyIndex = isPartyCard(game) ? Math.max(0, Math.min((game.partyMiniGames?.length || 1) - 1, options.partyIndex || 0)) : 0;
     const launchGame = partyLaunchGame(game, menuGames, partyIndex);
     const partyFirstMiniGame = isPartyCard(game) ? game.partyMiniGames?.[partyIndex] : undefined;
+    const levelOverride = options.levelID && launchGame.levels?.some((level) => level.id === options.levelID) ? options.levelID : undefined;
+    if (levelOverride) {
+      nextMenu = {
+        ...nextMenu,
+        selectedLevels: {
+          ...nextMenu.selectedLevels,
+          [launchGame.id]: levelOverride,
+        },
+      };
+    }
+    if (options.difficulty) {
+      nextMenu = { ...nextMenu, difficulty: options.difficulty };
+    }
     if (!nextMenu.sessionId) {
       nextMenu = {
         ...nextMenu,
@@ -2173,7 +2206,7 @@ function MenuApp() {
     }
     const playNarration = narrationArmedFor(game, nextMenu);
     const launchRoster = rosterForGame(game, nextMenu.players);
-    const selectedLevelID = partyFirstMiniGame?.level || selectedLevelFor(launchGame, nextMenu);
+    const selectedLevelID = partyFirstMiniGame?.level || levelOverride || selectedLevelFor(launchGame, nextMenu);
     const launchLevel = launchGame.levels?.find((level) => level.id === selectedLevelID);
     const partyParentDifficulty = isPartyCard(game) && usesDifficulty(game)
       ? closestSupportedDifficulty(nextMenu.difficulty, supportedDifficultiesFor(game))
@@ -2310,6 +2343,48 @@ function MenuApp() {
     setMessage("Reiniciando");
   }
 
+  function requestActiveLevelSwitch(levelID: string) {
+    if (!launchedGame.levels?.length) return;
+    const activeLevelID = status?.level || selectedLevelFor(launchedGame);
+    if (levelID === activeLevelID && isLevelRuntimeActive(status, launchedGame)) return;
+    if (!isLevelUnlocked(launchedGame, levelID, menu)) {
+      setSelectedLevel(launchedGame, levelID);
+      return;
+    }
+    if (isLevelRuntimeActive(status, launchedGame)) {
+      setPendingLevelSwitch({ gameID: launchedGame.id, levelID });
+      return;
+    }
+    void switchLaunchedLevel(launchedGame, levelID, false);
+  }
+
+  async function switchLaunchedLevel(game: GameCard, levelID: string, stopCurrent: boolean) {
+    const level = game.levels?.find((candidate) => candidate.id === levelID);
+    if (!level || !isLevelUnlocked(game, levelID, menu)) return;
+    setPendingLevelSwitch(null);
+    setError("");
+    captureMenuEvent("level_selected", {
+      difficulty: closestSupportedDifficulty(menu.difficulty, supportedDifficultiesFor(game, level)),
+      engine_game: engineGameID(game),
+      game: game.id,
+      level: levelID,
+      level_number: levelNumber(levelID),
+      stopped_current: stopCurrent,
+      source: "active_game",
+    });
+    try {
+      if (stopCurrent) {
+        setMessage("Deteniendo nivel");
+        const stoppedStatus = await controlGame("exit");
+        setStatus(stoppedStatus);
+      }
+      setMessage("Cambiando nivel");
+      await launch(game.id, { levelID });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cambiar de nivel");
+    }
+  }
+
   async function sendGameControl(action: "pause" | "resume" | "restart" | "exit" | "narration" | "mute" | "unmute" | "toggle_mute") {
     setError("");
     captureMenuEvent("control_used", {
@@ -2326,8 +2401,14 @@ function MenuApp() {
         syncPlayTiming(nextStatus, launchedGame);
         setMessage("Reiniciando");
       } else if (action === "exit") {
-        setScreenMode("browse");
-        setMessage("Juego finalizado");
+        const engineGame = gameForEngineStatus(nextStatus.currentGame, launchedGame.id, menuGames);
+        if (launchedGame.levels?.length && engineGame?.id === launchedGame.id && !animationIsIdleLoop(nextStatus.currentGame, nextStatus.phase)) {
+          syncPlayTiming(nextStatus, launchedGame);
+          setMessage("Nivel detenido");
+        } else {
+          setScreenMode("browse");
+          setMessage("Juego finalizado");
+        }
       } else if (action === "narration") {
         setMessage("Narración");
       } else if (action === "toggle_mute" || action === "mute" || action === "unmute") {
@@ -2495,12 +2576,17 @@ function MenuApp() {
           challengeRun={challengeRunFor(launchedGame, menu)}
           difficulty={launchedDifficulty}
           supportedDifficulties={launchedSupportedDifficulties}
+          difficultyLocked={launchedLevelActive}
           renderLevelOption={(level, options) => renderActiveLevelOption(launchedGame, level, options)}
           ambient={isAmbientCard(launchedGame)}
           introActive={introActive}
           countdownValue={countdownValue}
           error={error}
           onDifficultyChange={(difficulty) => {
+            if (launchedLevelActive) {
+              setMessage("Detén el nivel para cambiar dificultad");
+              return;
+            }
             captureMenuEvent("difficulty_changed", {
               difficulty,
               engine_game: engineGameID(launchedGame),
@@ -2510,18 +2596,19 @@ function MenuApp() {
             });
             setMenu((current) => ({ ...current, difficulty }));
           }}
-          onLevelSelect={(levelID) => setSelectedLevel(launchedGame, levelID)}
+          onLevelSelect={requestActiveLevelSwitch}
           onNextLevel={() => {
             const levels = launchedGame.levels || [];
             const currentIndex = Math.max(0, levels.findIndex((level) => level.id === selectedLevelFor(launchedGame)));
             const nextLevel = levels[(currentIndex + 1) % levels.length];
-            if (nextLevel) setSelectedLevel(launchedGame, nextLevel.id);
+            if (nextLevel) requestActiveLevelSwitch(nextLevel.id);
           }}
           onPauseToggle={() => sendGameControl(status?.paused ? "resume" : "pause")}
           onRestart={() => restartLaunchedGame()}
           narrationSupported={supportsNarration(launchedGame)}
           narrationArmed={narrationArmedFor(launchedGame)}
           onNarrationToggle={() => setNarrationArmed(launchedGame, !narrationArmedFor(launchedGame))}
+          exitLabel={launchedLevelActive ? "Terminar nivel" : "Salir del juego"}
           onExit={() => sendGameControl("exit")}
         />
       ) : (
@@ -2958,6 +3045,17 @@ function MenuApp() {
         />
       ) : null}
 
+      {pendingLevelSwitch && pendingLevelSwitchGame && pendingLevelSwitchLevel ? (
+        <ConfirmDialog
+          title="¿Cambiar nivel?"
+          body={`Se detendrá el nivel actual y empezará ${playerLevelLabel(pendingLevelSwitchLevel, pendingLevelSwitchGame.levels?.findIndex((level) => level.id === pendingLevelSwitchLevel.id) ?? -1)}.`}
+          confirmLabel="Cambiar"
+          cancelLabel="Cancelar"
+          onConfirm={() => void switchLaunchedLevel(pendingLevelSwitchGame, pendingLevelSwitchLevel.id, true)}
+          onCancel={() => setPendingLevelSwitch(null)}
+        />
+      ) : null}
+
       {settingsOpen ? (
         <OperatorSettingsDialog
           unlocked={settingsUnlocked}
@@ -3279,6 +3377,7 @@ function GameControlScreen({
   challengeRun,
   difficulty,
   supportedDifficulties,
+  difficultyLocked,
   renderLevelOption,
   ambient,
   introActive,
@@ -3292,6 +3391,7 @@ function GameControlScreen({
   narrationSupported,
   narrationArmed,
   onNarrationToggle,
+  exitLabel,
   onExit,
 }: {
   game: GameCard;
@@ -3304,6 +3404,7 @@ function GameControlScreen({
   challengeRun: ChallengeRun | null;
   difficulty: DifficultyID;
   supportedDifficulties: DifficultyID[];
+  difficultyLocked: boolean;
   renderLevelOption: (level: NonNullable<GameCard["levels"]>[number], options: { activeLevelID: string; selectable: boolean; onSelect: (levelID: string) => void }) => ReactNode;
   ambient: boolean;
   introActive: boolean;
@@ -3317,6 +3418,7 @@ function GameControlScreen({
   narrationSupported: boolean;
   narrationArmed: boolean;
   onNarrationToggle: () => void;
+  exitLabel: string;
   onExit: () => void;
 }) {
   const paused = Boolean(status?.paused);
@@ -3336,7 +3438,8 @@ function GameControlScreen({
   const difficultyLabel = difficulties.find((candidate) => candidate.id === difficulty)?.label || difficulty;
   const completedCount = Object.keys(challengeRun?.completedLevels || {}).length;
   const progressLabel = hasLevels ? `${completedCount}/${levels.length}` : "0/0";
-  const phaseLabel = ambient ? "Animación en curso" : introActive ? "Narración inicial" : countdownValue > 0 ? "Preparando salida" : paused ? "Pausado" : "En curso";
+  const stopped = isStoppedRuntimePhase(status);
+  const phaseLabel = ambient ? "Animación en curso" : stopped ? "Nivel detenido" : introActive ? "Narración inicial" : countdownValue > 0 ? "Preparando salida" : paused ? "Pausado" : "En curso";
   return (
     <section className={`game-control-screen ${hasLevels ? "with-levels" : ""}`} style={{ "--c": game.color, "--crgb": hexToRGB(game.color) } as CSSProperties}>
       <div className="game-control-main">
@@ -3397,10 +3500,10 @@ function GameControlScreen({
                       className={`active-difficulty ${difficulty === candidate.id ? "active" : ""}`}
                       style={{ "--difficulty-color": candidate.color, "--difficulty-rgb": hexToRGB(candidate.color) } as CSSProperties}
                       type="button"
-                      disabled={!supported}
+                      disabled={!supported || difficultyLocked}
                       aria-pressed={difficulty === candidate.id}
                       onClick={() => {
-                        if (supported) onDifficultyChange(candidate.id);
+                        if (supported && !difficultyLocked) onDifficultyChange(candidate.id);
                       }}
                     >
                       <span>{candidate.label}</span>
@@ -3409,6 +3512,7 @@ function GameControlScreen({
                   );
                 })}
               </div>
+              {difficultyLocked ? <p className="active-lock-note">Detén el nivel para cambiar dificultad.</p> : null}
               <button className="btn active-next-level" type="button" onClick={onNextLevel}>
                 Siguiente nivel
               </button>
@@ -3459,7 +3563,7 @@ function GameControlScreen({
         ) : null}
         <button className="btn control-action danger" type="button" onClick={onExit}>
           <CloseIcon />
-          Salir
+          {exitLabel}
         </button>
       </div>
     </section>

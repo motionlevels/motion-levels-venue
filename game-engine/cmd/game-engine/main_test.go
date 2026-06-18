@@ -26,7 +26,7 @@ import (
 )
 
 func TestMakeFrameProducesCompleteLogicalBoard(t *testing.T) {
-	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "lava"}, nil, nil)
 	frame := makeFrame(7, time.Unix(0, 123), 1.25, runtime)
 	if frame.Sequence != 7 || frame.Width != 16 || frame.Height != 32 {
 		t.Fatalf("unexpected frame metadata: %+v", frame)
@@ -36,6 +36,24 @@ func TestMakeFrameProducesCompleteLogicalBoard(t *testing.T) {
 	}
 	if len(frame.Tiles) != 16*32 {
 		t.Fatalf("tile count = %d, want %d", len(frame.Tiles), 16*32)
+	}
+}
+
+func TestMakeFrameOmitsSessionLineageForAmbientGames(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "salvapantallas"}, nil, nil)
+	frame := makeFrame(7, time.Unix(0, 123), 1.25, runtime)
+
+	if frame.SessionId != "" || frame.VenueSessionId != "" {
+		t.Fatalf("ambient frame lineage = session %q venue %q, want empty", frame.SessionId, frame.VenueSessionId)
+	}
+}
+
+func TestAmbientActivityClassifierDoesNotTreatUnknownGamesAsAmbient(t *testing.T) {
+	if isAmbientActivityGame("new-competitive-game") {
+		t.Fatal("unknown gameplay id was classified as ambient")
+	}
+	if !isAmbientActivityGame("animations") || !isAmbientActivityGame("ambient-pulse") || !isAmbientActivityGame("animation-custom") {
+		t.Fatal("known ambient ids were not classified as ambient")
 	}
 }
 
@@ -974,6 +992,32 @@ func TestPlatformSyncPostsSessionSnapshot(t *testing.T) {
 	}
 }
 
+func TestPlatformSyncSkipsAmbientSessionSnapshot(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer server.Close()
+
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "salvapantallas"}, nil, nil)
+	syncer, err := newPlatformSyncer(runtime, config{
+		PlatformURL:          server.URL,
+		ControllerID:         "controller-1",
+		PlatformSyncInterval: time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syncer.syncOnce(time.Unix(100, 0)); err != nil {
+		t.Fatal(err)
+	}
+
+	if requests != 0 {
+		t.Fatalf("ambient sync requests = %d, want 0", requests)
+	}
+}
+
 func TestAmbientSelectionChangesRenderedFrame(t *testing.T) {
 	runtime := newGameRuntime(config{Brightness: 100, PlayerCount: 1, Game: "salvapantallas"}, nil, nil)
 	now := time.Now()
@@ -1470,6 +1514,29 @@ func TestRuntimeRecordsSessionAPIAndDisplayData(t *testing.T) {
 	}
 	if !sawSessionStarted || !sawMenuCommand || !sawAPIInteraction || !sawDisplay {
 		t.Fatalf("records session=%v menu=%v api=%v display=%v", sawSessionStarted, sawMenuCommand, sawAPIInteraction, sawDisplay)
+	}
+}
+
+func TestRuntimeSkipsSessionActivityForAmbientGames(t *testing.T) {
+	dir := t.TempDir()
+	startedAt := time.Now().UTC().Truncate(time.Second)
+	recorder, err := sessionrecording.New(dir, startedAt, sessionrecording.Options{MaxSegmentDuration: 7 * 24 * time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "animations"}, nil, recorder)
+	runtime.RecordDisplaySnapshot(runtime.DisplayStatus(time.Now()), time.Now())
+	runtime.RecordAPIInteraction("GET", "/api/status", "127.0.0.1", http.StatusOK, time.Now())
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	stats := recorder.Stats()
+	if stats.WrittenRecords != 0 {
+		t.Fatalf("ambient written records = %d, want 0", stats.WrittenRecords)
+	}
+	if runtime.Status().SessionID != "" || runtime.Status().VenueSessionID != "" {
+		t.Fatalf("ambient status exposes session ids: %+v", runtime.Status())
 	}
 }
 

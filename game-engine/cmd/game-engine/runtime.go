@@ -978,6 +978,10 @@ func (r *gameRuntime) Status() runtimeStatus {
 	if venueSessionID == "" {
 		venueSessionID = cfg.VenueSessionID
 	}
+	if isAmbientActivityGame(cfg.Game) {
+		sessionID = ""
+		venueSessionID = ""
+	}
 	return runtimeStatus{
 		CurrentGame:              cfg.Game,
 		VenueSessionID:           venueSessionID,
@@ -1021,6 +1025,9 @@ func (r *gameRuntime) SessionID() string {
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	if isAmbientActivityGame(r.current.Game) {
+		return ""
+	}
 	return r.sessionID
 }
 
@@ -1030,6 +1037,9 @@ func (r *gameRuntime) VenueSessionID() string {
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	if isAmbientActivityGame(r.current.Game) {
+		return ""
+	}
 	return r.current.VenueSessionID
 }
 
@@ -1738,6 +1748,9 @@ func (r *gameRuntime) recordAudioCueLocked(cue, ref string, volume float64, now 
 
 func (r *gameRuntime) recordLocked(now time.Time, setPayload func(*gamepb.GameSessionRecord)) {
 	if r.recorder == nil || r.sessionID == "" {
+		return
+	}
+	if isAmbientActivityGame(r.current.Game) {
 		return
 	}
 	if now.IsZero() {
