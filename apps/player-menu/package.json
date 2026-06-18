@@ -41,18 +41,21 @@
     "@motion-levels/core": "file:../../packages/core",
     "@motion-levels/design-tokens": "file:../../packages/design-tokens",
     "@motion-levels/floor-view": "file:../../packages/floor-view",
-    "posthog-js": "^1.379.3",
-    "react": "^19.2.1",
-    "react-dom": "^19.2.1"
+    "posthog-js": "^1.390.2",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
-    "@types/react": "^19.2.7",
+    "@types/node": "^25.9.3",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
-    "electron": "^39.2.7",
-    "electron-builder": "^26.8.1",
-    "typescript": "^5.9.3",
-    "vite": "^7.2.6"
+    "@vitejs/plugin-react": "^6.0.2",
+    "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  },
+  "overrides": {
+    "dompurify": "^3.4.11"
   }
 }
