@@ -7,7 +7,7 @@ const GAP = 2;
 const LIT = PITCH - GAP;
 const IDLE: [number, number, number] = [13, 19, 30]; // unlit LED, matches controller preview tile tone
 const IDLE_CSS = `rgb(${IDLE[0]}, ${IDLE[1]}, ${IDLE[2]})`;
-const FPS = 30;
+const FPS = 50;
 
 type FloorPreviewOrientation = "portrait" | "landscape";
 
