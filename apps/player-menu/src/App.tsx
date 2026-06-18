@@ -1118,6 +1118,7 @@ function MenuApp() {
   const [screenMode, setScreenMode] = useState<ScreenMode>("browse");
   const [remoteSessionRequest, setRemoteSessionRequest] = useState<RemoteSessionRequest | null>(() => remoteSessionRequestFromURL());
   const [launchedGameID, setLaunchedGameID] = useState(menu.selectedGame);
+  const [stoppedLevelGameID, setStoppedLevelGameID] = useState<string | null>(null);
   const [launchingGameID, setLaunchingGameID] = useState<string | null>(null);
   const [levelBrowserGameID, setLevelBrowserGameID] = useState<string | null>(null);
   const [partyRun, setPartyRun] = useState<PartyRunState | null>(null);
@@ -1130,6 +1131,7 @@ function MenuApp() {
   const catalogRefreshInFlight = useRef(false);
   const platformCatalogRef = useRef(platformCatalog);
   const syncedEngineSession = useRef("");
+  const stoppedLevelGameIDRef = useRef<string | null>(null);
   const mirroredMenuVersion = useRef(0);
   const venueSessionIDRef = useRef(menu.sessionId);
 
@@ -1364,7 +1366,14 @@ function MenuApp() {
 
     if (engineIsIdleLoop) {
       syncedEngineSession.current = syncKey;
+      const heldStoppedLevelGameID = stoppedLevelGameIDRef.current || stoppedLevelGameID;
+      if (screenMode === "game" && heldStoppedLevelGameID && launchedGameID === heldStoppedLevelGameID) {
+        setMessage("Nivel detenido");
+        return;
+      }
       if (screenMode === "game") {
+        stoppedLevelGameIDRef.current = null;
+        setStoppedLevelGameID(null);
         setScreenMode("browse");
         setMessage("Juego finalizado");
       }
@@ -1434,7 +1443,7 @@ function MenuApp() {
       syncPlayTiming(status, engineGame);
       syncedEngineSession.current = syncKey;
     }
-  }, [status, menu.selectedGame, screenMode, menuGames]);
+  }, [status, menu.selectedGame, screenMode, menuGames, launchedGameID, stoppedLevelGameID]);
 
   useEffect(() => {
     if (screenMode !== "game") return;
@@ -2249,6 +2258,8 @@ function MenuApp() {
       setError("Nivel bloqueado");
       return;
     }
+    stoppedLevelGameIDRef.current = null;
+    setStoppedLevelGameID(null);
     setMenu(nextMenu);
     setMessage(isPartyCard(game) && game.partyMiniGames?.length ? `Party ${partyIndex + 1}/${game.partyMiniGames.length}` : "Iniciando");
     setError("");
@@ -2334,6 +2345,8 @@ function MenuApp() {
   }
 
   async function restartLaunchedGame() {
+    stoppedLevelGameIDRef.current = null;
+    setStoppedLevelGameID(null);
     captureMenuEvent("game_restarted", {
       engine_game: engineGameID(launchedGame),
       game: launchedGame.id,
@@ -2375,6 +2388,8 @@ function MenuApp() {
     try {
       if (stopCurrent) {
         setMessage("Deteniendo nivel");
+        stoppedLevelGameIDRef.current = game.id;
+        setStoppedLevelGameID(game.id);
         const stoppedStatus = await controlGame("exit");
         setStatus(stoppedStatus);
       }
@@ -2387,6 +2402,11 @@ function MenuApp() {
 
   async function sendGameControl(action: "pause" | "resume" | "restart" | "exit" | "narration" | "mute" | "unmute" | "toggle_mute") {
     setError("");
+    const stopLevelOnly = action === "exit" && isLevelRuntimeActive(status, launchedGame);
+    if (stopLevelOnly) {
+      stoppedLevelGameIDRef.current = launchedGame.id;
+      setStoppedLevelGameID(launchedGame.id);
+    }
     captureMenuEvent("control_used", {
       action,
       engine_game: engineGameID(launchedGame),
@@ -2398,9 +2418,18 @@ function MenuApp() {
       const nextStatus = await controlGame(action);
       setStatus(nextStatus);
       if (action === "restart") {
+        stoppedLevelGameIDRef.current = null;
+        setStoppedLevelGameID(null);
         syncPlayTiming(nextStatus, launchedGame);
         setMessage("Reiniciando");
       } else if (action === "exit") {
+        if (stopLevelOnly) {
+          setScreenMode("game");
+          setMessage("Nivel detenido");
+          return;
+        }
+        stoppedLevelGameIDRef.current = null;
+        setStoppedLevelGameID(null);
         const engineGame = gameForEngineStatus(nextStatus.currentGame, launchedGame.id, menuGames);
         if (launchedGame.levels?.length && engineGame?.id === launchedGame.id && !animationIsIdleLoop(nextStatus.currentGame, nextStatus.phase)) {
           syncPlayTiming(nextStatus, launchedGame);
