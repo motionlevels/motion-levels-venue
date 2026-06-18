@@ -267,7 +267,7 @@ function isAmbientCard(game: GameCard): boolean {
 }
 
 function isPartyCard(game: GameCard): boolean {
-  return Boolean(game.partyMiniGames?.length) || String(game.category) === "party";
+  return Boolean(game.partyMiniGames?.length);
 }
 
 function isFeaturedCard(game: GameCard): boolean {
@@ -494,7 +494,7 @@ function catalogPreviewAnimation(
   if (preferFallbackAnimation) return configured || fallback?.previewAnimation;
   if (hasPlatformMedia || isPlatformLevelSource(entry)) return undefined;
   if (configured) return configured;
-  return fallback?.previewAnimation || (entry.source_kind === "cloud_animations" || entry.catalog_category === "attract" ? engineGame : undefined);
+  return fallback?.previewAnimation || (entry.source_kind === "animations" || entry.catalog_category === "attract" ? engineGame : undefined);
 }
 
 function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, index: number): GameCard {
@@ -506,8 +506,8 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
   const previewSrc = previewSrcs[0];
   const hasPlatformMedia = !preferFallbackAnimation && Boolean(catalogDirectAssetSrc(entry.catalog_preview_url) || catalogDirectAssetSrc(entry.catalog_thumbnail_url));
   const playerBounds = platformPlayerBounds(entry);
-  const supportedDifficulties = platformSupportedDifficulties(entry, fallback);
-  const supportsLevels = platformSupportsLevels(entry, fallback);
+  const supportedDifficulties = platformSupportedDifficulties(entry);
+  const supportsLevels = platformSupportsLevels(entry);
   const estimatedDurationSeconds = normalizeEstimatedDurationSeconds(entry.estimated_duration_seconds);
   const partyMiniGames = platformPartyMiniGames(entry);
   const levels = supportsLevels && entry.levels && entry.levels.length > 0
@@ -515,7 +515,7 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
         const levelID = String(lvl.slug || lvl.id || "").trim() || String(lvl.id || "").trim();
         if (!levelID) return byID;
         const fallbackLevel = fallback?.levels?.find((level) => level.id === levelID || level.id === lvl.id);
-        const levelDifficulties = platformLevelSupportedDifficulties(lvl, fallbackLevel);
+        const levelDifficulties = platformLevelSupportedDifficulties(lvl);
         const existing = byID.get(levelID);
         byID.set(levelID, {
           id: levelID,
@@ -528,19 +528,18 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
         });
         return byID;
       }, new Map<string, NonNullable<GameCard["levels"]>[number]>()).values())
-    : supportsLevels ? fallback?.levels : undefined;
-  const duration = platformDurationLabel(entry, fallback) || (levels?.length ? `${levels.length} niveles` : "");
-  const fallbackCategory = String(fallback?.category || "") === "party" ? "versus" : fallback?.category;
+    : undefined;
+  const duration = platformDurationLabel(entry) || (levels?.length ? `${levels.length} niveles` : "");
   const category = partyMiniGames?.length
     ? "versus"
-    : isCategoryID(entry.catalog_category) ? entry.catalog_category : fallbackCategory || "arcade";
+    : isCategoryID(entry.catalog_category) ? entry.catalog_category : fallback?.category || "arcade";
   return {
     id: entry.id,
     label: entry.label || fallback?.label || engineGame,
     category,
     color: entry.catalog_color || fallback?.color || [colors.cyan, colors.blue, colors.green, colors.violet, colors.orange, colors.yellow][index % 6],
-    players: platformPlayerRangeLabel(entry, fallback),
-    difficulty: platformDifficultyLabel(entry, fallback),
+    players: platformPlayerRangeLabel(entry),
+    difficulty: platformDifficultyLabel(entry),
     difficulties: supportedDifficulties,
     duration,
     estimatedDurationSeconds,
@@ -595,11 +594,11 @@ function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalo
 }
 
 function isPlatformLaunchableSource(game: Pick<GameCard, "sourceKind">): boolean {
-  return game.sourceKind === "code_editable" || game.sourceKind === "platform_levels" || game.sourceKind === "cloud_animations";
+  return game.sourceKind === "code_editable" || game.sourceKind === "platform_levels" || game.sourceKind === "animations";
 }
 
 function canLaunchWhileCatalogRefreshes(game: GameCard): boolean {
-  return isAmbientCard(game) || game.sourceKind === "cloud_animations" || engineGameID(game).startsWith("animation-");
+  return isAmbientCard(game) || game.sourceKind === "animations" || engineGameID(game).startsWith("animation-");
 }
 
 function isIndividualCard(game: GameCard): boolean {
@@ -881,15 +880,7 @@ function loadMenuState(): MenuState {
         color: typeof player?.color === "string" ? player.color : playerColors[index % playerColors.length],
         active: Boolean(player?.active),
       }));
-      const wasOldUntouchedDefault =
-        !saved.teamName &&
-        savedPlayers.length === 2 &&
-        savedPlayers.every((player, index) => {
-          const name = String(player?.name || "").trim();
-          const oldName = index === 0 ? "Red" : "Blue";
-          return player && player.active && (name === "" || name === oldName);
-        });
-      const requestedGameID = saved.selectedGame === "whack-a-mole" && wasOldUntouchedDefault ? "featured-lava" : String(saved.selectedGame || "featured-lava");
+      const requestedGameID = String(saved.selectedGame || "featured-lava");
       const savedGame = games.find((game) => game.id === requestedGameID);
       const savedCategory: CategoryID = categories.some((category) => category.id === saved.category) ? (saved.category as CategoryID) : "featured";
       return {
@@ -905,8 +896,8 @@ function loadMenuState(): MenuState {
         levelModes,
         levelProgress,
         challengeRuns,
-        players: wasOldUntouchedDefault ? defaultPlayers : cleanedPlayers,
-        nextPlayerId: wasOldUntouchedDefault ? 1 : saved.nextPlayerId || 0,
+        players: cleanedPlayers.length ? cleanedPlayers : defaultPlayers,
+        nextPlayerId: saved.nextPlayerId || cleanedPlayers.length || 1,
         narrationArmed,
         operatorUnlockLevels: envUnlockLevels || Boolean(saved.operatorUnlockLevels),
       };
@@ -1575,7 +1566,7 @@ function MenuApp() {
     const launchGame = partyLaunchGame(game, menuGames);
     if (isScreensaverCard(launchGame)) return true;
     if (availableGames.has(runtimeGameID(launchGame)) || availableGames.has(engineGameID(launchGame))) return true;
-    if (game.sourceKind === "cloud_animations" && engineGameID(game).startsWith("animation-")) return true;
+    if (game.sourceKind === "animations" && engineGameID(game).startsWith("animation-")) return true;
     return isPlatformLaunchableSource(game) && (
       platformEnabledGames.has(game.id) || platformEnabledGames.has(engineGameID(game))
     );

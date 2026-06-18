@@ -77,18 +77,18 @@ describe("catalog metadata sync", () => {
     }), "http://localhost:4103");
   });
 
-  it("uses structured platform player bounds instead of stale fallback labels", () => {
+  it("uses structured platform player bounds", () => {
     const entry = catalogEntry({ min_players: 2, max_players: 5, players_label: "2-5" });
-    const fallback = { players: "1-6" };
 
     assert.deepEqual(platformPlayerBounds(entry), { minPlayers: 2, maxPlayers: 5 });
-    assert.equal(platformPlayerRangeLabel(entry, fallback), "2-5");
+    assert.equal(platformPlayerRangeLabel(entry), "2-5");
   });
 
-  it("keeps custom player labels only when they add information beyond the range", () => {
+  it("derives ambient player labels from category", () => {
     const entry = catalogEntry({ min_players: 3, max_players: 3, players_label: "Tríos" });
 
-    assert.equal(platformPlayerRangeLabel(entry), "Tríos");
+    assert.equal(platformPlayerRangeLabel(entry), "3");
+    assert.equal(platformPlayerRangeLabel(catalogEntry({ catalog_category: "attract", min_players: 1, max_players: 1 })), "Todos");
   });
 
   it("normalizes platform difficulty options and exposes the same label shown in the menu", () => {
@@ -98,14 +98,15 @@ describe("catalog metadata sync", () => {
     assert.equal(platformDifficultyLabel(entry), "Media-Difícil");
   });
 
-  it("keeps catalog difficulty copy while structured IDs drive availability", () => {
+  it("derives difficulty copy from structured IDs and category", () => {
     const entry = catalogEntry({
       difficulty_label: "1-4 estrellas",
       difficulties: ["easy", "medium", "hard", "expert"],
     });
 
-    assert.equal(platformDifficultyLabel(entry), "1-4 estrellas");
+    assert.equal(platformDifficultyLabel(entry), "Fácil-Experto");
     assert.deepEqual(platformSupportedDifficulties(entry), ["easy", "medium", "hard", "expert"]);
+    assert.equal(platformDifficultyLabel(catalogEntry({ catalog_category: "attract", difficulties: ["medium"] })), "Ambiente");
   });
 
   it("formats estimated duration when no custom duration label is set", () => {
@@ -113,12 +114,12 @@ describe("catalog metadata sync", () => {
     assert.equal(estimatedDurationLabel(300), "5 min");
     assert.equal(estimatedDurationLabel(5400), "1h 30 min");
     assert.equal(platformDurationLabel(catalogEntry({ duration_label: "", estimated_duration_seconds: 90 })), "2 min");
-    assert.equal(platformDurationLabel(catalogEntry({ duration_label: "Sin límite", estimated_duration_seconds: 90 })), "Sin límite");
+    assert.equal(platformDurationLabel(catalogEntry({ duration_label: "Sin límite", estimated_duration_seconds: 0 })), "");
   });
 
   it("treats support for levels as a catalog-owned flag", () => {
-    assert.equal(platformSupportsLevels(catalogEntry({ supports_levels: true }), { supportsLevels: false }), true);
-    assert.equal(platformSupportsLevels(catalogEntry({ supports_levels: false }), { supportsLevels: true }), false);
+    assert.equal(platformSupportsLevels(catalogEntry({ supports_levels: true })), true);
+    assert.equal(platformSupportsLevels(catalogEntry({ supports_levels: false })), false);
   });
 
   it("uses game-level difficulty support for menu buttons, with level metadata allowed to narrow it", () => {
@@ -176,11 +177,6 @@ describe("catalog metadata sync", () => {
     assert.deepEqual(rosterForGame(game, players).map((player) => player.id), [1, 2, 3]);
   });
 
-  it("keeps legacy category defaults for static cards without structured bounds", () => {
-    assert.deepEqual(playerBoundsForGame({ id: "solo", category: "individual" }), { minPlayers: 1, maxPlayers: 1 });
-    assert.deepEqual(playerBoundsForGame({ id: "duel", category: "versus" }), { minPlayers: 2, maxPlayers: 4 });
-  });
-
   it("does not expose the retired aggregate animations launcher", () => {
     const catalogSource = fs.readFileSync(path.resolve(__dirname, "../src/catalog.ts"), "utf8");
     const staticGamesSource = catalogSource
@@ -191,12 +187,12 @@ describe("catalog metadata sync", () => {
     assert.match(staticGamesSource, /id:\s*"salvapantallas"[\s\S]*?engineGame:\s*"salvapantallas"/);
   });
 
-  it("expands published cloud animations into Ambiente cards without drafts", () => {
+  it("expands published animations into Ambiente cards without drafts", () => {
     const cards = platformAnimationCards([
       catalogEntry({
         id: "animations",
         engine_game: "animations",
-        source_kind: "cloud_animations",
+        source_kind: "animations",
         catalog_enabled: false,
         default_music_ref: "Motion/canciones/Ambient.mp3",
         revision_hash: "game-rev",
@@ -236,19 +232,17 @@ describe("catalog metadata sync", () => {
     assert.match(catalogSource, /id:\s*"versus"[\s\S]*?label:\s*"Competitivos"/);
   });
 
-  it("keeps hidden cooperative prototypes out of the player-facing fallback catalog", () => {
+  it("keeps the player-facing fallback catalog minimal", () => {
     const catalogSource = fs.readFileSync(path.resolve(__dirname, "../src/catalog.ts"), "utf8");
     const staticGamesSource = catalogSource
       .slice(catalogSource.indexOf("export const games: GameCard[] = ["))
       .split("\n];")[0];
-    const memoryEntry = staticGamesSource.match(/id:\s*"memory-lights"[\s\S]*?engineGame:\s*"memory"/);
 
-    for (const id of ["plataformas", "temporada2", "patrones"]) {
+    for (const id of ["memory-lights", "plataformas", "temporada1-niveles", "temporada2", "patrones"]) {
       assert.equal(new RegExp(`id:\\s*"${id}"`).test(staticGamesSource), false);
     }
-    assert.ok(memoryEntry, "memory challenge should remain player-facing");
-    assert.match(memoryEntry[0], /category:\s*"team"/);
-    assert.match(memoryEntry[0], /featured:\s*true/);
+    assert.match(staticGamesSource, /id:\s*"featured-lava"/);
+    assert.match(staticGamesSource, /id:\s*"salvapantallas"/);
   });
 
   it("keeps catalog preview media cheap to decode", () => {

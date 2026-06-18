@@ -5,7 +5,7 @@ const animationColors = ["#36d9ff", "#005af8", "#8dff6e", "#b987ff", "#ff9f45", 
 
 export function platformAnimationCards(catalog: PlatformGameCatalogEntry[] | null): GameCard[] {
   return (catalog || [])
-    .filter((entry) => entry.source_kind === "cloud_animations")
+    .filter((entry) => entry.source_kind === "animations")
     .flatMap((entry) => (entry.levels || []).filter((level) => !level.status || level.status === "published").map((level, index): GameCard => {
       const levelID = String(level.slug || level.id || "").trim();
       const previewRevisionHash = String(level.settings_hash || level.updated_at || entry.revision_hash || "").trim();
@@ -27,7 +27,7 @@ export function platformAnimationCards(catalog: PlatformGameCatalogEntry[] | nul
         featured: false,
         minPlayers: 1,
         maxPlayers: 1,
-        sourceKind: "cloud_animations",
+        sourceKind: "animations",
       };
     }))
     .filter((game) => game.id !== "animation-");

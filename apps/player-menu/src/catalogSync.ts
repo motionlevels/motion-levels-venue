@@ -31,19 +31,15 @@ export function estimatedDurationLabel(seconds: number): string {
 }
 
 export function platformDurationLabel(
-  entry: Pick<PlatformGameCatalogEntry, "duration_label" | "estimated_duration_seconds">,
-  fallback?: Pick<GameCard, "duration">,
+  entry: Pick<PlatformGameCatalogEntry, "estimated_duration_seconds">,
 ): string {
-  const configured = String(entry.duration_label || "").trim();
-  return configured || estimatedDurationLabel(entry.estimated_duration_seconds) || fallback?.duration || "";
+  return estimatedDurationLabel(entry.estimated_duration_seconds);
 }
 
 export function platformSupportsLevels(
   entry: Pick<PlatformGameCatalogEntry, "supports_levels">,
-  fallback?: Pick<GameCard, "supportsLevels">,
 ): boolean {
-  if (typeof entry.supports_levels === "boolean") return entry.supports_levels;
-  return fallback?.supportsLevels === true;
+  return entry.supports_levels === true;
 }
 
 export function shouldPreferCatalogFallbackPreviewAnimation(
@@ -57,7 +53,7 @@ export function shouldPreferCatalogFallbackPreviewAnimation(
     && !fallback.previewSrc
     && !fallback.previewSrcs?.length
     && entry.source_kind !== "platform_levels"
-    && entry.source_kind !== "cloud_animations",
+    && entry.source_kind !== "animations",
   );
 }
 
@@ -78,25 +74,22 @@ export function platformPlayerBounds(entry: Pick<PlatformGameCatalogEntry, "max_
   return { maxPlayers, minPlayers };
 }
 
-export function platformPlayerRangeLabel(entry: PlatformGameCatalogEntry, fallback?: Pick<GameCard, "players">): string {
+export function platformPlayerRangeLabel(entry: Pick<PlatformGameCatalogEntry, "catalog_category" | "max_players" | "min_players">): string {
+  if (entry.catalog_category === "attract") return "Todos";
   const { maxPlayers, minPlayers } = platformPlayerBounds(entry);
-  const structured = minPlayers === maxPlayers ? String(minPlayers) : `${minPlayers}-${maxPlayers}`;
-  const configured = String(entry.players_label || "").trim();
-  return configured && configured !== structured ? configured : structured;
+  return minPlayers === maxPlayers ? String(minPlayers) : `${minPlayers}-${maxPlayers}`;
 }
 
 export function platformSupportedDifficulties(
   entry: Pick<PlatformGameCatalogEntry, "difficulties">,
-  fallback?: Pick<GameCard, "difficulties">,
 ): DifficultyID[] | undefined {
   const supported = normalizeDifficultyIDs(entry.difficulties);
   if (supported.length) return supported;
-  return fallback?.difficulties?.length ? fallback.difficulties : undefined;
+  return undefined;
 }
 
 export function platformLevelSupportedDifficulties(
   level: { difficulties?: string[]; difficulty?: string; rules?: Record<string, unknown> },
-  fallback?: Pick<GameLevel, "difficulties">,
 ): DifficultyID[] | undefined {
   const explicit = normalizeDifficultyIDs(level.difficulties);
   if (explicit.length) return explicit;
@@ -109,22 +102,20 @@ export function platformLevelSupportedDifficulties(
 
   const single = normalizeDifficultyIDs(level.difficulty ? [level.difficulty] : []);
   if (single.length) return single;
-  return fallback?.difficulties?.length ? fallback.difficulties : undefined;
+  return undefined;
 }
 
 export function platformDifficultyLabel(
-  entry: Pick<PlatformGameCatalogEntry, "difficulties" | "difficulty_label">,
-  fallback?: Pick<GameCard, "difficulty" | "difficulties">,
+  entry: Pick<PlatformGameCatalogEntry, "catalog_category" | "difficulties" | "source_kind">,
 ): string {
-  const configured = String(entry.difficulty_label || "").trim();
-  if (configured) return configured;
-  const supported = platformSupportedDifficulties(entry, fallback);
+  if (entry.catalog_category === "attract" || entry.source_kind === "animations") return "Ambiente";
+  const supported = platformSupportedDifficulties(entry);
   if (supported?.length === catalogDifficultyIDs.length) return "Fácil-Experto";
   if (supported && supported.length > 1) {
     return `${difficultyLabels[supported[0]]}-${difficultyLabels[supported[supported.length - 1]]}`;
   }
   if (supported?.length === 1) return difficultyLabels[supported[0]];
-  return fallback?.difficulty || "Juego";
+  return "Juego";
 }
 
 export function supportedDifficultiesForGame(game: Pick<GameCard, "difficulties">, level?: Pick<GameLevel, "difficulties">): DifficultyID[] {
