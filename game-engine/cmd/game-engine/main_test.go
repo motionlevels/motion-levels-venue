@@ -696,6 +696,66 @@ func TestAuthoredGameSelectsFromPlatformRuntimeSpec(t *testing.T) {
 	}
 }
 
+func TestAuthoredMotionGoPrefersNativeAndReportsPerformance(t *testing.T) {
+	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		gameJSON := `{
+			"id":"tetris",
+			"engine_game":"authored-tetris",
+			"label":"Tetris",
+			"description":"Native seeded tetris",
+			"default_music_ref":"Motion/canciones/Musica8.mp3",
+			"default_music_volume":0.12,
+			"min_players":1,
+			"max_players":4,
+			"game_source":{"schema":"motion-go-v1","kind":"wasm","language":"go","version":1}
+		}`
+		switch r.URL.Path {
+		case "/api/game-runtime":
+			_, _ = w.Write([]byte(`{"games":[` + gameJSON + `]}`))
+		case "/api/game-runtime/authored-tetris":
+			_, _ = w.Write([]byte(`{"game":` + gameJSON + `}`))
+		case "/api/level-games/animations/levels":
+			_, _ = w.Write([]byte(`{"gameId":"animations","levels":[]}`))
+		default:
+			t.Fatalf("platform path = %s", r.URL.Path)
+		}
+	}))
+	defer platform.Close()
+
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, PlatformURL: platform.URL}, nil, nil)
+	server := httptest.NewServer(gameAPIHandler(runtime))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/select", "application/json", bytes.NewBufferString(`{"game":"authored-tetris","playerCount":1}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("select response = %d", response.StatusCode)
+	}
+	_, frame := runtime.Render(time.Now().Add(2 * time.Second))
+	if len(frame) != animation.GridWidth*animation.GridHeight {
+		t.Fatalf("frame len = %d", len(frame))
+	}
+	performanceResponse, err := http.Get(server.URL + "/api/performance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer performanceResponse.Body.Close()
+	if performanceResponse.StatusCode != http.StatusOK {
+		t.Fatalf("performance response = %d", performanceResponse.StatusCode)
+	}
+	var performance framePerfSnapshot
+	if err := json.NewDecoder(performanceResponse.Body).Decode(&performance); err != nil {
+		t.Fatal(err)
+	}
+	if performance.Game != "authored-tetris" || performance.Runtime != "native" || performance.Count == 0 {
+		t.Fatalf("performance = %+v", performance)
+	}
+}
+
 func catalogHasGame(catalog []gameCatalogEntry, game string) bool {
 	for _, entry := range catalog {
 		if entry.Game == game {

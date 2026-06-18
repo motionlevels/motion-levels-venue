@@ -1,0 +1,243 @@
+package authored
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"sync"
+	"time"
+
+	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/pingpongmotion"
+	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/tetris"
+	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/whackamolego"
+	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
+	"github.com/lobis/motion-levels/packages/motiongo"
+)
+
+type NativeABI interface {
+	Init(ptr uint32, length uint32) uint64
+	Press(ptr uint32, length uint32) uint64
+	Tick(ptr uint32, length uint32) uint64
+	Render(ptr uint32, length uint32) uint64
+	Snapshot(ptr uint32, length uint32) uint64
+}
+
+type NativeGame struct {
+	mu      sync.Mutex
+	entry   CatalogEntry
+	players []playerInfo
+	abi     NativeABI
+	failed  bool
+	failErr error
+}
+
+var nativeFactories = map[string]func() NativeABI{
+	"authored-ping-pong-motion": func() NativeABI { return pingpongmotion.NewABI() },
+	"authored-tetris":           func() NativeABI { return tetris.NewABI() },
+	"authored-whack-a-mole-go":  func() NativeABI { return whackamolego.NewABI() },
+}
+
+func HasNative(engineGame string) bool {
+	_, ok := nativeFactories[engineGame]
+	return ok
+}
+
+func NativeGameIDs() []string {
+	out := make([]string, 0, len(nativeFactories))
+	for id := range nativeFactories {
+		out = append(out, id)
+	}
+	return out
+}
+
+func NewNativeWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount int, players []whackamole.PlayerConfig, difficulty string) (*NativeGame, error) {
+	factory, ok := nativeFactories[entry.EngineGame]
+	if !ok {
+		return nil, fmt.Errorf("motion-go-v1 game %q has no native runner", entry.EngineGame)
+	}
+	game := &NativeGame{
+		entry:   entry,
+		players: normalizePlayers(playerCount, players, NormalizeSpec(Spec{})),
+		abi:     factory(),
+	}
+	initPlayers := make([]wasmPlayer, 0, len(game.players))
+	for i, player := range game.players {
+		initPlayers = append(initPlayers, wasmPlayer{Index: i, Label: player.label, Color: rgbHex(player.rgb)})
+	}
+	if _, err := game.call("init", wasmInitRequest{
+		EngineGame: entry.EngineGame,
+		Label:      entry.Label,
+		Seed:       seed,
+		Difficulty: normalizeDifficulty(difficulty),
+		NowUnixNS:  now.UnixNano(),
+		Width:      GridWidth,
+		Height:     GridHeight,
+		Players:    initPlayers,
+		Spec:       entry.GameSource,
+	}); err != nil {
+		return nil, err
+	}
+	return game, nil
+}
+
+func (g *NativeGame) RuntimeKind() string {
+	return "native"
+}
+
+func (g *NativeGame) Label() string {
+	if g == nil || g.entry.Label == "" {
+		return "Juego Go"
+	}
+	return g.entry.Label
+}
+
+func (g *NativeGame) Press(event whackamole.PressEvent, now time.Time) []whackamole.Event {
+	if g == nil || g.isFailed() {
+		return nil
+	}
+	raw, err := g.call("press", wasmPressRequest{NowUnixNS: now.UnixNano(), X: event.X, Y: event.Y, Pressed: event.Pressed})
+	if err != nil || len(raw) == 0 {
+		return nil
+	}
+	var events []wasmEvent
+	if err := json.Unmarshal(raw, &events); err != nil {
+		return nil
+	}
+	out := make([]whackamole.Event, 0, len(events))
+	for _, event := range events {
+		out = append(out, whackamole.Event{Cue: event.Cue, Message: event.Message})
+	}
+	return out
+}
+
+func (g *NativeGame) Tick(now time.Time) {
+	if g == nil || g.isFailed() {
+		return
+	}
+	_, _ = g.call("tick", wasmTimeRequest{NowUnixNS: now.UnixNano()})
+}
+
+func (g *NativeGame) Render(now time.Time) []RGB {
+	if g == nil || g.isFailed() {
+		return nil
+	}
+	g.Tick(now)
+	raw, err := g.call("render", wasmTimeRequest{NowUnixNS: now.UnixNano()})
+	if err != nil || len(raw) == 0 {
+		return nil
+	}
+	var frame wasmFrameResponse
+	if err := json.Unmarshal(raw, &frame); err != nil {
+		return nil
+	}
+	out := make([]RGB, GridWidth*GridHeight)
+	for index := range out {
+		if index < len(frame.Pixels) {
+			out[index] = hexColor(frame.Pixels[index], RGB{})
+		}
+	}
+	return out
+}
+
+func (g *NativeGame) Snapshot(now time.Time) Snapshot {
+	if g == nil {
+		return Snapshot{}
+	}
+	if g.isFailed() {
+		return Snapshot{Phase: "failed", Players: g.defaultPlayers(), Lives: -1}
+	}
+	g.Tick(now)
+	raw, err := g.call("snapshot", wasmTimeRequest{NowUnixNS: now.UnixNano()})
+	if err != nil || len(raw) == 0 {
+		if g.isFailed() {
+			return Snapshot{Phase: "failed", Players: g.defaultPlayers(), Lives: -1}
+		}
+		return Snapshot{Phase: "running", Players: g.defaultPlayers()}
+	}
+	var snapshot wasmSnapshotResponse
+	if err := json.Unmarshal(raw, &snapshot); err != nil {
+		return Snapshot{Phase: "running", Players: g.defaultPlayers()}
+	}
+	return authoredSnapshot(snapshot, g.defaultPlayers())
+}
+
+func (g *NativeGame) defaultPlayers() []PlayerSnapshot {
+	out := make([]PlayerSnapshot, 0, len(g.players))
+	for i, player := range g.players {
+		out = append(out, PlayerSnapshot{Index: i, Label: player.label, Color: player.rgb})
+	}
+	return out
+}
+
+func (g *NativeGame) call(name string, input any) (out []byte, err error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.failed {
+		return nil, g.failErr
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("motion-go native %s panic: %v", name, recovered)
+			g.failLocked(err)
+		}
+	}()
+	payload, err := json.Marshal(input)
+	if err != nil {
+		return nil, err
+	}
+	ptr := motiongo.Alloc(uint32(len(payload)))
+	if !motiongo.WriteRequest(ptr, payload) {
+		err := fmt.Errorf("motion-go native request write failed")
+		g.failLocked(err)
+		return nil, err
+	}
+	var packed uint64
+	switch name {
+	case "init":
+		packed = g.abi.Init(ptr, uint32(len(payload)))
+	case "press":
+		packed = g.abi.Press(ptr, uint32(len(payload)))
+	case "tick":
+		packed = g.abi.Tick(ptr, uint32(len(payload)))
+	case "render":
+		packed = g.abi.Render(ptr, uint32(len(payload)))
+	case "snapshot":
+		packed = g.abi.Snapshot(ptr, uint32(len(payload)))
+	default:
+		err := fmt.Errorf("motion-go native missing call %q", name)
+		g.failLocked(err)
+		return nil, err
+	}
+	if packed == 0 {
+		return nil, nil
+	}
+	outPtr, outLen := unpackPtrLen(packed)
+	if outLen == 0 {
+		return nil, nil
+	}
+	out, ok := motiongo.ReadResponse(outPtr, outLen)
+	if !ok {
+		err := fmt.Errorf("motion-go native response read failed")
+		g.failLocked(err)
+		return nil, err
+	}
+	return append([]byte(nil), out...), nil
+}
+
+func (g *NativeGame) isFailed() bool {
+	if g == nil {
+		return true
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.failed
+}
+
+func (g *NativeGame) failLocked(err error) {
+	if g == nil || g.failed {
+		return
+	}
+	g.failed = true
+	g.failErr = err
+	log.Printf("motion-go native game %q disabled after runtime failure: %v", g.entry.EngineGame, err)
+}

@@ -88,6 +88,13 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 		}
 		writeJSON(w, runtime.Status())
 	})
+	mux.HandleFunc("/api/performance", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		writeJSON(w, runtime.Performance())
+	})
 	mux.HandleFunc("/api/display", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -476,7 +483,7 @@ func withAPILogging(runtime *gameRuntime, next http.Handler) http.Handler {
 
 func isAPIPath(path string) bool {
 	switch path {
-	case "/api/health", "/api/status", "/api/select", "/api/control", "/api/display", "/api/display/events", "/api/menu-state", "/api/menu-state/events", "/api/animation-preview":
+	case "/api/health", "/api/status", "/api/performance", "/api/select", "/api/control", "/api/display", "/api/display/events", "/api/menu-state", "/api/menu-state/events", "/api/animation-preview":
 		return true
 	default:
 		return false

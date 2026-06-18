@@ -63,6 +63,7 @@ type config struct {
 	ReplayKeyframeInterval time.Duration
 	ReplayZstdPath         string
 	DisplaySnapshotFPS     int
+	AuthoredRuntime        string
 	PlatformURL            string
 	PlatformToken          string
 	PlatformAssetCacheDir  string
@@ -112,6 +113,7 @@ func main() {
 	flag.DurationVar(&cfg.ReplayKeyframeInterval, "replay-keyframe-interval", 5*time.Second, "maximum time between full replay floor keyframes")
 	flag.StringVar(&cfg.ReplayZstdPath, "replay-zstd-path", "zstd", "path to zstd executable for replay compression")
 	flag.IntVar(&cfg.DisplaySnapshotFPS, "display-snapshot-fps", 4, "display snapshots per second to write into game session recordings")
+	flag.StringVar(&cfg.AuthoredRuntime, "authored-runtime", "auto", "runtime for motion-go-v1 games: auto, native, or wasm")
 	flag.StringVar(&cfg.PlatformURL, "platform-url", os.Getenv("MOTION_LEVELS_PLATFORM_URL"), "platform base URL for session ingest; empty disables")
 	flag.StringVar(&cfg.PlatformToken, "platform-token", os.Getenv("MOTION_LEVELS_PLATFORM_TOKEN"), "platform bearer token for session ingest; can also use MOTION_LEVELS_PLATFORM_TOKEN")
 	flag.StringVar(&cfg.PlatformAssetCacheDir, "platform-asset-cache", nonEmptyEnv("MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR", "/var/lib/motion-levels/platform-asset-cache"), "directory for cached platform preview assets")
@@ -214,6 +216,12 @@ func (c *config) normalize() {
 	}
 	if c.DisplaySnapshotFPS < 1 {
 		c.DisplaySnapshotFPS = 1
+	}
+	switch strings.ToLower(strings.TrimSpace(c.AuthoredRuntime)) {
+	case "native", "wasm":
+		c.AuthoredRuntime = strings.ToLower(strings.TrimSpace(c.AuthoredRuntime))
+	default:
+		c.AuthoredRuntime = "auto"
 	}
 	if c.DurationSeconds < 0 {
 		c.DurationSeconds = 0

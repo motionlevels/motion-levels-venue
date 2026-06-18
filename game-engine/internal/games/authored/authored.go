@@ -3,6 +3,7 @@ package authored
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"net/http"
@@ -247,11 +248,22 @@ func cacheCatalogEntry(entry CatalogEntry) {
 }
 
 func NewWithSeed(now time.Time, seed int64, engineGame string, playerCount int, players []whackamole.PlayerConfig, platformURL string, difficulty string) (RuntimeGame, error) {
+	return NewWithSeedRuntime(now, seed, engineGame, playerCount, players, platformURL, difficulty, "auto")
+}
+
+func NewWithSeedRuntime(now time.Time, seed int64, engineGame string, playerCount int, players []whackamole.PlayerConfig, platformURL string, difficulty string, runtimeKind string) (RuntimeGame, error) {
 	entry, err := FetchGame(platformURL, engineGame)
 	if err != nil {
 		return nil, err
 	}
 	if entry.GameSource.Schema == "motion-go-v1" {
+		if runtimeKind != "wasm" && HasNative(entry.EngineGame) {
+			game, err := NewNativeWithSeed(now, seed, entry, playerCount, players, difficulty)
+			if err == nil || runtimeKind == "native" {
+				return game, err
+			}
+			log.Printf("motion-go native game %q failed; falling back to wasm: %v", entry.EngineGame, err)
+		}
 		return NewWASMWithSeed(now, seed, entry, playerCount, players, difficulty)
 	}
 	return NewFromSpec(now, seed, entry.EngineGame, entry.Label, entry.GameSource, playerCount, players), nil

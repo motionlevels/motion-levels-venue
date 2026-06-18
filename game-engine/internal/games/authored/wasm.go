@@ -151,6 +151,10 @@ func (g *WASMGame) Label() string {
 	return g.entry.Label
 }
 
+func (g *WASMGame) RuntimeKind() string {
+	return "wasm"
+}
+
 func (g *WASMGame) Press(event whackamole.PressEvent, now time.Time) []whackamole.Event {
 	if g == nil || g.isFailed() {
 		return nil
@@ -218,32 +222,7 @@ func (g *WASMGame) Snapshot(now time.Time) Snapshot {
 	if err := json.Unmarshal(raw, &snapshot); err != nil {
 		return Snapshot{Phase: "running", Players: g.defaultPlayers()}
 	}
-	players := make([]PlayerSnapshot, 0, len(snapshot.Players))
-	for _, player := range snapshot.Players {
-		players = append(players, PlayerSnapshot{
-			Index: player.Index,
-			Label: player.Label,
-			Color: hexColor(player.Color, RGB{R: 255, G: 255, B: 255}),
-			Score: player.Score,
-			Lives: player.Lives,
-		})
-	}
-	if len(players) == 0 {
-		players = g.defaultPlayers()
-	}
-	return Snapshot{
-		Phase:           snapshot.Phase,
-		Players:         players,
-		Score:           snapshot.Score,
-		StartedUnix:     snapshot.StartedUnix,
-		EndsUnix:        snapshot.EndsUnix,
-		ElapsedMillis:   snapshot.ElapsedMillis,
-		RemainingMillis: snapshot.RemainingMillis,
-		CountdownMillis: snapshot.CountdownMillis,
-		ActiveTargets:   snapshot.ActiveTargets,
-		Lives:           snapshot.Lives,
-		Success:         snapshot.Success,
-	}
+	return authoredSnapshot(snapshot, g.defaultPlayers())
 }
 
 func (g *WASMGame) defaultPlayers() []PlayerSnapshot {
@@ -352,4 +331,33 @@ func unpackPtrLen(value uint64) (uint32, uint32) {
 
 func rgbHex(color RGB) string {
 	return fmt.Sprintf("#%02x%02x%02x", color.R, color.G, color.B)
+}
+
+func authoredSnapshot(snapshot wasmSnapshotResponse, fallbackPlayers []PlayerSnapshot) Snapshot {
+	players := make([]PlayerSnapshot, 0, len(snapshot.Players))
+	for _, player := range snapshot.Players {
+		players = append(players, PlayerSnapshot{
+			Index: player.Index,
+			Label: player.Label,
+			Color: hexColor(player.Color, RGB{R: 255, G: 255, B: 255}),
+			Score: player.Score,
+			Lives: player.Lives,
+		})
+	}
+	if len(players) == 0 {
+		players = fallbackPlayers
+	}
+	return Snapshot{
+		Phase:           snapshot.Phase,
+		Players:         players,
+		Score:           snapshot.Score,
+		StartedUnix:     snapshot.StartedUnix,
+		EndsUnix:        snapshot.EndsUnix,
+		ElapsedMillis:   snapshot.ElapsedMillis,
+		RemainingMillis: snapshot.RemainingMillis,
+		CountdownMillis: snapshot.CountdownMillis,
+		ActiveTargets:   snapshot.ActiveTargets,
+		Lives:           snapshot.Lives,
+		Success:         snapshot.Success,
+	}
 }

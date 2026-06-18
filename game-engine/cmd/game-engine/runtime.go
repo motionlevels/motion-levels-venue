@@ -80,6 +80,8 @@ type gameRuntime struct {
 
 	menuStateSnapshot menuStateSnapshot
 	menuStateVersion  uint64
+
+	framePerf framePerf
 }
 
 type ambientTouch struct {
@@ -112,6 +114,29 @@ type finishedLevelAttemptStatus struct {
 	Success        bool   `json:"success"`
 	ElapsedMillis  int64  `json:"elapsedMillis"`
 	EndedUnixNanos int64  `json:"endedUnixNanos"`
+}
+
+type framePerf struct {
+	mu      sync.Mutex
+	Game    string
+	Runtime string
+	Count   uint64
+	Total   time.Duration
+	Last    time.Duration
+	Min     time.Duration
+	Max     time.Duration
+	Updated time.Time
+}
+
+type framePerfSnapshot struct {
+	Game             string  `json:"game"`
+	Runtime          string  `json:"runtime"`
+	Count            uint64  `json:"count"`
+	LastMicros       int64   `json:"lastMicros"`
+	AverageMicros    float64 `json:"averageMicros"`
+	MinMicros        int64   `json:"minMicros"`
+	MaxMicros        int64   `json:"maxMicros"`
+	UpdatedUnixNanos int64   `json:"updatedUnixNanos"`
 }
 
 type displayEvent struct {
@@ -228,6 +253,7 @@ type runtimeStatus struct {
 	RNGSeed                  int64                        `json:"rngSeed"`
 	Recorder                 any                          `json:"recorder"`
 	FinishedLevelAttempts    []finishedLevelAttemptStatus `json:"finishedLevelAttempts,omitempty"`
+	Performance              framePerfSnapshot            `json:"performance"`
 	Catalog                  []gameCatalogEntry           `json:"catalog"`
 }
 
@@ -391,11 +417,78 @@ func (r *gameRuntime) Render(now time.Time) (int, []animation.RGB) {
 	r.mu.RUnlock()
 	if game == nil {
 		if animation.IsAmbientMode(gameID) {
-			return brightness, renderAmbient(gameID, gameNow, started, touches)
+			begin := time.Now()
+			frame := renderAmbient(gameID, gameNow, started, touches)
+			r.framePerf.Observe(gameID, "ambient", time.Since(begin), time.Now())
+			return brightness, frame
 		}
 		return brightness, nil
 	}
-	return brightness, game.Render(gameNow)
+	begin := time.Now()
+	frame := game.Render(gameNow)
+	r.framePerf.Observe(gameID, runtimeKind(game), time.Since(begin), time.Now())
+	return brightness, frame
+}
+
+func runtimeKind(game floorGame) string {
+	if game == nil {
+		return ""
+	}
+	if reporter, ok := game.(interface{ RuntimeKind() string }); ok {
+		if kind := strings.TrimSpace(reporter.RuntimeKind()); kind != "" {
+			return kind
+		}
+	}
+	return "go"
+}
+
+func (p *framePerf) Observe(game string, runtime string, elapsed time.Duration, now time.Time) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if game != p.Game || runtime != p.Runtime {
+		p.Game = game
+		p.Runtime = runtime
+		p.Count = 0
+		p.Total = 0
+		p.Last = 0
+		p.Min = 0
+		p.Max = 0
+	}
+	p.Count++
+	p.Total += elapsed
+	p.Last = elapsed
+	if p.Min == 0 || elapsed < p.Min {
+		p.Min = elapsed
+	}
+	if elapsed > p.Max {
+		p.Max = elapsed
+	}
+	p.Updated = now
+}
+
+func (p *framePerf) Snapshot() framePerfSnapshot {
+	if p == nil {
+		return framePerfSnapshot{}
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	average := float64(0)
+	if p.Count > 0 {
+		average = float64(p.Total.Microseconds()) / float64(p.Count)
+	}
+	return framePerfSnapshot{
+		Game:             p.Game,
+		Runtime:          p.Runtime,
+		Count:            p.Count,
+		LastMicros:       p.Last.Microseconds(),
+		AverageMicros:    average,
+		MinMicros:        p.Min.Microseconds(),
+		MaxMicros:        p.Max.Microseconds(),
+		UpdatedUnixNanos: p.Updated.UnixNano(),
+	}
 }
 
 func (r *gameRuntime) HandlePressure(event *inputpb.PressureEvent, fallbackStartedAt time.Time) {
@@ -910,8 +1003,16 @@ func (r *gameRuntime) Status() runtimeStatus {
 		RNGSeed:                  rngSeed,
 		Recorder:                 recorderStats,
 		FinishedLevelAttempts:    recentAttempts,
+		Performance:              r.framePerf.Snapshot(),
 		Catalog:                  gameCatalog(cfg.PlatformURL),
 	}
+}
+
+func (r *gameRuntime) Performance() framePerfSnapshot {
+	if r == nil {
+		return framePerfSnapshot{}
+	}
+	return r.framePerf.Snapshot()
 }
 
 func (r *gameRuntime) SessionID() string {
@@ -1739,8 +1840,8 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 		cfg.Game = "animations"
 	}
 	if strings.HasPrefix(cfg.Game, "authored-") {
-		log.Printf("game: authored id=%s players=%d difficulty=%s", cfg.Game, cfg.PlayerCount, cfg.Difficulty)
-		game, err := authored.NewWithSeed(now, seed, cfg.Game, cfg.PlayerCount, whackPlayersFromConfig(cfg), cfg.PlatformURL, cfg.Difficulty)
+		log.Printf("game: authored id=%s players=%d difficulty=%s runtime=%s", cfg.Game, cfg.PlayerCount, cfg.Difficulty, cfg.AuthoredRuntime)
+		game, err := authored.NewWithSeedRuntime(now, seed, cfg.Game, cfg.PlayerCount, whackPlayersFromConfig(cfg), cfg.PlatformURL, cfg.Difficulty, cfg.AuthoredRuntime)
 		if err != nil {
 			log.Printf("authored game: %v", err)
 			return nil

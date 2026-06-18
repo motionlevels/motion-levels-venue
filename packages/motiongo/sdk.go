@@ -314,12 +314,20 @@ func Decode(ptr, length uint32, out any) error {
 	if length == 0 {
 		return json.Unmarshal(nil, out)
 	}
+	if ptr == nativeRequestHandle {
+		return json.Unmarshal(requestBuffer[:length], out)
+	}
 	data := unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), length)
 	return json.Unmarshal(data, out)
 }
 
 var responseBuffer []byte
 var requestBuffer []byte
+
+const (
+	nativeRequestHandle  = ^uint32(0)
+	nativeResponseHandle = ^uint32(1)
+)
 
 func Alloc(size uint32) uint32 {
 	if cap(requestBuffer) < int(size) {
@@ -329,7 +337,26 @@ func Alloc(size uint32) uint32 {
 	if len(requestBuffer) == 0 {
 		return 0
 	}
-	return uint32(uintptr(unsafe.Pointer(&requestBuffer[0])))
+	ptr := uintptr(unsafe.Pointer(&requestBuffer[0]))
+	if ptr > uintptr(^uint32(0)) {
+		return nativeRequestHandle
+	}
+	return uint32(ptr)
+}
+
+func WriteRequest(ptr uint32, data []byte) bool {
+	if len(data) == 0 {
+		return true
+	}
+	if ptr == nativeRequestHandle {
+		if len(requestBuffer) < len(data) {
+			return false
+		}
+		copy(requestBuffer, data)
+		return true
+	}
+	copy(unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), len(data)), data)
+	return true
 }
 
 func Respond(value any) uint64 {
@@ -341,7 +368,24 @@ func Respond(value any) uint64 {
 	if len(responseBuffer) == 0 {
 		return 0
 	}
-	return Pack(uint32(uintptr(unsafe.Pointer(&responseBuffer[0]))), uint32(len(responseBuffer)))
+	ptr := uintptr(unsafe.Pointer(&responseBuffer[0]))
+	if ptr > uintptr(^uint32(0)) {
+		return Pack(nativeResponseHandle, uint32(len(responseBuffer)))
+	}
+	return Pack(uint32(ptr), uint32(len(responseBuffer)))
+}
+
+func ReadResponse(ptr uint32, length uint32) ([]byte, bool) {
+	if length == 0 {
+		return nil, true
+	}
+	if ptr == nativeResponseHandle {
+		if len(responseBuffer) < int(length) {
+			return nil, false
+		}
+		return responseBuffer[:length], true
+	}
+	return unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), length), true
 }
 
 func (s *StartPads) assignStartPadOrigins(seed uint32) {
