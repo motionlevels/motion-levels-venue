@@ -1,0 +1,531 @@
+// Code generated from platform/app/src/lib/seed; keep gameplay changes in sync with browser preview source.
+package lavago
+
+import (
+	"math"
+
+	"github.com/lobis/motion-levels/packages/motiongo"
+)
+
+const (
+	countdownNS      = int64(3000000000)
+	globalImmunityNS = int64(1000000000)
+	damageFlashNS    = int64(420000000)
+	maxLavaPlayers   = 6
+	maxClaimed       = 192
+	boardTileCount   = motiongo.Width * motiongo.Height
+	DefaultMusicRef  = "Motion/canciones/Background07.mp3"
+	DefaultMusicGain = 20
+)
+
+type point struct {
+	x int
+	y int
+}
+
+type rgb struct {
+	r int
+	g int
+	b int
+}
+
+type difficultySettings struct {
+	difficulty      string
+	lives           int
+	speed           float64
+	platformWidth   int
+	platformHeight  int
+	platformSpacing int
+}
+
+type movingPlatform struct {
+	spawn        int
+	x            int
+	y            int
+	width        int
+	height       int
+	motionPerSec float64
+	seconds      float64
+	yFloat       float64
+}
+
+type claimedPlatform struct {
+	spawn          int
+	width          int
+	height         int
+	motionPerSec   float64
+	initialSeconds float64
+	initialY       float64
+}
+
+var defaultPlayers = [maxLavaPlayers]motiongo.Player{
+	{Index: 0, Label: "Red", Color: "#ff0000"},
+	{Index: 1, Label: "Cyan", Color: "#00ffff"},
+	{Index: 2, Label: "Green", Color: "#00ff00"},
+	{Index: 3, Label: "Pink", Color: "#ff00ff"},
+	{Index: 4, Label: "Blue", Color: "#0000ff"},
+	{Index: 5, Label: "Yellow", Color: "#ffff00"},
+}
+
+var players []motiongo.Player
+var playerCount int
+var difficulty string
+var lives int
+var score int
+var speed float64
+var platformWidth int
+var platformHeight int
+var platformSpacing int
+var createdNS int64
+var startedNS int64
+var immuneUntilNS int64
+var damageFlashUntilNS int64
+var gameOver bool
+var claimed [maxClaimed]claimedPlatform
+var claimedCount int
+
+//export alloc
+func gameAlloc(size uint32) uint32 {
+	return motiongo.Alloc(size)
+}
+
+//export init
+func gameInit(ptr uint32, length uint32) uint64 {
+	var req motiongo.InitRequest
+	_ = motiongo.Decode(ptr, length, &req)
+	players = normalizePlayers(req.Players)
+	playerCount = len(players)
+	settings := settingsForDifficulty(req.Difficulty)
+	difficulty = settings.difficulty
+	lives = settings.lives
+	score = 0
+	speed = settings.speed
+	platformWidth = settings.platformWidth
+	platformHeight = settings.platformHeight
+	platformSpacing = settings.platformSpacing
+	createdNS = req.NowUnixNS
+	startedNS = req.NowUnixNS + countdownNS
+	immuneUntilNS = 0
+	damageFlashUntilNS = 0
+	gameOver = false
+	claimedCount = 0
+	for i := 0; i < maxClaimed; i++ {
+		claimed[i] = claimedPlatform{}
+	}
+	return motiongo.Respond([]motiongo.Event{{Cue: "start", Message: "Lava lista"}})
+}
+
+//export press
+func gamePress(ptr uint32, length uint32) uint64 {
+	var req motiongo.PressRequest
+	_ = motiongo.Decode(ptr, length, &req)
+	if !req.Pressed || !inBounds(req.X, req.Y) || gameOver || inCountdown(req.NowUnixNS) || req.NowUnixNS < immuneUntilNS {
+		return motiongo.Respond([]motiongo.Event{})
+	}
+	pt := point{x: req.X, y: req.Y}
+	seconds := patternSeconds(req.NowUnixNS)
+	platform, ok := platformAt(pt, seconds)
+	if !ok {
+		lives--
+		immuneUntilNS = req.NowUnixNS + globalImmunityNS
+		damageFlashUntilNS = req.NowUnixNS + damageFlashNS
+		if lives <= 0 {
+			lives = 0
+			gameOver = true
+			return motiongo.Respond([]motiongo.Event{{Cue: "damage", Message: "Sin vidas"}})
+		}
+		return motiongo.Respond([]motiongo.Event{{Cue: "damage", Message: "Vida perdida · " + itoa(lives)}})
+	}
+	if claimedMaskAt(pt, seconds) {
+		return motiongo.Respond([]motiongo.Event{})
+	}
+	if claimedCount < maxClaimed {
+		claimed[claimedCount] = newClaimedPlatform(platform)
+		claimedCount++
+	} else {
+		claimed[score%maxClaimed] = newClaimedPlatform(platform)
+	}
+	score++
+	return motiongo.Respond([]motiongo.Event{{Cue: "coin", Message: "Plataforma nueva · " + itoa(score)}})
+}
+
+//export tick
+func gameTick(ptr uint32, length uint32) uint64 {
+	return 0
+}
+
+//export render
+func gameRender(ptr uint32, length uint32) uint64 {
+	var req motiongo.TimeRequest
+	_ = motiongo.Decode(ptr, length, &req)
+	frame := motiongo.NewFrame(motiongo.Black)
+	seconds := patternSeconds(req.NowUnixNS)
+	for y := 0; y < motiongo.Height; y++ {
+		for x := 0; x < motiongo.Width; x++ {
+			pt := point{x: x, y: y}
+			color := colorAt(pt, seconds)
+			if claimedMaskAt(pt, seconds) && !inCountdown(req.NowUnixNS) && !gameOver {
+				color = claimedColor(color, req.NowUnixNS)
+			}
+			if inCountdown(req.NowUnixNS) {
+				color = scaleRGB(color, 0.34)
+			}
+			if immuneUntilNS > 0 && req.NowUnixNS < immuneUntilNS {
+				color = immuneColor(color, req.NowUnixNS)
+			}
+			if damageFlashUntilNS > 0 && req.NowUnixNS < damageFlashUntilNS {
+				color = damageColor(color, req.NowUnixNS, damageFlashUntilNS-req.NowUnixNS)
+			}
+			if gameOver {
+				color = gameOverColor(req.NowUnixNS)
+			}
+			frame.Set(x, y, rgbColor(color))
+		}
+	}
+	return motiongo.Respond(frame)
+}
+
+//export snapshot
+func gameSnapshot(ptr uint32, length uint32) uint64 {
+	var req motiongo.TimeRequest
+	_ = motiongo.Decode(ptr, length, &req)
+	phase := "running"
+	if inCountdown(req.NowUnixNS) {
+		phase = "countdown"
+	} else if gameOver {
+		phase = "finished"
+	}
+	elapsed := int64(0)
+	if req.NowUnixNS > startedNS {
+		elapsed = (req.NowUnixNS - startedNS) / 1000000
+	}
+	countdown := int64(0)
+	if inCountdown(req.NowUnixNS) {
+		countdown = (startedNS - req.NowUnixNS) / 1000000
+	}
+	snapPlayers := make([]motiongo.PlayerSnapshot, 0, playerCount)
+	for i := 0; i < playerCount; i++ {
+		snapPlayers = append(snapPlayers, motiongo.PlayerSnapshot{
+			Index: i,
+			Label: playerLabel(i),
+			Color: playerColor(i),
+			Score: score,
+			Lives: lives,
+		})
+	}
+	return motiongo.Respond(motiongo.Snapshot{
+		Phase:           phase,
+		Players:         snapPlayers,
+		Score:           score,
+		StartedUnix:     startedNS / 1000000000,
+		ElapsedMillis:   elapsed,
+		CountdownMillis: countdown,
+		ActiveTargets:   activeSafeTileCount(patternSeconds(req.NowUnixNS)),
+		Lives:           lives,
+		Success:         gameOver && lives > 0,
+	})
+}
+
+func settingsForDifficulty(value string) difficultySettings {
+	switch value {
+	case "expert":
+		return difficultySettings{difficulty: "expert", lives: 4, speed: 0.48, platformWidth: 3, platformHeight: 2, platformSpacing: 5}
+	case "hard":
+		return difficultySettings{difficulty: "hard", lives: 5, speed: 0.34, platformWidth: 4, platformHeight: 2, platformSpacing: 6}
+	case "medium":
+		return difficultySettings{difficulty: "medium", lives: 6, speed: 0.24, platformWidth: 5, platformHeight: 3, platformSpacing: 7}
+	default:
+		return difficultySettings{difficulty: "easy", lives: 8, speed: 0.14, platformWidth: 6, platformHeight: 4, platformSpacing: 8}
+	}
+}
+
+func patternSeconds(nowNS int64) float64 {
+	if nowNS <= startedNS {
+		return 0
+	}
+	return float64(nowNS-startedNS) / 1000000000 * speed
+}
+
+func inCountdown(nowNS int64) bool {
+	return startedNS > 0 && nowNS < startedNS
+}
+
+func newClaimedPlatform(platform movingPlatform) claimedPlatform {
+	return claimedPlatform{
+		spawn:          platform.spawn,
+		width:          platform.width,
+		height:         platform.height,
+		motionPerSec:   platform.motionPerSec,
+		initialSeconds: platform.seconds,
+		initialY:       platform.yFloat,
+	}
+}
+
+func (platform claimedPlatform) currentPlatform(seconds float64) (movingPlatform, bool) {
+	yFloat := platform.initialY - (seconds-platform.initialSeconds)*platform.motionPerSec
+	y := int(math.Round(yFloat))
+	if y+platform.height <= 0 || y >= motiongo.Height {
+		return movingPlatform{}, false
+	}
+	x := platformX(platform.spawn, platform.width)
+	return movingPlatform{
+		spawn:        platform.spawn,
+		x:            x,
+		y:            y,
+		width:        platform.width,
+		height:       platform.height,
+		motionPerSec: platform.motionPerSec,
+		seconds:      seconds,
+		yFloat:       yFloat,
+	}, true
+}
+
+func claimedMaskAt(pt point, seconds float64) bool {
+	for i := 0; i < claimedCount; i++ {
+		platform, ok := claimed[i].currentPlatform(seconds)
+		if ok && pointInPlatform(pt, platform) {
+			return true
+		}
+	}
+	return false
+}
+
+func platformAt(pt point, seconds float64) (movingPlatform, bool) {
+	if !inBounds(pt.x, pt.y) {
+		return movingPlatform{}, false
+	}
+	for _, platform := range visiblePlatforms(seconds) {
+		if pointInPlatform(pt, platform) {
+			return platform, true
+		}
+	}
+	return movingPlatform{}, false
+}
+
+func visiblePlatforms(seconds float64) []movingPlatform {
+	motionPerSec := 5.5
+	platforms := make([]movingPlatform, 0, 8)
+	height := platformHeight
+	spacing := platformSpacing
+	if height <= 0 || spacing <= height {
+		return platforms
+	}
+	firstSpawn := int(math.Floor((seconds*motionPerSec-float64(height))/float64(spacing))) - 1
+	lastSpawn := int(math.Ceil((seconds*motionPerSec+float64(motiongo.Height+height))/float64(spacing))) + 1
+	for spawn := firstSpawn; spawn <= lastSpawn; spawn++ {
+		yFloat := float64(spawn*spacing) - seconds*motionPerSec - float64(height)
+		y := int(math.Round(yFloat))
+		if y+height <= 0 || y >= motiongo.Height {
+			continue
+		}
+		platforms = append(platforms, movingPlatform{
+			spawn:        spawn,
+			x:            platformX(spawn, platformWidth),
+			y:            y,
+			width:        platformWidth,
+			height:       height,
+			motionPerSec: motionPerSec,
+			seconds:      seconds,
+			yFloat:       yFloat,
+		})
+	}
+	return platforms
+}
+
+func platformX(spawn int, width int) int {
+	maxX := motiongo.Width - width
+	if maxX <= 0 {
+		return 0
+	}
+	return positiveMod(spawn*7+spawn*spawn*3+5, maxX+1)
+}
+
+func pointInPlatform(pt point, platform movingPlatform) bool {
+	return pt.x >= platform.x && pt.x < platform.x+platform.width && pt.y >= platform.y && pt.y < platform.y+platform.height
+}
+
+func colorAt(pt point, seconds float64) rgb {
+	if _, ok := platformAt(pt, seconds); ok {
+		return rgb{4, 9, 18}
+	}
+	field := heatField(pt, seconds)
+	heat := clamp01(field)
+	flicker := 0.82 + 0.18*math.Sin((float64(pt.x)*1.3+float64(pt.y)*0.7+seconds*6)*math.Pi)
+	return rgb{
+		r: clampByte(math.Round(255 * flicker)),
+		g: clampByte(math.Round((45 + 150*heat) * flicker)),
+		b: clampByte(math.Round(8 * heat * flicker)),
+	}
+}
+
+func heatField(pt point, seconds float64) float64 {
+	nx := float64(pt.x) / float64(motiongo.Width)
+	ny := float64(pt.y) / float64(motiongo.Height)
+	return 0.5 + 0.5*math.Sin((nx*3.0+ny*1.6+seconds*0.7)*math.Pi)*math.Cos((nx*2.2-ny*3.2-seconds*0.5)*math.Pi)
+}
+
+func immuneColor(color rgb, nowNS int64) rgb {
+	pulse := 0.42 + 0.18*math.Sin(float64(nowNS)/1000000000*math.Pi*8)
+	return addRGB(scaleRGB(color, 0.62), rgb{0, clampByte(math.Round(80 * pulse)), clampByte(math.Round(190 * pulse))})
+}
+
+func damageColor(color rgb, nowNS int64, remainingNS int64) rgb {
+	amount := clamp01(float64(remainingNS) / float64(damageFlashNS))
+	strobe := 0.5 + 0.5*math.Sin(float64(nowNS)/1000000000*math.Pi*18)
+	return addRGB(scaleRGB(color, 0.38), rgb{
+		r: clampByte(math.Round(255 * amount)),
+		g: clampByte(math.Round(32 * amount * strobe)),
+		b: clampByte(math.Round(32 * amount * strobe)),
+	})
+}
+
+func claimedColor(color rgb, nowNS int64) rgb {
+	pulse := 0.72 + 0.28*math.Sin(float64(nowNS)/1000000000*math.Pi*3)
+	return addRGB(scaleRGB(color, 0.22), rgb{
+		r: clampByte(math.Round(18 + 18*pulse)),
+		g: clampByte(math.Round(132 + 95*pulse)),
+		b: clampByte(math.Round(24 + 42*pulse)),
+	})
+}
+
+func gameOverColor(nowNS int64) rgb {
+	value := 10 + int(42*(0.5+0.5*math.Sin(float64(nowNS)/1000000000*math.Pi*2)))
+	return rgb{value, 2, 4}
+}
+
+func activeSafeTileCount(seconds float64) int {
+	count := 0
+	for y := 0; y < motiongo.Height; y++ {
+		for x := 0; x < motiongo.Width; x++ {
+			if _, ok := platformAt(point{x: x, y: y}, seconds); ok {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+func normalizePlayers(input []motiongo.Player) []motiongo.Player {
+	count := len(input)
+	if count < 1 {
+		count = 1
+	}
+	if count > maxLavaPlayers {
+		count = maxLavaPlayers
+	}
+	out := make([]motiongo.Player, count)
+	for i := 0; i < count; i++ {
+		player := defaultPlayers[i]
+		if i < len(input) {
+			if input[i].Label != "" {
+				player.Label = input[i].Label
+			}
+			if input[i].Color != "" {
+				player.Color = input[i].Color
+			}
+			player.Index = i
+		}
+		out[i] = player
+	}
+	return out
+}
+
+func playerLabel(index int) string {
+	if index >= 0 && index < len(players) && players[index].Label != "" {
+		return players[index].Label
+	}
+	if index >= 0 && index < len(defaultPlayers) {
+		return defaultPlayers[index].Label
+	}
+	return "Player"
+}
+
+func playerColor(index int) string {
+	if index >= 0 && index < len(players) && players[index].Color != "" {
+		return players[index].Color
+	}
+	if index >= 0 && index < len(defaultPlayers) {
+		return defaultPlayers[index].Color
+	}
+	return "#ffffff"
+}
+
+func addRGB(left, right rgb) rgb {
+	return rgb{
+		r: clampByte(float64(left.r) + float64(right.r)),
+		g: clampByte(float64(left.g) + float64(right.g)),
+		b: clampByte(float64(left.b) + float64(right.b)),
+	}
+}
+
+func scaleRGB(color rgb, scale float64) rgb {
+	return rgb{
+		r: clampByte(math.Round(float64(color.r) * scale)),
+		g: clampByte(math.Round(float64(color.g) * scale)),
+		b: clampByte(math.Round(float64(color.b) * scale)),
+	}
+}
+
+func rgbColor(color rgb) motiongo.Color {
+	return motiongo.Color("#" + hexByte(color.r) + hexByte(color.g) + hexByte(color.b))
+}
+
+func hexByte(value int) string {
+	value = clampByte(float64(value))
+	const digits = "0123456789abcdef"
+	return string([]byte{digits[value>>4], digits[value&15]})
+}
+
+func clampByte(value float64) int {
+	if value < 0 {
+		return 0
+	}
+	if value > 255 {
+		return 255
+	}
+	return int(value)
+}
+
+func positiveMod(value int, modulus int) int {
+	out := value % modulus
+	if out < 0 {
+		out += modulus
+	}
+	return out
+}
+
+func clamp01(value float64) float64 {
+	if value < 0 {
+		return 0
+	}
+	if value > 1 {
+		return 1
+	}
+	return value
+}
+
+func inBounds(x int, y int) bool {
+	return x >= 0 && x < motiongo.Width && y >= 0 && y < motiongo.Height
+}
+
+func itoa(value int) string {
+	if value == 0 {
+		return "0"
+	}
+	negative := value < 0
+	if negative {
+		value = -value
+	}
+	var buf [16]byte
+	i := len(buf)
+	for value > 0 {
+		i--
+		buf[i] = byte('0' + value%10)
+		value /= 10
+	}
+	if negative {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
+}

@@ -7,6 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/duelgo"
+	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/lavago"
+	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/memorychallengego"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/pingpongmotion"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/tetris"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/whackamolego"
@@ -32,6 +35,9 @@ type NativeGame struct {
 }
 
 var nativeFactories = map[string]func() NativeABI{
+	"authored-duel":             func() NativeABI { return duelgo.NewABI() },
+	"authored-lava":             func() NativeABI { return lavago.NewABI() },
+	"authored-memory-challenge": func() NativeABI { return memorychallengego.NewABI() },
 	"authored-ping-pong-motion": func() NativeABI { return pingpongmotion.NewABI() },
 	"authored-tetris":           func() NativeABI { return tetris.NewABI() },
 	"authored-whack-a-mole-go":  func() NativeABI { return whackamolego.NewABI() },
