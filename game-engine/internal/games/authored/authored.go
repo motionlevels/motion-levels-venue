@@ -246,13 +246,13 @@ func cacheCatalogEntry(entry CatalogEntry) {
 	}
 }
 
-func NewWithSeed(now time.Time, seed int64, engineGame string, playerCount int, players []whackamole.PlayerConfig, platformURL string) (RuntimeGame, error) {
+func NewWithSeed(now time.Time, seed int64, engineGame string, playerCount int, players []whackamole.PlayerConfig, platformURL string, difficulty string) (RuntimeGame, error) {
 	entry, err := FetchGame(platformURL, engineGame)
 	if err != nil {
 		return nil, err
 	}
 	if entry.GameSource.Schema == "motion-go-v1" {
-		return NewWASMWithSeed(now, seed, entry, playerCount, players)
+		return NewWASMWithSeed(now, seed, entry, playerCount, players, difficulty)
 	}
 	return NewFromSpec(now, seed, entry.EngineGame, entry.Label, entry.GameSource, playerCount, players), nil
 }

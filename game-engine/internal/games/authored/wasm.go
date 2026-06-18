@@ -32,6 +32,7 @@ type wasmInitRequest struct {
 	EngineGame string       `json:"engine_game"`
 	Label      string       `json:"label"`
 	Seed       int64        `json:"seed"`
+	Difficulty string       `json:"difficulty"`
 	NowUnixNS  int64        `json:"now_unix_ns"`
 	Width      int          `json:"width"`
 	Height     int          `json:"height"`
@@ -87,7 +88,7 @@ type wasmPlayerSnapshot struct {
 	Lives int    `json:"lives"`
 }
 
-func NewWASMWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount int, players []whackamole.PlayerConfig) (*WASMGame, error) {
+func NewWASMWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount int, players []whackamole.PlayerConfig, difficulty string) (*WASMGame, error) {
 	if entry.GameSource.WASMBase64 == "" {
 		return nil, fmt.Errorf("motion-go-v1 game %q has no wasm_base64 artifact", entry.EngineGame)
 	}
@@ -121,6 +122,7 @@ func NewWASMWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount 
 		EngineGame: entry.EngineGame,
 		Label:      entry.Label,
 		Seed:       seed,
+		Difficulty: normalizeDifficulty(difficulty),
 		NowUnixNS:  now.UnixNano(),
 		Width:      GridWidth,
 		Height:     GridHeight,
@@ -131,6 +133,15 @@ func NewWASMWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount 
 		return nil, err
 	}
 	return game, nil
+}
+
+func normalizeDifficulty(value string) string {
+	switch value {
+	case "easy", "medium", "hard", "expert":
+		return value
+	default:
+		return "medium"
+	}
 }
 
 func (g *WASMGame) Label() string {
