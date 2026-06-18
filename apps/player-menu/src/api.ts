@@ -8,7 +8,20 @@ export type EngineGame = {
   maxPlayers: number;
   difficulty: boolean;
   volume: number;
-  levels?: Array<{ id: string; slug?: string; label: string; description: string; difficulty?: string; difficulties?: string[]; rules?: Record<string, unknown>; status?: string; settings_hash?: string; updated_at?: string }>;
+  levels?: Array<{
+    id: string;
+    slug?: string;
+    label: string;
+    description: string;
+    difficulty?: string;
+    difficulties?: string[];
+    rules?: Record<string, unknown>;
+    status?: string;
+    settings_hash?: string;
+    updated_at?: string;
+    catalog_thumbnail_url?: string;
+    catalog_preview_url?: string;
+  }>;
 };
 
 export type PlatformGameCatalogEntry = {
@@ -44,7 +57,20 @@ export type PlatformGameCatalogEntry = {
   code_editable: boolean;
   revision_hash?: string;
   game_source?: Record<string, unknown>;
-  levels?: Array<{ id: string; slug?: string; label: string; description: string; difficulty?: string; difficulties?: string[]; rules?: Record<string, unknown>; status?: string; settings_hash?: string; updated_at?: string }>;
+  levels?: Array<{
+    id: string;
+    slug?: string;
+    label: string;
+    description: string;
+    difficulty?: string;
+    difficulties?: string[];
+    rules?: Record<string, unknown>;
+    status?: string;
+    settings_hash?: string;
+    updated_at?: string;
+    catalog_thumbnail_url?: string;
+    catalog_preview_url?: string;
+  }>;
 };
 
 export type EngineStatus = {

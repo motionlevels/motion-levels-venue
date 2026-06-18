@@ -108,9 +108,13 @@ export type GameLevel = {
   label: string;
   description: string;
   difficulties?: DifficultyID[];
+  thumbnailSrc?: string;
+  thumbnailSrcs?: string[];
   previewSrc?: string;
+  previewSrcs?: string[];
   previewByDifficulty?: Partial<Record<DifficultyID, string>>;
   previewAnimation?: string;
+  previewRevisionHash?: string;
 };
 
 export const games: GameCard[] = [

@@ -241,12 +241,30 @@ function levelPreviewAnimationID(game: GameCard, level?: NonNullable<GameCard["l
   return level?.previewAnimation || previewAnimationID(game);
 }
 
+function levelThumbnailSrc(level: NonNullable<GameCard["levels"]>[number] | undefined, game: GameCard): string | undefined {
+  return level?.thumbnailSrc || level?.thumbnailSrcs?.[0] || level?.previewSrc || game.thumbnailSrc || game.previewSrc;
+}
+
+function levelThumbnailSrcs(level: NonNullable<GameCard["levels"]>[number] | undefined, game: GameCard): string[] {
+  const thumbnailSources = uniquePreviewSources([level?.thumbnailSrc, ...(level?.thumbnailSrcs || [])]);
+  if (thumbnailSources.length) return thumbnailSources;
+  return uniquePreviewSources([level?.previewSrc, game.thumbnailSrc, game.previewSrc]);
+}
+
+function levelPreviewSrcs(game: GameCard, level: NonNullable<GameCard["levels"]>[number] | undefined, difficulty: DifficultyID): string[] {
+  return uniquePreviewSources([level?.previewByDifficulty?.[difficulty], level?.previewSrc, ...(level?.previewSrcs || []), ...(level?.thumbnailSrcs || []), level?.thumbnailSrc, game.previewSrc, game.thumbnailSrc]);
+}
+
 function gameThumbnailSrc(game: GameCard): string | undefined {
   return game.thumbnailSrc || game.previewSrc;
 }
 
 function gameThumbnailSrcs(game: GameCard): string[] {
   return uniquePreviewSources([...(game.thumbnailSrcs || []), game.thumbnailSrc, game.previewSrc]);
+}
+
+function gamePreviewSrcs(game: GameCard): string[] {
+  return uniquePreviewSources([game.previewSrc, ...(game.previewSrcs || []), ...(game.thumbnailSrcs || []), game.thumbnailSrc]);
 }
 
 function levelPreviewSrc(game: GameCard, level: NonNullable<GameCard["levels"]>[number] | undefined, difficulty: DifficultyID): string | undefined {
@@ -486,14 +504,14 @@ function catalogPreviewAnimation(
   entry: PlatformGameCatalogEntry,
   fallback: GameCard | undefined,
   engineGame: string,
-  hasPlatformMedia: boolean,
   preferFallbackAnimation: boolean,
 ): string | undefined {
   if (engineGame === "salvapantallas") return undefined;
   const configured = String(entry.catalog_preview_animation || "").trim();
   if (preferFallbackAnimation) return configured || fallback?.previewAnimation;
-  if (hasPlatformMedia || isPlatformLevelSource(entry)) return undefined;
   if (configured) return configured;
+  if (fallback?.previewAnimation) return fallback.previewAnimation;
+  if (isPlatformLevelSource(entry)) return undefined;
   return fallback?.previewAnimation || (entry.source_kind === "animations" || entry.catalog_category === "attract" ? engineGame : undefined);
 }
 
@@ -504,28 +522,44 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
   const previewSrcs = preferFallbackAnimation ? [] : catalogPreviewMediaSrcs(entry, fallback, thumbnailSrcs);
   const thumbnailSrc = thumbnailSrcs[0];
   const previewSrc = previewSrcs[0];
-  const hasPlatformMedia = !preferFallbackAnimation && Boolean(catalogDirectAssetSrc(entry.catalog_preview_url) || catalogDirectAssetSrc(entry.catalog_thumbnail_url));
   const playerBounds = platformPlayerBounds(entry);
   const supportedDifficulties = platformSupportedDifficulties(entry);
   const supportsLevels = platformSupportsLevels(entry);
   const estimatedDurationSeconds = normalizeEstimatedDurationSeconds(entry.estimated_duration_seconds);
   const partyMiniGames = platformPartyMiniGames(entry);
   const levels = supportsLevels && entry.levels && entry.levels.length > 0
-    ? Array.from(entry.levels.reduce((byID, lvl) => {
-        const levelID = String(lvl.slug || lvl.id || "").trim() || String(lvl.id || "").trim();
-        if (!levelID) return byID;
-        const fallbackLevel = fallback?.levels?.find((level) => level.id === levelID || level.id === lvl.id);
-        const levelDifficulties = platformLevelSupportedDifficulties(lvl);
-        const existing = byID.get(levelID);
-        byID.set(levelID, {
-          id: levelID,
-          label: existing?.label || lvl.label,
-          description: existing?.description || lvl.description,
-          difficulties: Array.from(new Set([...(existing?.difficulties || []), ...(levelDifficulties || [])])),
-          previewSrc: existing?.previewSrc || fallbackLevel?.previewSrc || fallback?.previewSrc,
-          previewByDifficulty: existing?.previewByDifficulty || fallbackLevel?.previewByDifficulty,
-          previewAnimation: existing?.previewAnimation || fallbackLevel?.previewAnimation,
-        });
+	    ? Array.from(entry.levels.reduce((byID, lvl) => {
+	        const levelID = String(lvl.slug || lvl.id || "").trim() || String(lvl.id || "").trim();
+	        if (!levelID) return byID;
+	        const fallbackLevel = fallback?.levels?.find((level) => level.id === levelID || level.id === lvl.id);
+	        const levelDifficulties = platformLevelSupportedDifficulties(lvl);
+	        const platformThumbnailSrcs = uniquePreviewSources([
+	          catalogDirectAssetSrc(lvl.catalog_thumbnail_url),
+	          fallbackLevel?.thumbnailSrc,
+	          ...(fallbackLevel?.thumbnailSrcs || []),
+	          fallbackLevel?.previewSrc,
+	        ]);
+	        const platformPreviewSrcs = uniquePreviewSources([
+	          catalogDirectAssetSrc(lvl.catalog_preview_url),
+	          catalogDirectAssetSrc(lvl.catalog_thumbnail_url),
+	          ...platformThumbnailSrcs,
+	          fallbackLevel?.previewSrc,
+	          ...(fallbackLevel?.previewSrcs || []),
+	        ]);
+	        const existing = byID.get(levelID);
+	        byID.set(levelID, {
+	          id: levelID,
+	          label: existing?.label || lvl.label,
+	          description: existing?.description || lvl.description,
+	          difficulties: Array.from(new Set([...(existing?.difficulties || []), ...(levelDifficulties || [])])),
+	          thumbnailSrc: existing?.thumbnailSrc || platformThumbnailSrcs[0],
+	          thumbnailSrcs: existing?.thumbnailSrcs || platformThumbnailSrcs,
+	          previewSrc: existing?.previewSrc || platformPreviewSrcs[0] || fallbackLevel?.previewSrc || fallback?.previewSrc,
+	          previewSrcs: existing?.previewSrcs || platformPreviewSrcs,
+	          previewByDifficulty: existing?.previewByDifficulty || fallbackLevel?.previewByDifficulty,
+	          previewAnimation: existing?.previewAnimation || fallbackLevel?.previewAnimation,
+	          previewRevisionHash: existing?.previewRevisionHash || lvl.settings_hash || lvl.updated_at,
+	        });
         return byID;
       }, new Map<string, NonNullable<GameCard["levels"]>[number]>()).values())
     : undefined;
@@ -558,7 +592,7 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
     thumbnailSrcs,
     previewSrc,
     previewSrcs,
-    previewAnimation: catalogPreviewAnimation(entry, fallback, engineGame, hasPlatformMedia, preferFallbackAnimation),
+    previewAnimation: catalogPreviewAnimation(entry, fallback, engineGame, preferFallbackAnimation),
     supportsLevels,
     sourceKind: entry.source_kind || fallback?.sourceKind,
     revisionHash: entry.revision_hash || fallback?.revisionHash,
@@ -2068,7 +2102,16 @@ function MenuApp() {
         aria-label={`${levelLabel}${locked ? ", bloqueado en modo reto" : ""}`}
         onClick={() => setSelectedLevel(game, level.id)}
       >
-        <Preview src={levelPreviewSrc(game, level, previewDifficulty)} animationID={levelPreviewAnimationID(game, level)} compact />
+        <Preview
+          src={levelThumbnailSrc(level, game)}
+          srcs={levelThumbnailSrcs(level, game)}
+          richSrc={active ? levelPreviewSrc(game, level, previewDifficulty) : undefined}
+          richSrcs={active ? levelPreviewSrcs(game, level, previewDifficulty) : emptyPreviewSources}
+          animationID={levelPreviewAnimationID(game, level)}
+          revisionHash={level.previewRevisionHash || game.previewRevisionHash}
+          compact
+          promoteAnimation={active}
+        />
         <span className="level-footer">
           <strong>{levelLabel}</strong>
           {locked ? (
@@ -2106,7 +2149,16 @@ function MenuApp() {
         disabled={!options.selectable}
         onClick={() => options.onSelect(level.id)}
       >
-        <Preview src={levelPreviewSrc(game, level, previewDifficulty)} animationID={levelPreviewAnimationID(game, level)} compact />
+        <Preview
+          src={levelThumbnailSrc(level, game)}
+          srcs={levelThumbnailSrcs(level, game)}
+          richSrc={active ? levelPreviewSrc(game, level, previewDifficulty) : undefined}
+          richSrcs={active ? levelPreviewSrcs(game, level, previewDifficulty) : emptyPreviewSources}
+          animationID={levelPreviewAnimationID(game, level)}
+          revisionHash={level.previewRevisionHash || game.previewRevisionHash}
+          compact
+          promoteAnimation={active}
+        />
         <span className="level-footer">
           <strong>{levelLabel}</strong>
           {active ? (
@@ -2121,15 +2173,29 @@ function MenuApp() {
     );
   }
 
-  function renderPartyPreview(game: GameCard) {
+  function renderPartyPreview(game: GameCard, options: { compact?: boolean; rich?: boolean } = {}) {
+    const rich = options.rich ?? !options.compact;
     if (!isPartyCard(game) || !game.partyMiniGames?.length) {
-      return <Preview src={gameThumbnailSrc(game)} srcs={gameThumbnailSrcs(game)} animationID={previewAnimationID(game)} revisionHash={game.previewRevisionHash} />;
+      return (
+        <Preview
+          src={gameThumbnailSrc(game)}
+          srcs={gameThumbnailSrcs(game)}
+          richSrc={rich ? game.previewSrc : undefined}
+          richSrcs={rich ? gamePreviewSrcs(game) : emptyPreviewSources}
+          animationID={previewAnimationID(game)}
+          revisionHash={game.previewRevisionHash}
+          compact={options.compact}
+          promoteAnimation={rich}
+        />
+      );
     }
     return (
       <PartyPreview
         game={game}
         catalogGames={menuGames}
         difficulty={menu.difficulty}
+        compact={options.compact}
+        rich={rich}
       />
     );
   }
@@ -2771,7 +2837,7 @@ function MenuApp() {
                         aria-pressed={selected}
                         onClick={() => selectGameCard(game.id)}
                       >
-                        {renderPartyPreview(game)}
+                        {renderPartyPreview(game, { compact: true, rich: selected || active })}
                         <div className="game-body">
                           <h3>{game.label}</h3>
                         </div>
@@ -2784,7 +2850,7 @@ function MenuApp() {
 
             <aside className={`panel detail-panel ${levelDetail ? "level-detail-panel" : ""}`} style={{ "--c": selectedGame.color, "--crgb": hexToRGB(selectedGame.color) } as CSSProperties} aria-label="Juego seleccionado">
               <div className="detail-preview">
-                {isPartyCard(selectedGame) ? renderPartyPreview(selectedGame) : (
+                {isPartyCard(selectedGame) ? renderPartyPreview(selectedGame, { rich: true }) : (
                   <Preview src={levelPreviewSrc(selectedGame, selectedLevel, effectiveDifficulty)} animationID={levelPreviewAnimationID(selectedGame, selectedLevel)} revisionHash={selectedGame.previewRevisionHash} />
                 )}
               </div>
@@ -3750,7 +3816,7 @@ function animFromPreviewFrames(frames: RGB[][]): FloorAnim | null {
   };
 }
 
-function PartyPreview({ catalogGames, difficulty, game }: { catalogGames: GameCard[]; difficulty: DifficultyID; game: GameCard }) {
+function PartyPreview({ catalogGames, compact = false, difficulty, game, rich = true }: { catalogGames: GameCard[]; compact?: boolean; difficulty: DifficultyID; game: GameCard; rich?: boolean }) {
   const miniGames = game.partyMiniGames || [];
   const gridSize = partyPreviewGridSize(miniGames.length);
   return (
@@ -3771,6 +3837,8 @@ function PartyPreview({ catalogGames, difficulty, game }: { catalogGames: GameCa
           : difficulty;
         const previewSrc = miniGame && level ? levelPreviewSrc(miniGame, level, previewDifficulty) : miniGame ? gameThumbnailSrc(miniGame) : undefined;
         const previewSrcs = miniGame && !level ? gameThumbnailSrcs(miniGame) : emptyPreviewSources;
+        const richSrc = rich && miniGame ? (level ? levelPreviewSrc(miniGame, level, previewDifficulty) : miniGame.previewSrc) : undefined;
+        const richSrcs = rich && miniGame && !level ? gamePreviewSrcs(miniGame) : emptyPreviewSources;
         const animationID = miniGame && level ? levelPreviewAnimationID(miniGame, level) : miniGame ? previewAnimationID(miniGame) : "";
         const color = miniGame?.color || game.color;
         return (
@@ -3779,7 +3847,16 @@ function PartyPreview({ catalogGames, difficulty, game }: { catalogGames: GameCa
             className="party-preview-tile"
             style={{ "--c": color, "--crgb": hexToRGB(color) } as CSSProperties}
           >
-            <Preview src={previewSrc} srcs={previewSrcs} animationID={animationID} revisionHash={miniGame?.previewRevisionHash} compact />
+            <Preview
+              src={previewSrc}
+              srcs={previewSrcs}
+              richSrc={richSrc}
+              richSrcs={richSrcs}
+              animationID={animationID}
+              revisionHash={miniGame?.previewRevisionHash}
+              compact={compact}
+              promoteAnimation={rich}
+            />
           </div>
         );
       })}
@@ -3787,12 +3864,38 @@ function PartyPreview({ catalogGames, difficulty, game }: { catalogGames: GameCa
   );
 }
 
-function Preview({ animationID, compact = false, revisionHash, src, srcs = emptyPreviewSources }: { animationID: string; compact?: boolean; revisionHash?: string; src?: string; srcs?: string[] }) {
+function Preview({
+  animationID,
+  compact = false,
+  promoteAnimation = false,
+  revisionHash,
+  richSrc,
+  richSrcs = emptyPreviewSources,
+  src,
+  srcs = emptyPreviewSources,
+}: {
+  animationID: string;
+  compact?: boolean;
+  promoteAnimation?: boolean;
+  revisionHash?: string;
+  richSrc?: string;
+  richSrcs?: string[];
+  src?: string;
+  srcs?: string[];
+}) {
   const liveLevelID = previewLevelID(animationID);
   const [livePreview, setLivePreview] = useState<AnimationPreview | null>(null);
   const [failedSrcs, setFailedSrcs] = useState<string[]>([]);
-  const sourceCandidates = useMemo(() => uniquePreviewSources([src, ...srcs]), [src, srcs]);
-  const usableSrc = sourceCandidates.find((candidate) => !failedSrcs.includes(candidate));
+  const [loadedPosterSrc, setLoadedPosterSrc] = useState("");
+  const [promotedSrc, setPromotedSrc] = useState("");
+  const posterCandidates = useMemo(() => uniquePreviewSources([src, ...srcs]), [src, srcs]);
+  const richCandidates = useMemo(() => (
+    uniquePreviewSources([richSrc, ...richSrcs]).filter((candidate) => !posterCandidates.includes(candidate))
+  ), [posterCandidates, richSrc, richSrcs]);
+  const sourceCandidates = useMemo(() => uniquePreviewSources([...posterCandidates, ...richCandidates]), [posterCandidates, richCandidates]);
+  const posterSrc = posterCandidates.find((candidate) => !failedSrcs.includes(candidate));
+  const richCandidate = richCandidates.find((candidate) => !failedSrcs.includes(candidate));
+  const posterReady = Boolean(posterSrc && loadedPosterSrc === posterSrc);
 
   useEffect(() => {
     setFailedSrcs((failed) => {
@@ -3802,7 +3905,33 @@ function Preview({ animationID, compact = false, revisionHash, src, srcs = empty
   }, [sourceCandidates]);
 
   useEffect(() => {
-    if (!liveLevelID || usableSrc) return;
+    setLoadedPosterSrc("");
+    setPromotedSrc("");
+  }, [posterSrc, richCandidate]);
+
+  useEffect(() => {
+    if (!richCandidate || (posterSrc && !posterReady)) return;
+    let cancelled = false;
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => {
+      if (!cancelled) setPromotedSrc(richCandidate);
+    };
+    image.onerror = () => {
+      if (!cancelled) {
+        setFailedSrcs((failed) => failed.includes(richCandidate) ? failed : [...failed, richCandidate]);
+      }
+    };
+    image.src = richCandidate;
+    return () => {
+      cancelled = true;
+      image.onload = null;
+      image.onerror = null;
+    };
+  }, [posterReady, posterSrc, richCandidate]);
+
+  useEffect(() => {
+    if (!liveLevelID || richCandidate || (posterSrc && (!posterReady || !promoteAnimation))) return;
     let cancelled = false;
     cachedAnimationPreview(liveLevelID, revisionHash)
       .then((preview) => {
@@ -3814,24 +3943,29 @@ function Preview({ animationID, compact = false, revisionHash, src, srcs = empty
     return () => {
       cancelled = true;
     };
-  }, [liveLevelID, revisionHash, usableSrc]);
+  }, [liveLevelID, posterReady, posterSrc, promoteAnimation, revisionHash, richCandidate]);
 
   const previewFrames = useMemo(() => decodePreviewFrames(livePreview), [livePreview]);
   const liveAnim = useMemo(() => animFromPreviewFrames(previewFrames), [previewFrames]);
   const anim = liveAnim || floorAnimations[animationID];
-  const logoMedia = isMotionLevelsLogoSrc(usableSrc);
+  const promotedToAnimation = Boolean(promoteAnimation && posterReady && !richCandidate && anim);
+  const mediaSrc = promotedToAnimation ? undefined : promotedSrc || posterSrc;
+  const logoMedia = isMotionLevelsLogoSrc(mediaSrc);
   return (
     <div className={`preview ${compact ? "compact-preview" : ""} ${logoMedia ? "logo-preview" : ""}`}>
-      {usableSrc ? (
+      {mediaSrc ? (
         <img
           className={`preview-media ${logoMedia ? "logo-preview-media" : ""}`}
-          src={usableSrc}
+          src={mediaSrc}
           alt=""
           aria-hidden="true"
           decoding="async"
           draggable={false}
           loading={compact ? "lazy" : "eager"}
-          onError={() => setFailedSrcs((failed) => failed.includes(usableSrc) ? failed : [...failed, usableSrc])}
+          onError={() => setFailedSrcs((failed) => failed.includes(mediaSrc) ? failed : [...failed, mediaSrc])}
+          onLoad={() => {
+            if (mediaSrc === posterSrc) setLoadedPosterSrc(posterSrc);
+          }}
         />
       ) : anim ? (
         <FloorPreview anim={anim} orientation="landscape" />

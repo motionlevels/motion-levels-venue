@@ -250,6 +250,32 @@ describe("catalog metadata sync", () => {
 
     assert.match(appSource, /decoding="async"/);
     assert.match(appSource, /loading=\{compact \? "lazy" : "eager"\}/);
+    assert.match(appSource, /richSrc=\{rich \? game\.previewSrc : undefined\}/);
+    assert.match(appSource, /richSrcs=\{rich \? gamePreviewSrcs\(game\) : emptyPreviewSources\}/);
+    assert.match(appSource, /promoteAnimation=\{rich\}/);
+    assert.match(appSource, /renderPartyPreview\(game, \{ compact: true, rich: selected \|\| active \}\)/);
+  });
+
+  it("uses revisioned platform preview media for level cards", () => {
+    const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
+
+    assert.match(appSource, /catalogDirectAssetSrc\(lvl\.catalog_thumbnail_url\)/);
+    assert.match(appSource, /catalogDirectAssetSrc\(lvl\.catalog_preview_url\)/);
+    assert.match(appSource, /previewRevisionHash: existing\?\.previewRevisionHash \|\| lvl\.settings_hash \|\| lvl\.updated_at/);
+    assert.match(appSource, /src=\{levelThumbnailSrc\(level, game\)\}/);
+    assert.match(appSource, /richSrc=\{active \? levelPreviewSrc\(game, level, previewDifficulty\) : undefined\}/);
+  });
+
+  it("keeps preview animations as fallback when platform media URLs fail", () => {
+    const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
+    const helperSource = appSource.slice(
+      appSource.indexOf("function catalogPreviewAnimation("),
+      appSource.indexOf("function platformEntryToGameCard("),
+    );
+
+    assert.match(helperSource, /if \(configured\) return configured;/);
+    assert.match(helperSource, /if \(fallback\?\.previewAnimation\) return fallback\.previewAnimation;/);
+    assert.doesNotMatch(helperSource, /hasPlatformMedia/);
   });
 
   it("prefers authored preview animations for engine games without static preview art", () => {

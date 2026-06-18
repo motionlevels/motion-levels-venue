@@ -160,6 +160,7 @@ def main() -> None:
     cameras = {
         "128": os.environ.get("MOTION_LEVELS_CAMERA_128_HOST", "192.168.1.128"),
         "129": os.environ.get("MOTION_LEVELS_CAMERA_129_HOST", "192.168.1.129"),
+        "130": os.environ.get("MOTION_LEVELS_CAMERA_130_HOST", "192.168.1.130"),
     }
 
     feeds = {
