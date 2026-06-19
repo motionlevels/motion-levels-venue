@@ -132,6 +132,7 @@ export type SelectGameRequest = {
   level?: string;
   durationSeconds?: number;
   narrationEnabled?: boolean;
+  countdownFloorOverlay?: boolean;
   teamName?: string;
   players?: Array<{
     index: number;

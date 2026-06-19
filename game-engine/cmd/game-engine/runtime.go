@@ -316,10 +316,10 @@ func (r *gameRuntime) SelectGameWithDifficulty(game string, players int, difficu
 }
 
 func (r *gameRuntime) SelectGameWithOptions(game string, players int, difficulty string, narrationEnabled *bool) {
-	r.SelectGameWithMetadata(game, players, difficulty, "", 0, narrationEnabled, "", "", "", nil)
+	r.SelectGameWithMetadata(game, players, difficulty, "", 0, narrationEnabled, false, "", "", "", nil)
 }
 
-func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficulty string, level string, durationSeconds int, narrationEnabled *bool, teamName string, venueSessionID string, platformURL string, roster []playerConfig) {
+func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficulty string, level string, durationSeconds int, narrationEnabled *bool, countdownFloorOverlay bool, teamName string, venueSessionID string, platformURL string, roster []playerConfig) {
 	if r == nil {
 		return
 	}
@@ -336,6 +336,7 @@ func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficult
 	if durationSeconds > 0 {
 		cfg.DurationSeconds = durationSeconds
 	}
+	cfg.CountdownFloorOverlay = countdownFloorOverlay
 	cfg.TeamName = strings.TrimSpace(teamName)
 	cfg.VenueSessionID = strings.TrimSpace(venueSessionID)
 	cfg.Players = normalizePlayerRoster(roster, cfg.PlayerCount)
@@ -445,6 +446,33 @@ func (r *gameRuntime) Render(now time.Time) (int, []animation.RGB) {
 	frame := game.Render(gameNow)
 	r.framePerf.Observe(gameID, runtimeKind(game), time.Since(begin), time.Now())
 	return brightness, frame
+}
+
+func (r *gameRuntime) ApplyCountdownOverlay(now time.Time, frame []animation.RGB) []animation.RGB {
+	if r == nil || len(frame) != animation.GridWidth*animation.GridHeight {
+		return frame
+	}
+	status := r.DisplayStatus(now)
+	if !r.countdownFloorOverlayEnabled(status) {
+		return frame
+	}
+	digit := countdownOverlayDigit(status.CountdownRemainingMillis)
+	if digit == 0 {
+		return frame
+	}
+	out := append([]animation.RGB(nil), frame...)
+	drawCountdownDigit(out, digit)
+	return out
+}
+
+func (r *gameRuntime) countdownFloorOverlayEnabled(status displayStatus) bool {
+	if r == nil || status.CountdownRemainingMillis <= 0 || status.Phase != "countdown" {
+		return false
+	}
+	r.mu.RLock()
+	enabled := r.current.CountdownFloorOverlay
+	r.mu.RUnlock()
+	return enabled
 }
 
 func runtimeKind(game floorGame) string {
