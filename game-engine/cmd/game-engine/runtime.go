@@ -47,6 +47,7 @@ type gameRuntime struct {
 	started           time.Time
 	lastEvent         displayEvent
 	recorder          gameRecordWriter
+	cameraRecorder    levelAttemptCameraRecorder
 	sessionID         string
 	sessionSeq        uint64
 	rngSeed           int64
@@ -278,6 +279,15 @@ func newGameRuntime(cfg config, audioPlayer *audio.Player, recorder gameRecordWr
 	runtime.applyLocked(cfg, true)
 	runtime.refreshCloudCatalogs()
 	return runtime
+}
+
+func (r *gameRuntime) SetCameraRecorder(recorder levelAttemptCameraRecorder) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cameraRecorder = recorder
 }
 
 func (r *gameRuntime) refreshCloudCatalogs() {
@@ -1589,6 +1599,23 @@ func (r *gameRuntime) startLevelAttemptLocked(status displayStatus, startedUnixN
 		attempt.LevelNumber = levelNumberFromID(status.Level)
 	}
 	r.levelAttempt = attempt
+	if r.cameraRecorder != nil {
+		r.cameraRecorder.StartLevelAttempt(cameraRecordingStart{
+			AttemptID:                attempt.AttemptID,
+			SessionID:                r.sessionID,
+			VenueSessionID:           r.current.VenueSessionID,
+			ControllerLabel:          r.base.ControllerLabel,
+			ControllerHostname:       r.base.ControllerHostname,
+			Game:                     attempt.Game,
+			Level:                    attempt.Level,
+			LevelNumber:              attempt.LevelNumber,
+			Difficulty:               attempt.Difficulty,
+			TeamName:                 r.current.TeamName,
+			PlayerCount:              attempt.PlayerCount,
+			StartedUnixNanos:         attempt.StartedUnixNanos,
+			GameplayStartedUnixNanos: attempt.GameplayStartedUnixNanos,
+		})
+	}
 	r.recordLocked(time.Unix(0, startedUnixNanos), func(record *gamepb.GameSessionRecord) {
 		record.Payload = &gamepb.GameSessionRecord_LevelAttemptStarted{LevelAttemptStarted: &gamepb.LevelAttemptStarted{
 			AttemptId:                attempt.AttemptID,
@@ -1640,6 +1667,17 @@ func (r *gameRuntime) finishActiveLevelAttemptLocked(result string, status displ
 		if len(r.recentAttempts) > 64 {
 			r.recentAttempts = r.recentAttempts[len(r.recentAttempts)-64:]
 		}
+	}
+	if r.cameraRecorder != nil {
+		r.cameraRecorder.FinishLevelAttempt(cameraRecordingFinish{
+			AttemptID:      attempt.AttemptID,
+			Result:         result,
+			Success:        result == "success",
+			ScoreEnd:       scoreEnd,
+			LivesEnd:       livesEnd,
+			ElapsedMillis:  elapsedMillis,
+			EndedUnixNanos: endedUnixNanos,
+		})
 	}
 	r.recordLocked(time.Unix(0, endedUnixNanos), func(record *gamepb.GameSessionRecord) {
 		record.Payload = &gamepb.GameSessionRecord_LevelAttemptFinished{LevelAttemptFinished: &gamepb.LevelAttemptFinished{

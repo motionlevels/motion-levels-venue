@@ -897,6 +897,80 @@ func TestSessionRecordingWritesLevelAttemptRecords(t *testing.T) {
 	}
 }
 
+func TestLevelAttemptControlsCameraRecording(t *testing.T) {
+	runtime := newGameRuntime(config{
+		Brightness:            80,
+		PlayerCount:           2,
+		Game:                  "temporada1",
+		Difficulty:            "medium",
+		Level:                 "level-1",
+		TeamName:              "Equipo Azul",
+		VenueSessionID:        "venue-1",
+		ControllerLabel:       "Sala Test",
+		ControllerHostname:    "motionlevels-test",
+		DisplaySnapshotFPS:    4,
+		CameraRecorderURL:     "http://127.0.0.1:8030",
+		CameraRecorderTimeout: time.Second,
+	}, nil, nil)
+	recorder := &cameraRecorderBackend{}
+	runtime.SetCameraRecorder(recorder)
+	started := time.Date(2026, 6, 4, 8, 1, 0, 0, time.UTC)
+	gameplayStarted := started.Add(3 * time.Second)
+	ended := gameplayStarted.Add(42 * time.Second)
+
+	runtime.RecordDisplaySnapshot(displayStatus{
+		CurrentGame:              "temporada1",
+		Label:                    "Temporada 1",
+		Phase:                    "countdown",
+		Difficulty:               "medium",
+		Level:                    "level-1",
+		LevelNumber:              1,
+		PlayerCount:              2,
+		Score:                    0,
+		Lives:                    5,
+		LivesStart:               5,
+		ActiveTargets:            23,
+		AttemptStartedUnixNanos:  started.UnixNano(),
+		GameplayStartedUnixNanos: gameplayStarted.UnixNano(),
+	}, started)
+	runtime.RecordDisplaySnapshot(displayStatus{
+		CurrentGame:              "temporada1",
+		Label:                    "Temporada 1",
+		Phase:                    "finished",
+		Difficulty:               "medium",
+		Level:                    "level-1",
+		LevelNumber:              1,
+		PlayerCount:              2,
+		Score:                    23,
+		Lives:                    4,
+		LivesStart:               5,
+		ActiveTargets:            0,
+		Success:                  true,
+		ElapsedMillis:            42000,
+		AttemptStartedUnixNanos:  started.UnixNano(),
+		GameplayStartedUnixNanos: gameplayStarted.UnixNano(),
+		AttemptEndedUnixNanos:    ended.UnixNano(),
+	}, ended)
+
+	if len(recorder.starts) != 1 {
+		t.Fatalf("camera starts = %d, want 1", len(recorder.starts))
+	}
+	if len(recorder.finishes) != 1 {
+		t.Fatalf("camera finishes = %d, want 1", len(recorder.finishes))
+	}
+	start := recorder.starts[0]
+	finish := recorder.finishes[0]
+	if start.Game != "temporada1" || start.Level != "level-1" || start.LevelNumber != 1 || start.TeamName != "Equipo Azul" {
+		t.Fatalf("camera start = %+v", start)
+	}
+	if start.VenueSessionID != "venue-1" || start.ControllerLabel != "Sala Test" || start.ControllerHostname != "motionlevels-test" {
+		t.Fatalf("camera start venue metadata = %+v", start)
+	}
+	if finish.AttemptID != start.AttemptID || finish.Result != "success" || !finish.Success || finish.ElapsedMillis != 42000 {
+		t.Fatalf("camera finish = %+v start=%+v", finish, start)
+	}
+}
+
 func TestRuntimeStatusExposesRecentFinishedLevelAttempts(t *testing.T) {
 	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "parkour", Difficulty: "easy", Level: "level-1"}, nil, nil)
 	started := time.Date(2026, 6, 4, 8, 2, 0, 0, time.UTC)
@@ -944,6 +1018,23 @@ func TestRuntimeStatusExposesRecentFinishedLevelAttempts(t *testing.T) {
 	if attempt.Game != "parkour" || attempt.Level != "level-1" || attempt.Result != "success" || !attempt.Success || attempt.ElapsedMillis != 16100 {
 		t.Fatalf("finished attempt = %+v", attempt)
 	}
+}
+
+type cameraRecorderBackend struct {
+	starts   []cameraRecordingStart
+	finishes []cameraRecordingFinish
+}
+
+func (b *cameraRecorderBackend) StartLevelAttempt(start cameraRecordingStart) {
+	b.starts = append(b.starts, start)
+}
+
+func (b *cameraRecorderBackend) FinishLevelAttempt(finish cameraRecordingFinish) {
+	b.finishes = append(b.finishes, finish)
+}
+
+func (b *cameraRecorderBackend) Close() error {
+	return nil
 }
 
 func TestPlatformSyncPostsSessionSnapshot(t *testing.T) {

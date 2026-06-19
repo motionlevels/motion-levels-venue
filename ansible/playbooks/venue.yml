@@ -64,6 +64,7 @@
     motion_levels_services:
       - motion-levels-floor-controller.service
       - motion-levels-game-engine.service
+      - motion-levels-camera-recorder.service
       - motion-levels-camera-helper.service
       - motion-levels-kiosk.service
     motion_levels_old_services:
@@ -194,11 +195,17 @@
       ansible.builtin.apt:
         name:
           - caddy
+          - build-essential
+          - cmake
           - curl
           - libasound2-dev
+          - libudev-dev
+          - libusb-1.0-0-dev
           - pkg-config
           - python3-opencv
+          - rclone
           - rsync
+          - usbutils
           - zstd
           - xinit
           - xserver-xorg
@@ -226,6 +233,7 @@
         - /etc/motion-levels
         - /etc/caddy
         - /var/lib/motion-levels
+        - /var/lib/motion-levels/camera-recordings
 
     - name: Check installed Go version
       ansible.builtin.command:
@@ -312,6 +320,21 @@
         regexp: '^MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR='
         line: MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR=/var/lib/motion-levels/platform-asset-cache
         mode: "0644"
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+
+    - name: Ensure camera recorder env is configured
+      ansible.builtin.lineinfile:
+        path: /etc/motion-levels/motion-levels.env
+        regexp: "^{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+        mode: "0644"
+      loop:
+        - key: MOTION_LEVELS_CAMERA_RECORDER_URL
+          value: http://127.0.0.1:8030
+        - key: MOTION_LEVELS_CAMERA_RECORDER_BACKEND
+          value: fake
+        - key: MOTION_LEVELS_CAMERA_RECORDINGS_ROOT
+          value: /var/lib/motion-levels/camera-recordings
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Resolve local deployed stack revision

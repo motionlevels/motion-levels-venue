@@ -65,6 +65,8 @@ type config struct {
 	ReplayMaxLocalBytes    int64
 	ReplayKeepLocal        bool
 	DisplaySnapshotFPS     int
+	CameraRecorderURL      string
+	CameraRecorderTimeout  time.Duration
 	AuthoredRuntime        string
 	PlatformURL            string
 	PlatformToken          string
@@ -117,6 +119,8 @@ func main() {
 	flag.Int64Var(&cfg.ReplayMaxLocalBytes, "replay-max-local-bytes", int64Env("MOTION_LEVELS_REPLAY_MAX_LOCAL_BYTES", 512*1024*1024), "maximum bytes for one active local replay file before discarding it; 0 disables the cap")
 	flag.BoolVar(&cfg.ReplayKeepLocal, "replay-keep-local", true, "keep replay files locally when platform upload is not configured")
 	flag.IntVar(&cfg.DisplaySnapshotFPS, "display-snapshot-fps", 4, "display snapshots per second to write into game session recordings")
+	flag.StringVar(&cfg.CameraRecorderURL, "camera-recorder-url", os.Getenv("MOTION_LEVELS_CAMERA_RECORDER_URL"), "local camera recorder API base URL; empty disables external video recording")
+	flag.DurationVar(&cfg.CameraRecorderTimeout, "camera-recorder-timeout", durationEnv("MOTION_LEVELS_CAMERA_RECORDER_TIMEOUT", 2*time.Second), "HTTP timeout for camera recorder API calls")
 	flag.StringVar(&cfg.AuthoredRuntime, "authored-runtime", "auto", "runtime for motion-go-v1 games: auto, native, or wasm")
 	flag.StringVar(&cfg.PlatformURL, "platform-url", os.Getenv("MOTION_LEVELS_PLATFORM_URL"), "platform base URL for session ingest; empty disables")
 	flag.StringVar(&cfg.PlatformToken, "platform-token", os.Getenv("MOTION_LEVELS_PLATFORM_TOKEN"), "platform bearer token for session ingest; can also use MOTION_LEVELS_PLATFORM_TOKEN")
@@ -170,7 +174,15 @@ func main() {
 		}
 	}()
 
+	cameraRecorder := newHTTPCameraRecorder(cfg.CameraRecorderURL, cfg.CameraRecorderTimeout)
+	defer func() {
+		if err := cameraRecorder.Close(); err != nil {
+			log.Printf("camera recorder close: %v", err)
+		}
+	}()
+
 	runtime := newGameRuntime(cfg, audioPlayer, replayRecorder)
+	runtime.SetCameraRecorder(cameraRecorder)
 	runtime.StartDisplaySnapshotRecording(displaySnapshotInterval(cfg.DisplaySnapshotFPS))
 	startPlatformSync(runtime, cfg)
 	go serveGameAPI(cfg.HTTPAddr, runtime)
@@ -286,6 +298,18 @@ func int64Env(key string, fallback int64) int64 {
 		return fallback
 	}
 	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func durationEnv(key string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(value)
 	if err != nil {
 		return fallback
 	}
