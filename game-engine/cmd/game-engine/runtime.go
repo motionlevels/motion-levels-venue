@@ -398,7 +398,7 @@ func (r *gameRuntime) ControlGame(action string) {
 	case "toggle_mute":
 		r.setAudioMutedLocked(!r.audioMuted, now)
 	case "exit":
-		r.applyLocked(configForSelection(r.base, "salvapantallas", 1), true)
+		r.exitActiveGameLocked("game exited")
 	default:
 		return
 	}
@@ -410,6 +410,13 @@ func (r *gameRuntime) ControlGame(action string) {
 			UnixNanos: now.UnixNano(),
 		}}
 	})
+}
+
+func (r *gameRuntime) exitActiveGameLocked(reason string) {
+	cfg := configForSelection(r.base, "salvapantallas", 1)
+	cfg.VenueSessionID = ""
+	cfg.TeamName = ""
+	r.applyLockedWithNarrationReason(cfg, true, narrationAuto, reason)
 }
 
 func (r *gameRuntime) Render(now time.Time) (int, []animation.RGB) {

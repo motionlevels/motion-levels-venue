@@ -1665,8 +1665,14 @@ func TestVenueSessionLifecycleAndMenuEvents(t *testing.T) {
 	if got := runtime.Status().VenueSessionID; got != venueSessionID {
 		t.Fatalf("status venue session id = %q, want %q", got, venueSessionID)
 	}
+	if got := runtime.Status().CurrentGame; got != "whack-a-mole" {
+		t.Fatalf("current game before venue end = %q, want whack-a-mole", got)
+	}
 	if response := post("/api/venue-session", `{"action":"end","venueSessionId":"`+venueSessionID+`","reason":"manual"}`); response.StatusCode != http.StatusOK {
 		t.Fatalf("venue end response = %d", response.StatusCode)
+	}
+	if status := runtime.Status(); status.CurrentGame != "salvapantallas" || status.VenueSessionID != "" {
+		t.Fatalf("status after venue end = %+v, want ambient without venue session", status)
 	}
 	if err := recorder.Close(); err != nil {
 		t.Fatal(err)

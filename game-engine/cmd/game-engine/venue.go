@@ -188,6 +188,9 @@ func (r *gameRuntime) endVenueLocked(id, reason string, now time.Time) {
 		}}
 	})
 	r.enqueueVenueEventLocked(now, "venue_lifecycle", "venue_ended", map[string]any{"reason": reason})
+	if r.current.VenueSessionID == r.venueID && !isAmbientActivityGame(r.current.Game) {
+		r.exitActiveGameLocked("venue session ended")
+	}
 	log.Printf("venue session ended: id=%s reason=%s", r.venueID, reason)
 }
 
