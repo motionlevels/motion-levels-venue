@@ -54,7 +54,7 @@ type previewLevel struct {
 }
 
 func main() {
-	output := flag.String("output", "apps/player-menu/src/assets/previews", "preview output directory")
+	output := flag.String("output", "/tmp/motion-levels-season-previews", "preview output directory")
 	season := flag.String("season", "all", "season to render: all, temporada1, temporada2")
 	force := flag.Bool("force", false, "overwrite existing WebP previews")
 	flag.Parse()
@@ -170,8 +170,8 @@ func renderFrame(frame []animation.RGB) *image.Paletted {
 }
 
 func drawTile(img *image.Paletted, x, y int, index uint8) {
-	drawX := y
-	drawY := gridWidth - 1 - x
+	drawX := gridHeight - 1 - y
+	drawY := x
 	left := margin + drawX*pitch
 	top := margin + drawY*pitch
 	for py := top; py < top+lit; py++ {

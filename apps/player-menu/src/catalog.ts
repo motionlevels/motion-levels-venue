@@ -1,8 +1,3 @@
-export function previewAsset(fileName: string): string | undefined {
-  void fileName;
-  return undefined;
-}
-
 export const colors = {
   cyan: "#36d9ff",
   green: "#8dff6e",

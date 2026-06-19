@@ -19,6 +19,7 @@ export type EngineGame = {
     status?: string;
     settings_hash?: string;
     updated_at?: string;
+    catalog_thumbnail_small_url?: string;
     catalog_thumbnail_url?: string;
     catalog_preview_url?: string;
   }>;
@@ -36,6 +37,7 @@ export type PlatformGameCatalogEntry = {
   catalog_order: number;
   catalog_thumbnail_ref?: string;
   catalog_preview_animation?: string;
+  catalog_thumbnail_small_url?: string;
   catalog_thumbnail_url?: string;
   catalog_preview_url?: string;
   catalog_rules?: string[];
@@ -68,6 +70,7 @@ export type PlatformGameCatalogEntry = {
     status?: string;
     settings_hash?: string;
     updated_at?: string;
+    catalog_thumbnail_small_url?: string;
     catalog_thumbnail_url?: string;
     catalog_preview_url?: string;
   }>;

@@ -1,4 +1,10 @@
 export type ScreenMode = "browse" | "game";
+export type ActiveLevelLaunchPhase = "stopping" | "loading";
+export type ActiveLevelLaunch = {
+  gameID: string;
+  levelID: string;
+  phase: ActiveLevelLaunchPhase;
+};
 
 type IdleLoopSyncInput = {
   launchedGameID: string;
@@ -27,4 +33,18 @@ export function idleLoopSyncDecision({
     return { action: "hold-launching" };
   }
   return { action: "return-to-browse", message: "Juego finalizado" };
+}
+
+export function visibleActiveLevelLaunch({
+  gameID,
+  launch,
+  screenMode,
+}: {
+  gameID: string;
+  launch: ActiveLevelLaunch | null;
+  screenMode: ScreenMode;
+}): ActiveLevelLaunch | null {
+  if (screenMode !== "game") return null;
+  if (!launch || launch.gameID !== gameID) return null;
+  return launch;
 }

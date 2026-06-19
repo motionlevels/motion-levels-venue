@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { controlGame, fetchAnimationPreview, fetchEngineStatus, fetchGameCatalog, fetchMenuState, platformBaseURL, postMenuEvent, postMenuState, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus, type MenuStateEnvelope, type PlatformGameCatalogEntry } from "./api";
-import { categories, colors, difficulties, games, playerColorNames, playerColors, previewAsset, type CategoryID, type DifficultyID, type GameCard, type PartyMiniGame } from "./catalog";
+import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard, type PartyMiniGame } from "./catalog";
 import {
   catalogDifficultyIDs,
   closestSupportedDifficulty,
@@ -27,7 +27,7 @@ import { floorAnimations, type FloorAnim, type RGB } from "./floor";
 import { hexToColor, hexToRGB, initials, randomUUID } from "./utils";
 import { captureMenuEvent, menuKioskID, setMenuEventForwarder } from "./analytics";
 import { platformAnimationCards } from "./animationCatalog";
-import { idleLoopSyncDecision, type ScreenMode } from "./runtimeFlow";
+import { idleLoopSyncDecision, visibleActiveLevelLaunch, type ActiveLevelLaunch, type ActiveLevelLaunchPhase, type ScreenMode } from "./runtimeFlow";
 
 type Player = {
   id: number;
@@ -466,14 +466,7 @@ function catalogDirectAssetSrc(ref: string | undefined): string | undefined {
 }
 
 function catalogThumbnailSrc(ref: string | undefined): string | undefined {
-  const direct = catalogDirectAssetSrc(ref);
-  if (direct) return direct;
-  const clean = String(ref || "").trim();
-  if (!clean || /^data:/i.test(clean)) return undefined;
-  const assetName = webpPreviewRef(clean);
-  const platformURL = platformBaseURL();
-  if (platformURL) return `${platformURL}/api/game-catalog/thumbnails/${encodeURIComponent(assetName)}`;
-  return previewAsset(assetName);
+  return catalogDirectAssetSrc(ref);
 }
 
 function uniquePreviewSources(values: Array<string | undefined>): string[] {
@@ -482,6 +475,7 @@ function uniquePreviewSources(values: Array<string | undefined>): string[] {
 
 function catalogThumbnailMediaSrcs(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined): string[] {
   return uniquePreviewSources([
+    catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
     catalogDirectAssetSrc(entry.catalog_thumbnail_url),
     catalogThumbnailSrc(entry.catalog_thumbnail_ref),
     ...(fallback?.thumbnailSrcs || []),
@@ -494,6 +488,7 @@ function catalogPreviewMediaSrcs(entry: PlatformGameCatalogEntry, fallback: Game
   return uniquePreviewSources([
     catalogDirectAssetSrc(entry.catalog_preview_url),
     catalogDirectAssetSrc(entry.catalog_thumbnail_url),
+    catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
     ...thumbnailSrcs,
     ...(fallback?.previewSrcs || []),
     fallback?.previewSrc,
@@ -534,6 +529,7 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
 	        const fallbackLevel = fallback?.levels?.find((level) => level.id === levelID || level.id === lvl.id);
 	        const levelDifficulties = platformLevelSupportedDifficulties(lvl);
 	        const platformThumbnailSrcs = uniquePreviewSources([
+	          catalogDirectAssetSrc(lvl.catalog_thumbnail_small_url),
 	          catalogDirectAssetSrc(lvl.catalog_thumbnail_url),
 	          fallbackLevel?.thumbnailSrc,
 	          ...(fallbackLevel?.thumbnailSrcs || []),
@@ -542,6 +538,7 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
 	        const platformPreviewSrcs = uniquePreviewSources([
 	          catalogDirectAssetSrc(lvl.catalog_preview_url),
 	          catalogDirectAssetSrc(lvl.catalog_thumbnail_url),
+	          catalogDirectAssetSrc(lvl.catalog_thumbnail_small_url),
 	          ...platformThumbnailSrcs,
 	          fallbackLevel?.previewSrc,
 	          ...(fallbackLevel?.previewSrcs || []),
@@ -963,7 +960,9 @@ function loadCachedPlatformCatalog(): PlatformGameCatalogEntry[] | null {
   try {
     const payload = JSON.parse(localStorage.getItem(platformCatalogStorageKey) || "null") as { games?: unknown } | PlatformGameCatalogEntry[] | null;
     const games = Array.isArray(payload) ? payload : Array.isArray(payload?.games) ? payload.games : null;
-    return games ? games.filter(isPlatformGameCatalogEntry) : null;
+    const catalog = games ? games.filter(isPlatformGameCatalogEntry) : null;
+    if (!catalog || catalog.some(hasLegacyPreviewMediaURL)) return null;
+    return catalog;
   } catch {
     return null;
   }
@@ -979,6 +978,22 @@ function cachePlatformCatalog(catalog: PlatformGameCatalogEntry[]) {
 
 function isPlatformGameCatalogEntry(value: unknown): value is PlatformGameCatalogEntry {
   return Boolean(value && typeof value === "object" && !Array.isArray(value) && "id" in value && "label" in value);
+}
+
+function hasLegacyPreviewMediaURL(entry: PlatformGameCatalogEntry): boolean {
+  const stale = [entry.catalog_thumbnail_small_url, entry.catalog_thumbnail_url, entry.catalog_preview_url]
+    .some(isLegacyPreviewMediaURL);
+  if (stale) return true;
+  return entry.levels?.some((level) => (
+    isLegacyPreviewMediaURL(level.catalog_thumbnail_small_url)
+    || isLegacyPreviewMediaURL(level.catalog_thumbnail_url)
+    || isLegacyPreviewMediaURL(level.catalog_preview_url)
+  )) === true;
+}
+
+function isLegacyPreviewMediaURL(value: unknown): boolean {
+  const url = String(value || "");
+  return /\/api\/game-catalog\/thumbnails\//.test(url) || /[?&]v=\d+\b/.test(url);
 }
 
 // Players get a "Jugador N" placeholder until they are named.
@@ -1145,6 +1160,7 @@ function MenuApp() {
   const [launchedGameID, setLaunchedGameID] = useState(menu.selectedGame);
   const [stoppedLevelGameID, setStoppedLevelGameID] = useState<string | null>(null);
   const [launchingGameID, setLaunchingGameID] = useState<string | null>(null);
+  const [activeLevelLaunch, setActiveLevelLaunch] = useState<ActiveLevelLaunch | null>(null);
   const [levelBrowserGameID, setLevelBrowserGameID] = useState<string | null>(null);
   const [partyRun, setPartyRun] = useState<PartyRunState | null>(null);
   const [introUntil, setIntroUntil] = useState(0);
@@ -1649,6 +1665,11 @@ function MenuApp() {
   const launchedDifficulty = closestSupportedDifficulty(menu.difficulty, launchedSupportedDifficulties);
   const launchedModeLabel = isAmbientCard(launchedGame) ? "Ambiente" : launchedLevel?.label || selectedDifficulty.label;
   const launchedLevelActive = isLevelRuntimeActive(status, launchedGame);
+  const activeLevelLaunchView = visibleActiveLevelLaunch({
+    gameID: launchedGame.id,
+    launch: activeLevelLaunch,
+    screenMode,
+  });
   const pendingLevelSwitchGame = pendingLevelSwitch ? menuGames.find((game) => game.id === pendingLevelSwitch.gameID) || null : null;
   const pendingLevelSwitchLevel = pendingLevelSwitchGame?.levels?.find((level) => level.id === pendingLevelSwitch?.levelID) || null;
   const pickerPlayer = menu.players.find((player) => player.id === colorPickerFor) || null;
@@ -2137,25 +2158,30 @@ function MenuApp() {
 
   function renderActiveLevelOption(game: GameCard, level: NonNullable<GameCard["levels"]>[number], options: {
     activeLevelID: string;
+    launchingLevelID: string | null;
+    launchPhase: ActiveLevelLaunchPhase | null;
     selectable: boolean;
     onSelect: (levelID: string) => void;
   }) {
-    const active = options.activeLevelID === level.id;
+    const launching = options.launchingLevelID === level.id;
+    const active = options.launchingLevelID ? launching : options.activeLevelID === level.id;
     const levelIndex = game.levels?.findIndex((candidate) => candidate.id === level.id) ?? -1;
     const levelLabel = playerLevelLabel(level, levelIndex);
     const progress = progressFor(game, menu);
     const bestDifficulty = progress.bestByLevel[level.id];
     const previewDifficulty = closestSupportedDifficulty(menu.difficulty, supportedDifficultiesFor(game, level));
+    const selectable = options.selectable && !options.launchingLevelID;
     return (
       <button
         key={level.id}
-        className={`level-option active-game-level ${active ? "active" : ""} ${bestDifficulty ? "passed" : ""} ${options.selectable ? "" : "readonly"}`}
+        className={`level-option active-game-level ${active ? "active" : ""} ${launching ? "loading" : ""} ${bestDifficulty ? "passed" : ""} ${selectable ? "" : "readonly"}`}
         style={{ "--level-color": difficultyColor(bestDifficulty), "--level-rgb": hexToRGB(difficultyColor(bestDifficulty)), "--c": game.color, "--crgb": hexToRGB(game.color) } as CSSProperties}
         type="button"
         role="radio"
-        aria-checked={active}
-        aria-label={`${levelLabel}${options.selectable ? "" : ", solo lectura durante reto"}`}
-        disabled={!options.selectable}
+        aria-busy={launching || undefined}
+        aria-checked={active || launching}
+        aria-label={`${levelLabel}${launching ? ", cargando" : selectable ? "" : ", solo lectura durante reto"}`}
+        disabled={!selectable}
         onClick={() => options.onSelect(level.id)}
       >
         <Preview
@@ -2170,7 +2196,12 @@ function MenuApp() {
         />
         <span className="level-footer">
           <strong>{levelLabel}</strong>
-          {active ? (
+          {launching ? (
+            <span className="level-state loading-label">
+              <span className="launch-spinner" aria-hidden="true" />
+              {options.launchPhase === "stopping" ? "Deteniendo" : "Cargando"}
+            </span>
+          ) : active ? (
             <span className="level-state rated">Actual</span>
           ) : (
             <span className={`level-state ${bestDifficulty ? "rated" : "unrated"}`}>
@@ -2424,6 +2455,7 @@ function MenuApp() {
 
   function requestActiveLevelSwitch(levelID: string) {
     if (!launchedGame.levels?.length) return;
+    if (activeLevelLaunch?.gameID === launchedGame.id) return;
     const activeLevelID = status?.level || selectedLevelFor(launchedGame);
     if (levelID === activeLevelID && isLevelRuntimeActive(status, launchedGame)) return;
     if (!isLevelUnlocked(launchedGame, levelID, menu)) {
@@ -2441,6 +2473,7 @@ function MenuApp() {
     const level = game.levels?.find((candidate) => candidate.id === levelID);
     if (!level || !isLevelUnlocked(game, levelID, menu)) return;
     setPendingLevelSwitch(null);
+    setActiveLevelLaunch({ gameID: game.id, levelID, phase: stopCurrent ? "stopping" : "loading" });
     setError("");
     captureMenuEvent("level_selected", {
       difficulty: closestSupportedDifficulty(menu.difficulty, supportedDifficultiesFor(game, level)),
@@ -2459,10 +2492,15 @@ function MenuApp() {
         const stoppedStatus = await controlGame("exit");
         setStatus(stoppedStatus);
       }
+      setActiveLevelLaunch({ gameID: game.id, levelID, phase: "loading" });
       setMessage("Cambiando nivel");
       await launch(game.id, { levelID });
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cambiar de nivel");
+    } finally {
+      setActiveLevelLaunch((current) => (
+        current?.gameID === game.id && current.levelID === levelID ? null : current
+      ));
     }
   }
 
@@ -2673,6 +2711,7 @@ function MenuApp() {
           supportedDifficulties={launchedSupportedDifficulties}
           difficultyLocked={launchedLevelActive}
           renderLevelOption={(level, options) => renderActiveLevelOption(launchedGame, level, options)}
+          activeLevelLaunch={activeLevelLaunchView}
           ambient={isAmbientCard(launchedGame)}
           introActive={introActive}
           countdownValue={countdownValue}
@@ -3474,6 +3513,7 @@ function GameControlScreen({
   supportedDifficulties,
   difficultyLocked,
   renderLevelOption,
+  activeLevelLaunch,
   ambient,
   introActive,
   countdownValue,
@@ -3500,7 +3540,14 @@ function GameControlScreen({
   difficulty: DifficultyID;
   supportedDifficulties: DifficultyID[];
   difficultyLocked: boolean;
-  renderLevelOption: (level: NonNullable<GameCard["levels"]>[number], options: { activeLevelID: string; selectable: boolean; onSelect: (levelID: string) => void }) => ReactNode;
+  renderLevelOption: (level: NonNullable<GameCard["levels"]>[number], options: {
+    activeLevelID: string;
+    launchingLevelID: string | null;
+    launchPhase: ActiveLevelLaunchPhase | null;
+    selectable: boolean;
+    onSelect: (levelID: string) => void;
+  }) => ReactNode;
+  activeLevelLaunch: ActiveLevelLaunch | null;
   ambient: boolean;
   introActive: boolean;
   countdownValue: number;
@@ -3524,6 +3571,11 @@ function GameControlScreen({
   const currentLevel = levels.find((level) => level.id === currentLevelID);
   const currentLevelIndex = currentLevel ? levels.findIndex((level) => level.id === currentLevel.id) : -1;
   const pendingLevel = levels.find((level) => level.id === selectedLevelID);
+  const launchingLevel = activeLevelLaunch ? levels.find((level) => level.id === activeLevelLaunch.levelID) : undefined;
+  const launchingLevelIndex = launchingLevel ? levels.findIndex((level) => level.id === launchingLevel.id) : -1;
+  const visibleLevel = launchingLevel || currentLevel;
+  const visibleLevelIndex = launchingLevel ? launchingLevelIndex : currentLevelIndex;
+  const launchingLevelLabel = launchingLevel ? playerLevelLabel(launchingLevel, launchingLevelIndex) : "";
   const totalMillis = Math.max(0, Math.round((game.estimatedDurationSeconds || 0) * 1000));
   const elapsedMillis = Math.max(0, Math.round(status?.elapsedMillis || 0));
   const remainingMillis = totalMillis > 0 ? Math.max(0, totalMillis - elapsedMillis) : 0;
@@ -3534,13 +3586,20 @@ function GameControlScreen({
   const completedCount = Object.keys(challengeRun?.completedLevels || {}).length;
   const progressLabel = hasLevels ? `${completedCount}/${levels.length}` : "0/0";
   const stopped = isStoppedRuntimePhase(status);
-  const phaseLabel = ambient ? "Animación en curso" : stopped ? "Nivel detenido" : introActive ? "Narración inicial" : countdownValue > 0 ? "Preparando salida" : paused ? "Pausado" : "En curso";
+  const phaseLabel = activeLevelLaunch
+    ? activeLevelLaunch.phase === "stopping" ? "Deteniendo nivel" : `Cargando ${launchingLevelLabel || "nivel"}`
+    : ambient ? "Animación en curso" : stopped ? "Nivel detenido" : introActive ? "Narración inicial" : countdownValue > 0 ? "Preparando salida" : paused ? "Pausado" : "En curso";
   return (
     <section className={`game-control-screen ${hasLevels ? "with-levels" : ""}`} style={{ "--c": game.color, "--crgb": hexToRGB(game.color) } as CSSProperties}>
       <div className="game-control-main">
         <div className="game-control-preview">
           <LiveFloorView orientation={hasLevels ? "portrait" : "landscape"} />
-          {introActive ? (
+          {activeLevelLaunch ? (
+            <div className="countdown-overlay loading" aria-live="polite">
+              <span className="launch-spinner" aria-hidden="true" />
+              <span>{activeLevelLaunch.phase === "stopping" ? "Deteniendo" : "Cargando"}</span>
+            </div>
+          ) : introActive ? (
             <div className="countdown-overlay narration" aria-live="polite">
               <span>Narración</span>
             </div>
@@ -3563,7 +3622,7 @@ function GameControlScreen({
           </div>
           <div className="control-meta">
             <span>{ambient ? "Todos los jugadores" : `${players.length || 1} ${players.length === 1 ? "jugador" : "jugadores"}`}</span>
-            <span>{hasLevels && currentLevel ? playerLevelLabel(currentLevel, currentLevelIndex) : modeLabel}</span>
+            <span>{hasLevels && visibleLevel ? playerLevelLabel(visibleLevel, visibleLevelIndex) : modeLabel}</span>
             <span>{difficultyLabel}</span>
           </div>
           {!ambient ? (
@@ -3578,8 +3637,8 @@ function GameControlScreen({
               </div>
               {hasLevels ? (
                 <div>
-                  <span>{levelModeFree ? "Nivel listo" : "Progreso"}</span>
-                  <strong>{levelModeFree && pendingLevel ? playerLevelLabel(pendingLevel, levels.findIndex((level) => level.id === pendingLevel.id)) : progressLabel}</strong>
+                  <span>{activeLevelLaunch ? "Cargando" : levelModeFree ? "Nivel listo" : "Progreso"}</span>
+                  <strong>{launchingLevel ? playerLevelLabel(launchingLevel, launchingLevelIndex) : levelModeFree && pendingLevel ? playerLevelLabel(pendingLevel, levels.findIndex((level) => level.id === pendingLevel.id)) : progressLabel}</strong>
                 </div>
               ) : null}
             </div>
@@ -3595,10 +3654,10 @@ function GameControlScreen({
                       className={`active-difficulty ${difficulty === candidate.id ? "active" : ""}`}
                       style={{ "--difficulty-color": candidate.color, "--difficulty-rgb": hexToRGB(candidate.color) } as CSSProperties}
                       type="button"
-                      disabled={!supported || difficultyLocked}
+                      disabled={!supported || difficultyLocked || Boolean(activeLevelLaunch)}
                       aria-pressed={difficulty === candidate.id}
                       onClick={() => {
-                        if (supported && !difficultyLocked) onDifficultyChange(candidate.id);
+                        if (supported && !difficultyLocked && !activeLevelLaunch) onDifficultyChange(candidate.id);
                       }}
                     >
                       <span>{candidate.label}</span>
@@ -3608,8 +3667,13 @@ function GameControlScreen({
                 })}
               </div>
               {difficultyLocked ? <p className="active-lock-note">Detén el nivel para cambiar dificultad.</p> : null}
-              <button className="btn active-next-level" type="button" onClick={onNextLevel}>
-                Siguiente nivel
+              <button className="btn active-next-level" type="button" onClick={onNextLevel} disabled={Boolean(activeLevelLaunch)} aria-busy={Boolean(activeLevelLaunch) || undefined}>
+                {activeLevelLaunch ? (
+                  <>
+                    <span className="launch-spinner" aria-hidden="true" />
+                    Cargando nivel
+                  </>
+                ) : "Siguiente nivel"}
               </button>
             </div>
           ) : null}
@@ -3630,7 +3694,13 @@ function GameControlScreen({
               <strong>{levelModeFree ? "Todos los niveles" : progressLabel}</strong>
             </div>
             <div className="active-level-grid">
-              {levels.map((level) => renderLevelOption(level, { activeLevelID: levelModeFree ? selectedLevelID : currentLevelID, selectable: levelModeFree, onSelect: onLevelSelect }))}
+              {levels.map((level) => renderLevelOption(level, {
+                activeLevelID: levelModeFree ? selectedLevelID : currentLevelID,
+                launchingLevelID: activeLevelLaunch?.levelID || null,
+                launchPhase: activeLevelLaunch?.phase || null,
+                selectable: levelModeFree && !activeLevelLaunch,
+                onSelect: onLevelSelect,
+              }))}
             </div>
           </section>
         ) : null}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { idleLoopSyncDecision } from "../src/runtimeFlow.ts";
+import { idleLoopSyncDecision, visibleActiveLevelLaunch } from "../src/runtimeFlow.ts";
 
 describe("runtime screen flow", () => {
   it("keeps the game screen after a level was stopped", () => {
@@ -48,6 +48,36 @@ describe("runtime screen flow", () => {
         stoppedLevelGameID: "temporada-1",
       }),
       { action: "ignore" },
+    );
+  });
+
+  it("shows active level launch progress on the current game screen", () => {
+    assert.deepEqual(
+      visibleActiveLevelLaunch({
+        gameID: "temporada-1",
+        launch: { gameID: "temporada-1", levelID: "temporada1-level-20", phase: "loading" },
+        screenMode: "game",
+      }),
+      { gameID: "temporada-1", levelID: "temporada1-level-20", phase: "loading" },
+    );
+  });
+
+  it("does not show active level launch progress in browse or for another game", () => {
+    assert.equal(
+      visibleActiveLevelLaunch({
+        gameID: "temporada-1",
+        launch: { gameID: "temporada-1", levelID: "temporada1-level-20", phase: "stopping" },
+        screenMode: "browse",
+      }),
+      null,
+    );
+    assert.equal(
+      visibleActiveLevelLaunch({
+        gameID: "reto-memoria",
+        launch: { gameID: "temporada-1", levelID: "temporada1-level-20", phase: "loading" },
+        screenMode: "game",
+      }),
+      null,
     );
   });
 });

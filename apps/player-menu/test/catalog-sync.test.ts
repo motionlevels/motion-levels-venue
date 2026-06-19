@@ -263,8 +263,12 @@ describe("catalog metadata sync", () => {
   it("uses revisioned platform preview media for level cards", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
 
+    assert.match(appSource, /catalogDirectAssetSrc\(lvl\.catalog_thumbnail_small_url\)/);
     assert.match(appSource, /catalogDirectAssetSrc\(lvl\.catalog_thumbnail_url\)/);
     assert.match(appSource, /catalogDirectAssetSrc\(lvl\.catalog_preview_url\)/);
+    assert.match(appSource, /function hasLegacyPreviewMediaURL/);
+    assert.match(appSource, /\/api\\\/game-catalog\\\/thumbnails\\\//);
+    assert.match(appSource, /\[\?&\]v=\\d\+\\b/);
     assert.match(appSource, /previewRevisionHash: existing\?\.previewRevisionHash \|\| lvl\.settings_hash \|\| lvl\.updated_at/);
     assert.match(appSource, /src=\{levelThumbnailSrc\(level, game\)\}/);
     assert.match(appSource, /richSrc=\{active \? levelPreviewSrc\(game, level, previewDifficulty\) : undefined\}/);
@@ -289,7 +293,7 @@ describe("catalog metadata sync", () => {
       shouldPreferCatalogFallbackPreviewAnimation(
         catalogEntry({
           catalog_preview_url: "/api/game-catalog/previews/lava.webp",
-          catalog_thumbnail_url: "/api/game-catalog/thumbnails/lava.webp",
+          catalog_thumbnail_url: "/api/game-catalog/previews/lava/revision/thumbnail.webp",
           source_kind: "engine_hardcoded",
           supports_levels: false,
         }),

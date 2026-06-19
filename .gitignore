@@ -19,6 +19,9 @@ engine/recordings/
 floor-controller/recordings/
 game-recordings/
 
+# Generated menu/catalog previews are derived runtime media.
+apps/player-menu/src/assets/previews/
+
 # Framework build output and local test artifacts.
 .next/
 test-results/
