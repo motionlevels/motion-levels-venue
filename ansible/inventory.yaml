@@ -22,6 +22,8 @@ all:
           motion_levels_repo_root: /opt/motion-levels/repo
           motion_levels_website_health_url: http://127.0.0.1:3000
           motion_levels_website_url: https://website.motionlevels.obis.dev
+          motion_levels_website_cms_health_url: http://127.0.0.1:8055/server/ping
+          motion_levels_website_cms_url: https://cms.motionlevels.obis.dev
     motion_levels_venues:
       hosts:
         motionlevels-1:
