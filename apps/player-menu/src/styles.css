@@ -1717,6 +1717,35 @@ button.capsule:disabled,
   transform: rotateX(8deg) rotateZ(0.2deg);
 }
 
+.level-mystery-preview {
+  display: grid;
+  place-items: center;
+  color: rgba(223, 233, 255, 0.72);
+  background:
+    radial-gradient(56% 58% at 50% 42%, rgba(var(--accent-rgb), 0.18), transparent 72%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 18px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 18px),
+    linear-gradient(180deg, #070d16, #04070b);
+}
+
+.level-mystery-preview__icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(var(--accent-rgb), 0.34);
+  border-radius: 50%;
+  background: rgba(var(--accent-rgb), 0.1);
+  box-shadow:
+    0 0 22px -12px rgba(var(--accent-rgb), 0.9),
+    inset 0 0 18px rgba(var(--accent-rgb), 0.08);
+}
+
+.level-mystery-preview__icon svg {
+  width: 28px;
+  height: 28px;
+}
+
 .level-option:not(.active):not(.locked):hover {
   border-color: var(--line-strong);
   transform: translateY(-1px);

@@ -99,6 +99,15 @@ export function StarIcon() {
   );
 }
 
+export function QuestionIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M23 24c.8-8 6.2-13 14-13 8.2 0 14 5.1 14 12.4 0 5.8-3.1 9.2-8 12.2-4.4 2.8-6 5.2-6 9.4" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="36" cy="54" r="4" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function TeamIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">

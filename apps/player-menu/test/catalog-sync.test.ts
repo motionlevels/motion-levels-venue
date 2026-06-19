@@ -274,6 +274,24 @@ describe("catalog metadata sync", () => {
     assert.match(appSource, /richSrc=\{active \? levelPreviewSrc\(game, level, previewDifficulty\) : undefined\}/);
   });
 
+  it("hides future challenge level previews behind a mystery tile", () => {
+    const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
+    const styleSource = fs.readFileSync(path.resolve(__dirname, "../src/styles.css"), "utf8");
+
+    assert.match(appSource, /function challengeLevelPreviewRevealed/);
+    assert.match(appSource, /if \(levelModeFor\(game, state\) === "free"\) return true;/);
+    assert.match(appSource, /if \(active\) return true;/);
+    assert.match(appSource, /challengeRunFor\(game, state\)\?\.completedLevels\[levelID\] !== undefined/);
+    assert.match(appSource, /const revealPreview = challengeLevelPreviewRevealed\(game, level\.id, menu, active\);/);
+    assert.match(appSource, /revealPreview \? \(/);
+    assert.match(appSource, /<LevelMysteryPreview \/>/);
+    assert.match(appSource, /function LevelMysteryPreview/);
+    assert.match(appSource, /<QuestionIcon \/>/);
+    assert.match(styleSource, /\.level-mystery-preview\s*\{/);
+    assert.match(styleSource, /\.level-mystery-preview__icon\s*\{/);
+    assert.match(appSource, /renderPartyPreview\(game, \{ compact: true, rich: selected \|\| active \}\)/);
+  });
+
   it("keeps preview animations as fallback when platform media URLs fail", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
     const helperSource = appSource.slice(

@@ -20,7 +20,7 @@ import {
   shouldPreferCatalogFallbackPreviewAnimation,
   supportedDifficultiesForGame,
 } from "./catalogSync";
-import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GamepadIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, RefreshIcon, RestartIcon, SparkIcon, StarIcon, TeamIcon, UserIcon, VersusIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
+import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GamepadIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, QuestionIcon, RefreshIcon, RestartIcon, SparkIcon, StarIcon, TeamIcon, UserIcon, VersusIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
 import { floorAnimations, type FloorAnim, type RGB } from "./floor";
@@ -720,6 +720,12 @@ function isLevelUnlocked(game: GameCard, levelID: string, state: MenuState): boo
   if (unlockLevelsEnabled(state)) return true;
   if (levelModeFor(game, state) === "free") return true;
   return challengeNextLevel(game, state)?.id === levelID;
+}
+
+function challengeLevelPreviewRevealed(game: GameCard, levelID: string, state: MenuState, active: boolean): boolean {
+  if (levelModeFor(game, state) === "free") return true;
+  if (active) return true;
+  return challengeRunFor(game, state)?.completedLevels[levelID] !== undefined;
 }
 
 function difficultyColor(difficulty?: DifficultyID): string {
@@ -2119,6 +2125,7 @@ function MenuApp() {
     const bestDifficulty = progress.bestByLevel[level.id];
     const locked = !isLevelUnlocked(game, level.id, menu);
     const previewDifficulty = closestSupportedDifficulty(menu.difficulty, supportedDifficultiesFor(game, level));
+    const revealPreview = challengeLevelPreviewRevealed(game, level.id, menu, active);
     return (
       <button
         key={level.id}
@@ -2132,16 +2139,20 @@ function MenuApp() {
         aria-label={`${levelLabel}${locked ? ", bloqueado en modo reto" : ""}`}
         onClick={() => setSelectedLevel(game, level.id)}
       >
-        <Preview
-          src={levelThumbnailSrc(level, game)}
-          srcs={levelThumbnailSrcs(level, game)}
-          richSrc={active ? levelPreviewSrc(game, level, previewDifficulty) : undefined}
-          richSrcs={active ? levelPreviewSrcs(game, level, previewDifficulty) : emptyPreviewSources}
-          animationID={levelPreviewAnimationID(game, level)}
-          revisionHash={level.previewRevisionHash || game.previewRevisionHash}
-          compact
-          promoteAnimation={active}
-        />
+        {revealPreview ? (
+          <Preview
+            src={levelThumbnailSrc(level, game)}
+            srcs={levelThumbnailSrcs(level, game)}
+            richSrc={active ? levelPreviewSrc(game, level, previewDifficulty) : undefined}
+            richSrcs={active ? levelPreviewSrcs(game, level, previewDifficulty) : emptyPreviewSources}
+            animationID={levelPreviewAnimationID(game, level)}
+            revisionHash={level.previewRevisionHash || game.previewRevisionHash}
+            compact
+            promoteAnimation={active}
+          />
+        ) : (
+          <LevelMysteryPreview />
+        )}
         <span className="level-footer">
           <strong>{levelLabel}</strong>
           {locked ? (
@@ -2171,6 +2182,7 @@ function MenuApp() {
     const bestDifficulty = progress.bestByLevel[level.id];
     const previewDifficulty = closestSupportedDifficulty(menu.difficulty, supportedDifficultiesFor(game, level));
     const selectable = options.selectable && !options.launchingLevelID;
+    const revealPreview = challengeLevelPreviewRevealed(game, level.id, menu, active);
     return (
       <button
         key={level.id}
@@ -2184,16 +2196,20 @@ function MenuApp() {
         disabled={!selectable}
         onClick={() => options.onSelect(level.id)}
       >
-        <Preview
-          src={levelThumbnailSrc(level, game)}
-          srcs={levelThumbnailSrcs(level, game)}
-          richSrc={active ? levelPreviewSrc(game, level, previewDifficulty) : undefined}
-          richSrcs={active ? levelPreviewSrcs(game, level, previewDifficulty) : emptyPreviewSources}
-          animationID={levelPreviewAnimationID(game, level)}
-          revisionHash={level.previewRevisionHash || game.previewRevisionHash}
-          compact
-          promoteAnimation={active}
-        />
+        {revealPreview ? (
+          <Preview
+            src={levelThumbnailSrc(level, game)}
+            srcs={levelThumbnailSrcs(level, game)}
+            richSrc={active ? levelPreviewSrc(game, level, previewDifficulty) : undefined}
+            richSrcs={active ? levelPreviewSrcs(game, level, previewDifficulty) : emptyPreviewSources}
+            animationID={levelPreviewAnimationID(game, level)}
+            revisionHash={level.previewRevisionHash || game.previewRevisionHash}
+            compact
+            promoteAnimation={active}
+          />
+        ) : (
+          <LevelMysteryPreview />
+        )}
         <span className="level-footer">
           <strong>{levelLabel}</strong>
           {launching ? (
@@ -3939,6 +3955,16 @@ function PartyPreview({ catalogGames, compact = false, difficulty, game, rich = 
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function LevelMysteryPreview() {
+  return (
+    <div className="preview compact-preview level-mystery-preview" aria-hidden="true">
+      <span className="level-mystery-preview__icon">
+        <QuestionIcon />
+      </span>
     </div>
   );
 }
