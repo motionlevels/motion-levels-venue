@@ -34,6 +34,14 @@
 		}
 	}
 
+	@platform_cameras path /cameras /cameras/
+	handle @platform_cameras {
+		root * /opt/motion-levels/rebuild/src/deploy/motionlevels-pc
+		rewrite * /cameras.html
+		header Cache-Control "no-store"
+		file_server
+	}
+
 	handle /_next/* {
 		reverse_proxy https://84.7.190.81 {
 			header_up Host platform.motionlevels.obis.dev

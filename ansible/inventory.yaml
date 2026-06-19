@@ -33,6 +33,9 @@ all:
         motionlevels-1:
           ansible_host: 100.76.156.89
           motion_levels_hostname: motionlevels-1
+          motion_levels_lan_interface: enp2s0
+          motion_levels_lan_ipv4: 192.168.1.142/24
+          motion_levels_lan_gateway: 192.168.1.1
         motionlevels-cloud-1:
           ansible_host: 100.94.69.53
           motion_levels_hostname: motionlevels-cloud-1
