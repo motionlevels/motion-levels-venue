@@ -167,6 +167,7 @@ write_files:
       MOTION_LEVELS_CAMERA_130_HOST=192.168.1.130
       MOTION_LEVELS_CAMERA_FPS=2
       MOTION_LEVELS_CAMERA_JPEG_QUALITY=55
+      MOTION_LEVELS_CAMERA_IDLE_SECONDS=20
 
   # 3. Default Caddy reverse proxy config
   - path: /etc/caddy/Caddyfile
@@ -195,6 +196,48 @@ write_files:
 
         handle /cam/* {
           reverse_proxy 127.0.0.1:8020
+        }
+
+        @platform_tv path /tv /tv/
+        handle @platform_tv {
+          rewrite * /salas/motionlevels-1/tv
+          reverse_proxy https://84.7.190.81 {
+            header_up Host platform.motionlevels.obis.dev
+            transport http {
+              dial_timeout 10s
+              tls_server_name platform.motionlevels.obis.dev
+            }
+          }
+        }
+
+        handle /_next/* {
+          reverse_proxy https://84.7.190.81 {
+            header_up Host platform.motionlevels.obis.dev
+            transport http {
+              dial_timeout 10s
+              tls_server_name platform.motionlevels.obis.dev
+            }
+          }
+        }
+
+        handle /api/rooms/* {
+          reverse_proxy https://84.7.190.81 {
+            header_up Host platform.motionlevels.obis.dev
+            transport http {
+              dial_timeout 10s
+              tls_server_name platform.motionlevels.obis.dev
+            }
+          }
+        }
+
+        handle /api/live-floor/* {
+          reverse_proxy https://84.7.190.81 {
+            header_up Host platform.motionlevels.obis.dev
+            transport http {
+              dial_timeout 10s
+              tls_server_name platform.motionlevels.obis.dev
+            }
+          }
         }
 
         handle /motion-levels-icon.png {

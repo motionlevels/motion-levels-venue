@@ -16,20 +16,30 @@ import cv2
 
 
 class CameraFeed:
-    def __init__(self, name: str, url: str, fps: float, jpeg_quality: int):
+    def __init__(self, name: str, url: str, fps: float, jpeg_quality: int, idle_seconds: float):
         self.name = name
         self.url = url
         self.delay = 1.0 / fps
         self.jpeg_quality = jpeg_quality
+        self.idle_seconds = idle_seconds
         self.lock = threading.Lock()
         self.jpeg: bytes | None = None
-        self.running = True
+        self.last_requested = 0.0
+        self.thread: threading.Thread | None = None
 
-    def start(self) -> None:
-        threading.Thread(target=self._loop, daemon=True).start()
+    def ensure_running(self) -> None:
+        thread: threading.Thread | None = None
+        with self.lock:
+            self.last_requested = time.monotonic()
+            if self.thread is None or not self.thread.is_alive():
+                self.jpeg = None
+                self.thread = threading.Thread(target=self._loop, daemon=True)
+                thread = self.thread
+        if thread is not None:
+            thread.start()
 
     def _loop(self) -> None:
-        while self.running:
+        while not self._idle_expired():
             cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             if not cap.isOpened():
@@ -39,7 +49,7 @@ class CameraFeed:
 
             print(f"{self.name}: connected", flush=True)
             last_encode = 0.0
-            while self.running:
+            while not self._idle_expired():
                 ok, frame = cap.read()
                 if not ok or frame is None:
                     print(f"{self.name}: frame read failed, reconnecting", flush=True)
@@ -58,9 +68,16 @@ class CameraFeed:
             cap.release()
             time.sleep(1)
 
+        print(f"{self.name}: idle, closed", flush=True)
+
     def latest(self) -> bytes | None:
+        self.ensure_running()
         with self.lock:
             return self.jpeg
+
+    def _idle_expired(self) -> bool:
+        with self.lock:
+            return time.monotonic() - self.last_requested > self.idle_seconds
 
 
 def make_handler(feeds: dict[str, CameraFeed]):
@@ -157,6 +174,7 @@ def main() -> None:
     user = os.environ.get("MOTION_LEVELS_CAMERA_USER", "motionlevels")
     fps = env_float("MOTION_LEVELS_CAMERA_FPS", 2.0)
     jpeg_quality = env_int("MOTION_LEVELS_CAMERA_JPEG_QUALITY", 55)
+    idle_seconds = env_float("MOTION_LEVELS_CAMERA_IDLE_SECONDS", 20.0)
     cameras = {
         "128": os.environ.get("MOTION_LEVELS_CAMERA_128_HOST", "192.168.1.128"),
         "129": os.environ.get("MOTION_LEVELS_CAMERA_129_HOST", "192.168.1.129"),
@@ -164,11 +182,9 @@ def main() -> None:
     }
 
     feeds = {
-        key: CameraFeed(f"camera {key}", f"rtsp://{user}:{password}@{host}:554/stream2", fps, jpeg_quality)
+        key: CameraFeed(f"camera {key}", f"rtsp://{user}:{password}@{host}:554/stream2", fps, jpeg_quality, idle_seconds)
         for key, host in cameras.items()
     }
-    for feed in feeds.values():
-        feed.start()
 
     server = ThreadingHTTPServer((bind, port), make_handler(feeds))
     print(f"serving camera snapshots at http://{bind}:{port}/cam/{{id}}.jpg", flush=True)

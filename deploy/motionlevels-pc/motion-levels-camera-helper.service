@@ -15,6 +15,7 @@ Nice=12
 CPUWeight=100
 CPUQuota=45%
 IOSchedulingClass=idle
+MemoryMax=512M
 
 [Install]
 WantedBy=multi-user.target

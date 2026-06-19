@@ -1348,12 +1348,14 @@ button.capsule:disabled,
 
 /* A "stage" that holds the real 16x32 floor turned sideways for kiosk browsing. */
 .preview {
+  --preview-board-max-height: calc(100% - 18px);
+  --preview-board-max-width: min(78%, 560px);
   position: relative;
   min-height: 128px;
   display: grid;
   place-items: center;
   overflow: hidden;
-  padding: 4px;
+  padding: 10px 14px;
   perspective: 900px;
   background:
     radial-gradient(72% 60% at 50% 38%, rgba(var(--crgb), 0.2), transparent 72%),
@@ -1361,12 +1363,16 @@ button.capsule:disabled,
   border-bottom: 1px solid var(--line);
 }
 
+.floor-canvas,
 .preview-media {
   display: block;
   width: auto;
   height: auto;
-  max-width: calc(100% - 8px);
-  max-height: calc(100% - 8px);
+  max-width: var(--preview-board-max-width);
+  max-height: var(--preview-board-max-height);
+}
+
+.preview-media {
   object-fit: contain;
   border-radius: 0;
   transform: rotateX(12deg) rotateZ(0.3deg);
@@ -1426,6 +1432,8 @@ button.capsule:disabled,
 }
 
 .party-preview-tile .preview {
+  --preview-board-max-height: calc(100% - 4px);
+  --preview-board-max-width: calc(100% - 4px);
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -1438,8 +1446,8 @@ button.capsule:disabled,
 
 .party-preview-tile .floor-canvas,
 .party-preview-tile .preview-media {
-  max-width: calc(100% - 4px);
-  max-height: calc(100% - 4px);
+  max-width: var(--preview-board-max-width);
+  max-height: var(--preview-board-max-height);
   transform: rotateX(7deg) rotateZ(0.2deg);
   box-shadow:
     0 12px 28px -20px rgba(0, 0, 0, 0.85),
@@ -1480,7 +1488,8 @@ button.capsule:disabled,
   display: block;
   width: auto;
   height: auto;
-  max-height: calc(100% - 8px);
+  max-width: var(--preview-board-max-width);
+  max-height: var(--preview-board-max-height);
   border-radius: 0;
   transform: rotateX(12deg) rotateZ(0.3deg);
   transform-origin: center 56%;
@@ -1537,6 +1546,7 @@ button.capsule:disabled,
 }
 
 .detail-preview .preview {
+  --preview-board-max-width: min(82%, 720px);
   height: 100%;
   min-height: 0;
   border-bottom: 0;
@@ -1691,6 +1701,8 @@ button.capsule:disabled,
 }
 
 .level-option .preview {
+  --preview-board-max-height: calc(100% - 12px);
+  --preview-board-max-width: min(78%, 260px);
   min-height: 0;
   height: 100%;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -3656,13 +3668,15 @@ button.capsule:disabled,
   }
 
   .preview {
+    --preview-board-max-width: min(80%, 650px);
     min-height: 420px;
   }
 
   .floor-canvas {
     width: auto;
     height: auto;
-    max-height: calc(100% - 12px);
+    max-width: var(--preview-board-max-width);
+    max-height: var(--preview-board-max-height);
     transform: rotateX(10deg) rotateZ(0.3deg);
   }
 
@@ -3952,13 +3966,15 @@ button.capsule:disabled,
   }
 
   .preview {
+    --preview-board-max-width: min(78%, 330px);
     min-height: 150px;
   }
 
   .floor-canvas {
     width: auto;
     height: auto;
-    max-height: calc(100% - 8px);
+    max-width: var(--preview-board-max-width);
+    max-height: var(--preview-board-max-height);
     transform: rotateX(10deg) rotateZ(0.3deg);
   }
 
@@ -4127,6 +4143,7 @@ button.capsule:disabled,
   }
 
   .preview {
+    --preview-board-max-width: min(80%, 420px);
     min-height: 220px;
   }
 
@@ -4232,6 +4249,10 @@ button.capsule:disabled,
   .game-card {
     min-height: 190px;
     grid-template-rows: minmax(128px, 1fr) 62px;
+  }
+
+  .preview {
+    --preview-board-max-width: min(84%, 260px);
   }
 
   .game-body {

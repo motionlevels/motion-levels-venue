@@ -27,6 +27,7 @@ import { floorAnimations, type FloorAnim, type RGB } from "./floor";
 import { hexToColor, hexToRGB, initials, randomUUID } from "./utils";
 import { captureMenuEvent, menuKioskID, setMenuEventForwarder } from "./analytics";
 import { platformAnimationCards } from "./animationCatalog";
+import { idleLoopSyncDecision, type ScreenMode } from "./runtimeFlow";
 
 type Player = {
   id: number;
@@ -80,7 +81,6 @@ type ChallengeCompletion = {
 
 type FinishedLevelAttempt = NonNullable<EngineStatus["finishedLevelAttempts"]>[number];
 type KeyboardTarget = { kind: "team" } | { kind: "player"; id: number };
-type ScreenMode = "browse" | "game";
 type RosterIssue = { message: string; playerIds: Set<number> };
 type PartyRunState = {
   cumulativeScore: number;
@@ -1392,15 +1392,24 @@ function MenuApp() {
     if (engineIsIdleLoop) {
       syncedEngineSession.current = syncKey;
       const heldStoppedLevelGameID = stoppedLevelGameIDRef.current || stoppedLevelGameID;
-      if (screenMode === "game" && heldStoppedLevelGameID && launchedGameID === heldStoppedLevelGameID) {
-        setMessage("Nivel detenido");
+      const idleDecision = idleLoopSyncDecision({
+        launchedGameID,
+        launchingGameID,
+        screenMode,
+        stoppedLevelGameID: heldStoppedLevelGameID,
+      });
+      if (idleDecision.action === "hold-stopped") {
+        setMessage(idleDecision.message);
         return;
       }
-      if (screenMode === "game") {
+      if (idleDecision.action === "hold-launching") {
+        return;
+      }
+      if (idleDecision.action === "return-to-browse") {
         stoppedLevelGameIDRef.current = null;
         setStoppedLevelGameID(null);
         setScreenMode("browse");
-        setMessage("Juego finalizado");
+        setMessage(idleDecision.message);
       }
       return;
     }
@@ -1468,7 +1477,7 @@ function MenuApp() {
       syncPlayTiming(status, engineGame);
       syncedEngineSession.current = syncKey;
     }
-  }, [status, menu.selectedGame, screenMode, menuGames, launchedGameID, stoppedLevelGameID]);
+  }, [status, menu.selectedGame, screenMode, menuGames, launchedGameID, stoppedLevelGameID, launchingGameID]);
 
   useEffect(() => {
     if (screenMode !== "game") return;
@@ -2315,8 +2324,6 @@ function MenuApp() {
       setError("Nivel bloqueado");
       return;
     }
-    stoppedLevelGameIDRef.current = null;
-    setStoppedLevelGameID(null);
     setMenu(nextMenu);
     setMessage(isPartyCard(game) && game.partyMiniGames?.length ? `Party ${partyIndex + 1}/${game.partyMiniGames.length}` : "Iniciando");
     setError("");
@@ -2374,6 +2381,8 @@ function MenuApp() {
         })),
       });
       setStatus(nextStatus);
+      stoppedLevelGameIDRef.current = null;
+      setStoppedLevelGameID(null);
       setMessage(isPartyCard(game) && game.partyMiniGames?.length ? `Party ${partyIndex + 1}/${game.partyMiniGames.length} · ${options.partyScore || 0} pts` : "En curso");
       setLaunchedGameID(game.id);
       if (supportsNarration(launchGame) && playNarration) {

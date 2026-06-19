@@ -247,6 +247,7 @@ describe("catalog metadata sync", () => {
 
   it("keeps catalog preview media cheap to decode", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
+    const styleSource = fs.readFileSync(path.resolve(__dirname, "../src/styles.css"), "utf8");
 
     assert.match(appSource, /decoding="async"/);
     assert.match(appSource, /loading=\{compact \? "lazy" : "eager"\}/);
@@ -254,6 +255,9 @@ describe("catalog metadata sync", () => {
     assert.match(appSource, /richSrcs=\{rich \? gamePreviewSrcs\(game\) : emptyPreviewSources\}/);
     assert.match(appSource, /promoteAnimation=\{rich\}/);
     assert.match(appSource, /renderPartyPreview\(game, \{ compact: true, rich: selected \|\| active \}\)/);
+    assert.match(styleSource, /--preview-board-max-width: min\(78%, 560px\);/);
+    assert.match(styleSource, /\.floor-canvas\s*\{[\s\S]*?max-width: var\(--preview-board-max-width\);[\s\S]*?max-height: var\(--preview-board-max-height\);/);
+    assert.match(styleSource, /\.party-preview-tile \.preview\s*\{\s*--preview-board-max-height: calc\(100% - 4px\);\s*--preview-board-max-width: calc\(100% - 4px\);/);
   });
 
   it("uses revisioned platform preview media for level cards", () => {
