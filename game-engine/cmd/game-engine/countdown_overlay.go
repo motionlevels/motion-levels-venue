@@ -4,31 +4,28 @@ import "github.com/lobis/motion-levels/game-engine/internal/animation"
 
 var countdownDigitPatterns = map[int][]string{
 	1: {
-		"01100",
-		"11100",
-		"01100",
-		"01100",
-		"01100",
-		"01100",
-		"11110",
+		"0100",
+		"1100",
+		"0100",
+		"0100",
+		"0100",
+		"1110",
 	},
 	2: {
-		"11110",
-		"00011",
-		"00011",
-		"11110",
-		"11000",
-		"11000",
-		"11111",
+		"1110",
+		"0001",
+		"0010",
+		"0100",
+		"1000",
+		"1111",
 	},
 	3: {
-		"11110",
-		"00011",
-		"00011",
-		"11110",
-		"00011",
-		"00011",
-		"11110",
+		"1110",
+		"0001",
+		"0110",
+		"0001",
+		"0001",
+		"1110",
 	},
 }
 
@@ -63,10 +60,12 @@ func drawCountdownDigit(frame []animation.RGB, digit int) {
 			if lit != '1' {
 				continue
 			}
+			flippedX := patternWidth - 1 - px
+			flippedY := patternHeight - 1 - py
 			for sy := 0; sy < scale; sy++ {
 				for sx := 0; sx < scale; sx++ {
-					x := startX + px*scale + sx
-					y := startY + py*scale + sy
+					x := startX + flippedX*scale + sx
+					y := startY + flippedY*scale + sy
 					if x < 0 || x >= animation.GridWidth || y < 0 || y >= animation.GridHeight {
 						continue
 					}

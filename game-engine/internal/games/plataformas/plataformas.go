@@ -144,6 +144,7 @@ type compiledLevel struct {
 	greenFade         bool
 	greenImpact       bool
 	greenLoad         bool
+	greenLoadSide     string
 	blueTurnGreen     bool
 	blueCapture       bool
 	totalDuration     time.Duration
@@ -212,6 +213,7 @@ type levelRules struct {
 	DifficultySettings        map[string]difficultySetting `json:"difficulty_settings"`
 	RedFloorAnimation         string                       `json:"red_floor_animation"`
 	GreenPlatformLoad         *bool                        `json:"green_platform_load_animation"`
+	GreenPlatformLoadSide     string                       `json:"green_platform_load_side"`
 	GreenPlatformDisappear    bool                         `json:"green_platform_disappear"`
 	GreenPlatformImpactRipple bool                         `json:"green_platform_impact_ripple"`
 	BluePlatformTurnGreen     bool                         `json:"blue_platform_turn_green"`
@@ -903,7 +905,7 @@ func (g *Game) safeZoneCountdownColorAtLocked(pt Point, now time.Time) RGB {
 		if tileProgress < 0 {
 			continue
 		}
-		if target.X == pt.X && countdownFallingY(target.Y, tileProgress) == pt.Y {
+		if target.X == pt.X && countdownFallingY(target.Y, tileProgress, g.level.greenLoadSide) == pt.Y {
 			return countdownPulseGreen(target, now, g.createdAt)
 		}
 	}
@@ -1037,6 +1039,7 @@ func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
 			greenFade:         level.Rules.GreenPlatformDisappear,
 			greenImpact:       level.Rules.GreenPlatformImpactRipple,
 			greenLoad:         boolDefaultTrue(level.Rules.GreenPlatformLoad),
+			greenLoadSide:     normalizeGreenPlatformLoadSide(level.Rules.GreenPlatformLoadSide),
 			blueTurnGreen:     level.Rules.BluePlatformTurnGreen,
 			blueCapture:       level.Rules.BluePlatformCaptureArea,
 			scoreUniqs:        map[string]struct{}{},
@@ -1173,6 +1176,13 @@ func normalizeRedFloorAnimation(value string) string {
 		return "parkour_lava"
 	}
 	return "none"
+}
+
+func normalizeGreenPlatformLoadSide(value string) string {
+	if strings.TrimSpace(value) == "right" {
+		return "right"
+	}
+	return "left"
 }
 
 func boolDefaultTrue(value *bool) bool {
@@ -1464,7 +1474,7 @@ func countdownTileProgress(countdownProgress float64, order int, total int) floa
 	return progress
 }
 
-func countdownFallingY(targetY int, tileProgress float64) int {
+func countdownFallingY(targetY int, tileProgress float64, side string) int {
 	if tileProgress < 0 {
 		tileProgress = 0
 	}
@@ -1472,7 +1482,10 @@ func countdownFallingY(targetY int, tileProgress float64) int {
 		tileProgress = 1
 	}
 	eased := 1 - math.Pow(1-tileProgress, 3)
-	startY := targetY - GridHeight
+	startY := targetY + GridHeight
+	if side == "right" {
+		startY = targetY - GridHeight
+	}
 	y := float64(startY) + float64(targetY-startY)*eased
 	return int(math.Round(y))
 }

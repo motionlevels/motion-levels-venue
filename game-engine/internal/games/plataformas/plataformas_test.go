@@ -191,6 +191,25 @@ func TestCountdownGreenLoadAnimationCanBeDisabled(t *testing.T) {
 	}
 }
 
+func TestCountdownGreenLoadSideDefaultsLeftAndCanUseRight(t *testing.T) {
+	targetY := 12
+	if got := normalizeGreenPlatformLoadSide(""); got != "left" {
+		t.Fatalf("default green load side = %q, want left", got)
+	}
+	if got := countdownFallingY(targetY, 0, "left"); got != targetY+GridHeight {
+		t.Fatalf("left start y = %d, want %d", got, targetY+GridHeight)
+	}
+	if got := countdownFallingY(targetY, 0, "right"); got != targetY-GridHeight {
+		t.Fatalf("right start y = %d, want %d", got, targetY-GridHeight)
+	}
+	if got := countdownFallingY(targetY, 1, "left"); got != targetY {
+		t.Fatalf("left settled y = %d, want %d", got, targetY)
+	}
+	if got := countdownFallingY(targetY, 1, "right"); got != targetY {
+		t.Fatalf("right settled y = %d, want %d", got, targetY)
+	}
+}
+
 func TestDifficultySettingsOverrideRuntimeTimingAndLimits(t *testing.T) {
 	levels, err := compileCloudLevels([]cloudLevel{{
 		Slug:             "level-1",

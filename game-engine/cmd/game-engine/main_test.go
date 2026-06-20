@@ -171,8 +171,8 @@ func TestCountdownOverlayDigitUsesFloorSpaceOrientation(t *testing.T) {
 	}
 	width := maxX - minX + 1
 	height := maxY - minY + 1
-	if width != 10 || height != 14 {
-		t.Fatalf("countdown digit bounds = %dx%d, want floor-space 10x14", width, height)
+	if width != 8 || height != 12 {
+		t.Fatalf("countdown digit bounds = %dx%d, want compact floor-space 8x12", width, height)
 	}
 }
 
