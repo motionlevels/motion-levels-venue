@@ -141,7 +141,7 @@ func TestCountdownOverlayDigit(t *testing.T) {
 	}
 }
 
-func TestCountdownOverlayDigitIsRotated(t *testing.T) {
+func TestCountdownOverlayDigitUsesFloorSpaceOrientation(t *testing.T) {
 	frame := make([]animation.RGB, animation.GridWidth*animation.GridHeight)
 	drawCountdownDigit(frame, 3)
 
@@ -171,8 +171,8 @@ func TestCountdownOverlayDigitIsRotated(t *testing.T) {
 	}
 	width := maxX - minX + 1
 	height := maxY - minY + 1
-	if width != 14 || height != 10 {
-		t.Fatalf("countdown digit bounds = %dx%d, want rotated 14x10", width, height)
+	if width != 10 || height != 14 {
+		t.Fatalf("countdown digit bounds = %dx%d, want floor-space 10x14", width, height)
 	}
 }
 
