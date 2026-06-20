@@ -51,7 +51,6 @@ type MenuState = {
   challengeRuns: Record<string, ChallengeRun>;
   nextPlayerId: number;
   narrationArmed: Record<string, boolean>;
-  countdownOverlayArmed: Record<string, boolean>;
   operatorUnlockLevels: boolean;
 };
 
@@ -593,6 +592,7 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
     previewAnimation: catalogPreviewAnimation(entry, fallback, engineGame, preferFallbackAnimation),
     supportsLevels,
     sourceKind: entry.source_kind || fallback?.sourceKind,
+    countdownFloorOverlay: entry.countdown_floor_overlay === true,
     revisionHash: entry.revision_hash || fallback?.revisionHash,
     disabled: false,
   };
@@ -907,7 +907,6 @@ function loadMenuState(): MenuState {
     const saved = JSON.parse(localStorage.getItem(storageKey) || "null") as Partial<MenuState> | null;
     if (saved && typeof saved === "object") {
       const narrationArmed = saved.narrationArmed && typeof saved.narrationArmed === "object" ? saved.narrationArmed : {};
-      const countdownOverlayArmed = saved.countdownOverlayArmed && typeof saved.countdownOverlayArmed === "object" ? saved.countdownOverlayArmed : {};
       const selectedLevels = saved.selectedLevels && typeof saved.selectedLevels === "object" ? saved.selectedLevels : {};
       const levelModes = normalizeLevelModes(saved.levelModes);
       const levelProgress = saved.levelProgress && typeof saved.levelProgress === "object" ? saved.levelProgress : {};
@@ -938,7 +937,6 @@ function loadMenuState(): MenuState {
         players: cleanedPlayers.length ? cleanedPlayers : defaultPlayers,
         nextPlayerId: saved.nextPlayerId || cleanedPlayers.length || 1,
         narrationArmed,
-        countdownOverlayArmed,
         operatorUnlockLevels: envUnlockLevels || Boolean(saved.operatorUnlockLevels),
       };
     }
@@ -960,7 +958,6 @@ function loadMenuState(): MenuState {
     challengeRuns: {},
     nextPlayerId: 1,
     narrationArmed: {},
-    countdownOverlayArmed: {},
     operatorUnlockLevels: envUnlockLevels,
   };
 }
@@ -1840,7 +1837,6 @@ function MenuApp() {
       challengeRuns: {},
       nextPlayerId: Math.max(0, ...nextPlayers.map((player) => player.id)),
       narrationArmed: {},
-      countdownOverlayArmed: {},
     }));
     if (remoteRequest) {
       setRemoteSessionRequest(null);
@@ -1892,7 +1888,6 @@ function MenuApp() {
       challengeRuns: {},
       nextPlayerId: 1,
       narrationArmed: {},
-      countdownOverlayArmed: {},
     }));
     setKeyboardTarget(null);
     setColorPickerFor(null);
@@ -2267,15 +2262,6 @@ function MenuApp() {
     return state.narrationArmed[game.id] ?? true;
   }
 
-  function supportsCountdownOverlay(game: GameCard): boolean {
-    return Boolean(game.levels?.length);
-  }
-
-  function countdownOverlayArmedFor(game: GameCard, state = menu): boolean {
-    if (!supportsCountdownOverlay(game)) return false;
-    return state.countdownOverlayArmed[game.id] ?? false;
-  }
-
   function setNarrationArmed(game: GameCard, armed: boolean) {
     captureMenuEvent("narration_toggled", {
       engine_game: engineGameID(game),
@@ -2290,21 +2276,6 @@ function MenuApp() {
       },
     }));
     setMessage((current) => (current.startsWith("Narración") ? "" : current));
-  }
-
-  function setCountdownOverlayArmed(game: GameCard, armed: boolean) {
-    captureMenuEvent("countdown_floor_overlay_toggled", {
-      countdown_floor_overlay: armed,
-      engine_game: engineGameID(game),
-      game: game.id,
-    });
-    setMenu((current) => ({
-      ...current,
-      countdownOverlayArmed: {
-        ...current.countdownOverlayArmed,
-        [game.id]: armed,
-      },
-    }));
   }
 
   async function launch(gameID = selectedGame.id, options: { difficulty?: DifficultyID; levelID?: string; partyIndex?: number; partyScore?: number } = {}) {
@@ -2357,7 +2328,7 @@ function MenuApp() {
       return;
     }
     const playNarration = narrationArmedFor(game, nextMenu);
-    const showCountdownOverlay = countdownOverlayArmedFor(launchGame, nextMenu);
+    const showCountdownOverlay = launchGame.countdownFloorOverlay === true;
     const launchRoster = rosterForGame(game, nextMenu.players);
     const selectedLevelID = partyFirstMiniGame?.level || levelOverride || selectedLevelFor(launchGame, nextMenu);
     const launchLevel = launchGame.levels?.find((level) => level.id === selectedLevelID);
@@ -2426,7 +2397,7 @@ function MenuApp() {
       level_number: selectedLevelID ? levelNumber(selectedLevelID) : undefined,
       level_mode: launchGame.levels?.length ? levelModeFor(launchGame, nextMenu) : undefined,
       narration_enabled: supportsNarration(game) ? playNarration : false,
-      countdown_floor_overlay: supportsCountdownOverlay(launchGame) ? showCountdownOverlay : false,
+      countdown_floor_overlay: showCountdownOverlay,
       player_count: launchRoster.length,
       venue_session_id: nextMenu.sessionId,
     });
@@ -2452,7 +2423,7 @@ function MenuApp() {
         level: selectedLevelID || undefined,
         durationSeconds: launchGame.estimatedDurationSeconds || undefined,
         narrationEnabled: supportsNarration(launchGame) ? playNarration : false,
-        countdownFloorOverlay: supportsCountdownOverlay(launchGame) ? showCountdownOverlay : false,
+        countdownFloorOverlay: showCountdownOverlay,
         teamName: nextMenu.teamName.trim(),
         players: launchRoster.map((player, index) => ({
           index,
@@ -2791,9 +2762,6 @@ function MenuApp() {
           narrationSupported={supportsNarration(launchedGame)}
           narrationArmed={narrationArmedFor(launchedGame)}
           onNarrationToggle={() => setNarrationArmed(launchedGame, !narrationArmedFor(launchedGame))}
-          countdownOverlaySupported={supportsCountdownOverlay(launchedGame)}
-          countdownOverlayArmed={countdownOverlayArmedFor(launchedGame)}
-          onCountdownOverlayToggle={() => setCountdownOverlayArmed(launchedGame, !countdownOverlayArmedFor(launchedGame))}
           exitLabel={launchedLevelActive ? "Terminar nivel" : "Salir del juego"}
           onExit={() => sendGameControl("exit")}
         />
@@ -3167,17 +3135,6 @@ function MenuApp() {
                     >
                       <BoltIcon />
                       {narrationArmedFor(selectedGame) ? "Narración ON" : "Narración OFF"}
-                    </button>
-                  ) : null}
-                  {supportsCountdownOverlay(selectedGame) ? (
-                    <button
-                      className={`btn launch-toggle countdown-floor-toggle ${countdownOverlayArmedFor(selectedGame) ? "active" : ""}`}
-                      type="button"
-                      aria-pressed={countdownOverlayArmedFor(selectedGame)}
-                      onClick={() => setCountdownOverlayArmed(selectedGame, !countdownOverlayArmedFor(selectedGame))}
-                    >
-                      <SparkIcon />
-                      {countdownOverlayArmedFor(selectedGame) ? "3-2-1 ON" : "3-2-1 OFF"}
                     </button>
                   ) : null}
                   <button className={`btn primary play ${loadingVisual ? "loading" : ""} ${rosterAction ? "roster-action" : ""}`} type="button" disabled={launchDisabled} aria-busy={loadingVisual} onClick={handleLaunchAction}>
@@ -3589,9 +3546,6 @@ function GameControlScreen({
   narrationSupported,
   narrationArmed,
   onNarrationToggle,
-  countdownOverlaySupported,
-  countdownOverlayArmed,
-  onCountdownOverlayToggle,
   exitLabel,
   onExit,
 }: {
@@ -3626,9 +3580,6 @@ function GameControlScreen({
   narrationSupported: boolean;
   narrationArmed: boolean;
   onNarrationToggle: () => void;
-  countdownOverlaySupported: boolean;
-  countdownOverlayArmed: boolean;
-  onCountdownOverlayToggle: () => void;
   exitLabel: string;
   onExit: () => void;
 }) {
@@ -3793,17 +3744,6 @@ function GameControlScreen({
           >
             <BoltIcon />
             {narrationArmed ? "Narración ON" : "Narración OFF"}
-          </button>
-        ) : null}
-        {countdownOverlaySupported ? (
-          <button
-            className={`btn control-action launch-toggle countdown-floor-toggle ${countdownOverlayArmed ? "active" : ""}`}
-            type="button"
-            aria-pressed={countdownOverlayArmed}
-            onClick={onCountdownOverlayToggle}
-          >
-            <SparkIcon />
-            {countdownOverlayArmed ? "3-2-1 ON" : "3-2-1 OFF"}
           </button>
         ) : null}
         <button className="btn control-action danger" type="button" onClick={onExit}>

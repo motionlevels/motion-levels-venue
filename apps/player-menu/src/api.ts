@@ -55,6 +55,7 @@ export type PlatformGameCatalogEntry = {
   difficulties?: string[];
   default_music_ref: string;
   default_music_volume: number;
+  countdown_floor_overlay?: boolean;
   source_kind: string;
   code_editable: boolean;
   revision_hash?: string;
