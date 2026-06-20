@@ -51,8 +51,10 @@ func drawCountdownDigit(frame []animation.RGB, digit int) {
 		return
 	}
 	const scale = 2
-	width := len(pattern[0]) * scale
-	height := len(pattern) * scale
+	patternWidth := len(pattern[0])
+	patternHeight := len(pattern)
+	width := patternHeight * scale
+	height := patternWidth * scale
 	startX := (animation.GridWidth - width) / 2
 	startY := (animation.GridHeight - height) / 2
 	yellow := animation.RGB{R: 255, G: 224, B: 32}
@@ -61,10 +63,12 @@ func drawCountdownDigit(frame []animation.RGB, digit int) {
 			if lit != '1' {
 				continue
 			}
+			rotatedX := patternHeight - 1 - py
+			rotatedY := px
 			for sy := 0; sy < scale; sy++ {
 				for sx := 0; sx < scale; sx++ {
-					x := startX + px*scale + sx
-					y := startY + py*scale + sy
+					x := startX + rotatedX*scale + sx
+					y := startY + rotatedY*scale + sy
 					if x < 0 || x >= animation.GridWidth || y < 0 || y >= animation.GridHeight {
 						continue
 					}

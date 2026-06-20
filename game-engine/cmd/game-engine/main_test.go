@@ -141,6 +141,41 @@ func TestCountdownOverlayDigit(t *testing.T) {
 	}
 }
 
+func TestCountdownOverlayDigitIsRotated(t *testing.T) {
+	frame := make([]animation.RGB, animation.GridWidth*animation.GridHeight)
+	drawCountdownDigit(frame, 3)
+
+	minX, minY := animation.GridWidth, animation.GridHeight
+	maxX, maxY := -1, -1
+	for i, tile := range frame {
+		if tile.R != 255 || tile.G != 224 || tile.B != 32 {
+			continue
+		}
+		x := i % animation.GridWidth
+		y := i / animation.GridWidth
+		if x < minX {
+			minX = x
+		}
+		if x > maxX {
+			maxX = x
+		}
+		if y < minY {
+			minY = y
+		}
+		if y > maxY {
+			maxY = y
+		}
+	}
+	if maxX < 0 {
+		t.Fatal("countdown digit did not draw any yellow tiles")
+	}
+	width := maxX - minX + 1
+	height := maxY - minY + 1
+	if width != 14 || height != 10 {
+		t.Fatalf("countdown digit bounds = %dx%d, want rotated 14x10", width, height)
+	}
+}
+
 func countCountdownYellowTiles(frame *recordingpb.FrameRecord) int {
 	count := 0
 	for _, tile := range frame.GetTiles() {
