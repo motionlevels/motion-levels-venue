@@ -4280,7 +4280,8 @@ button.capsule:disabled,
   border-radius: var(--r-md);
 }
 
-.narration-toggle {
+.narration-toggle,
+.launch-toggle {
   min-height: 84px;
   padding: 0 28px;
   font-size: 22px;
@@ -4455,7 +4456,8 @@ button.capsule:disabled,
   }
 
   .btn.primary.play,
-  .narration-toggle {
+  .narration-toggle,
+  .launch-toggle {
     min-height: 58px;
   }
 }

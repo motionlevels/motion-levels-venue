@@ -390,20 +390,34 @@ func run(cfg config, runtime *gameRuntime) error {
 	writer := bufio.NewWriterSize(conn, 1<<20)
 	ticker := time.NewTicker(time.Duration(float64(time.Second) / float64(cfg.FPS)))
 	defer ticker.Stop()
+	frameInterval := time.Duration(float64(time.Second) / float64(cfg.FPS))
 
 	startedAt := time.Now()
 	if runtime != nil && cfg.PressureAddr != "" {
 		go pressureEventLoop(ctx, cfg, runtime, startedAt)
 	}
 	var sequence uint64
+	var lastReplayFrame *recordingpb.FrameRecord
 	for now := range ticker.C {
 		sequence++
 		frame := makeFrame(sequence, now, now.Sub(startedAt).Seconds(), runtime)
 		if replayRecorder, ok := runtime.recorder.(interface {
 			RecordFrame(*recordingpb.FrameRecord) error
 		}); ok {
+			for _, catchUpFrame := range replayCatchUpFrames(lastReplayFrame, frame, frameInterval) {
+				if err := replayRecorder.RecordFrame(catchUpFrame); err != nil {
+					log.Printf("replay catch-up frame: %v", err)
+				}
+				lastReplayFrame = catchUpFrame
+			}
+			sequence = frame.GetSequence()
 			if err := replayRecorder.RecordFrame(frame); err != nil {
 				log.Printf("replay frame: %v", err)
+			}
+			if strings.TrimSpace(frame.GetSessionId()) != "" {
+				lastReplayFrame = cloneFrameRecord(frame)
+			} else {
+				lastReplayFrame = nil
 			}
 		}
 		if err := pbstream.Write(writer, frame); err != nil {
@@ -610,4 +624,70 @@ func makeFrame(sequence uint64, now time.Time, seconds float64, runtime *gameRun
 		}
 	}
 	return frame
+}
+
+const maxReplayCatchUpFrames = 600
+
+func replayCatchUpFrames(previous *recordingpb.FrameRecord, current *recordingpb.FrameRecord, frameInterval time.Duration) []*recordingpb.FrameRecord {
+	if previous == nil || current == nil || frameInterval <= 0 {
+		return nil
+	}
+	if strings.TrimSpace(previous.GetSessionId()) == "" || previous.GetSessionId() != current.GetSessionId() {
+		return nil
+	}
+	previousTime := time.Unix(0, previous.GetUnixNanos())
+	currentTime := time.Unix(0, current.GetUnixNanos())
+	if !currentTime.After(previousTime) {
+		return nil
+	}
+	tolerance := frameInterval / 2
+	if tolerance <= 0 {
+		tolerance = frameInterval
+	}
+	nextSequence := current.GetSequence()
+	frames := make([]*recordingpb.FrameRecord, 0)
+	for expected := previousTime.Add(frameInterval); !expected.Add(tolerance).After(currentTime); expected = expected.Add(frameInterval) {
+		catchUp := cloneFrameRecord(previous)
+		setFrameRecordSequence(catchUp, nextSequence)
+		catchUp.UnixNanos = expected.UnixNano()
+		if catchUp.GetGameUnixNanos() != 0 {
+			catchUp.GameUnixNanos = expected.UnixNano()
+		}
+		frames = append(frames, catchUp)
+		nextSequence++
+		if len(frames) >= maxReplayCatchUpFrames {
+			break
+		}
+	}
+	if len(frames) > 0 {
+		setFrameRecordSequence(current, nextSequence)
+	}
+	return frames
+}
+
+func setFrameRecordSequence(frame *recordingpb.FrameRecord, sequence uint64) {
+	if frame == nil {
+		return
+	}
+	previousSequence := frame.GetSequence()
+	frame.Sequence = sequence
+	if frame.GetGameFrameSequence() == 0 || frame.GetGameFrameSequence() == previousSequence {
+		frame.GameFrameSequence = sequence
+	}
+}
+
+func cloneFrameRecord(frame *recordingpb.FrameRecord) *recordingpb.FrameRecord {
+	if frame == nil {
+		return nil
+	}
+	clone := *frame
+	clone.Tiles = make([]*recordingpb.TileState, len(frame.GetTiles()))
+	for i, tile := range frame.GetTiles() {
+		if tile == nil {
+			continue
+		}
+		tileClone := *tile
+		clone.Tiles[i] = &tileClone
+	}
+	return &clone
 }

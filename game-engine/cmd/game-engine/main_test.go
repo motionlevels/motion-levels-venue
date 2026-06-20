@@ -23,6 +23,7 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
 	"github.com/lobis/motion-levels/packages/contracts/gamepb"
 	"github.com/lobis/motion-levels/packages/contracts/inputpb"
+	"github.com/lobis/motion-levels/packages/contracts/recordingpb"
 )
 
 func TestMakeFrameProducesCompleteLogicalBoard(t *testing.T) {
@@ -46,6 +47,108 @@ func TestMakeFrameOmitsSessionLineageForAmbientGames(t *testing.T) {
 	if frame.SessionId != "" || frame.VenueSessionId != "" {
 		t.Fatalf("ambient frame lineage = session %q venue %q, want empty", frame.SessionId, frame.VenueSessionId)
 	}
+}
+
+func TestReplayCatchUpFramesRepeatPreviousSessionFrame(t *testing.T) {
+	started := time.Unix(100, 0)
+	previous := &recordingpb.FrameRecord{
+		Sequence:          7,
+		UnixNanos:         started.UnixNano(),
+		Width:             2,
+		Height:            1,
+		SessionId:         "session-1",
+		VenueSessionId:    "venue-1",
+		GameFrameSequence: 7,
+		GameUnixNanos:     started.UnixNano(),
+		Tiles: []*recordingpb.TileState{
+			{X: 0, Y: 0, R: 10, G: 20, B: 30},
+			{X: 1, Y: 0, R: 40, G: 50, B: 60},
+		},
+	}
+	current := cloneFrameRecord(previous)
+	current.Sequence = 8
+	current.GameFrameSequence = 8
+	current.UnixNanos = started.Add(70 * time.Millisecond).UnixNano()
+	current.GameUnixNanos = current.UnixNanos
+
+	catchUps := replayCatchUpFrames(previous, current, 20*time.Millisecond)
+	if len(catchUps) != 3 {
+		t.Fatalf("catch-up frames = %d, want 3", len(catchUps))
+	}
+	for i, frame := range catchUps {
+		wantSequence := uint64(8 + i)
+		if frame.Sequence != wantSequence || frame.GameFrameSequence != wantSequence {
+			t.Fatalf("catch-up %d sequence = %d/%d, want %d", i, frame.Sequence, frame.GameFrameSequence, wantSequence)
+		}
+		wantUnix := started.Add(time.Duration(i+1) * 20 * time.Millisecond).UnixNano()
+		if frame.UnixNanos != wantUnix || frame.GameUnixNanos != wantUnix {
+			t.Fatalf("catch-up %d unix = %d/%d, want %d", i, frame.UnixNanos, frame.GameUnixNanos, wantUnix)
+		}
+	}
+	if current.Sequence != 11 || current.GameFrameSequence != 11 {
+		t.Fatalf("current sequence = %d/%d, want 11", current.Sequence, current.GameFrameSequence)
+	}
+	catchUps[0].Tiles[0].R = 99
+	if previous.Tiles[0].R == 99 {
+		t.Fatal("catch-up frame reused previous tile pointers")
+	}
+}
+
+func TestReplayCatchUpFramesSkipSessionChanges(t *testing.T) {
+	previous := &recordingpb.FrameRecord{
+		Sequence:  7,
+		UnixNanos: time.Unix(0, 0).UnixNano(),
+		SessionId: "session-1",
+	}
+	current := &recordingpb.FrameRecord{
+		Sequence:  8,
+		UnixNanos: time.Unix(0, int64(70*time.Millisecond)).UnixNano(),
+		SessionId: "session-2",
+	}
+	if got := replayCatchUpFrames(previous, current, 20*time.Millisecond); len(got) != 0 {
+		t.Fatalf("catch-up frames across session change = %d, want 0", len(got))
+	}
+	if current.Sequence != 8 {
+		t.Fatalf("current sequence changed to %d across session boundary", current.Sequence)
+	}
+}
+
+func TestCountdownFloorOverlayIsOptIn(t *testing.T) {
+	disabled := newGameRuntime(config{Brightness: 100, PlayerCount: 2, Game: "temporada1", Difficulty: "medium", Level: "level-1"}, nil, nil)
+	disabledFrame := makeFrame(1, disabled.started.Add(500*time.Millisecond), 0, disabled)
+	if got := countCountdownYellowTiles(disabledFrame); got != 0 {
+		t.Fatalf("disabled countdown overlay yellow tiles = %d, want 0", got)
+	}
+
+	enabled := newGameRuntime(config{Brightness: 100, PlayerCount: 2, Game: "temporada1", Difficulty: "medium", Level: "level-1", CountdownFloorOverlay: true}, nil, nil)
+	enabledFrame := makeFrame(2, enabled.started.Add(500*time.Millisecond), 0, enabled)
+	if got := countCountdownYellowTiles(enabledFrame); got == 0 {
+		t.Fatal("enabled countdown overlay did not draw yellow digit tiles")
+	}
+}
+
+func TestCountdownOverlayDigit(t *testing.T) {
+	tests := map[int64]int{
+		2500: 3,
+		1500: 2,
+		500:  1,
+		0:    0,
+	}
+	for remaining, want := range tests {
+		if got := countdownOverlayDigit(remaining); got != want {
+			t.Fatalf("countdownOverlayDigit(%d) = %d, want %d", remaining, got, want)
+		}
+	}
+}
+
+func countCountdownYellowTiles(frame *recordingpb.FrameRecord) int {
+	count := 0
+	for _, tile := range frame.GetTiles() {
+		if tile.GetR() == 255 && tile.GetG() == 224 && tile.GetB() == 32 {
+			count++
+		}
+	}
+	return count
 }
 
 func TestAmbientActivityClassifierDoesNotTreatUnknownGamesAsAmbient(t *testing.T) {

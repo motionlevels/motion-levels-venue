@@ -348,6 +348,7 @@ func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficult
 			mode = narrationSkip
 		}
 	}
+	preparedIntroHold := r.preparedLaunchIntroHold(cfg, mode)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now()
@@ -356,7 +357,7 @@ func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficult
 		r.startVenueLocked(cfg.VenueSessionID, cfg.TeamName, "", now, true)
 		r.venueLastActivity = now
 	}
-	r.applyLockedWithNarration(cfg, true, mode)
+	r.applyLockedWithNarrationPrepared(cfg, true, mode, preparedIntroHold)
 	r.recordLocked(now, func(record *gamepb.GameSessionRecord) {
 		record.Payload = &gamepb.GameSessionRecord_MenuCommand{MenuCommand: &gamepb.MenuCommand{
 			Command:     "select_game",
@@ -1109,7 +1110,15 @@ func (r *gameRuntime) applyLockedWithNarration(cfg config, playAudio bool, mode 
 	r.applyLockedWithNarrationReason(cfg, playAudio, mode, "game changed")
 }
 
+func (r *gameRuntime) applyLockedWithNarrationPrepared(cfg config, playAudio bool, mode narrationMode, preparedIntroHold time.Duration) {
+	r.applyLockedWithNarrationReasonPrepared(cfg, playAudio, mode, "game changed", preparedIntroHold)
+}
+
 func (r *gameRuntime) applyLockedWithNarrationReason(cfg config, playAudio bool, mode narrationMode, endReason string) {
+	r.applyLockedWithNarrationReasonPrepared(cfg, playAudio, mode, endReason, -1)
+}
+
+func (r *gameRuntime) applyLockedWithNarrationReasonPrepared(cfg config, playAudio bool, mode narrationMode, endReason string, preparedIntroHold time.Duration) {
 	now := time.Now()
 	if r.sessionID != "" {
 		r.finishActiveLevelAttemptLocked("abandoned", displayStatus{}, now)
@@ -1129,7 +1138,11 @@ func (r *gameRuntime) applyLockedWithNarrationReason(cfg config, playAudio bool,
 	cfg = applyPlataformasAudioConfig(cfg, game)
 	introHold := time.Duration(0)
 	if playAudio && r.shouldNarrateLocked(cfg, mode) {
-		introHold = r.narrationHoldDurationLocked(cfg)
+		if preparedIntroHold >= 0 {
+			introHold = preparedIntroHold
+		} else {
+			introHold = r.narrationHoldDuration(cfg)
+		}
 	}
 	gameNow := now.Add(introHold)
 	if introHold > 0 {
@@ -1173,6 +1186,22 @@ func (r *gameRuntime) applyLockedWithNarrationReason(cfg config, playAudio bool,
 	if playAudio {
 		r.startAudioLocked(cfg, now, introHold, mode)
 	}
+}
+
+func (r *gameRuntime) preparedLaunchIntroHold(cfg config, mode narrationMode) time.Duration {
+	if r == nil {
+		return 0
+	}
+	cfg.normalize()
+	audioGame := makeGame(cfg, time.Now().UnixNano(), time.Now())
+	cfg = applyPlataformasAudioConfig(cfg, audioGame)
+	r.mu.RLock()
+	shouldNarrate := r.shouldNarrateLocked(cfg, mode)
+	r.mu.RUnlock()
+	if !shouldNarrate {
+		return 0
+	}
+	return r.narrationHoldDuration(cfg)
 }
 
 func applyPlataformasAudioConfig(cfg config, game floorGame) config {
@@ -1438,7 +1467,7 @@ func narrationKey(cfg config) string {
 	return normalizeGame(cfg.Game) + "\x00" + ref
 }
 
-func (r *gameRuntime) narrationHoldDurationLocked(cfg config) time.Duration {
+func (r *gameRuntime) narrationHoldDuration(cfg config) time.Duration {
 	if r.audio == nil || cfg.NarrationCueRef == "" {
 		return 0
 	}
