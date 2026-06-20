@@ -130,6 +130,67 @@ func TestParkourLavaRuleAnimatesRedTiles(t *testing.T) {
 	}
 }
 
+func TestCountdownDropsSafeZonesIntoPlaceByDefault(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        "level-1",
+		Label:       "Load animation",
+		Difficulty:  string(DifficultyMedium),
+		Life:        5,
+		FrameTickMS: 25,
+		Frames: []rawFrame{{
+			Repeat: 40,
+			Cells: []cellTuple{
+				{X: 5, Y: 28, Kind: 0},
+				{X: 6, Y: 28, Kind: 0},
+				{X: 5, Y: 27, Kind: 0},
+				{X: 7, Y: 28, Kind: 2},
+			},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(100, 0)
+	game := &Game{level: levels[0], createdAt: now, startedAt: now.Add(countdownDuration)}
+
+	early := game.Render(now.Add(time.Second))
+	if got := countVisibleGreen(early); got == 0 {
+		t.Fatalf("visible green tiles during countdown = %d, want falling safe zones", got)
+	}
+	if hazard := early[28*GridWidth+7]; hazard != (RGB{}) {
+		t.Fatalf("hazard during countdown = %+v, want hidden while load animation plays", hazard)
+	}
+
+	settled := game.Render(game.startedAt.Add(-50 * time.Millisecond))
+	if color := settled[28*GridWidth+5]; color.G < 220 || color.R != 0 {
+		t.Fatalf("settled safe tile color = %+v, want bright green at target position", color)
+	}
+}
+
+func TestCountdownGreenLoadAnimationCanBeDisabled(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        "level-1",
+		Label:       "Load animation off",
+		Difficulty:  string(DifficultyMedium),
+		Life:        5,
+		FrameTickMS: 25,
+		Rules:       levelRules{GreenPlatformLoad: boolPtr(false)},
+		Frames: []rawFrame{{
+			Repeat: 40,
+			Cells:  []cellTuple{{X: 5, Y: 28, Kind: 0}},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(100, 0)
+	game := &Game{level: levels[0], createdAt: now, startedAt: now.Add(countdownDuration)}
+
+	if got := countVisibleGreen(game.Render(now.Add(time.Second))); got != 0 {
+		t.Fatalf("visible green tiles during disabled countdown = %d, want none", got)
+	}
+}
+
 func TestDifficultySettingsOverrideRuntimeTimingAndLimits(t *testing.T) {
 	levels, err := compileCloudLevels([]cloudLevel{{
 		Slug:             "level-1",
@@ -481,4 +542,18 @@ func colorDistance(a RGB, b RGB) float64 {
 	dg := float64(a.G) - float64(b.G)
 	db := float64(a.B) - float64(b.B)
 	return math.Sqrt(dr*dr + dg*dg + db*db)
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func countVisibleGreen(frame []RGB) int {
+	count := 0
+	for _, color := range frame {
+		if color.G > 180 && color.R < 32 && color.B > 40 {
+			count++
+		}
+	}
+	return count
 }

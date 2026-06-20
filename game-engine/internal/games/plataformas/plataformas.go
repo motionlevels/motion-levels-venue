@@ -129,26 +129,27 @@ type Game struct {
 }
 
 type compiledLevel struct {
-	id               string
-	settingsHash     string
-	label            string
-	description      string
-	lives            int
-	passScore        int
-	timeLimit        time.Duration
-	frameTick        time.Duration
-	winCondition     string
-	redAnimation     string
+	id                string
+	settingsHash      string
+	label             string
+	description       string
+	lives             int
+	passScore         int
+	timeLimit         time.Duration
+	frameTick         time.Duration
+	winCondition      string
+	redAnimation      string
 	victoryAnimations []string
 	defeatAnimations  []string
-	greenFade        bool
-	greenImpact      bool
-	blueTurnGreen    bool
-	blueCapture      bool
-	totalDuration    time.Duration
-	frames           []compiledFrame
-	scoreUniqs       map[string]struct{}
-	audio            AudioRefs
+	greenFade         bool
+	greenImpact       bool
+	greenLoad         bool
+	blueTurnGreen     bool
+	blueCapture       bool
+	totalDuration     time.Duration
+	frames            []compiledFrame
+	scoreUniqs        map[string]struct{}
+	audio             AudioRefs
 }
 
 type compiledFrame struct {
@@ -210,6 +211,7 @@ type levelRules struct {
 	DefeatAnimations          []string                     `json:"defeat_animations"`
 	DifficultySettings        map[string]difficultySetting `json:"difficulty_settings"`
 	RedFloorAnimation         string                       `json:"red_floor_animation"`
+	GreenPlatformLoad         *bool                        `json:"green_platform_load_animation"`
 	GreenPlatformDisappear    bool                         `json:"green_platform_disappear"`
 	GreenPlatformImpactRipple bool                         `json:"green_platform_impact_ripple"`
 	BluePlatformTurnGreen     bool                         `json:"blue_platform_turn_green"`
@@ -884,17 +886,28 @@ func (g *Game) framePositionAtLocked(now time.Time) (*compiledFrame, int, time.D
 }
 
 func (g *Game) countdownColorAtLocked(pt Point, now time.Time) RGB {
+	if !g.level.greenLoad {
+		return RGB{}
+	}
+	return g.safeZoneCountdownColorAtLocked(pt, now)
+}
+
+func (g *Game) safeZoneCountdownColorAtLocked(pt Point, now time.Time) RGB {
 	if len(g.level.frames) == 0 {
 		return RGB{}
 	}
-	point := g.level.frames[0].points[pt.Y][pt.X]
-	if point.kind != 0 {
-		return RGB{}
+	progress := countdownProgress(now, g.createdAt, g.startedAt)
+	safeTiles := countdownSafeTiles(&g.level.frames[0])
+	for order, target := range safeTiles {
+		tileProgress := countdownTileProgress(progress, order, len(safeTiles))
+		if tileProgress < 0 {
+			continue
+		}
+		if target.X == pt.X && countdownFallingY(target.Y, tileProgress) == pt.Y {
+			return countdownPulseGreen(target, now, g.createdAt)
+		}
 	}
-	if int(now.Sub(g.createdAt)/(180*time.Millisecond))%2 == 0 {
-		return RGB{G: 140}
-	}
-	return RGB{G: 255}
+	return RGB{}
 }
 
 func (g *Game) playersLocked() []PlayerSnapshot {
@@ -1009,24 +1022,25 @@ func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
 			winCondition = "collect_all"
 		}
 		compiled := compiledLevel{
-			id:               NormalizeLevel(id),
-			settingsHash:     strings.TrimSpace(level.SettingsHash),
-			label:            level.Label,
-			description:      level.Description,
-			lives:            lives,
-			passScore:        level.PassScore,
-			timeLimit:        timeLimit,
-			frameTick:        frameTick,
-			winCondition:     winCondition,
-			redAnimation:     normalizeRedFloorAnimation(level.Rules.RedFloorAnimation),
+			id:                NormalizeLevel(id),
+			settingsHash:      strings.TrimSpace(level.SettingsHash),
+			label:             level.Label,
+			description:       level.Description,
+			lives:             lives,
+			passScore:         level.PassScore,
+			timeLimit:         timeLimit,
+			frameTick:         frameTick,
+			winCondition:      winCondition,
+			redAnimation:      normalizeRedFloorAnimation(level.Rules.RedFloorAnimation),
 			victoryAnimations: normalizeResultAnimationList(level.Rules.VictoryAnimations, level.Rules.VictoryAnimation, "victory-pulse"),
 			defeatAnimations:  normalizeResultAnimationList(level.Rules.DefeatAnimations, level.Rules.DefeatAnimation, "defeat-pulse"),
-			greenFade:        level.Rules.GreenPlatformDisappear,
-			greenImpact:      level.Rules.GreenPlatformImpactRipple,
-			blueTurnGreen:    level.Rules.BluePlatformTurnGreen,
-			blueCapture:      level.Rules.BluePlatformCaptureArea,
-			scoreUniqs:       map[string]struct{}{},
-			audio:            normalizeAudioRefs(level),
+			greenFade:         level.Rules.GreenPlatformDisappear,
+			greenImpact:       level.Rules.GreenPlatformImpactRipple,
+			greenLoad:         boolDefaultTrue(level.Rules.GreenPlatformLoad),
+			blueTurnGreen:     level.Rules.BluePlatformTurnGreen,
+			blueCapture:       level.Rules.BluePlatformCaptureArea,
+			scoreUniqs:        map[string]struct{}{},
+			audio:             normalizeAudioRefs(level),
 		}
 		for _, frame := range level.Frames {
 			repeat := frame.Repeat
@@ -1159,6 +1173,10 @@ func normalizeRedFloorAnimation(value string) string {
 		return "parkour_lava"
 	}
 	return "none"
+}
+
+func boolDefaultTrue(value *bool) bool {
+	return value == nil || *value
 }
 
 func lavaColor(pt Point, now time.Time) RGB {
@@ -1412,6 +1430,77 @@ func playerColor(index int) RGB {
 		{R: 255, G: 255},
 	}
 	return colors[index%len(colors)]
+}
+
+func countdownProgress(now, createdAt, startedAt time.Time) float64 {
+	total := startedAt.Sub(createdAt)
+	if total <= 0 {
+		return 1
+	}
+	progress := float64(now.Sub(createdAt)) / float64(total)
+	if progress < 0 {
+		return 0
+	}
+	if progress > 1 {
+		return 1
+	}
+	return progress
+}
+
+func countdownTileProgress(countdownProgress float64, order int, total int) float64 {
+	if total <= 1 {
+		return countdownProgress
+	}
+	// Spread the starts across the countdown, but leave a final beat where all tiles are settled.
+	delay := float64(order) / float64(total-1) * 0.68
+	fallDuration := 0.24
+	progress := (countdownProgress - delay) / fallDuration
+	if progress < 0 {
+		return -1
+	}
+	if progress > 1 {
+		return 1
+	}
+	return progress
+}
+
+func countdownFallingY(targetY int, tileProgress float64) int {
+	if tileProgress < 0 {
+		tileProgress = 0
+	}
+	if tileProgress > 1 {
+		tileProgress = 1
+	}
+	eased := 1 - math.Pow(1-tileProgress, 3)
+	startY := targetY - GridHeight
+	y := float64(startY) + float64(targetY-startY)*eased
+	return int(math.Round(y))
+}
+
+func countdownSafeTiles(frame *compiledFrame) []Point {
+	if frame == nil {
+		return nil
+	}
+	tiles := []Point{}
+	for y := GridHeight - 1; y >= 0; y-- {
+		for x := 0; x < GridWidth; x++ {
+			point := frame.points[y][x]
+			if point.present && point.kind == 0 {
+				tiles = append(tiles, Point{X: x, Y: y})
+			}
+		}
+	}
+	return tiles
+}
+
+func countdownPulseGreen(pt Point, now time.Time, createdAt time.Time) RGB {
+	phase := now.Sub(createdAt).Seconds()*math.Pi*4 + float64(pt.X+pt.Y)*0.22
+	pulse := 0.5 + 0.5*math.Sin(phase)
+	return RGB{
+		R: 0,
+		G: byte(232 + 23*pulse),
+		B: byte(68 + 18*pulse),
+	}
 }
 
 func levelNumber(id string) int {
