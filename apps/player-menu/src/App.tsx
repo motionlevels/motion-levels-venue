@@ -400,6 +400,10 @@ function platformEntryEngineGame(entry: PlatformGameCatalogEntry): string {
   return entry.engine_game || entry.id;
 }
 
+function isParkourPreviewGame(engineGame: string): boolean {
+  return engineGame === "parkour" || engineGame === "parkour2";
+}
+
 function isPlatformLevelSource(entry: PlatformGameCatalogEntry): boolean {
   return entry.source_kind === "platform_levels";
 }
@@ -512,7 +516,9 @@ function catalogPreviewAnimation(
 
 function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, index: number): GameCard {
   const engineGame = platformEntryEngineGame(entry);
-  const preferFallbackAnimation = shouldPreferCatalogFallbackPreviewAnimation(entry, fallback);
+  const forceParkourAnimation = isParkourPreviewGame(engineGame);
+  const preferFallbackAnimation = forceParkourAnimation || shouldPreferCatalogFallbackPreviewAnimation(entry, fallback);
+  const previewAnimation = forceParkourAnimation ? "parkour" : catalogPreviewAnimation(entry, fallback, engineGame, preferFallbackAnimation);
   const thumbnailSrcs = preferFallbackAnimation ? [] : catalogThumbnailMediaSrcs(entry, fallback);
   const previewSrcs = preferFallbackAnimation ? [] : catalogPreviewMediaSrcs(entry, fallback, thumbnailSrcs);
   const thumbnailSrc = thumbnailSrcs[0];
@@ -528,14 +534,14 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
 	        if (!levelID) return byID;
 	        const fallbackLevel = fallback?.levels?.find((level) => level.id === levelID || level.id === lvl.id);
 	        const levelDifficulties = platformLevelSupportedDifficulties(lvl);
-	        const platformThumbnailSrcs = uniquePreviewSources([
+	        const platformThumbnailSrcs = preferFallbackAnimation ? [] : uniquePreviewSources([
 	          catalogDirectAssetSrc(lvl.catalog_thumbnail_small_url),
 	          catalogDirectAssetSrc(lvl.catalog_thumbnail_url),
 	          fallbackLevel?.thumbnailSrc,
 	          ...(fallbackLevel?.thumbnailSrcs || []),
 	          fallbackLevel?.previewSrc,
 	        ]);
-	        const platformPreviewSrcs = uniquePreviewSources([
+	        const platformPreviewSrcs = preferFallbackAnimation ? [] : uniquePreviewSources([
 	          catalogDirectAssetSrc(lvl.catalog_preview_url),
 	          catalogDirectAssetSrc(lvl.catalog_thumbnail_url),
 	          catalogDirectAssetSrc(lvl.catalog_thumbnail_small_url),
@@ -554,7 +560,7 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
 	          previewSrc: existing?.previewSrc || platformPreviewSrcs[0] || fallbackLevel?.previewSrc || fallback?.previewSrc,
 	          previewSrcs: existing?.previewSrcs || platformPreviewSrcs,
 	          previewByDifficulty: existing?.previewByDifficulty || fallbackLevel?.previewByDifficulty,
-	          previewAnimation: existing?.previewAnimation || fallbackLevel?.previewAnimation,
+	          previewAnimation: existing?.previewAnimation || fallbackLevel?.previewAnimation || previewAnimation,
 	          previewRevisionHash: existing?.previewRevisionHash || lvl.settings_hash || lvl.updated_at,
 	        });
         return byID;
@@ -589,7 +595,7 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
     thumbnailSrcs,
     previewSrc,
     previewSrcs,
-    previewAnimation: catalogPreviewAnimation(entry, fallback, engineGame, preferFallbackAnimation),
+    previewAnimation,
     supportsLevels,
     sourceKind: entry.source_kind || fallback?.sourceKind,
     countdownFloorOverlay: entry.countdown_floor_overlay === true,
@@ -793,7 +799,16 @@ function recordLevelCompletion(
       nextBestTime[levelID] = elapsedMillis;
     }
 
-    if (levelModeFor(game, state) === "challenge") {
+    if (levelModeFor(game, state) === "free") {
+      const finishedIndex = game.levels.findIndex((level) => level.id === levelID);
+      const nextLevel = finishedIndex >= 0 ? game.levels[finishedIndex + 1] : null;
+      if (nextLevel) {
+        selectedLevels = {
+          ...selectedLevels,
+          [game.id]: nextLevel.id,
+        };
+      }
+    } else if (levelModeFor(game, state) === "challenge") {
       const expectedLevel = challengeNextLevel(game, state);
       if (expectedLevel?.id === levelID) {
         const previousRun = challengeRunFor(game, state) || emptyChallengeRun(difficulty);

@@ -127,6 +127,93 @@ func TestCountdownFloorOverlayIsOptIn(t *testing.T) {
 	}
 }
 
+func TestLevelGameVictoryAdvancesToNextCountdownWithOverlay(t *testing.T) {
+	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		switch r.URL.Path {
+		case "/api/level-games/temporada1-niveles/levels":
+			_, _ = w.Write([]byte(`{
+			"gameId":"temporada1-niveles",
+			"levels":[{
+				"slug":"level-1",
+				"label":"Nivel 1",
+				"difficulty":"medium",
+				"life":5,
+				"frame_tick_ms":25,
+				"frames":[{"r":8,"c":[[5,5,1,"coin-a"]]}]
+			},{
+				"slug":"level-2",
+				"label":"Nivel 2",
+				"difficulty":"medium",
+				"life":5,
+				"frame_tick_ms":25,
+				"frames":[{"r":8,"c":[[4,28,0],[6,5,1,"coin-b"]]}]
+			}]
+		}`))
+		case "/api/game-runtime":
+			_, _ = w.Write([]byte(`{"games":[]}`))
+		case "/api/level-games/animations/levels":
+			_, _ = w.Write([]byte(`{"gameId":"animations","levels":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer platform.Close()
+
+	runtime := newGameRuntime(config{
+		Brightness:            100,
+		PlayerCount:           1,
+		Game:                  "temporada1-niveles",
+		Difficulty:            "medium",
+		Level:                 "level-1",
+		PlatformURL:           platform.URL,
+		CountdownFloorOverlay: true,
+		ControllerLabel:       "Sala Test",
+		ControllerHostname:    "motionlevels-test",
+		DisplaySnapshotFPS:    4,
+		CameraRecorderTimeout: time.Second,
+	}, nil, nil)
+	countdown := runtime.DisplayStatus(runtime.started.Add(500 * time.Millisecond))
+	if countdown.Phase != "countdown" || countdown.Level != "level-1" {
+		t.Fatalf("initial status = %+v, want level 1 countdown", countdown)
+	}
+	runtime.RecordDisplaySnapshot(countdown, runtime.started.Add(500*time.Millisecond))
+
+	playAt := runtime.started.Add(3*time.Second + 50*time.Millisecond)
+	runtime.HandlePressure(&inputpb.PressureEvent{
+		X:         5,
+		Y:         5,
+		Pressed:   true,
+		UnixNanos: playAt.UnixNano(),
+	}, playAt)
+
+	finished := runtime.DisplayStatus(playAt)
+	if finished.Phase != "finished" || !finished.Success || finished.Level != "level-1" {
+		t.Fatalf("finished status = %+v, want level 1 success", finished)
+	}
+	runtime.RecordDisplaySnapshot(finished, playAt)
+
+	nextCountdownAt := playAt.Add(1250*time.Millisecond + time.Millisecond)
+	next := runtime.DisplayStatus(nextCountdownAt)
+	if next.Phase != "countdown" || next.Level != "level-2" || next.Success || next.CountdownRemainingMillis <= 0 {
+		t.Fatalf("next status = %+v, want level 2 countdown", next)
+	}
+	runtime.RecordDisplaySnapshot(next, nextCountdownAt)
+	status := runtime.Status()
+	if len(status.FinishedLevelAttempts) != 1 {
+		t.Fatalf("finished attempts = %d, want 1: %+v", len(status.FinishedLevelAttempts), status.FinishedLevelAttempts)
+	}
+	attempt := status.FinishedLevelAttempts[0]
+	if attempt.Game != "temporada1-niveles" || attempt.Level != "level-1" || !attempt.Success || attempt.Result != "success" {
+		t.Fatalf("finished attempt = %+v, want level 1 success", attempt)
+	}
+
+	frame := makeFrame(99, nextCountdownAt, 0, runtime)
+	if got := countCountdownYellowTiles(frame); got == 0 {
+		t.Fatal("next level countdown overlay did not draw yellow digit tiles")
+	}
+}
+
 func TestCountdownOverlayDigit(t *testing.T) {
 	tests := map[int64]int{
 		2500: 3,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { idleLoopSyncDecision, visibleActiveLevelLaunch } from "../src/runtimeFlow.ts";
 
@@ -79,5 +80,12 @@ describe("runtime screen flow", () => {
       }),
       null,
     );
+  });
+
+  it("advances the selected level after free-mode success so controls follow engine status", () => {
+    const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    assert.match(source, /if \(levelModeFor\(game, state\) === "free"\)/);
+    assert.match(source, /const nextLevel = finishedIndex >= 0 \? game\.levels\[finishedIndex \+ 1\] : null;/);
+    assert.match(source, /\[game\.id\]: nextLevel\.id/);
   });
 });

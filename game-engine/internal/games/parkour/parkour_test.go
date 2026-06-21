@@ -143,6 +143,14 @@ func TestClaimedBluePlatformFlashesThenStaysGreen(t *testing.T) {
 	}
 }
 
+func TestSuccessAdvancesToNextLevelAfterTransition(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	game := NewWithSeed(now, 42, 1, "easy", "level-1")
+
+	assertLevelCompletionAdvances(t, game, "level-1", "level-2")
+	assertLevelCompletionAdvances(t, game, "level-2", "level-3")
+}
+
 func TestLavaColorAnimates(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	game := NewWithSeed(now, 42, 1, "easy", "level-2")
@@ -315,6 +323,55 @@ func greenCount(frame compiledFrame) int {
 		}
 	}
 	return count
+}
+
+func countVisibleGreen(frame []RGB) int {
+	count := 0
+	for _, color := range frame {
+		if color.G > 180 && color.R < 90 && color.B < 120 {
+			count++
+		}
+	}
+	return count
+}
+
+func assertLevelCompletionAdvances(t *testing.T, game *Game, currentID string, nextID string) {
+	t.Helper()
+	if game.level.id != currentID {
+		t.Fatalf("current level = %s, want %s", game.level.id, currentID)
+	}
+
+	var finished Snapshot
+	for _, target := range representativeBlueTargets(t, game) {
+		pressAt := game.startedAt.Add(target.offset)
+		events := game.Press(whackamole.PressEvent{X: target.X, Y: target.Y, Pressed: true}, pressAt)
+		if len(events) == 0 {
+			t.Fatalf("pressing %s objective %v did not emit a claim event", currentID, target.Point)
+		}
+		game.Press(whackamole.PressEvent{X: target.X, Y: target.Y, Pressed: false}, pressAt.Add(5*time.Millisecond))
+		finished = game.Snapshot(pressAt.Add(10 * time.Millisecond))
+	}
+	if finished.Phase != "finished" || finished.Level != currentID || !finished.Success {
+		t.Fatalf("finished snapshot = %+v, want %s success", finished, currentID)
+	}
+	endedAt := time.Unix(0, finished.EndedUnixNanos)
+
+	during := game.Snapshot(endedAt.Add(transitionDuration / 2))
+	if during.Phase != "finished" || during.Level != currentID || !during.Success {
+		t.Fatalf("during transition snapshot = %+v, want finished %s success", during, currentID)
+	}
+
+	after := game.Snapshot(endedAt.Add(transitionDuration + time.Millisecond))
+	if after.Phase != "countdown" || after.Level != nextID || after.Success {
+		t.Fatalf("after transition snapshot = %+v, want %s countdown", after, nextID)
+	}
+	if after.CountdownMillis <= 0 {
+		t.Fatalf("after transition countdown = %d, want positive", after.CountdownMillis)
+	}
+	frame := game.Render(endedAt.Add(transitionDuration + 500*time.Millisecond))
+	if got := countVisibleGreen(frame); got == 0 {
+		t.Fatalf("%s countdown green tiles = %d, want load effect visible", nextID, got)
+	}
 }
 
 func disappearingGreenPoint(t *testing.T, frames []compiledFrame) timedPoint {

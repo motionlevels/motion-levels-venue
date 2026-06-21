@@ -30,6 +30,7 @@ const (
 	greenImpactDuration  = 1100 * time.Millisecond
 	blueCaptureWindow    = 600 * time.Millisecond
 	damageCooldown       = 1 * time.Second
+	resultDuration       = 1250 * time.Millisecond
 	DefaultMusicRef      = "Motion/canciones/Background07.mp3"
 	DefaultMusicVolume   = 0.18
 	DefaultCoinCueRef    = "Motion/sonidos/coin.wav"
@@ -105,6 +106,7 @@ type Game struct {
 	mu sync.Mutex
 
 	level       compiledLevel
+	levels      []compiledLevel
 	difficulty  Difficulty
 	playerCount int
 
@@ -319,6 +321,7 @@ func NewWithSeedForGame(now time.Time, seed int64, playerCount int, difficulty s
 	}
 	return &Game{
 		level:        selected,
+		levels:       append([]compiledLevel(nil), levels...),
 		difficulty:   diff,
 		playerCount:  playerCount,
 		createdAt:    now,
@@ -428,6 +431,9 @@ func (g *Game) AudioRefs() AudioRefs {
 func (g *Game) tickLocked(now time.Time) {
 	g.pruneRipplesLocked(now)
 	if g.ended {
+		if g.success && !g.endedAt.IsZero() && !now.Before(g.endedAt.Add(resultDuration)) {
+			g.advanceSuccessLevelLocked(now)
+		}
 		if !g.success && !g.restartAt.IsZero() && !now.Before(g.restartAt) {
 			g.restartFailedLevelLocked(now)
 		}
@@ -526,8 +532,40 @@ func (g *Game) finishFailureLocked(now time.Time) {
 }
 
 func (g *Game) restartFailedLevelLocked(now time.Time) {
-	g.createdAt = now
+	g.resetLevelRunLocked(g.level, now)
 	g.startedAt = now
+}
+
+func (g *Game) advanceSuccessLevelLocked(now time.Time) {
+	next, ok := g.nextLevelLocked()
+	if !ok {
+		return
+	}
+	g.resetLevelRunLocked(next, now)
+}
+
+func (g *Game) nextLevelLocked() (compiledLevel, bool) {
+	if len(g.levels) == 0 {
+		return compiledLevel{}, false
+	}
+	currentID := g.level.id
+	for index := range g.levels {
+		if g.levels[index].id != currentID {
+			continue
+		}
+		next := index + 1
+		if next >= len(g.levels) {
+			return compiledLevel{}, false
+		}
+		return g.levels[next], true
+	}
+	return compiledLevel{}, false
+}
+
+func (g *Game) resetLevelRunLocked(level compiledLevel, now time.Time) {
+	g.level = level
+	g.createdAt = now
+	g.startedAt = now.Add(countdownDuration)
 	g.endedAt = time.Time{}
 	g.restartAt = time.Time{}
 	g.score = 0

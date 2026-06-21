@@ -227,6 +227,65 @@ func TestCountdownGreenLoadSideDefaultsLeftAndCanUseRight(t *testing.T) {
 	}
 }
 
+func TestSuccessAdvancesToNextLevelAfterResultAnimation(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{
+		{
+			Slug:        "level-1",
+			Label:       "First",
+			Difficulty:  string(DifficultyMedium),
+			Life:        5,
+			FrameTickMS: 25,
+			Frames: []rawFrame{{
+				Repeat: 40,
+				Cells:  []cellTuple{{X: 5, Y: 5, Kind: 1, Uniq: "coin-a"}},
+			}},
+		},
+		{
+			Slug:        "level-2",
+			Label:       "Second",
+			Difficulty:  string(DifficultyMedium),
+			Life:        5,
+			FrameTickMS: 25,
+			Frames: []rawFrame{{
+				Repeat: 40,
+				Cells:  []cellTuple{{X: 4, Y: 28, Kind: 0}, {X: 6, Y: 5, Kind: 1, Uniq: "coin-b"}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(100, 0)
+	game := newTestGameWithLevels(levels, now)
+	playAt := game.startedAt.Add(tickDuration)
+
+	events := game.Press(whackamole.PressEvent{X: 5, Y: 5, Pressed: true}, playAt)
+	if len(events) != 1 || events[0].Cue != whackamole.CueCoin {
+		t.Fatalf("events = %+v, want coin cue", events)
+	}
+	finished := game.Snapshot(playAt)
+	if finished.Phase != "finished" || !finished.Success || finished.Level != "level-1" {
+		t.Fatalf("finished snapshot = %+v, want level 1 success", finished)
+	}
+
+	during := game.Snapshot(playAt.Add(resultDuration / 2))
+	if during.Phase != "finished" || during.Level != "level-1" || !during.Success {
+		t.Fatalf("during result snapshot = %+v, want level 1 result animation", during)
+	}
+
+	after := game.Snapshot(playAt.Add(resultDuration + time.Millisecond))
+	if after.Phase != "countdown" || after.Level != "level-2" || after.Success {
+		t.Fatalf("after result snapshot = %+v, want level 2 countdown", after)
+	}
+	if after.CountdownMillis <= 0 {
+		t.Fatalf("after result countdown = %d, want positive", after.CountdownMillis)
+	}
+	frame := game.Render(playAt.Add(resultDuration + 2900*time.Millisecond))
+	if got := countVisibleGreen(frame); got == 0 {
+		t.Fatalf("level 2 countdown green tiles = %d, want load effect visible", got)
+	}
+}
+
 func TestDifficultySettingsOverrideRuntimeTimingAndLimits(t *testing.T) {
 	levels, err := compileCloudLevels([]cloudLevel{{
 		Slug:             "level-1",
@@ -257,6 +316,30 @@ func TestDifficultySettingsOverrideRuntimeTimingAndLimits(t *testing.T) {
 	}
 	if got := levels[0].frameTick; got != 25*time.Millisecond {
 		t.Fatalf("frameTick = %s, want speed-adjusted 25ms", got)
+	}
+}
+
+func newTestGameWithLevels(levels []compiledLevel, now time.Time) *Game {
+	selected := levels[0]
+	lives := selected.lives
+	if lives < 1 {
+		lives = 5
+	}
+	return &Game{
+		level:        selected,
+		levels:       append([]compiledLevel(nil), levels...),
+		difficulty:   DifficultyMedium,
+		playerCount:  1,
+		createdAt:    now,
+		startedAt:    now.Add(countdownDuration),
+		lives:        lives,
+		removed:      map[string]bool{},
+		purpleHeld:   map[string]bool{},
+		purplePrimed: map[string]bool{},
+		pressed:      map[Point]bool{},
+		greenImpacts: map[string]bool{},
+		capturedAt:   map[string]time.Time{},
+		hitFlash:     map[Point]time.Time{},
 	}
 }
 

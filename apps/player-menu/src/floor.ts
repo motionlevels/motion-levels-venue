@@ -360,6 +360,45 @@ const patrones: FloorAnim = (x, y, cols, rows, t) => {
   return [20 * pulse, 104 * pulse, 255 * pulse];
 };
 
+const parkour: FloorAnim = (x, y, cols, rows, t) => {
+  const route: Array<[number, number]> = [
+    [7, 29], [7, 28], [7, 27], [8, 26], [8, 25], [8, 24],
+    [7, 23], [6, 22], [6, 21], [7, 20], [8, 19], [8, 18],
+    [9, 17], [9, 16], [8, 15], [7, 14], [7, 13], [6, 12],
+    [6, 11], [7, 10], [8, 9], [9, 8], [9, 7], [8, 6],
+    [7, 5], [7, 4], [8, 3],
+  ];
+  const routeIndex = route.findIndex(([rx, ry]) => rx === x && ry === y);
+  const checkpoint = coinAt(x, y, [[7, 29], [9, 17], [8, 3]], t);
+  if (checkpoint) return checkpoint;
+  if (routeIndex >= 0) {
+    const runner = mod(t * 5.2, route.length);
+    const distance = Math.abs(routeIndex - runner);
+    const wrapDistance = Math.min(distance, route.length - distance);
+    const runnerGlow = Math.max(0, 1 - wrapDistance / 3);
+    const routePulse = 0.72 + 0.18 * Math.sin(t * 4.8 + routeIndex * 0.42);
+    return [
+      8 + 62 * runnerGlow,
+      160 + 95 * Math.max(routePulse, runnerGlow),
+      56 + 120 * runnerGlow,
+    ];
+  }
+
+  const sideWall = x === 0 || x === cols - 1 || y === 0 || y === rows - 1;
+  const lavaWave =
+    0.48 +
+    0.52 *
+      Math.sin((x * 0.32 + y * 0.18 + t * 1.25) * Math.PI) *
+      Math.cos((x * 0.18 - y * 0.22 - t * 0.82) * Math.PI);
+  const heat = clamp01(0.24 + lavaWave * 0.44 + (sideWall ? 0.18 : 0));
+  const ember = Math.floor(t * 8 + x * 3 + y * 5) % 31 === 0 ? 0.24 : 0;
+  return [
+    Math.min(255, 86 + 132 * heat + 40 * ember),
+    10 + 34 * heat + 20 * ember,
+    6 + 10 * heat,
+  ];
+};
+
 function onRect(x: number, y: number, rx: number, ry: number, rw: number, rh: number): boolean {
   return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
 }
@@ -587,6 +626,8 @@ export const floorAnimations: Record<string, FloorAnim> = {
   duel,
   memory,
   patrones,
+  parkour,
+  parkour2: parkour,
   "temporada1-level-1": temporada1Preview(1),
   temporada1: temporada1Preview(1),
   "temporada1-niveles": temporada1Preview(1),
