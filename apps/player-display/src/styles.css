@@ -505,7 +505,7 @@ body {
 
 .display.arcade-display {
   padding: 24px 36px;
-  grid-template-rows: auto minmax(260px, 1fr) minmax(118px, 0.42fr) auto;
+  grid-template-rows: auto minmax(260px, 1fr) minmax(118px, 0.42fr);
   gap: 18px;
   background:
     linear-gradient(180deg, rgba(5, 8, 15, 0.2), rgba(5, 8, 15, 0.72)),
@@ -514,27 +514,36 @@ body {
 }
 
 .display.arcade-display.duel-game {
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .display.arcade-display.no-player-info {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.display.arcade-display.has-event {
+  grid-template-rows: auto minmax(260px, 1fr) minmax(118px, 0.42fr) auto;
+}
+
+.display.arcade-display.no-player-info.has-event,
+.display.arcade-display.duel-game.has-event {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .display.arcade-display.parkour-display.no-player-info {
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 16px;
 }
 
 .arcade-top {
   min-height: 86px;
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) minmax(420px, 1fr) minmax(190px, 0.45fr);
+  grid-template-columns: minmax(330px, 0.72fr) minmax(520px, 1.28fr);
   align-items: center;
   gap: 26px;
 }
 
-.arcade-lives,
+.arcade-brand-panel,
 .arcade-title,
 .arcade-system,
 .arcade-primary,
@@ -554,13 +563,13 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-.arcade-lives {
+.arcade-brand-panel {
   min-width: 0;
   min-height: 72px;
   padding: 10px 20px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 16px;
   clip-path: polygon(0 0, 96% 0, 100% 50%, 96% 100%, 0 100%);
 }
@@ -613,11 +622,6 @@ body {
   gap: 12px;
 }
 
-.arcade-lives .heart-meter {
-  flex: 0 1 auto;
-  justify-content: flex-end;
-}
-
 .heart {
   width: 48px;
   height: 48px;
@@ -659,6 +663,22 @@ body {
   letter-spacing: 0;
   text-transform: uppercase;
   text-shadow: 0 0 24px rgba(54, 217, 255, 0.5);
+}
+
+.difficulty-stars {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.22);
+  font-size: 1.65rem;
+  line-height: 1;
+  letter-spacing: 0;
+  text-shadow: none;
+}
+
+.difficulty-stars span.active {
+  color: var(--amber-ink);
+  text-shadow: 0 0 20px rgba(251, 191, 36, 0.46);
 }
 
 .heart-meter.compact b {
@@ -721,11 +741,11 @@ body {
 }
 
 .parkour-display .arcade-top {
-  grid-template-columns: minmax(520px, 1.25fr) minmax(360px, 0.92fr) minmax(170px, 0.36fr);
+  grid-template-columns: minmax(330px, 0.64fr) minmax(580px, 1.36fr);
   gap: 18px;
 }
 
-.parkour-display .arcade-lives {
+.parkour-display .arcade-brand-panel {
   min-height: 82px;
   justify-content: flex-start;
   gap: 20px;
@@ -746,61 +766,9 @@ body {
   display: none;
 }
 
-.parkour-display .arcade-lives .heart-meter {
-  flex: 1 1 auto;
-  justify-content: flex-start;
-  gap: 8px;
-}
-
-.parkour-display .arcade-lives .heart {
-  width: 42px;
-  height: 42px;
-}
-
-.parkour-display .arcade-lives .heart::before {
-  font-size: 50px;
-}
-
 .display.arcade-display.parkour-display.no-player-info .arcade-stage {
-  grid-template-columns: minmax(0, 1.06fr) minmax(360px, 0.94fr);
-  gap: 20px;
-}
-
-.display.arcade-display.parkour-display.no-player-info .arcade-primary {
-  min-height: 220px;
-  gap: 14px;
-  padding: 24px 34px;
-}
-
-.parkour-display .arcade-ribbon {
-  padding: 10px 28px 11px;
-  font-size: 0.9rem;
-}
-
-.parkour-display .arcade-primary strong {
-  font-size: 6.35rem;
-}
-
-.parkour-display .arcade-primary span {
-  font-size: 2.05rem;
-}
-
-.level-points-display .arcade-side {
-  gap: 12px;
-}
-
-.level-points-display .arcade-metric {
-  min-height: 82px;
-  padding: 14px 22px;
-  gap: 8px;
-}
-
-.level-points-display .arcade-metric span {
-  font-size: 0.86rem;
-}
-
-.level-points-display .arcade-metric strong {
-  font-size: 2.48rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
 }
 
 .arcade-stage {
@@ -878,6 +846,20 @@ body {
   gap: 16px;
 }
 
+.arcade-stage--level-hud {
+  min-height: 0;
+  display: grid;
+  align-items: stretch;
+}
+
+.arcade-level-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
 .arcade-metric {
   min-width: 0;
   min-height: 96px;
@@ -895,7 +877,6 @@ body {
   font-weight: 950;
   letter-spacing: 0;
   text-overflow: ellipsis;
-  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
@@ -911,6 +892,58 @@ body {
 
 .arcade-metric.amber strong {
   color: var(--amber-ink);
+}
+
+.arcade-metric.red strong {
+  color: #ff1730;
+}
+
+.arcade-stage--level-hud .arcade-metric {
+  min-height: 0;
+  padding: clamp(18px, 1.6vw, 30px) clamp(22px, 1.9vw, 36px);
+  align-content: center;
+  gap: 12px;
+}
+
+.arcade-stage--level-hud .arcade-metric span {
+  font-size: clamp(0.9rem, 1.05vw, 1.28rem);
+  letter-spacing: 0.18em;
+}
+
+.arcade-stage--level-hud .arcade-metric strong {
+  font-size: clamp(2.45rem, 3.2vw, 4.8rem);
+}
+
+.arcade-metric--lives {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.arcade-metric--time {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.arcade-metric--lives strong {
+  overflow: visible;
+  white-space: normal;
+}
+
+.arcade-metric--lives .heart-meter {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(26px, 1fr));
+  align-items: center;
+  gap: clamp(2px, 0.42vw, 8px);
+  max-width: 100%;
+}
+
+.arcade-metric--lives .heart {
+  width: clamp(26px, 2.3vw, 44px);
+  height: clamp(26px, 2.3vw, 44px);
+}
+
+.arcade-metric--lives .heart::before {
+  font-size: clamp(34px, 2.8vw, 54px);
 }
 
 .arcade-players {
@@ -930,6 +963,13 @@ body {
 
 .arcade-players.count-3 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.arcade-players.count-5,
+.arcade-players.count-6,
+.arcade-players.count-7,
+.arcade-players.count-8 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .arcade-player-card {
@@ -1012,10 +1052,6 @@ body {
 
 .parkour-display .arcade-player-card.compact > strong {
   font-size: 3.2rem;
-}
-
-.parkour-display .arcade-player-card.compact .heart-meter {
-  justify-self: end;
 }
 
 .arcade-team-card {
@@ -1220,7 +1256,8 @@ body {
   background: rgba(255, 82, 104, 0.22);
 }
 
-.arcade-display.event-life-loss .arcade-lives,
+.arcade-display.event-life-loss .arcade-brand-panel,
+.arcade-display.event-life-loss .arcade-metric--lives,
 .arcade-display.event-life-loss .arcade-event {
   border-color: rgba(255, 82, 104, 0.82);
   box-shadow:
@@ -1303,7 +1340,7 @@ body {
     white-space: normal;
   }
 
-  .arcade-lives {
+  .arcade-brand-panel {
     padding-inline: 12px;
   }
 

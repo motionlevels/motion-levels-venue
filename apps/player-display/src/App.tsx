@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./api";
 import { colorCSS, colorRGB, difficultyLabelES, eventMessageES, formatClock, gameTitleES, phaseLabel, playerLabelES } from "./utils";
@@ -192,7 +192,7 @@ function ClassicDisplay({ status, connected, error }: DisplayProps) {
           <strong>{status.activeTargets}</strong>
         </div>
         <div className={`event-strip ${status.lastEventCue ? "active" : ""}`}>
-          <span>{eventMessageES(status.lastEventCue, status.lastEventMessage) || "Listo"}</span>
+          <span>{eventMessageES(status.lastEventCue, status.lastEventMessage)}</span>
         </div>
         <div className="mini-stat">
           <span>Dificultad</span>
@@ -221,11 +221,12 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
   const sideMetrics = arcadeSideMetrics(status);
   const levelLabel = displayLevelLabel(status);
   const showPlayerInfo = shouldShowPlayerInfo(status);
+  const showFooterEvent = Boolean(eventMessage);
 
   return (
-    <main className={`display arcade-display ${duelGame ? "duel-game" : ""} ${parkourStyleGame ? "parkour-display" : ""} ${levelPointsGame ? "level-points-display" : ""} ${!duelGame && !showPlayerInfo ? "no-player-info" : ""} ${status.phase} ${eventClass}`}>
+    <main className={`display arcade-display ${duelGame ? "duel-game" : ""} ${parkourStyleGame ? "parkour-display" : ""} ${levelPointsGame ? "level-points-display" : ""} ${!duelGame && !showPlayerInfo ? "no-player-info" : ""} ${showFooterEvent ? "has-event" : ""} ${status.phase} ${eventClass}`}>
       <header className="arcade-top">
-        <div className="arcade-lives" aria-label={status.lives < 0 ? "Vidas ilimitadas" : `${status.lives} vidas`}>
+        <div className="arcade-brand-panel">
           <span className="arcade-brand" aria-label="Motion Levels">
             <span className="arcade-brand-mark" aria-hidden="true" />
             <span className="arcade-brand-name" aria-hidden="true">
@@ -233,21 +234,31 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
               <b>Levels</b>
             </span>
           </span>
-          <HeartMeter lives={status.lives} compact={!parkourGame && !showPlayerInfo} />
         </div>
         <div className="arcade-title">
           <span>{levelLabel ? `${phaseLabel(status.phase)} · ${levelLabel}` : phaseLabel(status.phase)}</span>
           <h1>{gameTitleES(status.currentGame, status.label)}</h1>
         </div>
-        <div className="arcade-system">
-          <span className={`live-dot ${connected ? "on" : ""}`} aria-label={connected ? "En directo" : "Sin conexión"} />
-          <strong>{connected ? "LIVE" : "OFF"}</strong>
-          {error ? <small>{error}</small> : null}
-        </div>
+        {error && !connected ? <div className="arcade-system"><strong>OFF</strong><small>{error}</small></div> : null}
       </header>
 
       {duelGame ? (
         <DuelBoard status={status} clock={clock} />
+      ) : parkourStyleGame ? (
+        <section className="arcade-stage arcade-stage--level-hud">
+          <div className="arcade-level-grid" aria-label="Marcadores de ronda">
+            <MetricPanel
+              className="arcade-metric--lives"
+              label="Vidas"
+              value={<HeartMeter lives={status.lives} showAllUpTo={20} />}
+              tone="red"
+            />
+            <MetricPanel className="arcade-metric--time" label={mainMetric.caption === "Restante" ? "Tiempo restante" : "Tiempo transcurrido"} value={clock} tone="amber" />
+            {sideMetrics.map((metric) => (
+              <MetricPanel key={metric.label} label={metric.label} value={metric.value} tone={metric.tone} stars={metric.stars} />
+            ))}
+          </div>
+        </section>
       ) : (
         <section className={`arcade-stage ${teamScoreGame ? "team-score" : ""}`}>
           <article className="arcade-primary">
@@ -266,7 +277,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
 
       {!duelGame && showPlayerInfo ? (
         <section
-          className={`arcade-players ${teamScoreGame ? "team-score" : ""} count-${Math.min(Math.max(status.players.length, 1), 4)}`}
+          className={`arcade-players ${teamScoreGame ? "team-score" : ""} count-${Math.min(Math.max(status.players.length, 1), 8)}`}
           aria-label={teamScoreGame ? "Equipo" : "Jugadores"}
         >
           {teamScoreGame && status.players.length ? (
@@ -289,11 +300,11 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
         </section>
       ) : null}
 
-      <footer className="arcade-bottom">
+      {showFooterEvent ? <footer className="arcade-bottom">
         <div className={`arcade-event ${status.lastEventCue ? "active" : ""}`}>
-          <span>{eventMessage || "Listo"}</span>
+          <span>{eventMessage}</span>
         </div>
-      </footer>
+      </footer> : null}
     </main>
   );
 }
@@ -322,7 +333,6 @@ function DuelSide({ player, side }: { player: DisplayStatus["players"][number]; 
         <span>{playerLabelES(player.label)}</span>
       </div>
       <strong>{player.score}</strong>
-      <HeartMeter lives={player.lives} compact />
     </article>
   );
 }
@@ -336,7 +346,6 @@ function ArcadePlayerCard({ player, leader, compact = false }: { player: Display
         {leader ? <b>Líder</b> : null}
       </div>
       <strong>{player.score}</strong>
-      <HeartMeter lives={player.lives} compact />
     </article>
   );
 }
@@ -350,20 +359,44 @@ function PlayerChip({ player }: { player: DisplayStatus["players"][number] }) {
   );
 }
 
-function MetricPanel({ label, value, tone }: { label: string; value: string; tone: "magenta" | "cyan" | "amber" }) {
+function MetricPanel({
+  label,
+  value,
+  tone,
+  stars,
+  className = "",
+}: {
+  label: string;
+  value: ReactNode;
+  tone: "magenta" | "cyan" | "amber" | "red";
+  stars?: number;
+  className?: string;
+}) {
   return (
-    <article className={`arcade-metric ${tone}`}>
+    <article className={`arcade-metric ${tone} ${className}`}>
       <span>{label}</span>
       <strong>{value}</strong>
+      {stars ? <DifficultyStars count={stars} /> : null}
     </article>
   );
 }
 
-function HeartMeter({ lives, compact = false }: { lives: number; compact?: boolean }) {
+function DifficultyStars({ count }: { count: number }) {
+  const active = Math.max(0, Math.min(4, count));
+  return (
+    <div className="difficulty-stars" aria-label={`${active} de 4 estrellas`}>
+      {Array.from({ length: 4 }, (_, index) => (
+        <span className={index < active ? "active" : ""} key={index}>★</span>
+      ))}
+    </div>
+  );
+}
+
+function HeartMeter({ lives, compact = false, showAllUpTo = 8 }: { lives: number; compact?: boolean; showAllUpTo?: number }) {
   if (lives < 0) {
     return <div className={`heart-meter ${compact ? "compact" : ""} infinite`}><b>∞</b></div>;
   }
-  if (lives > 8) {
+  if (lives > showAllUpTo) {
     return (
       <div className={`heart-meter ${compact ? "compact" : ""} many`}>
         {Array.from({ length: compact ? 3 : 5 }, (_, index) => <span className="heart filled" key={index} />)}
@@ -454,7 +487,7 @@ function primaryMetric(status: DisplayStatus): { label: string; value: string; c
   return { label: "Tiempo", value: displayClock(status), caption: status.remainingMillis > 0 ? "Restante" : "Transcurrido" };
 }
 
-function arcadeSideMetrics(status: DisplayStatus): Array<{ label: string; value: string; tone: "magenta" | "cyan" | "amber" }> {
+function arcadeSideMetrics(status: DisplayStatus): Array<{ label: string; value: string; tone: "magenta" | "cyan" | "amber"; stars?: number }> {
   if (isParkourGame(status.currentGame)) {
     return [
       { label: "Intentos", value: String(Math.max(1, status.attemptCount || 0)), tone: "magenta" },
@@ -464,8 +497,9 @@ function arcadeSideMetrics(status: DisplayStatus): Array<{ label: string; value:
   }
   if (isLevelPointsGame(status)) {
     return [
-      { label: "Recogidos", value: String(status.score), tone: "magenta" },
-      { label: "Restantes", value: String(Math.max(0, status.activeTargets || 0)), tone: "cyan" },
+      { label: "Puntos", value: String(status.score), tone: "magenta" },
+      { label: "Objetivos", value: String(Math.max(0, status.activeTargets || 0)), tone: "cyan" },
+      { label: "Dificultad", value: difficultyLabelES(status.difficulty), tone: "amber", stars: difficultyStars(status.difficulty) },
       { label: "Intentos", value: String(Math.max(1, status.attemptCount || 0)), tone: "magenta" },
       { label: "Mejor sesión", value: formatBestTime(status.sessionBestElapsedMillis), tone: "cyan" },
       { label: "Mejor global", value: formatBestTime(status.bestElapsedMillis), tone: "amber" },
@@ -474,12 +508,20 @@ function arcadeSideMetrics(status: DisplayStatus): Array<{ label: string; value:
   return [
     { label: "Puntos", value: String(status.score), tone: "magenta" },
     { label: "Objetivos", value: String(status.activeTargets), tone: "cyan" },
-    { label: "Dificultad", value: difficultyLabelES(status.difficulty), tone: "amber" },
+    { label: "Dificultad", value: difficultyLabelES(status.difficulty), tone: "amber", stars: difficultyStars(status.difficulty) },
   ];
 }
 
 function formatBestTime(milliseconds?: number): string {
   return milliseconds && milliseconds > 0 ? formatClock(milliseconds) : "-";
+}
+
+function difficultyStars(difficulty: string): number {
+  const normalized = normalizedDisplayText(difficulty);
+  if (normalized === "expert" || normalized === "experto") return 4;
+  if (normalized === "hard" || normalized === "dificil") return 3;
+  if (normalized === "medium" || normalized === "media") return 2;
+  return 1;
 }
 
 type DisplayProps = {
@@ -598,6 +640,27 @@ function demoDisplayStatus(name: string): DisplayStatus | null {
         bestElapsedMillis: 46800,
         lastEventCue: "coin",
         lastEventMessage: "Temporada 1 punto 12",
+      };
+    case "temporada1-20lives":
+      return {
+        ...base,
+        currentGame: "temporada1",
+        label: "Temporada 1",
+        difficulty: "hard",
+        playerConfigurable: false,
+        score: 12,
+        lives: 20,
+        elapsedMillis: 48600,
+        remainingMillis: 0,
+        activeTargets: 8,
+        level: "level-4",
+        levelNumber: 4,
+        attemptCount: 3,
+        failureCount: 1,
+        sessionBestElapsedMillis: 51200,
+        bestElapsedMillis: 46800,
+        lastEventCue: "",
+        lastEventMessage: "",
       };
     case "classic":
       return base;
