@@ -75,11 +75,23 @@ export default function App() {
   const liveConnected = demoStatus ? true : connected;
   const liveError = demoStatus ? "" : error;
 
+  if (isScreensaverDisplay(liveStatus)) {
+    return <ScreensaverDisplay />;
+  }
+
   if (options.hud === "classic") {
     return <ClassicDisplay status={liveStatus} connected={liveConnected} error={liveError} />;
   }
 
   return <ArcadeDisplay status={liveStatus} connected={liveConnected} error={liveError} />;
+}
+
+function ScreensaverDisplay() {
+  return (
+    <main className="display screensaver-display" aria-label="Motion Levels">
+      <div className="screensaver-logo" aria-hidden="true" />
+    </main>
+  );
 }
 
 function ClassicDisplay({ status, connected, error }: DisplayProps) {
@@ -381,6 +393,12 @@ function isParkourGame(currentGame: string): boolean {
   return currentGame === "parkour" || currentGame === "parkour2";
 }
 
+function isScreensaverDisplay(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
+  const currentGame = normalizedDisplayText(status.currentGame);
+  const label = normalizedDisplayText(status.label);
+  return currentGame === "salvapantallas" || currentGame === "screensaver" || label === "salvapantallas";
+}
+
 function normalizedDisplayText(value: string): string {
   return value
     .normalize("NFD")
@@ -506,6 +524,18 @@ function demoDisplayStatus(name: string): DisplayStatus | null {
   };
 
   switch (name) {
+    case "screensaver":
+      return {
+        ...emptyStatus,
+        currentGame: "salvapantallas",
+        label: "Salvapantallas",
+        phase: "ambient",
+        playerCount: 0,
+        playerConfigurable: false,
+        players: [],
+        lives: -1,
+        audioEnabled: true,
+      };
     case "countdown":
       return {
         ...base,
