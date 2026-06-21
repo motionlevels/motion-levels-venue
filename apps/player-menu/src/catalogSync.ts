@@ -158,7 +158,7 @@ export function closestSupportedDifficulty(requested: DifficultyID, supported: D
 export function playerBoundsForGame(
   game: Pick<GameCard, "engineGame" | "id" | "category" | "maxPlayers" | "minPlayers" | "players">,
 ): PlayerBounds {
-  if (!gameRequiresPlayerCount(game)) return { minPlayers: 1, maxPlayers: 99 };
+  if (typeof game.players === "string" && !gameRequiresPlayerCount(game)) return { minPlayers: 1, maxPlayers: 99 };
   if (Number.isFinite(game.minPlayers) && Number.isFinite(game.maxPlayers)) {
     const minPlayers = clampInteger(game.minPlayers, 1, 99, 1);
     const maxPlayers = Math.max(minPlayers, clampInteger(game.maxPlayers, 1, 99, minPlayers));
