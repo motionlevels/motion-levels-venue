@@ -223,7 +223,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
   const levelTimeDetails = arcadeLevelTimeDetails(status);
   const levelLabel = displayLevelLabel(status);
   const showPlayerInfo = shouldShowPlayerInfo(status);
-  const showFooterEvent = Boolean(eventMessage);
+  const showFooterEvent = Boolean(eventMessage) && !levelPointsGame;
 
   return (
     <main className={`display arcade-display ${duelGame ? "duel-game" : ""} ${parkourStyleGame ? "parkour-display" : ""} ${levelPointsGame ? "level-points-display" : ""} ${!duelGame && !showPlayerInfo ? "no-player-info" : ""} ${showFooterEvent ? "has-event" : ""} ${status.phase} ${eventClass}`}>

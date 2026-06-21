@@ -1035,14 +1035,14 @@ body {
 .arcade-time-details {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: clamp(12px, 1vw, 18px);
 }
 
 .arcade-time-details span {
   min-width: 0;
-  padding: 11px 13px 12px;
+  padding: clamp(14px, 1vw, 20px) clamp(16px, 1.25vw, 24px);
   display: grid;
-  gap: 5px;
+  gap: 7px;
   border: 1px solid rgba(54, 217, 255, 0.24);
   background: rgba(0, 0, 0, 0.18);
   clip-path: polygon(7% 0, 100% 0, 100% 100%, 0 100%, 0 24%);
@@ -1051,7 +1051,7 @@ body {
 .arcade-time-details small {
   overflow: hidden;
   color: var(--cyan);
-  font-size: clamp(0.64rem, 0.68vw, 0.9rem);
+  font-size: clamp(0.82rem, 0.86vw, 1.08rem);
   line-height: 1;
   font-weight: 950;
   letter-spacing: 0.12em;
@@ -1063,11 +1063,19 @@ body {
 .arcade-time-details b {
   overflow: hidden;
   color: #fff;
-  font-size: clamp(1rem, 1.2vw, 1.55rem);
+  font-size: clamp(1.95rem, 2.2vw, 3rem);
   line-height: 1;
   font-weight: 950;
   letter-spacing: 0;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.level-points-display .arcade-level-side .arcade-metric:nth-child(3) strong {
+  overflow: visible;
+  padding-block: 0.04em;
+  font-size: clamp(4.15rem, 4.85vw, 6.6rem);
+  line-height: 1.02;
   white-space: nowrap;
 }
 
