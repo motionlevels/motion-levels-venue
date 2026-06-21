@@ -71,6 +71,8 @@ body {
 .display.screensaver-display {
   padding: clamp(32px, 4vw, 96px);
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
   place-items: center;
   background:
     radial-gradient(circle at 50% 50%, rgba(54, 217, 255, 0.13), transparent 42%),
@@ -84,7 +86,7 @@ body {
 }
 
 .screensaver-logo {
-  width: min(62vw, 760px);
+  width: min(68vw, 82vh, 900px);
   aspect-ratio: 1;
   background: url("/motion-levels-icon.png?v=20260611") center / contain no-repeat;
   filter:
