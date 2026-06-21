@@ -7,6 +7,8 @@ import {
   closestSupportedDifficulty,
   difficultyRank,
   estimatedDurationLabel,
+  gameRequiresPlayerCount,
+  noPlayerRequirementLabel,
   normalizeEstimatedDurationSeconds,
   platformDifficultyLabel,
   platformDurationLabel,
@@ -15,6 +17,7 @@ import {
   platformPlayerRangeLabel,
   platformSupportedDifficulties,
   platformSupportsLevels,
+  type PlayerBounds,
   playerBoundsForGame,
   rosterForGame,
   shouldPreferCatalogFallbackPreviewAnimation,
@@ -151,6 +154,7 @@ function clampInteger(value: number, min: number, max: number): number {
 }
 
 function playerRangeLabel(game: GameCard): string {
+  if (!gameRequiresPlayerCount(game)) return noPlayerRequirementLabel;
   const bounds = playerBoundsForGame(game);
   if (game.players && !/^\d+(?:-\d+)?$/.test(game.players.trim())) return game.players;
   const count = bounds.minPlayers === bounds.maxPlayers ? String(bounds.minPlayers) : `${bounds.minPlayers}-${bounds.maxPlayers}`;
@@ -464,6 +468,26 @@ function scoreFromStatus(status: EngineStatus | null): number {
   return Math.max(0, Math.round((status?.players || []).reduce((total, player) => total + (Number(player.score) || 0), 0)));
 }
 
+function finishedAttemptMatchesLevel(attempt: FinishedLevelAttempt, game: GameCard, levelID: string, status: EngineStatus | null): boolean {
+  if (!levelID || attempt.level !== levelID) return false;
+  const gameIDs = new Set([game.id, engineGameID(game), runtimeGameID(game)].filter(Boolean));
+  if (!gameIDs.has(attempt.game)) return false;
+  if (status?.difficulty && attempt.difficulty && attempt.difficulty !== status.difficulty) return false;
+  const sessionStartedUnixNanos = Math.max(0, Number(status?.startedUnix || 0)) * 1_000_000_000;
+  return !sessionStartedUnixNanos || Number(attempt.endedUnixNanos || 0) >= sessionStartedUnixNanos;
+}
+
+function levelAttemptSummary(status: EngineStatus | null, game: GameCard, levelID: string): { attempts: number; failures: number } {
+  if (!status || !levelID) return { attempts: 0, failures: 0 };
+  const finishedAttempts = (status.finishedLevelAttempts || []).filter((attempt) => finishedAttemptMatchesLevel(attempt, game, levelID, status));
+  const failures = finishedAttempts.filter((attempt) => !attempt.success || attempt.result === "failed").length;
+  const activeAttempt = !isStoppedRuntimePhase(status) && !animationIsIdleLoop(status.currentGame, status.phase) && Boolean(status.level === levelID);
+  return {
+    attempts: finishedAttempts.length + (activeAttempt ? 1 : 0),
+    failures,
+  };
+}
+
 function webpPreviewRef(value: string): string {
   return value.replace(/^preview:/, "").replace(/\.(?:gif|png|webp)(?=($|[?#]))/i, ".webp");
 }
@@ -619,8 +643,44 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
   };
 }
 
+function playerBoundsRangeValue(bounds: PlayerBounds): string {
+  return bounds.minPlayers === bounds.maxPlayers ? String(bounds.minPlayers) : `${bounds.minPlayers}-${bounds.maxPlayers}`;
+}
+
+function gameMatchesPartyMiniGame(candidate: Pick<GameCard, "engineGame" | "id">, gameID: string): boolean {
+  return candidate.id === gameID || engineGameID(candidate) === gameID;
+}
+
+function derivedPartyPlayerBounds(game: GameCard, catalogGames: GameCard[]): PlayerBounds {
+  const fallback = playerBoundsForGame(game);
+  if (!isPartyCard(game) || !game.partyMiniGames?.length) return fallback;
+  const miniGameBounds = game.partyMiniGames
+    .map((miniGame) => catalogGames.find((candidate) => gameMatchesPartyMiniGame(candidate, miniGame.gameId)))
+    .filter((candidate): candidate is GameCard => Boolean(candidate))
+    .map((miniGame) => playerBoundsForGame(miniGame));
+  if (!miniGameBounds.length) return fallback;
+  const minPlayers = Math.max(...miniGameBounds.map((bounds) => bounds.minPlayers));
+  const maxPlayers = Math.min(...miniGameBounds.map((bounds) => bounds.maxPlayers));
+  return { minPlayers, maxPlayers: Math.max(minPlayers, maxPlayers) };
+}
+
+function applyDerivedPartyPlayerRanges(catalogGames: GameCard[]): GameCard[] {
+  return catalogGames.map((game) => {
+    if (!isPartyCard(game)) return game;
+    const bounds = derivedPartyPlayerBounds(game, catalogGames);
+    const players = playerBoundsRangeValue(bounds);
+    if (game.minPlayers === bounds.minPlayers && game.maxPlayers === bounds.maxPlayers && game.players === players) return game;
+    return {
+      ...game,
+      minPlayers: bounds.minPlayers,
+      maxPlayers: bounds.maxPlayers,
+      players,
+    };
+  });
+}
+
 function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalogEntry[] | null): GameCard[] {
-  if (!catalog) return baseGames;
+  if (!catalog) return applyDerivedPartyPlayerRanges(baseGames);
   const fallbackByID = new Map(baseGames.map((game) => [game.id, game]));
   const fallbackByEngine = new Map(baseGames.map((game) => [engineGameID(game), game]));
   const baseOrder = new Map(baseGames.map((game, index) => [game.id, index]));
@@ -638,12 +698,13 @@ function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalo
     && !catalog.some((entry) => platformEntryMatchesGame(entry, game) && entry.catalog_enabled === false)
     && !enabledCatalog.some((entry) => platformEntryMatchesGame(entry, game))
   ));
-  return [...platformGames, ...remainingBaseGames]
+  const orderedGames = [...platformGames, ...remainingBaseGames]
     .sort((left, right) => {
       const leftOrder = catalogOrderByID.get(left.id) ?? catalogOrderByEngine.get(engineGameID(left)) ?? 10_000 + (baseOrder.get(left.id) ?? 0);
       const rightOrder = catalogOrderByID.get(right.id) ?? catalogOrderByEngine.get(engineGameID(right)) ?? 10_000 + (baseOrder.get(right.id) ?? 0);
       return leftOrder - rightOrder || left.label.localeCompare(right.label);
     });
+  return applyDerivedPartyPlayerRanges(orderedGames);
 }
 
 function isPlatformLaunchableSource(game: Pick<GameCard, "sourceKind">): boolean {
@@ -3643,6 +3704,9 @@ function GameControlScreen({
   const completedCount = Object.keys(challengeRun?.completedLevels || {}).length;
   const progressLabel = hasLevels ? `${completedCount}/${levels.length}` : "0/0";
   const stopped = isStoppedRuntimePhase(status);
+  const attemptSummary = hasLevels ? levelAttemptSummary(status, game, currentLevelID) : { attempts: 0, failures: 0 };
+  const attemptCount = Math.max(1, attemptSummary.attempts || 0);
+  const failureLabel = attemptSummary.failures === 1 ? "1 caída" : `${attemptSummary.failures} caídas`;
   const phaseLabel = activeLevelLaunch
     ? activeLevelLaunch.phase === "stopping" ? "Deteniendo nivel" : `Cargando ${launchingLevelLabel || "nivel"}`
     : ambient ? "Animación en curso" : stopped ? "Nivel detenido" : introActive ? "Narración inicial" : countdownValue > 0 ? "Preparando salida" : paused ? "Pausado" : "En curso";
@@ -3696,6 +3760,13 @@ function GameControlScreen({
                 <div>
                   <span>{activeLevelLaunch ? "Cargando" : levelModeFree ? "Nivel listo" : "Progreso"}</span>
                   <strong>{launchingLevel ? playerLevelLabel(launchingLevel, launchingLevelIndex) : levelModeFree && pendingLevel ? playerLevelLabel(pendingLevel, levels.findIndex((level) => level.id === pendingLevel.id)) : progressLabel}</strong>
+                </div>
+              ) : null}
+              {hasLevels ? (
+                <div aria-label={`Intentos: ${attemptCount}. ${failureLabel}.`}>
+                  <span>Intentos</span>
+                  <strong>{attemptCount}</strong>
+                  <small>{failureLabel}</small>
                 </div>
               ) : null}
             </div>

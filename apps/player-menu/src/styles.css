@@ -2583,8 +2583,12 @@ button.capsule:disabled,
 .active-game-stats {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+}
+
+.game-control-screen.with-levels .active-game-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .active-game-stats div {
@@ -2618,6 +2622,16 @@ button.capsule:disabled,
   color: var(--text);
   font-size: 23px;
   font-weight: 950;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-game-stats small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;

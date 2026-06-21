@@ -1245,6 +1245,67 @@ func TestRuntimeStatusExposesRecentFinishedLevelAttempts(t *testing.T) {
 	}
 }
 
+func TestDisplayStatusIncludesCurrentLevelAttemptSummary(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "parkour", Difficulty: "easy", Level: "level-1"}, nil, nil)
+	sessionStarted := time.Date(2026, 6, 4, 8, 1, 0, 0, time.UTC)
+	runtime.started = sessionStarted
+	runtime.bestAttemptMillis[levelAttemptRecordKey("parkour", "level-1", "easy")] = 14500
+	runtime.recentAttempts = []finishedLevelAttemptStatus{
+		{
+			AttemptID:      "older-success",
+			Game:           "parkour",
+			Level:          "level-1",
+			Difficulty:     "easy",
+			Result:         "success",
+			Success:        true,
+			ElapsedMillis:  15000,
+			EndedUnixNanos: sessionStarted.Add(-2 * time.Minute).UnixNano(),
+		},
+		{
+			AttemptID:      "failed-1",
+			Game:           "parkour",
+			Level:          "level-1",
+			Difficulty:     "easy",
+			Result:         "failed",
+			Success:        false,
+			EndedUnixNanos: sessionStarted.Add(20 * time.Second).UnixNano(),
+		},
+		{
+			AttemptID:      "success-1",
+			Game:           "parkour",
+			Level:          "level-1",
+			Difficulty:     "easy",
+			Result:         "success",
+			Success:        true,
+			ElapsedMillis:  17100,
+			EndedUnixNanos: sessionStarted.Add(30 * time.Second).UnixNano(),
+		},
+		{
+			AttemptID:      "other-level",
+			Game:           "parkour",
+			Level:          "level-2",
+			Difficulty:     "easy",
+			Result:         "failed",
+			Success:        false,
+			EndedUnixNanos: sessionStarted.Add(25 * time.Second).UnixNano(),
+		},
+	}
+
+	status := runtime.withDisplayAttemptSummary(displayStatus{
+		CurrentGame: "parkour",
+		Phase:       "running",
+		Difficulty:  "easy",
+		Level:       "level-1",
+	}, sessionStarted)
+
+	if status.AttemptCount != 3 || status.FailureCount != 1 {
+		t.Fatalf("attempt summary = attempts %d failures %d, want 3/1", status.AttemptCount, status.FailureCount)
+	}
+	if status.SessionBestElapsedMillis != 17100 || status.BestElapsedMillis != 14500 {
+		t.Fatalf("best times = session %d overall %d, want 17100/14500", status.SessionBestElapsedMillis, status.BestElapsedMillis)
+	}
+}
+
 type cameraRecorderBackend struct {
 	starts   []cameraRecordingStart
 	finishes []cameraRecordingFinish

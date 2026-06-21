@@ -62,6 +62,7 @@ type gameRuntime struct {
 	ambientTouches    []ambientTouch
 	levelAttempt      *levelAttemptTracker
 	recentAttempts    []finishedLevelAttemptStatus
+	bestAttemptMillis map[string]int64
 
 	// Venue session (client visit) state; see venue.go.
 	venueID           string
@@ -206,6 +207,7 @@ type displayStatus struct {
 	Level                    string          `json:"level,omitempty"`
 	TeamName                 string          `json:"teamName"`
 	PlayerCount              int             `json:"playerCount"`
+	PlayerConfigurable       bool            `json:"playerConfigurable"`
 	Players                  []displayPlayer `json:"players"`
 	Score                    int             `json:"score"`
 	Lives                    int             `json:"lives"`
@@ -227,6 +229,10 @@ type displayStatus struct {
 	GameplayStartedUnixNanos int64           `json:"gameplayStartedUnixNanos,omitempty"`
 	AttemptEndedUnixNanos    int64           `json:"attemptEndedUnixNanos,omitempty"`
 	LivesStart               int             `json:"livesStart,omitempty"`
+	AttemptCount             int             `json:"attemptCount,omitempty"`
+	FailureCount             int             `json:"failureCount,omitempty"`
+	BestElapsedMillis        int64           `json:"bestElapsedMillis,omitempty"`
+	SessionBestElapsedMillis int64           `json:"sessionBestElapsedMillis,omitempty"`
 }
 
 type runtimeStatus struct {
@@ -267,11 +273,12 @@ func unixOrZero(t time.Time) int64 {
 
 func newGameRuntime(cfg config, audioPlayer *audio.Player, recorder gameRecordWriter) *gameRuntime {
 	runtime := &gameRuntime{
-		base:             cfg,
-		audio:            audioPlayer,
-		recorder:         recorder,
-		narrated:         map[string]bool{},
-		venueIdleTimeout: cfg.VenueIdleTimeout,
+		base:              cfg,
+		audio:             audioPlayer,
+		recorder:          recorder,
+		narrated:          map[string]bool{},
+		bestAttemptMillis: map[string]int64{},
+		venueIdleTimeout:  cfg.VenueIdleTimeout,
 	}
 	if runtime.venueIdleTimeout == 0 {
 		runtime.venueIdleTimeout = defaultVenueIdleLimit
@@ -606,6 +613,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		Level:              cfg.Level,
 		TeamName:           cfg.TeamName,
 		PlayerCount:        cfg.PlayerCount,
+		PlayerConfigurable: gameHasConfigurablePlayers(cfg.Game, cfg.PlatformURL),
 		Players:            defaultDisplayPlayers(cfg),
 		Lives:              -1,
 		StartedUnix:        started.Unix(),
@@ -642,7 +650,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		if paused && status.Phase != "finished" {
 			status.Phase = "paused"
 		}
-		return status
+		return r.withDisplayAttemptSummary(status, started)
 	}
 
 	if cfg.Game == "lava" {
@@ -673,7 +681,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		if paused && status.Phase != "finished" {
 			status.Phase = "paused"
 		}
-		return status
+		return r.withDisplayAttemptSummary(status, started)
 	}
 
 	if cfg.Game == "duel" {
@@ -703,7 +711,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		if paused && status.Phase != "finished" {
 			status.Phase = "paused"
 		}
-		return status
+		return r.withDisplayAttemptSummary(status, started)
 	}
 
 	if cfg.Game == "memory" {
@@ -733,7 +741,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		if paused && status.Phase != "finished" {
 			status.Phase = "paused"
 		}
-		return status
+		return r.withDisplayAttemptSummary(status, started)
 	}
 
 	if cfg.Game == "patrones" {
@@ -770,7 +778,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		if paused && status.Phase != "finished" {
 			status.Phase = "paused"
 		}
-		return status
+		return r.withDisplayAttemptSummary(status, started)
 	}
 
 	if cfg.Game == "saltos" {
@@ -800,7 +808,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		if paused && status.Phase != "finished" {
 			status.Phase = "paused"
 		}
-		return status
+		return r.withDisplayAttemptSummary(status, started)
 	}
 
 	if cfg.Game == "parkour" {
@@ -837,7 +845,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		if paused && status.Phase != "finished" {
 			status.Phase = "paused"
 		}
-		return status
+		return r.withDisplayAttemptSummary(status, started)
 	}
 
 	if isPlatformRuntimeGame(cfg.Game) {
@@ -877,7 +885,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		if paused && status.Phase != "finished" {
 			status.Phase = "paused"
 		}
-		return status
+		return r.withDisplayAttemptSummary(status, started)
 	}
 
 	if strings.HasPrefix(cfg.Game, "authored-") {
@@ -911,7 +919,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		if paused && status.Phase != "finished" {
 			status.Phase = "paused"
 		}
-		return status
+		return r.withDisplayAttemptSummary(status, started)
 	}
 
 	if cfg.Game == "temporada1" || cfg.Game == "temporada2" {
@@ -977,7 +985,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		if paused && status.Phase != "finished" {
 			status.Phase = "paused"
 		}
-		return status
+		return r.withDisplayAttemptSummary(status, started)
 	}
 
 	if !started.IsZero() {
@@ -986,6 +994,51 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 	}
 	if paused && status.Phase != "finished" {
 		status.Phase = "paused"
+	}
+	return status
+}
+
+func (r *gameRuntime) withDisplayAttemptSummary(status displayStatus, sessionStarted time.Time) displayStatus {
+	if r == nil || !recordsLevelAttempts(status.CurrentGame) || strings.TrimSpace(status.Level) == "" {
+		return status
+	}
+	r.mu.RLock()
+	recentAttempts := append([]finishedLevelAttemptStatus(nil), r.recentAttempts...)
+	bestAttempts := make(map[string]int64, len(r.bestAttemptMillis))
+	for key, millis := range r.bestAttemptMillis {
+		bestAttempts[key] = millis
+	}
+	r.mu.RUnlock()
+
+	sessionStartedUnixNanos := int64(0)
+	if !sessionStarted.IsZero() {
+		sessionStartedUnixNanos = sessionStarted.UnixNano()
+	}
+	bestKey := levelAttemptRecordKey(status.CurrentGame, status.Level, status.Difficulty)
+	status.BestElapsedMillis = bestAttempts[bestKey]
+	for _, attempt := range recentAttempts {
+		if attempt.Game != status.CurrentGame || attempt.Level != status.Level {
+			continue
+		}
+		if status.Difficulty != "" && attempt.Difficulty != "" && attempt.Difficulty != status.Difficulty {
+			continue
+		}
+		if attempt.Success && attempt.ElapsedMillis > 0 && (status.BestElapsedMillis == 0 || attempt.ElapsedMillis < status.BestElapsedMillis) {
+			status.BestElapsedMillis = attempt.ElapsedMillis
+		}
+		if sessionStartedUnixNanos > 0 && attempt.EndedUnixNanos > 0 && attempt.EndedUnixNanos < sessionStartedUnixNanos {
+			continue
+		}
+		status.AttemptCount++
+		if !attempt.Success || attempt.Result == "failed" {
+			status.FailureCount++
+		}
+		if attempt.Success && attempt.ElapsedMillis > 0 && (status.SessionBestElapsedMillis == 0 || attempt.ElapsedMillis < status.SessionBestElapsedMillis) {
+			status.SessionBestElapsedMillis = attempt.ElapsedMillis
+		}
+	}
+	if status.Phase != "idle" && status.Phase != "ambient" && status.Phase != "finished" {
+		status.AttemptCount++
 	}
 	return status
 }
@@ -1731,6 +1784,12 @@ func (r *gameRuntime) finishActiveLevelAttemptLocked(result string, status displ
 		if len(r.recentAttempts) > 64 {
 			r.recentAttempts = r.recentAttempts[len(r.recentAttempts)-64:]
 		}
+		if result == "success" && elapsedMillis > 0 {
+			key := levelAttemptRecordKey(attempt.Game, attempt.Level, attempt.Difficulty)
+			if key != "" && (r.bestAttemptMillis[key] == 0 || elapsedMillis < r.bestAttemptMillis[key]) {
+				r.bestAttemptMillis[key] = elapsedMillis
+			}
+		}
 	}
 	if r.cameraRecorder != nil {
 		r.cameraRecorder.FinishLevelAttempt(cameraRecordingFinish{
@@ -1792,6 +1851,32 @@ func recordsLevelAttempts(game string) bool {
 	default:
 		return false
 	}
+}
+
+func levelAttemptRecordKey(game string, level string, difficulty string) string {
+	game = strings.TrimSpace(normalizeGame(game))
+	level = strings.TrimSpace(level)
+	difficulty = strings.TrimSpace(difficulty)
+	if game == "" || level == "" {
+		return ""
+	}
+	return game + "\x00" + level + "\x00" + difficulty
+}
+
+func gameHasConfigurablePlayers(game string, platformURL string) bool {
+	normalized := normalizeGame(game)
+	for _, entry := range gameCatalog(platformURL) {
+		if normalizeGame(entry.Game) == normalized {
+			return entry.Players && entry.MaxPlayers > entry.MinPlayers
+		}
+	}
+	if strings.HasPrefix(normalized, "animation-") || animation.IsAmbientMode(normalized) {
+		return false
+	}
+	if strings.HasPrefix(normalized, "authored-") || isPlatformLevelGameID(normalized) {
+		return true
+	}
+	return false
 }
 
 func isPlatformRuntimeGame(game string) bool {

@@ -18,9 +18,11 @@ export type DisplayStatus = {
   phase: string;
   difficulty: string;
   playerCount: number;
+  playerConfigurable?: boolean;
   players: DisplayPlayer[];
   score: number;
   lives: number;
+  livesStart?: number;
   startedUnix: number;
   endsUnix: number;
   elapsedMillis: number;
@@ -33,6 +35,12 @@ export type DisplayStatus = {
   lastEventUnixNanos: number;
   lastEventCue: string;
   lastEventMessage: string;
+  level?: string;
+  levelNumber?: number;
+  attemptCount?: number;
+  failureCount?: number;
+  bestElapsedMillis?: number;
+  sessionBestElapsedMillis?: number;
 };
 
 const enginePort = "4102";

@@ -476,9 +476,9 @@ body {
 /* ---------- Arcade HUD ---------- */
 
 .display.arcade-display {
-  padding: 34px 46px 30px;
-  grid-template-rows: auto minmax(300px, 1fr) minmax(190px, 0.62fr) auto;
-  gap: 24px;
+  padding: 24px 36px;
+  grid-template-rows: auto minmax(260px, 1fr) minmax(118px, 0.42fr) auto;
+  gap: 18px;
   background:
     linear-gradient(180deg, rgba(5, 8, 15, 0.2), rgba(5, 8, 15, 0.72)),
     radial-gradient(circle at 50% 12%, rgba(54, 217, 255, 0.12), transparent 38%),
@@ -489,8 +489,17 @@ body {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
+.display.arcade-display.no-player-info {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.display.arcade-display.parkour-display.no-player-info {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 16px;
+}
+
 .arcade-top {
-  min-height: 102px;
+  min-height: 86px;
   display: grid;
   grid-template-columns: minmax(420px, 1fr) minmax(420px, 1fr) minmax(190px, 0.45fr);
   align-items: center;
@@ -519,11 +528,54 @@ body {
 
 .arcade-lives {
   min-width: 0;
-  min-height: 88px;
-  padding: 12px 24px;
+  min-height: 72px;
+  padding: 10px 20px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   clip-path: polygon(0 0, 96% 0, 100% 50%, 96% 100%, 0 100%);
+}
+
+.arcade-brand {
+  min-width: 0;
+  max-width: 148px;
+  flex: 1 1 148px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.arcade-brand-mark {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  background: url("/motion-levels-icon.png?v=20260611") center / contain no-repeat;
+  filter:
+    drop-shadow(0 8px 14px rgba(0, 0, 0, 0.48))
+    drop-shadow(0 0 14px rgba(54, 217, 255, 0.34));
+}
+
+.arcade-brand-name {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  color: #fff;
+  font-size: 0.84rem;
+  line-height: 0.9;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 0 18px rgba(54, 217, 255, 0.28);
+}
+
+.arcade-brand-name b {
+  min-width: 0;
+  overflow: hidden;
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .heart-meter {
@@ -533,9 +585,14 @@ body {
   gap: 12px;
 }
 
+.arcade-lives .heart-meter {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+}
+
 .heart {
-  width: 58px;
-  height: 58px;
+  width: 48px;
+  height: 48px;
   display: inline-grid;
   place-items: center;
   color: rgba(255, 255, 255, 0.36);
@@ -544,7 +601,7 @@ body {
 
 .heart::before {
   content: "\2665";
-  font-size: 66px;
+  font-size: 56px;
   line-height: 1;
 }
 
@@ -606,7 +663,7 @@ body {
   margin: 8px 0 0;
   overflow: hidden;
   color: #fff;
-  font-size: 3.35rem;
+  font-size: 3rem;
   line-height: 0.92;
   font-weight: 950;
   letter-spacing: 0;
@@ -616,8 +673,8 @@ body {
 }
 
 .arcade-system {
-  min-height: 78px;
-  padding: 12px 18px;
+  min-height: 70px;
+  padding: 10px 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -635,6 +692,89 @@ body {
   white-space: nowrap;
 }
 
+.parkour-display .arcade-top {
+  grid-template-columns: minmax(520px, 1.25fr) minmax(360px, 0.92fr) minmax(170px, 0.36fr);
+  gap: 18px;
+}
+
+.parkour-display .arcade-lives {
+  min-height: 82px;
+  justify-content: flex-start;
+  gap: 20px;
+  padding: 9px 22px 9px 18px;
+}
+
+.parkour-display .arcade-brand {
+  flex: 0 0 auto;
+  max-width: none;
+}
+
+.parkour-display .arcade-brand-mark {
+  width: 64px;
+  height: 64px;
+}
+
+.parkour-display .arcade-brand-name {
+  display: none;
+}
+
+.parkour-display .arcade-lives .heart-meter {
+  flex: 1 1 auto;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.parkour-display .arcade-lives .heart {
+  width: 42px;
+  height: 42px;
+}
+
+.parkour-display .arcade-lives .heart::before {
+  font-size: 50px;
+}
+
+.display.arcade-display.parkour-display.no-player-info .arcade-stage {
+  grid-template-columns: minmax(0, 1.06fr) minmax(360px, 0.94fr);
+  gap: 20px;
+}
+
+.display.arcade-display.parkour-display.no-player-info .arcade-primary {
+  min-height: 220px;
+  gap: 14px;
+  padding: 24px 34px;
+}
+
+.parkour-display .arcade-ribbon {
+  padding: 10px 28px 11px;
+  font-size: 0.9rem;
+}
+
+.parkour-display .arcade-primary strong {
+  font-size: 6.35rem;
+}
+
+.parkour-display .arcade-primary span {
+  font-size: 2.05rem;
+}
+
+.level-points-display .arcade-side {
+  gap: 12px;
+}
+
+.level-points-display .arcade-metric {
+  min-height: 82px;
+  padding: 14px 22px;
+  gap: 8px;
+}
+
+.level-points-display .arcade-metric span {
+  font-size: 0.86rem;
+}
+
+.level-points-display .arcade-metric strong {
+  font-size: 2.48rem;
+}
+
 .arcade-stage {
   min-height: 0;
   display: grid;
@@ -642,16 +782,24 @@ body {
   gap: 26px;
 }
 
+.display.arcade-display.no-player-info .arcade-stage {
+  grid-template-columns: minmax(0, 1.3fr) minmax(360px, 0.7fr);
+}
+
 .arcade-primary {
   min-width: 0;
-  min-height: 300px;
-  padding: 44px 48px;
+  min-height: 260px;
+  padding: 32px 40px;
   display: grid;
   align-content: center;
   gap: 18px;
   position: relative;
   overflow: hidden;
   clip-path: polygon(0 0, 95% 0, 100% 10%, 100% 100%, 4% 100%, 0 88%);
+}
+
+.display.arcade-display.no-player-info .arcade-primary {
+  min-height: 0;
 }
 
 .arcade-primary::after {
@@ -676,7 +824,7 @@ body {
   overflow: hidden;
   width: 100%;
   color: #fffef4;
-  font-size: 9.5rem;
+  font-size: 8rem;
   line-height: 0.82;
   font-weight: 950;
   letter-spacing: 0;
@@ -691,7 +839,7 @@ body {
 
 .arcade-primary span {
   color: var(--cyan);
-  font-size: 3rem;
+  font-size: 2.45rem;
   letter-spacing: 0.04em;
   text-shadow: 0 0 28px rgba(54, 217, 255, 0.42);
 }
@@ -699,13 +847,13 @@ body {
 .arcade-side {
   min-height: 0;
   display: grid;
-  gap: 22px;
+  gap: 16px;
 }
 
 .arcade-metric {
   min-width: 0;
-  min-height: 126px;
-  padding: 22px 28px;
+  min-height: 96px;
+  padding: 18px 24px;
   display: grid;
   align-content: center;
   gap: 10px;
@@ -714,7 +862,7 @@ body {
 
 .arcade-metric strong {
   overflow: hidden;
-  font-size: 3.7rem;
+  font-size: 3rem;
   line-height: 0.92;
   font-weight: 950;
   letter-spacing: 0;
@@ -758,8 +906,8 @@ body {
 
 .arcade-player-card {
   min-width: 0;
-  min-height: 172px;
-  padding: 20px 22px;
+  min-height: 118px;
+  padding: 16px 20px;
   display: grid;
   align-content: space-between;
   gap: 12px;
@@ -819,12 +967,27 @@ body {
 
 .arcade-player-card > strong {
   color: var(--player);
-  font-size: 5.5rem;
+  font-size: 4rem;
   line-height: 0.82;
   font-weight: 950;
   letter-spacing: 0;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 30px rgba(var(--player-rgb), 0.46);
+}
+
+.parkour-display .arcade-player-card.compact {
+  min-height: 112px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  align-content: center;
+}
+
+.parkour-display .arcade-player-card.compact > strong {
+  font-size: 3.2rem;
+}
+
+.parkour-display .arcade-player-card.compact .heart-meter {
+  justify-self: end;
 }
 
 .arcade-team-card {
@@ -883,7 +1046,7 @@ body {
 }
 
 .arcade-bottom {
-  min-height: 70px;
+  min-height: 54px;
   display: grid;
 }
 
@@ -894,7 +1057,7 @@ body {
   align-items: center;
   justify-content: center;
   color: var(--soft);
-  font-size: 2.2rem;
+  font-size: 1.65rem;
   line-height: 1;
   font-weight: 950;
   letter-spacing: 0.04em;

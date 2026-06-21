@@ -9,6 +9,7 @@ const emptyStatus: DisplayStatus = {
   phase: "idle",
   difficulty: "easy",
   playerCount: 1,
+  playerConfigurable: false,
   players: [],
   score: 0,
   lives: -1,
@@ -193,6 +194,9 @@ function ClassicDisplay({ status, connected, error }: DisplayProps) {
 function ArcadeDisplay({ status, connected, error }: DisplayProps) {
   const teamScoreGame = isTeamScoreGame(status.currentGame);
   const duelGame = status.currentGame === "duel" && status.players.length >= 2;
+  const parkourGame = isParkourGame(status.currentGame);
+  const levelPointsGame = isLevelPointsGame(status);
+  const parkourStyleGame = parkourGame || levelPointsGame;
   const leader = useMemo(() => {
     if (teamScoreGame || duelGame || !status.players.length) return null;
     return [...status.players].sort((left, right) => right.score - left.score)[0];
@@ -202,15 +206,25 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
   const clock = displayClock(status);
   const eventMessage = eventMessageES(status.lastEventCue, status.lastEventMessage);
   const mainMetric = primaryMetric(status);
+  const sideMetrics = arcadeSideMetrics(status);
+  const levelLabel = displayLevelLabel(status);
+  const showPlayerInfo = shouldShowPlayerInfo(status);
 
   return (
-    <main className={`display arcade-display ${duelGame ? "duel-game" : ""} ${status.phase} ${eventClass}`}>
+    <main className={`display arcade-display ${duelGame ? "duel-game" : ""} ${parkourStyleGame ? "parkour-display" : ""} ${levelPointsGame ? "level-points-display" : ""} ${!duelGame && !showPlayerInfo ? "no-player-info" : ""} ${status.phase} ${eventClass}`}>
       <header className="arcade-top">
         <div className="arcade-lives" aria-label={status.lives < 0 ? "Vidas ilimitadas" : `${status.lives} vidas`}>
-          <HeartMeter lives={status.lives} />
+          <span className="arcade-brand" aria-label="Motion Levels">
+            <span className="arcade-brand-mark" aria-hidden="true" />
+            <span className="arcade-brand-name" aria-hidden="true">
+              <b>Motion</b>
+              <b>Levels</b>
+            </span>
+          </span>
+          <HeartMeter lives={status.lives} compact={!parkourGame && !showPlayerInfo} />
         </div>
         <div className="arcade-title">
-          <span>{phaseLabel(status.phase)}</span>
+          <span>{levelLabel ? `${phaseLabel(status.phase)} · ${levelLabel}` : phaseLabel(status.phase)}</span>
           <h1>{gameTitleES(status.currentGame, status.label)}</h1>
         </div>
         <div className="arcade-system">
@@ -231,14 +245,14 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
           </article>
 
           <aside className="arcade-side" aria-label="Marcadores de ronda">
-            <MetricPanel label="Puntos" value={String(status.score)} tone="magenta" />
-            <MetricPanel label="Objetivos" value={String(status.activeTargets)} tone="cyan" />
-            <MetricPanel label="Dificultad" value={difficultyLabelES(status.difficulty)} tone="amber" />
+            {sideMetrics.map((metric) => (
+              <MetricPanel key={metric.label} label={metric.label} value={metric.value} tone={metric.tone} />
+            ))}
           </aside>
         </section>
       )}
 
-      {!duelGame ? (
+      {!duelGame && showPlayerInfo ? (
         <section
           className={`arcade-players ${teamScoreGame ? "team-score" : ""} count-${Math.min(Math.max(status.players.length, 1), 4)}`}
           aria-label={teamScoreGame ? "Equipo" : "Jugadores"}
@@ -256,7 +270,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
               </div>
             </article>
           ) : status.players.length ? (
-            status.players.map((player) => <ArcadePlayerCard key={player.index} player={player} leader={leader?.index === player.index} />)
+            status.players.map((player) => <ArcadePlayerCard key={player.index} player={player} leader={leader?.index === player.index} compact={parkourStyleGame} />)
           ) : (
             <article className="arcade-empty">Esperando datos del juego</article>
           )}
@@ -301,9 +315,9 @@ function DuelSide({ player, side }: { player: DisplayStatus["players"][number]; 
   );
 }
 
-function ArcadePlayerCard({ player, leader }: { player: DisplayStatus["players"][number]; leader: boolean }) {
+function ArcadePlayerCard({ player, leader, compact = false }: { player: DisplayStatus["players"][number]; leader: boolean; compact?: boolean }) {
   return (
-    <article className={`arcade-player-card ${leader ? "leader" : ""}`} style={{ "--player": colorCSS(player.color), "--player-rgb": colorRGB(player.color) } as CSSProperties}>
+    <article className={`arcade-player-card ${leader ? "leader" : ""} ${compact ? "compact" : ""}`} style={{ "--player": colorCSS(player.color), "--player-rgb": colorRGB(player.color) } as CSSProperties}>
       <div className="arcade-player-name">
         <i />
         <span>{playerLabelES(player.label)}</span>
@@ -363,17 +377,92 @@ function displayClock(status: DisplayStatus): string {
   return formatClock(status.elapsedMillis);
 }
 
+function isParkourGame(currentGame: string): boolean {
+  return currentGame === "parkour" || currentGame === "parkour2";
+}
+
+function normalizedDisplayText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function isTemporadaOneGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
+  const currentGame = normalizedDisplayText(status.currentGame);
+  const label = normalizedDisplayText(status.label);
+  return currentGame === "temporada1" || currentGame === "temporada1-niveles" || label.includes("temporada 1");
+}
+
+function isLevelPointsGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
+  return isTemporadaOneGame(status);
+}
+
+function isFixedSoloDisplayGame(currentGame: string): boolean {
+  return currentGame === "parkour" || currentGame === "parkour2" || currentGame === "saltos" || currentGame === "temporada1" || currentGame === "temporada1-niveles";
+}
+
+function shouldShowPlayerInfo(status: DisplayStatus): boolean {
+  if (isLevelPointsGame(status)) return false;
+  if (isFixedSoloDisplayGame(status.currentGame)) return false;
+  if (status.playerConfigurable === false) return false;
+  return status.players.length > 0 || status.playerConfigurable === true;
+}
+
+function displayLevelLabel(status: DisplayStatus): string {
+  if (status.levelNumber && status.levelNumber > 0) return `Nivel ${status.levelNumber}`;
+  const level = String(status.level || "").trim();
+  const match = level.match(/^level-(\d+)$/i);
+  if (match) return `Nivel ${match[1]}`;
+  return level;
+}
+
 function primaryMetric(status: DisplayStatus): { label: string; value: string; caption: string } {
   if (status.phase === "countdown") {
     return { label: "Countdown", value: displayClock(status), caption: "Preparados" };
   }
-  if (status.currentGame === "whack-a-mole" || status.currentGame === "parkour" || status.currentGame === "temporada2") {
+  if (isParkourGame(status.currentGame)) {
+    return { label: "Tiempo", value: displayClock(status), caption: status.remainingMillis > 0 ? "Restante" : "Transcurrido" };
+  }
+  if (isLevelPointsGame(status)) {
+    return { label: "Tiempo", value: displayClock(status), caption: status.remainingMillis > 0 ? "Restante" : "Transcurrido" };
+  }
+  if (status.currentGame === "whack-a-mole" || status.currentGame === "temporada2") {
     return { label: "Puntos", value: String(status.score), caption: "Marcador actual" };
   }
   if (status.activeTargets > 0 && (status.currentGame === "lava" || status.currentGame === "plataformas" || status.currentGame === "temporada1")) {
     return { label: "Objetivos", value: String(status.activeTargets), caption: "Restantes" };
   }
   return { label: "Tiempo", value: displayClock(status), caption: status.remainingMillis > 0 ? "Restante" : "Transcurrido" };
+}
+
+function arcadeSideMetrics(status: DisplayStatus): Array<{ label: string; value: string; tone: "magenta" | "cyan" | "amber" }> {
+  if (isParkourGame(status.currentGame)) {
+    return [
+      { label: "Intentos", value: String(Math.max(1, status.attemptCount || 0)), tone: "magenta" },
+      { label: "Mejor sesión", value: formatBestTime(status.sessionBestElapsedMillis), tone: "cyan" },
+      { label: "Mejor global", value: formatBestTime(status.bestElapsedMillis), tone: "amber" },
+    ];
+  }
+  if (isLevelPointsGame(status)) {
+    return [
+      { label: "Recogidos", value: String(status.score), tone: "magenta" },
+      { label: "Restantes", value: String(Math.max(0, status.activeTargets || 0)), tone: "cyan" },
+      { label: "Intentos", value: String(Math.max(1, status.attemptCount || 0)), tone: "magenta" },
+      { label: "Mejor sesión", value: formatBestTime(status.sessionBestElapsedMillis), tone: "cyan" },
+      { label: "Mejor global", value: formatBestTime(status.bestElapsedMillis), tone: "amber" },
+    ];
+  }
+  return [
+    { label: "Puntos", value: String(status.score), tone: "magenta" },
+    { label: "Objetivos", value: String(status.activeTargets), tone: "cyan" },
+    { label: "Dificultad", value: difficultyLabelES(status.difficulty), tone: "amber" },
+  ];
+}
+
+function formatBestTime(milliseconds?: number): string {
+  return milliseconds && milliseconds > 0 ? formatClock(milliseconds) : "-";
 }
 
 type DisplayProps = {
@@ -399,6 +488,7 @@ function demoDisplayStatus(name: string): DisplayStatus | null {
     phase: "running",
     difficulty: "medium",
     playerCount: 4,
+    playerConfigurable: true,
     players: [
       { index: 0, label: "Red", color: { r: 255, g: 41, b: 56 }, score: 42, lives: 4 },
       { index: 1, label: "Cyan", color: { r: 30, g: 213, b: 255 }, score: 35, lives: 3 },
@@ -427,6 +517,9 @@ function demoDisplayStatus(name: string): DisplayStatus | null {
         countdownRemainingMillis: 19000,
         remainingMillis: 0,
         activeTargets: 23,
+        attemptCount: 2,
+        sessionBestElapsedMillis: 38200,
+        bestElapsedMillis: 36100,
         lastEventCue: "",
         lastEventMessage: "",
       };
@@ -455,6 +548,27 @@ function demoDisplayStatus(name: string): DisplayStatus | null {
         activeTargets: 6,
         lastEventCue: "miss",
         lastEventMessage: "Fallo",
+      };
+    case "temporada1":
+      return {
+        ...base,
+        currentGame: "temporada1",
+        label: "Temporada 1",
+        difficulty: "medium",
+        playerConfigurable: false,
+        score: 12,
+        lives: 7,
+        elapsedMillis: 48600,
+        remainingMillis: 0,
+        activeTargets: 8,
+        level: "level-4",
+        levelNumber: 4,
+        attemptCount: 3,
+        failureCount: 1,
+        sessionBestElapsedMillis: 51200,
+        bestElapsedMillis: 46800,
+        lastEventCue: "coin",
+        lastEventMessage: "Temporada 1 punto 12",
       };
     case "classic":
       return base;
