@@ -341,7 +341,7 @@ describe("catalog metadata sync", () => {
     );
   });
 
-  it("forces Parkour menu previews to use the curated route animation", () => {
+  it("forces Parkour game previews to use the curated route animation without flattening level previews", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
     const floorSource = fs.readFileSync(path.resolve(__dirname, "../src/floor.ts"), "utf8");
 
@@ -349,10 +349,19 @@ describe("catalog metadata sync", () => {
     assert.match(appSource, /return engineGame === "parkour" \|\| engineGame === "parkour2";/);
     assert.match(appSource, /const forceParkourAnimation = isParkourPreviewGame\(engineGame\);/);
     assert.match(appSource, /const previewAnimation = forceParkourAnimation \? "parkour" : catalogPreviewAnimation/);
-    assert.match(appSource, /const platformThumbnailSrcs = preferFallbackAnimation \? \[\] : uniquePreviewSources/);
-    assert.match(appSource, /const platformPreviewSrcs = preferFallbackAnimation \? \[\] : uniquePreviewSources/);
-    assert.match(appSource, /previewAnimation: existing\?\.previewAnimation \|\| fallbackLevel\?\.previewAnimation \|\| previewAnimation/);
+    assert.doesNotMatch(appSource, /const platformThumbnailSrcs = preferFallbackAnimation \? \[\] : uniquePreviewSources/);
+    assert.doesNotMatch(appSource, /const platformPreviewSrcs = preferFallbackAnimation \? \[\] : uniquePreviewSources/);
+    assert.match(appSource, /previewAnimation: existing\?\.previewAnimation \|\| fallbackLevel\?\.previewAnimation,/);
+    assert.match(appSource, /function levelFallbackPreviewAnimationID\(game: GameCard, level\?: NonNullable<GameCard\["levels"\]>\[number\]\): string/);
+    assert.match(appSource, /if \(level && isParkourPreviewGame\(engineGameID\(game\)\)\) return "";/);
+    assert.match(appSource, /function levelFallbackPreviewAnim\(game: GameCard, level\?: NonNullable<GameCard\["levels"\]>\[number\]\): FloorAnim \| undefined/);
+    assert.match(appSource, /return parkourLevelPreview\(\[/);
+    assert.match(appSource, /const hasLevelMedia = Boolean\(level\?\.thumbnailSrc \|\| level\?\.previewSrc \|\| level\?\.thumbnailSrcs\?\.length \|\| level\?\.previewSrcs\?\.length \|\| level\?\.previewByDifficulty\);/);
+    assert.match(appSource, /return hasLevelMedia \? "" : previewAnimationID\(game\);/);
+    assert.match(appSource, /animationID=\{levelFallbackPreviewAnimationID\(game, level\)\}/);
+    assert.match(appSource, /fallbackAnim=\{levelFallbackPreviewAnim\(game, level\)\}/);
     assert.match(floorSource, /const parkour: FloorAnim =/);
+    assert.match(floorSource, /export function parkourLevelPreview\(seedText: string\): FloorAnim/);
     assert.match(floorSource, /\n  parkour,\n  parkour2: parkour,/);
   });
 });

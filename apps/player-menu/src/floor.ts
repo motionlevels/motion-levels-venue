@@ -90,6 +90,15 @@ function hash(n: number): number {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
+function hashText(value: string): number {
+  let out = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    out ^= value.charCodeAt(index);
+    out = Math.imul(out, 16777619) >>> 0;
+  }
+  return out || 1;
+}
+
 // Local rainbow attract preview for cards that do not have generated assets yet.
 const rainbowPreview: FloorAnim = (x, y, cols, rows, t) => {
   const widthPhase = x / cols;
@@ -398,6 +407,59 @@ const parkour: FloorAnim = (x, y, cols, rows, t) => {
     6 + 10 * heat,
   ];
 };
+
+export function parkourLevelPreview(seedText: string): FloorAnim {
+  const seed = hashText(seedText);
+  const phase = (seed & 0xff) / 255;
+  const waveA = 1.2 + ((seed >>> 8) % 9) / 7;
+  const waveB = 0.55 + ((seed >>> 17) % 11) / 10;
+  const routeWidth = 1 + ((seed >>> 28) % 2);
+  const coinYs = Array.from({ length: 4 }, (_, index) => 5 + index * 7 + ((seed >>> (index * 5)) % 4));
+
+  return (x, y, cols, rows, t) => {
+    const progress = y / Math.max(1, rows - 1);
+    const center =
+      (cols - 1) / 2 +
+      Math.sin(progress * Math.PI * (1.4 + waveA) + phase * Math.PI * 2) * (2.1 + waveB) +
+      Math.sin(progress * Math.PI * (3.2 + waveB) + phase * Math.PI * 5) * 1.15;
+    const routeDistance = Math.abs(x - center);
+    const route = routeDistance <= routeWidth;
+    const checkpoint = coinAt(
+      x,
+      y,
+      coinYs.map((coinY, index) => [Math.round(center + (index % 2 === 0 ? -1 : 1)), coinY] as [number, number]),
+      t,
+    );
+    if (checkpoint) return checkpoint;
+    if (route) {
+      const runnerY = mod(t * 5 + phase * rows, rows);
+      const runnerDistance = Math.abs(y - runnerY);
+      const wrappedRunnerDistance = Math.min(runnerDistance, rows - runnerDistance);
+      const runnerGlow = Math.max(0, 1 - wrappedRunnerDistance / 3.2);
+      const routePulse = 0.7 + 0.18 * Math.sin(t * 4.5 + y * 0.34 + phase * 6);
+      return [
+        8 + 64 * runnerGlow,
+        150 + 105 * Math.max(routePulse, runnerGlow),
+        48 + 128 * runnerGlow,
+      ];
+    }
+
+    const wall = x === 0 || x === cols - 1 || y === 0 || y === rows - 1;
+    const heat =
+      0.36 +
+      0.42 *
+        Math.sin((x * (0.25 + phase * 0.12) + y * 0.19 + t * (0.7 + waveB * 0.2)) * Math.PI) *
+        Math.cos((x * 0.18 - y * (0.18 + phase * 0.05) - t * 0.62) * Math.PI) +
+      (wall ? 0.12 : 0);
+    const ember = hash((seed + x * 31 + y * 47 + Math.floor(t * 7)) >>> 0) % 37 === 0 ? 0.18 : 0;
+    const clamped = clamp01(heat);
+    return [
+      Math.min(255, 78 + 136 * clamped + 38 * ember),
+      8 + 34 * clamped + 18 * ember,
+      5 + 10 * clamped,
+    ];
+  };
+}
 
 function onRect(x: number, y: number, rx: number, ry: number, rw: number, rh: number): boolean {
   return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
