@@ -1868,6 +1868,7 @@ func TestRuntimeRecordsSessionAPIAndDisplayData(t *testing.T) {
 		t.Fatalf("select response = %d", response.StatusCode)
 	}
 	selectedSessionID := runtime.SessionID()
+	runtime.RecordAPIInteraction("GET", "/api/status", "127.0.0.1", http.StatusOK, time.Now())
 	runtime.RecordDisplaySnapshot(runtime.DisplayStatus(time.Now()), time.Now())
 	if err := recorder.Close(); err != nil {
 		t.Fatal(err)
