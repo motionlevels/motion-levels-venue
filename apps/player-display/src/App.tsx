@@ -219,6 +219,8 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
   const eventMessage = eventMessageES(status.lastEventCue, status.lastEventMessage);
   const mainMetric = primaryMetric(status);
   const sideMetrics = arcadeSideMetrics(status);
+  const levelSideMetrics = arcadeLevelSideMetrics(status);
+  const levelTimeDetails = arcadeLevelTimeDetails(status);
   const levelLabel = displayLevelLabel(status);
   const showPlayerInfo = shouldShowPlayerInfo(status);
   const showFooterEvent = Boolean(eventMessage);
@@ -239,22 +241,30 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
           <span>{levelLabel ? `${phaseLabel(status.phase)} · ${levelLabel}` : phaseLabel(status.phase)}</span>
           <h1>{gameTitleES(status.currentGame, status.label)}</h1>
         </div>
-        {error && !connected ? <div className="arcade-system"><strong>OFF</strong><small>{error}</small></div> : null}
+        {error && !connected ? <div className="arcade-system"><strong>OFF</strong><small>{error}</small></div> : <div className="arcade-top-spacer" aria-hidden="true" />}
       </header>
 
       {duelGame ? (
         <DuelBoard status={status} clock={clock} />
       ) : parkourStyleGame ? (
         <section className="arcade-stage arcade-stage--level-hud">
-          <div className="arcade-level-grid" aria-label="Marcadores de ronda">
-            <MetricPanel
-              className="arcade-metric--lives"
-              label="Vidas"
-              value={<HeartMeter lives={status.lives} showAllUpTo={20} />}
-              tone="red"
-            />
-            <MetricPanel className="arcade-metric--time" label={mainMetric.caption === "Restante" ? "Tiempo restante" : "Tiempo transcurrido"} value={clock} tone="amber" />
-            {sideMetrics.map((metric) => (
+          <div className="arcade-level-main" aria-label="Marcadores principales">
+            <MetricPanel className="arcade-metric--lives" label="Vidas" value={<HeartMeter lives={status.lives} showAllUpTo={20} />} tone="red" />
+            <MetricPanel className="arcade-metric--time" label={mainMetric.caption === "Restante" ? "Tiempo restante" : "Tiempo transcurrido"} value={clock} tone="amber">
+              {levelTimeDetails.length ? (
+                <div className="arcade-time-details">
+                  {levelTimeDetails.map((detail) => (
+                    <span key={detail.label}>
+                      <small>{detail.label}</small>
+                      <b>{detail.value}</b>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </MetricPanel>
+          </div>
+          <div className="arcade-level-side" aria-label="Marcadores de ronda">
+            {levelSideMetrics.map((metric) => (
               <MetricPanel key={metric.label} label={metric.label} value={metric.value} tone={metric.tone} stars={metric.stars} />
             ))}
           </div>
@@ -364,12 +374,14 @@ function MetricPanel({
   value,
   tone,
   stars,
+  children,
   className = "",
 }: {
   label: string;
   value: ReactNode;
   tone: "magenta" | "cyan" | "amber" | "red";
   stars?: number;
+  children?: ReactNode;
   className?: string;
 }) {
   return (
@@ -377,6 +389,7 @@ function MetricPanel({
       <span>{label}</span>
       <strong>{value}</strong>
       {stars ? <DifficultyStars count={stars} /> : null}
+      {children}
     </article>
   );
 }
@@ -510,6 +523,27 @@ function arcadeSideMetrics(status: DisplayStatus): Array<{ label: string; value:
     { label: "Objetivos", value: String(status.activeTargets), tone: "cyan" },
     { label: "Dificultad", value: difficultyLabelES(status.difficulty), tone: "amber", stars: difficultyStars(status.difficulty) },
   ];
+}
+
+function arcadeLevelSideMetrics(status: DisplayStatus): Array<{ label: string; value: string; tone: "magenta" | "cyan" | "amber"; stars?: number }> {
+  if (isLevelPointsGame(status)) {
+    return [
+      { label: "Puntos", value: String(status.score), tone: "magenta" },
+      { label: "Objetivos", value: String(Math.max(0, status.activeTargets || 0)), tone: "cyan" },
+      { label: "Dificultad", value: difficultyLabelES(status.difficulty), tone: "amber", stars: difficultyStars(status.difficulty) },
+    ];
+  }
+  return arcadeSideMetrics(status);
+}
+
+function arcadeLevelTimeDetails(status: DisplayStatus): Array<{ label: string; value: string }> {
+  const details: Array<{ label: string; value: string }> = [];
+  if (isParkourGame(status.currentGame) || isLevelPointsGame(status)) {
+    details.push({ label: "Intentos", value: String(Math.max(1, status.attemptCount || 0)) });
+    details.push({ label: "Mejor sesión", value: formatBestTime(status.sessionBestElapsedMillis) });
+    details.push({ label: "Mejor global", value: formatBestTime(status.bestElapsedMillis) });
+  }
+  return details;
 }
 
 function formatBestTime(milliseconds?: number): string {
