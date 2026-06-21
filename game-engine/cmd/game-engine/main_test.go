@@ -1835,6 +1835,16 @@ func TestGameAPIDisplayStatus(t *testing.T) {
 	}
 }
 
+func TestPlatformLevelGameLabelDoesNotFallBackToScreensaver(t *testing.T) {
+	label := gameLabel("c1daea4f-e586-4116-8cbe-871cde887a81")
+	if label == "Salvapantallas" {
+		t.Fatal("platform level UUID was mislabeled as screensaver")
+	}
+	if label != "Juego de niveles" {
+		t.Fatalf("platform level label = %q, want Juego de niveles", label)
+	}
+}
+
 func TestRuntimeRecordsSessionAPIAndDisplayData(t *testing.T) {
 	dir := t.TempDir()
 	// Recent start time: a stale fixed date plus real-time record timestamps

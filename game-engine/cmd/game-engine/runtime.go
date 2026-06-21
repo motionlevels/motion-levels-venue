@@ -2695,6 +2695,7 @@ func patronesCatalogLevels() []gameLevelEntry {
 }
 
 func gameLabel(game string) string {
+	clean := strings.TrimSpace(game)
 	if strings.HasPrefix(game, "animation-") {
 		return animations.GetLabel(strings.TrimPrefix(game, "animation-"))
 	}
@@ -2703,7 +2704,13 @@ func gameLabel(game string) string {
 			return entry.Label
 		}
 	}
-	return "Salvapantallas"
+	if isPlatformLevelGameID(clean) {
+		return "Juego de niveles"
+	}
+	if clean != "" {
+		return clean
+	}
+	return "Motion Levels"
 }
 
 func defaultDisplayPlayers(cfg config) []displayPlayer {

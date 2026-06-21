@@ -395,8 +395,7 @@ function isParkourGame(currentGame: string): boolean {
 
 function isScreensaverDisplay(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
   const currentGame = normalizedDisplayText(status.currentGame);
-  const label = normalizedDisplayText(status.label);
-  return currentGame === "salvapantallas" || currentGame === "screensaver" || label === "salvapantallas";
+  return currentGame === "salvapantallas" || currentGame === "screensaver";
 }
 
 function normalizedDisplayText(value: string): string {
@@ -410,7 +409,7 @@ function normalizedDisplayText(value: string): string {
 function isTemporadaOneGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
   const currentGame = normalizedDisplayText(status.currentGame);
   const label = normalizedDisplayText(status.label);
-  return currentGame === "temporada1" || currentGame === "temporada1-niveles" || label.includes("temporada 1");
+  return currentGame === "temporada1" || currentGame === "temporada1-niveles" || label.includes("temporada 1") || label.includes("temporada1");
 }
 
 function isLevelPointsGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
