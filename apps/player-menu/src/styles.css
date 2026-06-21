@@ -2558,26 +2558,11 @@ button.capsule:disabled,
   font-size: 17px;
 }
 
-.control-meta,
 .control-roster {
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-}
-
-.control-meta span {
-  min-height: 42px;
-  padding: 0 16px;
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid rgba(var(--crgb), 0.28);
-  border-radius: var(--r-pill);
-  color: rgb(var(--crgb));
-  background: rgba(var(--crgb), 0.08);
-  font-size: 15px;
-  font-weight: 900;
-  text-transform: uppercase;
 }
 
 .active-game-stats {
@@ -2680,16 +2665,31 @@ button.capsule:disabled,
 
 .active-difficulty.active {
   color: #f7fbff;
-  border-color: rgba(var(--accent-rgb), 0.55);
+  border-color: rgba(var(--difficulty-rgb, var(--accent-rgb)), 0.82);
   background:
-    linear-gradient(180deg, rgba(var(--accent-rgb), 0.18), rgba(var(--accent-rgb), 0.07)),
+    linear-gradient(180deg, rgba(var(--difficulty-rgb, var(--accent-rgb)), 0.24), rgba(var(--difficulty-rgb, var(--accent-rgb)), 0.09)),
     rgba(9, 15, 24, 0.9);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--difficulty-rgb, var(--accent-rgb)), 0.18),
+    0 10px 24px -22px rgba(var(--difficulty-rgb, var(--accent-rgb)), 0.85);
 }
 
-.active-difficulty:disabled {
+.active-difficulty:disabled:not(.active) {
   cursor: not-allowed;
   opacity: 0.46;
   filter: grayscale(0.9);
+}
+
+.active-difficulty.active:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+  filter: none;
+}
+
+.active-difficulty.active .star-rating,
+.active-difficulty.active .star-rating .filled {
+  color: #f7fbff;
+  text-shadow: none;
 }
 
 .game-control-screen.with-levels .game-control-copy .active-lock-note {

@@ -1740,7 +1740,6 @@ function MenuApp() {
   const selectedLevel = selectedGame.levels?.find((level) => level.id === selectedLevelFor(selectedGame));
   const selectedSupportedDifficulties = supportedDifficultiesFor(selectedGame, selectedLevel);
   const effectiveDifficulty = closestSupportedDifficulty(menu.difficulty, selectedSupportedDifficulties);
-  const selectedDifficulty = difficulties.find((difficulty) => difficulty.id === effectiveDifficulty) || difficulties[0];
   const selectedLevelProgress = progressFor(selectedGame, menu);
   const selectedLevelMode = levelModeFor(selectedGame, menu);
   const selectedChallengeRun = challengeRunFor(selectedGame, menu);
@@ -1761,7 +1760,6 @@ function MenuApp() {
   const launchedLevel = launchedGame.levels?.find((level) => level.id === (status?.level || selectedLevelFor(launchedGame)));
   const launchedSupportedDifficulties = supportedDifficultiesFor(launchedGame, launchedLevel);
   const launchedDifficulty = closestSupportedDifficulty(menu.difficulty, launchedSupportedDifficulties);
-  const launchedModeLabel = isAmbientCard(launchedGame) ? "Ambiente" : launchedLevel?.label || selectedDifficulty.label;
   const launchedLevelActive = isLevelRuntimeActive(status, launchedGame);
   const activeLevelLaunchView = visibleActiveLevelLaunch({
     gameID: launchedGame.id,
@@ -2816,7 +2814,6 @@ function MenuApp() {
           status={status}
           players={displayPlayers}
           allPlayers={displayPlayers.length > 0 ? displayPlayers : menu.players}
-          modeLabel={launchedModeLabel}
           levelMode={levelModeFor(launchedGame, menu)}
           selectedLevelID={selectedLevelFor(launchedGame)}
           challengeRun={challengeRunFor(launchedGame, menu)}
@@ -3623,7 +3620,6 @@ function GameControlScreen({
   status,
   players,
   allPlayers,
-  modeLabel,
   levelMode,
   selectedLevelID,
   challengeRun,
@@ -3651,7 +3647,6 @@ function GameControlScreen({
   status: EngineStatus | null;
   players: Player[];
   allPlayers: Player[];
-  modeLabel: string;
   levelMode: LevelMode;
   selectedLevelID: string;
   challengeRun: ChallengeRun | null;
@@ -3700,7 +3695,6 @@ function GameControlScreen({
   const timeLabel = totalMillis > 0 ? formatRuntimeTime(remainingMillis) : formatRuntimeTime(elapsedMillis);
   const timeCaption = totalMillis > 0 ? "Restante" : "Tiempo";
   const score = scoreFromStatus(status);
-  const difficultyLabel = difficulties.find((candidate) => candidate.id === difficulty)?.label || difficulty;
   const completedCount = Object.keys(challengeRun?.completedLevels || {}).length;
   const progressLabel = hasLevels ? `${completedCount}/${levels.length}` : "0/0";
   const stopped = isStoppedRuntimePhase(status);
@@ -3741,11 +3735,6 @@ function GameControlScreen({
             <h2>{game.label}</h2>
             <p>{phaseLabel}</p>
           </div>
-          <div className="control-meta">
-            <span>{ambient ? "Todos los jugadores" : `${players.length || 1} ${players.length === 1 ? "jugador" : "jugadores"}`}</span>
-            <span>{hasLevels && visibleLevel ? playerLevelLabel(visibleLevel, visibleLevelIndex) : modeLabel}</span>
-            <span>{difficultyLabel}</span>
-          </div>
           {!ambient ? (
             <div className="active-game-stats" aria-label="Estado de partida">
               <div>
@@ -3758,7 +3747,7 @@ function GameControlScreen({
               </div>
               {hasLevels ? (
                 <div>
-                  <span>{activeLevelLaunch ? "Cargando" : levelModeFree ? "Nivel listo" : "Progreso"}</span>
+                  <span>{activeLevelLaunch ? "Cargando" : levelModeFree ? "Nivel" : "Progreso"}</span>
                   <strong>{launchingLevel ? playerLevelLabel(launchingLevel, launchingLevelIndex) : levelModeFree && pendingLevel ? playerLevelLabel(pendingLevel, levels.findIndex((level) => level.id === pendingLevel.id)) : progressLabel}</strong>
                 </div>
               ) : null}
