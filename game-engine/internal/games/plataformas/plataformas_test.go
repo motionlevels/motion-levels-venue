@@ -208,6 +208,18 @@ func TestCountdownGreenLoadSideDefaultsLeftAndCanUseRight(t *testing.T) {
 	if got := countdownFallingY(targetY, 1, "right"); got != targetY {
 		t.Fatalf("right settled y = %d, want %d", got, targetY)
 	}
+
+	frame := &compiledFrame{}
+	frame.points[2][1] = tilePoint{present: true, kind: 0}
+	frame.points[28][1] = tilePoint{present: true, kind: 0}
+	leftOrder := countdownSafeTiles(frame, "left")
+	if len(leftOrder) != 2 || leftOrder[0].Y != 2 || leftOrder[1].Y != 28 {
+		t.Fatalf("left load order = %+v, want far side y=2 before near side y=28", leftOrder)
+	}
+	rightOrder := countdownSafeTiles(frame, "right")
+	if len(rightOrder) != 2 || rightOrder[0].Y != 28 || rightOrder[1].Y != 2 {
+		t.Fatalf("right load order = %+v, want far side y=28 before near side y=2", rightOrder)
+	}
 }
 
 func TestDifficultySettingsOverrideRuntimeTimingAndLimits(t *testing.T) {

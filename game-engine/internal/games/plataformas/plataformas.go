@@ -899,7 +899,7 @@ func (g *Game) safeZoneCountdownColorAtLocked(pt Point, now time.Time) RGB {
 		return RGB{}
 	}
 	progress := countdownProgress(now, g.createdAt, g.startedAt)
-	safeTiles := countdownSafeTiles(&g.level.frames[0])
+	safeTiles := countdownSafeTiles(&g.level.frames[0], g.level.greenLoadSide)
 	for order, target := range safeTiles {
 		tileProgress := countdownTileProgress(progress, order, len(safeTiles))
 		if tileProgress < 0 {
@@ -1490,12 +1490,16 @@ func countdownFallingY(targetY int, tileProgress float64, side string) int {
 	return int(math.Round(y))
 }
 
-func countdownSafeTiles(frame *compiledFrame) []Point {
+func countdownSafeTiles(frame *compiledFrame, side string) []Point {
 	if frame == nil {
 		return nil
 	}
 	tiles := []Point{}
-	for y := GridHeight - 1; y >= 0; y-- {
+	firstY, pastLastY, stepY := 0, GridHeight, 1
+	if side == "right" {
+		firstY, pastLastY, stepY = GridHeight-1, -1, -1
+	}
+	for y := firstY; y != pastLastY; y += stepY {
 		for x := 0; x < GridWidth; x++ {
 			point := frame.points[y][x]
 			if point.present && point.kind == 0 {
