@@ -889,9 +889,20 @@ func (g *Game) framePositionAtLocked(now time.Time) (*compiledFrame, int, time.D
 
 func (g *Game) countdownColorAtLocked(pt Point, now time.Time) RGB {
 	if !g.level.greenLoad {
-		return RGB{}
+		return g.settledSafeZoneCountdownColorAtLocked(pt)
 	}
 	return g.safeZoneCountdownColorAtLocked(pt, now)
+}
+
+func (g *Game) settledSafeZoneCountdownColorAtLocked(pt Point) RGB {
+	if len(g.level.frames) == 0 {
+		return RGB{}
+	}
+	point := g.level.frames[0].points[pt.Y][pt.X]
+	if !point.present || point.kind != 0 {
+		return RGB{}
+	}
+	return colorForPoint(point)
 }
 
 func (g *Game) safeZoneCountdownColorAtLocked(pt Point, now time.Time) RGB {

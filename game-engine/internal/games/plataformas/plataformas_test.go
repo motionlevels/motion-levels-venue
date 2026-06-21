@@ -167,7 +167,7 @@ func TestCountdownDropsSafeZonesIntoPlaceByDefault(t *testing.T) {
 	}
 }
 
-func TestCountdownGreenLoadAnimationCanBeDisabled(t *testing.T) {
+func TestCountdownGreenLoadAnimationDisabledShowsSettledSafeZones(t *testing.T) {
 	levels, err := compileCloudLevels([]cloudLevel{{
 		Slug:        "level-1",
 		Label:       "Load animation off",
@@ -177,7 +177,7 @@ func TestCountdownGreenLoadAnimationCanBeDisabled(t *testing.T) {
 		Rules:       levelRules{GreenPlatformLoad: boolPtr(false)},
 		Frames: []rawFrame{{
 			Repeat: 40,
-			Cells:  []cellTuple{{X: 5, Y: 28, Kind: 0}},
+			Cells:  []cellTuple{{X: 5, Y: 28, Kind: 0}, {X: 6, Y: 28, Kind: 2}},
 		}},
 	}})
 	if err != nil {
@@ -186,8 +186,13 @@ func TestCountdownGreenLoadAnimationCanBeDisabled(t *testing.T) {
 	now := time.Unix(100, 0)
 	game := &Game{level: levels[0], createdAt: now, startedAt: now.Add(countdownDuration)}
 
-	if got := countVisibleGreen(game.Render(now.Add(time.Second))); got != 0 {
-		t.Fatalf("visible green tiles during disabled countdown = %d, want none", got)
+	frame := game.Render(now.Add(time.Second))
+	green := colorForPoint(tilePoint{present: true, kind: 0})
+	if color := frame[28*GridWidth+5]; color != green {
+		t.Fatalf("settled green tile during disabled countdown = %+v, want %+v", color, green)
+	}
+	if hazard := frame[28*GridWidth+6]; hazard != (RGB{}) {
+		t.Fatalf("hazard during disabled countdown = %+v, want hidden", hazard)
 	}
 }
 
