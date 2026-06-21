@@ -238,10 +238,19 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
           </span>
         </div>
         <div className="arcade-title">
-          <span>{levelLabel ? `${phaseLabel(status.phase)} · ${levelLabel}` : phaseLabel(status.phase)}</span>
+          <span>{phaseLabel(status.phase)}</span>
           <h1>{gameTitleES(status.currentGame, status.label)}</h1>
         </div>
-        {error && !connected ? <div className="arcade-system"><strong>OFF</strong><small>{error}</small></div> : <div className="arcade-top-spacer" aria-hidden="true" />}
+        {levelLabel ? (
+          <div className="arcade-level-badge">
+            <span>Nivel actual</span>
+            <strong>{levelLabel}</strong>
+          </div>
+        ) : error && !connected ? (
+          <div className="arcade-system"><strong>OFF</strong><small>{error}</small></div>
+        ) : (
+          <div className="arcade-top-spacer" aria-hidden="true" />
+        )}
       </header>
 
       {duelGame ? (
