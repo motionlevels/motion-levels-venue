@@ -713,14 +713,14 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if len(status.Catalog) != 17 {
-		t.Fatalf("catalog = %d entries, want 17", len(status.Catalog))
+	if len(status.Catalog) != 1 {
+		t.Fatalf("catalog = %d entries, want 1", len(status.Catalog))
 	}
 	if !catalogHasGame(status.Catalog, "salvapantallas") {
 		t.Fatal("catalog missing salvapantallas")
 	}
-	if !catalogHasGame(status.Catalog, "temporada1-niveles") {
-		t.Fatal("catalog missing temporada1-niveles")
+	if catalogHasGame(status.Catalog, "temporada1-niveles") {
+		t.Fatal("catalog includes retired temporada1-niveles")
 	}
 
 	menuStateBody := bytes.NewBufferString(`{"kioskId":"kiosk-test","snapshot":{"screenMode":"browse","message":"ready"}}`)
@@ -923,8 +923,11 @@ func TestAuthoredGameSelectsFromPlatformRuntimeSpec(t *testing.T) {
 	if status.CurrentGame != "authored-turbo-topos" || status.Label != "Turbo topos" || status.Phase != "countdown" {
 		t.Fatalf("authored selected status = %+v", status)
 	}
-	if !catalogHasGame(status.Catalog, "authored-turbo-topos") {
-		t.Fatal("engine catalog missing authored runtime game")
+	if catalogHasGame(status.Catalog, "authored-turbo-topos") {
+		t.Fatal("engine catalog includes authored runtime game")
+	}
+	if !catalogHasGame(status.Catalog, "salvapantallas") {
+		t.Fatal("engine catalog missing salvapantallas")
 	}
 
 	playAt := time.Now().Add(2 * time.Second)
@@ -1355,7 +1358,7 @@ func TestPlatformSyncPostsSessionSnapshot(t *testing.T) {
 	if auth != "Bearer test-token" {
 		t.Fatalf("authorization = %q", auth)
 	}
-	if payload.ControllerID != "controller-1" || payload.Game != "lava" || payload.Label != "El suelo es lava" {
+	if payload.ControllerID != "controller-1" || payload.Game != "lava" || payload.Label != "lava" {
 		t.Fatalf("payload metadata = %+v", payload)
 	}
 	if payload.SessionID == "" || payload.Status != "open" || payload.StartedAt == "" {
