@@ -241,15 +241,19 @@ function previewAnimationID(game: GameCard): string {
   return game.previewAnimation || game.id;
 }
 
+function levelHasPreviewMedia(level?: NonNullable<GameCard["levels"]>[number]): boolean {
+  return Boolean(level?.previewByDifficulty || level?.previewSrc || level?.previewSrcs?.length || level?.thumbnailSrc || level?.thumbnailSrcs?.length);
+}
+
 function levelFallbackPreviewAnimationID(game: GameCard, level?: NonNullable<GameCard["levels"]>[number]): string {
+  if (levelHasPreviewMedia(level)) return "";
   if (level?.previewAnimation) return level.previewAnimation;
   if (level && isParkourPreviewGame(engineGameID(game))) return "";
-  const hasLevelMedia = Boolean(level?.thumbnailSrc || level?.previewSrc || level?.thumbnailSrcs?.length || level?.previewSrcs?.length || level?.previewByDifficulty);
-  return hasLevelMedia ? "" : previewAnimationID(game);
+  return previewAnimationID(game);
 }
 
 function levelFallbackPreviewAnim(game: GameCard, level?: NonNullable<GameCard["levels"]>[number]): FloorAnim | undefined {
-  if (!level || !isParkourPreviewGame(engineGameID(game)) || level.previewAnimation) return undefined;
+  if (!level || levelHasPreviewMedia(level) || !isParkourPreviewGame(engineGameID(game)) || level.previewAnimation) return undefined;
   return parkourLevelPreview([
     game.id,
     engineGameID(game),
@@ -261,17 +265,17 @@ function levelFallbackPreviewAnim(game: GameCard, level?: NonNullable<GameCard["
 }
 
 function levelThumbnailSrc(level: NonNullable<GameCard["levels"]>[number] | undefined, game: GameCard): string | undefined {
-  return level?.thumbnailSrc || level?.thumbnailSrcs?.[0] || level?.previewSrc || game.thumbnailSrc || game.previewSrc;
+  return levelPreviewSrc(game, level, "medium");
 }
 
 function levelThumbnailSrcs(level: NonNullable<GameCard["levels"]>[number] | undefined, game: GameCard): string[] {
-  const thumbnailSources = uniquePreviewSources([level?.thumbnailSrc, ...(level?.thumbnailSrcs || [])]);
-  if (thumbnailSources.length) return thumbnailSources;
-  return uniquePreviewSources([level?.previewSrc, game.thumbnailSrc, game.previewSrc]);
+  if (!level) return uniquePreviewSources([game.previewSrc, game.thumbnailSrc]);
+  return uniquePreviewSources([level.previewSrc, ...(level.previewSrcs || []), level.thumbnailSrc, ...(level.thumbnailSrcs || [])]);
 }
 
 function levelPreviewSrcs(game: GameCard, level: NonNullable<GameCard["levels"]>[number] | undefined, difficulty: DifficultyID): string[] {
-  return uniquePreviewSources([level?.previewByDifficulty?.[difficulty], level?.previewSrc, ...(level?.previewSrcs || []), ...(level?.thumbnailSrcs || []), level?.thumbnailSrc, game.previewSrc, game.thumbnailSrc]);
+  if (!level) return uniquePreviewSources([game.previewSrc, game.thumbnailSrc]);
+  return uniquePreviewSources([level.previewByDifficulty?.[difficulty], level.previewSrc, ...(level.previewSrcs || []), level.thumbnailSrc, ...(level.thumbnailSrcs || [])]);
 }
 
 function gameThumbnailSrc(game: GameCard): string | undefined {
@@ -287,7 +291,8 @@ function gamePreviewSrcs(game: GameCard): string[] {
 }
 
 function levelPreviewSrc(game: GameCard, level: NonNullable<GameCard["levels"]>[number] | undefined, difficulty: DifficultyID): string | undefined {
-  return level?.previewByDifficulty?.[difficulty] || level?.previewSrc || game.previewSrc || game.thumbnailSrc;
+  if (!level) return game.previewSrc || game.thumbnailSrc;
+  return level.previewByDifficulty?.[difficulty] || level.previewSrc || level.previewSrcs?.[0] || level.thumbnailSrc || level.thumbnailSrcs?.[0];
 }
 
 function partyPreviewGridSize(count: number): number {
@@ -590,6 +595,7 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
 	          fallbackLevel?.previewSrc,
 	          ...(fallbackLevel?.previewSrcs || []),
 	        ]);
+	        const hasLevelMedia = platformPreviewSrcs.length > 0 || platformThumbnailSrcs.length > 0;
 	        const existing = byID.get(levelID);
 	        byID.set(levelID, {
 	          id: levelID,
@@ -601,7 +607,7 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
 	          previewSrc: existing?.previewSrc || platformPreviewSrcs[0] || fallbackLevel?.previewSrc || fallback?.previewSrc,
 	          previewSrcs: existing?.previewSrcs || platformPreviewSrcs,
 	          previewByDifficulty: existing?.previewByDifficulty || fallbackLevel?.previewByDifficulty,
-	          previewAnimation: existing?.previewAnimation || fallbackLevel?.previewAnimation,
+	          previewAnimation: hasLevelMedia ? undefined : existing?.previewAnimation || fallbackLevel?.previewAnimation,
 	          previewRevisionHash: existing?.previewRevisionHash || lvl.settings_hash || lvl.updated_at,
 	        });
         return byID;
@@ -2241,7 +2247,7 @@ function MenuApp() {
             fallbackAnim={levelFallbackPreviewAnim(game, level)}
             revisionHash={level.previewRevisionHash || game.previewRevisionHash}
             compact
-            promoteAnimation={active}
+            promoteAnimation={active && !levelHasPreviewMedia(level)}
           />
         ) : (
           <LevelMysteryPreview />
@@ -2299,7 +2305,7 @@ function MenuApp() {
             fallbackAnim={levelFallbackPreviewAnim(game, level)}
             revisionHash={level.previewRevisionHash || game.previewRevisionHash}
             compact
-            promoteAnimation={active}
+            promoteAnimation={active && !levelHasPreviewMedia(level)}
           />
         ) : (
           <LevelMysteryPreview />
@@ -4050,10 +4056,10 @@ function PartyPreview({ catalogGames, compact = false, difficulty, game, rich = 
             supportedDifficultiesFor(miniGame, level),
           )
           : difficulty;
-        const previewSrc = miniGame && level ? levelPreviewSrc(miniGame, level, previewDifficulty) : miniGame ? gameThumbnailSrc(miniGame) : undefined;
-        const previewSrcs = miniGame && !level ? gameThumbnailSrcs(miniGame) : emptyPreviewSources;
+        const previewSrc = miniGame && level ? levelThumbnailSrc(level, miniGame) : miniGame ? gameThumbnailSrc(miniGame) : undefined;
+        const previewSrcs = miniGame && level ? levelThumbnailSrcs(level, miniGame) : miniGame ? gameThumbnailSrcs(miniGame) : emptyPreviewSources;
         const richSrc = rich && miniGame ? (level ? levelPreviewSrc(miniGame, level, previewDifficulty) : miniGame.previewSrc) : undefined;
-        const richSrcs = rich && miniGame && !level ? gamePreviewSrcs(miniGame) : emptyPreviewSources;
+        const richSrcs = rich && miniGame ? (level ? levelPreviewSrcs(miniGame, level, previewDifficulty) : gamePreviewSrcs(miniGame)) : emptyPreviewSources;
         const animationID = miniGame && level ? levelFallbackPreviewAnimationID(miniGame, level) : miniGame ? previewAnimationID(miniGame) : "";
         const color = miniGame?.color || game.color;
         return (
@@ -4069,9 +4075,9 @@ function PartyPreview({ catalogGames, compact = false, difficulty, game, rich = 
               richSrcs={richSrcs}
               animationID={animationID}
               fallbackAnim={miniGame && level ? levelFallbackPreviewAnim(miniGame, level) : undefined}
-              revisionHash={miniGame?.previewRevisionHash}
+              revisionHash={level?.previewRevisionHash || miniGame?.previewRevisionHash}
               compact={compact}
-              promoteAnimation={rich}
+              promoteAnimation={rich && !(level && levelHasPreviewMedia(level))}
             />
           </div>
         );
