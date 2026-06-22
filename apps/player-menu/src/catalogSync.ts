@@ -165,7 +165,10 @@ export function playerBoundsForGame(
     return { maxPlayers, minPlayers };
   }
   if (game.category === "individual") return { minPlayers: 1, maxPlayers: 1 };
-  if ((game.engineGame || game.id) === "duel" || (game.engineGame || game.id) === "memory") {
+  if ((game.engineGame || game.id) === "duel" || (game.engineGame || game.id) === "authored-duel") {
+    return { minPlayers: 2, maxPlayers: 8 };
+  }
+  if ((game.engineGame || game.id) === "memory") {
     return { minPlayers: 2, maxPlayers: 4 };
   }
   return { minPlayers: 1, maxPlayers: 6 };

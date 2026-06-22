@@ -177,6 +177,16 @@ describe("catalog metadata sync", () => {
     assert.deepEqual(rosterForGame(game, players).map((player) => player.id), [1, 2, 3]);
   });
 
+  it("falls back to eight-player authored duel bounds when catalog metadata is unavailable", () => {
+    const game = {
+      id: "duel",
+      engineGame: "authored-duel",
+      category: "versus",
+    } as Pick<GameCard, "category" | "engineGame" | "id" | "maxPlayers" | "minPlayers">;
+
+    assert.deepEqual(playerBoundsForGame(game), { minPlayers: 2, maxPlayers: 8 });
+  });
+
   it("does not expose the retired aggregate animations launcher", () => {
     const catalogSource = fs.readFileSync(path.resolve(__dirname, "../src/catalog.ts"), "utf8");
     const staticGamesSource = catalogSource

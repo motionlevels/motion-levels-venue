@@ -13,7 +13,7 @@ const (
 	setupBlinks      = 3
 	startPadHoldNS   = int64(1000000000)
 	claimFlashNS     = int64(240000000)
-	maxDuelPlayers   = 4
+	maxDuelPlayers   = 8
 	minDuelPlayers   = 2
 	boardCandidateN  = 18
 	mediumFillPct    = 60
@@ -46,6 +46,10 @@ var defaultPlayers = [maxDuelPlayers]motiongo.Player{
 	{Index: 1, Label: "Cyan", Color: "#00ffff"},
 	{Index: 2, Label: "Green", Color: "#00ff00"},
 	{Index: 3, Label: "Pink", Color: "#ff00ff"},
+	{Index: 4, Label: "Blue", Color: "#0000ff"},
+	{Index: 5, Label: "Yellow", Color: "#ffff00"},
+	{Index: 6, Label: "Violet", Color: "#a78bfa"},
+	{Index: 7, Label: "Orange", Color: "#fb923c"},
 }
 
 var players []motiongo.Player
@@ -490,6 +494,10 @@ func assignStartPadOrigins() {
 		startPadOrigin[1] = point{x: motiongo.Width - startPadSize, y: motiongo.Height - startPadSize}
 		startPadOrigin[2] = point{x: 0, y: motiongo.Height - startPadSize}
 		startPadOrigin[3] = point{x: motiongo.Width - startPadSize, y: 0}
+		startPadOrigin[4] = point{x: 0, y: (motiongo.Height - startPadSize) / 2}
+		startPadOrigin[5] = point{x: motiongo.Width - startPadSize, y: (motiongo.Height - startPadSize) / 2}
+		startPadOrigin[6] = point{x: (motiongo.Width - startPadSize) / 2, y: 0}
+		startPadOrigin[7] = point{x: (motiongo.Width - startPadSize) / 2, y: motiongo.Height - startPadSize}
 	}
 }
 

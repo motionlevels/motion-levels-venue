@@ -116,7 +116,7 @@ const platformCatalogStorageKey = "ml-player-menu-platform-catalog-v2";
 const platformCatalogRefreshMillis = 5000;
 const menuBuildLabel = `${__MENU_BUILD_REVISION__} · ${formatMenuBuildDate(__MENU_BUILD_DATE__)}`;
 const menuBuildDateLabel = formatMenuBuildDate(__MENU_BUILD_DATE__);
-const maxPlayers = 6;
+const maxPlayers = 8;
 const maxTeamNameLength = 24;
 const maxPlayerNameLength = 12;
 const noPressureSessionLimitMillis = 60 * 60 * 1000;
@@ -2789,7 +2789,7 @@ function MenuApp() {
             title={gameActive ? "Sal de la partida para cambiar el equipo" : undefined}
           >
             <span className="mini-avatars">
-              {headerPlayers.slice(0, 6).map((player) => (
+              {headerPlayers.slice(0, 8).map((player) => (
                 <span key={player.id} style={{ "--pc": player.color } as CSSProperties} />
               ))}
             </span>
@@ -3795,7 +3795,7 @@ function GameControlScreen({
             </div>
           ) : null}
           {!ambient ? <div className="control-roster">
-            {players.slice(0, 6).map((player) => (
+            {players.slice(0, 8).map((player) => (
               <span key={player.id} className="player-pill" style={{ "--pc": player.color } as CSSProperties}>
                 <span />
                 <span>{playerLabel(allPlayers, player)}</span>

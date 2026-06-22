@@ -16,7 +16,7 @@ const (
 )
 
 const (
-	MaxStartPadPlayers      = 6
+	MaxStartPadPlayers      = 8
 	DefaultStartPadSize     = 4
 	DefaultStartPadHoldNS   = int64(1000000000)
 	DefaultStartCountdownNS = int64(3000000000)
@@ -407,7 +407,7 @@ func (s *StartPads) assignStartPadOrigins(seed uint32) {
 		}
 		return
 	}
-	order := [MaxStartPadPlayers]int{0, 1, 2, 3, 4, 5}
+	order := [MaxStartPadPlayers]int{0, 1, 2, 3, 4, 5, 6, 7}
 	for i := MaxStartPadPlayers - 1; i > 0; i-- {
 		j := startPadRand(&seed, i+1)
 		order[i], order[j] = order[j], order[i]
@@ -425,6 +425,8 @@ func defaultStartPadOrigins(size int) [MaxStartPadPlayers]Point {
 		{X: Width - size, Y: 0},
 		{X: 0, Y: (Height - size) / 2},
 		{X: Width - size, Y: (Height - size) / 2},
+		{X: (Width - size) / 2, Y: 0},
+		{X: (Width - size) / 2, Y: Height - size},
 	}
 }
 
