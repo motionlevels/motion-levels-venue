@@ -65,6 +65,7 @@ type InitRequest struct {
 	Label      string          `json:"label"`
 	Seed       int64           `json:"seed"`
 	Difficulty string          `json:"difficulty"`
+	Level      string          `json:"level"`
 	NowUnixNS  int64           `json:"now_unix_ns"`
 	Width      int             `json:"width"`
 	Height     int             `json:"height"`

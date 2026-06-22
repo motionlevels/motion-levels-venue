@@ -2055,8 +2055,8 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 		cfg.Game = "animations"
 	}
 	if strings.HasPrefix(cfg.Game, "authored-") {
-		log.Printf("game: authored id=%s players=%d difficulty=%s runtime=%s", cfg.Game, cfg.PlayerCount, cfg.Difficulty, cfg.AuthoredRuntime)
-		game, err := authored.NewWithSeedRuntime(now, seed, cfg.Game, cfg.PlayerCount, whackPlayersFromConfig(cfg), cfg.PlatformURL, cfg.Difficulty, cfg.AuthoredRuntime)
+		log.Printf("game: authored id=%s players=%d difficulty=%s level=%s runtime=%s", cfg.Game, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.AuthoredRuntime)
+		game, err := authored.NewWithSeedRuntime(now, seed, cfg.Game, cfg.PlayerCount, whackPlayersFromConfig(cfg), cfg.PlatformURL, cfg.Difficulty, cfg.Level, cfg.AuthoredRuntime)
 		if err != nil {
 			log.Printf("authored game: %v", err)
 			return nil

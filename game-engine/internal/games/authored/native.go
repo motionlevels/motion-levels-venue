@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/duelgo"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/lavago"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/memorychallengego"
+	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/patronesgo"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/pingpongmotion"
+	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/saltosgo"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/tetris"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/whackamolego"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
@@ -38,7 +41,9 @@ var nativeFactories = map[string]func() NativeABI{
 	"authored-duel":             func() NativeABI { return duelgo.NewABI() },
 	"authored-lava":             func() NativeABI { return lavago.NewABI() },
 	"authored-memory-challenge": func() NativeABI { return memorychallengego.NewABI() },
+	"authored-patrones":         func() NativeABI { return patronesgo.NewABI() },
 	"authored-ping-pong-motion": func() NativeABI { return pingpongmotion.NewABI() },
+	"authored-saltos":           func() NativeABI { return saltosgo.NewABI() },
 	"authored-tetris":           func() NativeABI { return tetris.NewABI() },
 	"authored-whack-a-mole-go":  func() NativeABI { return whackamolego.NewABI() },
 }
@@ -56,7 +61,7 @@ func NativeGameIDs() []string {
 	return out
 }
 
-func NewNativeWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount int, players []whackamole.PlayerConfig, difficulty string) (*NativeGame, error) {
+func NewNativeWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount int, players []whackamole.PlayerConfig, difficulty string, level string) (*NativeGame, error) {
 	factory, ok := nativeFactories[entry.EngineGame]
 	if !ok {
 		return nil, fmt.Errorf("motion-go-v1 game %q has no native runner", entry.EngineGame)
@@ -75,6 +80,7 @@ func NewNativeWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCoun
 		Label:      entry.Label,
 		Seed:       seed,
 		Difficulty: normalizeDifficulty(difficulty),
+		Level:      strings.TrimSpace(level),
 		NowUnixNS:  now.UnixNano(),
 		Width:      GridWidth,
 		Height:     GridHeight,

@@ -19,7 +19,7 @@ func TestWASMGameInitTimeoutFailsClosed(t *testing.T) {
 	}
 
 	start := time.Now()
-	game, err := NewWASMWithSeed(start, 1, entry, 1, nil, "medium")
+	game, err := NewWASMWithSeed(start, 1, entry, 1, nil, "medium", "")
 	if err == nil {
 		if game != nil {
 			snapshot := game.Snapshot(start)

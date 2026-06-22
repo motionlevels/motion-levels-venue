@@ -13,7 +13,7 @@ func TestNativeTetrisRunsWithoutWASMArtifact(t *testing.T) {
 		EngineGame: "authored-tetris",
 		Label:      "Tetris",
 		GameSource: Spec{Schema: "motion-go-v1", Kind: "wasm", Version: 1},
-	}, 1, nil, "medium")
+	}, 1, nil, "medium", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestNativePingPongRunsWithoutWASMArtifact(t *testing.T) {
 		EngineGame: "authored-ping-pong-motion",
 		Label:      "Ping Pong Motion",
 		GameSource: Spec{Schema: "motion-go-v1", Kind: "wasm", Version: 1},
-	}, 2, nil, "medium")
+	}, 2, nil, "medium", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestNativeMemoryChallengeRunsWithoutWASMArtifact(t *testing.T) {
 		EngineGame: "authored-memory-challenge",
 		Label:      "Reto de memoria",
 		GameSource: Spec{Schema: "motion-go-v1", Kind: "wasm", Version: 1},
-	}, 4, nil, "medium")
+	}, 4, nil, "medium", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,13 +80,13 @@ func TestNativeDuelDifficultyControlsFloorFill(t *testing.T) {
 		Label:      "Duelo",
 		GameSource: Spec{Schema: "motion-go-v1", Kind: "wasm", Version: 1},
 	}
-	medium, err := NewNativeWithSeed(start, 7, entry, 4, nil, "medium")
+	medium, err := NewNativeWithSeed(start, 7, entry, 4, nil, "medium", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	mediumSnapshot := medium.Snapshot(start)
 	mediumFrame := medium.Render(start)
-	hard, err := NewNativeWithSeed(start, 7, entry, 4, nil, "hard")
+	hard, err := NewNativeWithSeed(start, 7, entry, 4, nil, "hard", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestNativeLavaRunsWithLivesAndDamage(t *testing.T) {
 		Label:      "El suelo es lava",
 		GameSource: Spec{Schema: "motion-go-v1", Kind: "wasm", Version: 1},
 	}
-	game, err := NewNativeWithSeed(start, 7, entry, 3, nil, "hard")
+	game, err := NewNativeWithSeed(start, 7, entry, 3, nil, "hard", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,12 +138,45 @@ func TestNativeLavaRunsWithLivesAndDamage(t *testing.T) {
 	}
 }
 
+func TestNativeSaltosAndPatronesRunWithSelectedLevels(t *testing.T) {
+	start := time.Unix(1_700_000_000, 0)
+	for _, tc := range []struct {
+		id      string
+		label   string
+		players int
+		level   string
+	}{
+		{id: "authored-saltos", label: "Saltos", players: 1, level: "classic"},
+		{id: "authored-patrones", label: "Patrones", players: 4, level: "level-3"},
+	} {
+		game, err := NewNativeWithSeed(start, 7, CatalogEntry{
+			EngineGame: tc.id,
+			Label:      tc.label,
+			GameSource: Spec{Schema: "motion-go-v1", Kind: "wasm", Version: 1},
+		}, tc.players, nil, "hard", tc.level)
+		if err != nil {
+			t.Fatalf("%s init: %v", tc.id, err)
+		}
+		if !HasNative(tc.id) {
+			t.Fatalf("%s should be registered as a native authored game", tc.id)
+		}
+		frame := game.Render(start.Add(4 * time.Second))
+		if len(frame) != GridWidth*GridHeight {
+			t.Fatalf("%s frame len = %d, want %d", tc.id, len(frame), GridWidth*GridHeight)
+		}
+		snapshot := game.Snapshot(start.Add(4 * time.Second))
+		if snapshot.Phase == "" || len(snapshot.Players) != tc.players {
+			t.Fatalf("%s snapshot = %+v", tc.id, snapshot)
+		}
+	}
+}
+
 func TestNativeUnknownGameErrors(t *testing.T) {
 	_, err := NewNativeWithSeed(time.Now(), 1, CatalogEntry{
 		EngineGame: "authored-unknown",
 		Label:      "Unknown",
 		GameSource: Spec{Schema: "motion-go-v1", Kind: "wasm", Version: 1},
-	}, 1, nil, "medium")
+	}, 1, nil, "medium", "")
 	if err == nil {
 		t.Fatal("expected unknown native game to fail")
 	}

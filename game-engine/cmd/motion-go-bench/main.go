@@ -76,7 +76,7 @@ func splitList(value string) []string {
 func runBench(platformURL string, gameID string, runtime string, frames int, fps int, players int, difficulty string, seed int64) benchResult {
 	result := benchResult{Game: gameID, Runtime: runtime, Frames: frames}
 	start := time.Unix(1_700_000_000, 0)
-	game, err := authored.NewWithSeedRuntime(start, seed, gameID, players, nil, platformURL, difficulty, runtime)
+	game, err := authored.NewWithSeedRuntime(start, seed, gameID, players, nil, platformURL, difficulty, "", runtime)
 	if err != nil {
 		result.Errored = true
 		result.Error = err.Error()
