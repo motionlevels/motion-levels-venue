@@ -1103,6 +1103,17 @@ button.capsule:disabled,
     0 10px 24px -20px rgba(0, 0, 0, 0.9);
 }
 
+.tab::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(70% 90% at 50% 0%, rgba(255, 255, 255, 0.12), transparent 70%);
+  transition: opacity 180ms var(--ease);
+}
+
 .tab::after {
   content: "";
   position: absolute;
@@ -1142,6 +1153,10 @@ button.capsule:disabled,
   transform: translateY(-1px);
 }
 
+.tab:hover:not(.active)::before {
+  opacity: 0.72;
+}
+
 .tab.active {
   color: #f7fbff;
   border-color: rgba(var(--accent-rgb), 0.58);
@@ -1156,6 +1171,10 @@ button.capsule:disabled,
 .tab.active::after {
   opacity: 1;
   transform: scaleX(1);
+}
+
+.tab.active::before {
+  opacity: 1;
 }
 
 .tab.active .tab-icon {
@@ -1254,6 +1273,10 @@ button.capsule:disabled,
   touch-action: pan-y;
 }
 
+.games.game-grid {
+  grid-auto-rows: minmax(0, 1fr);
+}
+
 .games.count-1,
 .games.count-2 {
   align-content: center;
@@ -1324,8 +1347,9 @@ button.capsule:disabled,
   background: rgba(11, 18, 28, 0.9);
   box-shadow: var(--shadow-card);
   isolation: isolate;
-  animation: cardRise 480ms var(--ease) backwards;
-  animation-delay: calc(var(--i, 0) * 62ms);
+  contain: layout paint;
+  animation: cardRise 360ms var(--ease) backwards;
+  animation-delay: calc(var(--i, 0) * 42ms);
 }
 
 @keyframes cardRise {
@@ -1394,6 +1418,11 @@ button.capsule:disabled,
     0 0 42px -18px rgba(var(--accent-rgb), 0.95);
 }
 
+.game-card.selected .preview,
+.game-card.active .preview {
+  filter: saturate(1.08) brightness(1.05);
+}
+
 .game-card.active {
   border-color: rgba(var(--crgb), 0.85);
   box-shadow:
@@ -1458,6 +1487,16 @@ button.capsule:disabled,
   mix-blend-mode: screen;
   transform: translateY(-52%);
   animation: previewScan 3800ms linear infinite;
+}
+
+.preview::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.34;
+  background:
+    radial-gradient(46% 42% at 50% 50%, transparent 46%, rgba(0, 0, 0, 0.42) 100%);
 }
 
 @keyframes previewScan {
@@ -1607,8 +1646,10 @@ button.capsule:disabled,
   min-height: 0;
   padding: 16px;
   display: grid;
-  align-content: center;
-  gap: 9px;
+  align-content: space-between;
+  gap: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(0, 0, 0, 0.08));
 }
 
 .game-body h3 {
@@ -2307,6 +2348,7 @@ button.capsule:disabled,
   gap: 12px;
   overflow: hidden;
   background:
+    radial-gradient(58% 120% at 86% 50%, rgba(var(--accent-rgb), 0.14), transparent 70%),
     linear-gradient(90deg, rgba(var(--accent-rgb), 0.1), transparent 36%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012)),
     rgba(10, 16, 25, 0.9);
@@ -2482,6 +2524,10 @@ button.capsule:disabled,
 .launch-difficulty-button.active::after {
   opacity: 1;
   transform: scaleX(1);
+}
+
+.launch-difficulty-button.active .difficulty-label {
+  text-shadow: 0 0 18px rgba(var(--accent-rgb), 0.34);
 }
 
 .launch-difficulty-button.active .star-rating,
@@ -4414,12 +4460,12 @@ button.capsule:disabled,
 
 @media (min-width: 0px) {
   .app {
-    padding: 26px 30px;
-    gap: 14px;
+    padding: 26px 30px 24px;
+    gap: 12px;
   }
 
   .topbar {
-    min-height: 118px;
+    min-height: 108px;
     grid-template-columns: 120px minmax(0, 1fr) max-content;
     gap: 22px;
   }
@@ -4466,38 +4512,38 @@ button.capsule:disabled,
   }
 
   .game-grid-panel {
-    padding: 20px;
-    gap: 16px;
+    padding: 18px 20px;
+    gap: 14px;
   }
 
   .section-head h2 {
-    font-size: 42px;
+    font-size: 38px;
   }
 
   .games {
     grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
-    gap: 16px;
+    gap: 14px;
     padding: 3px;
   }
 
   .game-card {
-    min-height: 322px;
-    grid-template-rows: minmax(220px, 1fr) 102px;
+    min-height: 300px;
+    grid-template-rows: minmax(204px, 1fr) 96px;
     border-radius: var(--r-lg);
   }
 
   .preview {
-    --preview-board-max-width: min(80%, 420px);
-    min-height: 220px;
+    --preview-board-max-width: min(84%, 440px);
+    min-height: 204px;
   }
 
   .game-body {
-    padding: 16px 22px;
+    padding: 15px 20px;
     gap: 10px;
   }
 
   .game-body h3 {
-    font-size: 30px;
+    font-size: 28px;
   }
 
   .game-card-meta {
@@ -4507,16 +4553,16 @@ button.capsule:disabled,
   }
 
   .detail-panel {
-    grid-template-rows: 300px minmax(0, 1fr);
+    grid-template-rows: 286px minmax(0, 1fr);
   }
 
   .detail-copy {
-    padding: 24px 26px;
-    gap: 12px;
+    padding: 22px 24px;
+    gap: 11px;
   }
 
   .detail-copy h2 {
-    font-size: 46px;
+    font-size: 44px;
   }
 
   .detail-copy > p {
@@ -4532,7 +4578,7 @@ button.capsule:disabled,
   }
 
   .launch-bar {
-    min-height: 122px;
+    min-height: 116px;
     padding: 12px;
   }
 
@@ -4543,21 +4589,21 @@ button.capsule:disabled,
   .launch-deck-label,
   .launch-summary-pill,
   .launch-difficulty-button {
-    min-height: 98px;
+    min-height: 92px;
   }
 
   .btn.primary.play {
     min-width: 350px;
-    min-height: 98px;
+    min-height: 92px;
     padding: 0 38px;
-    font-size: 31px;
+    font-size: 30px;
     border-radius: var(--r-md);
   }
 
   .narration-toggle {
-    min-height: 98px;
+    min-height: 92px;
     padding: 0 28px;
-    font-size: 22px;
+    font-size: 21px;
     border-radius: var(--r-md);
   }
 }
