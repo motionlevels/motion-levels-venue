@@ -272,10 +272,26 @@ describe("catalog metadata sync", () => {
 
   it("uses revisioned platform preview media for level cards", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
+    const cardThumbnailSources = appSource.slice(
+      appSource.indexOf("function catalogThumbnailMediaSrcs("),
+      appSource.indexOf("function catalogPreviewMediaSrcs("),
+    );
+    const levelThumbnailSources = appSource.slice(
+      appSource.indexOf("const platformThumbnailSrcs = uniquePreviewSources(["),
+      appSource.indexOf("const platformPreviewSrcs = uniquePreviewSources(["),
+    );
 
     assert.match(appSource, /catalogDirectAssetSrc\(lvl\.catalog_thumbnail_small_url\)/);
     assert.match(appSource, /catalogDirectAssetSrc\(lvl\.catalog_thumbnail_url\)/);
     assert.match(appSource, /catalogDirectAssetSrc\(lvl\.catalog_preview_url\)/);
+    assert.ok(
+      cardThumbnailSources.indexOf("entry.catalog_preview_url") < cardThumbnailSources.indexOf("entry.catalog_thumbnail_small_url"),
+      "game cards should prefer the generated preview over the small thumbnail",
+    );
+    assert.ok(
+      levelThumbnailSources.indexOf("lvl.catalog_preview_url") < levelThumbnailSources.indexOf("lvl.catalog_thumbnail_small_url"),
+      "level cards should prefer the generated preview over the small thumbnail",
+    );
     assert.match(appSource, /function hasLegacyPreviewMediaURL/);
     assert.match(appSource, /\/api\\\/game-catalog\\\/thumbnails\\\//);
     assert.match(appSource, /\[\?&\]v=\\d\+\\b/);

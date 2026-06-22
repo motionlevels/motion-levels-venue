@@ -518,8 +518,9 @@ function uniquePreviewSources(values: Array<string | undefined>): string[] {
 
 function catalogThumbnailMediaSrcs(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined): string[] {
   return uniquePreviewSources([
-    catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
+    catalogDirectAssetSrc(entry.catalog_preview_url),
     catalogDirectAssetSrc(entry.catalog_thumbnail_url),
+    catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
     catalogThumbnailSrc(entry.catalog_thumbnail_ref),
     ...(fallback?.thumbnailSrcs || []),
     fallback?.thumbnailSrc,
@@ -574,8 +575,9 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
 	        const fallbackLevel = fallback?.levels?.find((level) => level.id === levelID || level.id === lvl.id);
 	        const levelDifficulties = platformLevelSupportedDifficulties(lvl);
 	        const platformThumbnailSrcs = uniquePreviewSources([
-	          catalogDirectAssetSrc(lvl.catalog_thumbnail_small_url),
+	          catalogDirectAssetSrc(lvl.catalog_preview_url),
 	          catalogDirectAssetSrc(lvl.catalog_thumbnail_url),
+	          catalogDirectAssetSrc(lvl.catalog_thumbnail_small_url),
 	          fallbackLevel?.thumbnailSrc,
 	          ...(fallbackLevel?.thumbnailSrcs || []),
 	          fallbackLevel?.previewSrc,
