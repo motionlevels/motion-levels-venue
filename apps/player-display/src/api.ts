@@ -17,6 +17,7 @@ export type DisplayStatus = {
   label: string;
   phase: string;
   difficulty: string;
+  difficultyConfigurable?: boolean;
   playerCount: number;
   playerConfigurable?: boolean;
   players: DisplayPlayer[];

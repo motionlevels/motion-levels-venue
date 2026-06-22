@@ -64,7 +64,9 @@ const gameTitlesES: Record<string, string> = {
 };
 
 export function gameTitleES(currentGame: string, label: string): string {
-  return gameTitlesES[currentGame] || label;
+  const cleanLabel = label.trim();
+  if (cleanLabel && cleanLabel !== currentGame) return cleanLabel;
+  return gameTitlesES[currentGame] || cleanLabel || currentGame;
 }
 
 // Some engine event messages are still English; translate the known ones while preserving

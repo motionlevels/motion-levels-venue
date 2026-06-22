@@ -204,6 +204,7 @@ type displayStatus struct {
 	Label                    string          `json:"label"`
 	Phase                    string          `json:"phase"`
 	Difficulty               string          `json:"difficulty"`
+	DifficultyConfigurable   bool            `json:"difficultyConfigurable"`
 	Level                    string          `json:"level,omitempty"`
 	TeamName                 string          `json:"teamName"`
 	PlayerCount              int             `json:"playerCount"`
@@ -605,23 +606,24 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 	r.mu.RUnlock()
 
 	status := displayStatus{
-		CurrentGame:        cfg.Game,
-		VenueSessionID:     cfg.VenueSessionID,
-		Label:              gameLabel(cfg.Game),
-		Phase:              "idle",
-		Difficulty:         cfg.Difficulty,
-		Level:              cfg.Level,
-		TeamName:           cfg.TeamName,
-		PlayerCount:        cfg.PlayerCount,
-		PlayerConfigurable: gameHasConfigurablePlayers(cfg.Game, cfg.PlatformURL),
-		Players:            defaultDisplayPlayers(cfg),
-		Lives:              -1,
-		StartedUnix:        started.Unix(),
-		AudioEnabled:       audioEnabled,
-		AudioMuted:         audioMuted,
-		LastEventUnixNanos: lastEvent.unixNanos,
-		LastEventCue:       lastEvent.cue,
-		LastEventMessage:   lastEvent.message,
+		CurrentGame:            cfg.Game,
+		VenueSessionID:         cfg.VenueSessionID,
+		Label:                  gameLabel(cfg.Game),
+		Phase:                  "idle",
+		Difficulty:             cfg.Difficulty,
+		DifficultyConfigurable: gameHasConfigurableDifficulty(cfg.Game, cfg.PlatformURL),
+		Level:                  cfg.Level,
+		TeamName:               cfg.TeamName,
+		PlayerCount:            cfg.PlayerCount,
+		PlayerConfigurable:     gameHasConfigurablePlayers(cfg.Game, cfg.PlatformURL),
+		Players:                defaultDisplayPlayers(cfg),
+		Lives:                  -1,
+		StartedUnix:            started.Unix(),
+		AudioEnabled:           audioEnabled,
+		AudioMuted:             audioMuted,
+		LastEventUnixNanos:     lastEvent.unixNanos,
+		LastEventCue:           lastEvent.cue,
+		LastEventMessage:       lastEvent.message,
 	}
 
 	if cfg.Game == "whack-a-mole" {
@@ -1879,6 +1881,19 @@ func gameHasConfigurablePlayers(game string, platformURL string) bool {
 	return false
 }
 
+func gameHasConfigurableDifficulty(game string, platformURL string) bool {
+	normalized := normalizeGame(game)
+	for _, entry := range gameCatalog(platformURL) {
+		if normalizeGame(entry.Game) == normalized {
+			return entry.Difficulty
+		}
+	}
+	if strings.HasPrefix(normalized, "animation-") || animation.IsAmbientMode(normalized) {
+		return false
+	}
+	return strings.HasPrefix(normalized, "authored-") || isPlatformLevelGameID(normalized)
+}
+
 func isPlatformRuntimeGame(game string) bool {
 	game = normalizeGame(game)
 	return isPlatformLevelGameID(game) || game == "plataformas" || game == "parkour2" || game == "temporada1-niveles"
@@ -2474,7 +2489,7 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 			Players:     true,
 			MinPlayers:  1,
 			MaxPlayers:  6,
-			Difficulty:  true,
+			Difficulty:  false,
 			Volume:      temporada2.DefaultMusicVolume,
 			Levels:      temporada2CatalogLevels(),
 		},

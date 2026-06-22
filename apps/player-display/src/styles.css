@@ -1107,8 +1107,8 @@ body {
 
 .arcade-player-card {
   min-width: 0;
-  min-height: 118px;
-  padding: 16px 20px;
+  min-height: 132px;
+  padding: 18px 22px;
   display: grid;
   align-content: space-between;
   gap: 12px;
@@ -1148,7 +1148,7 @@ body {
 .arcade-player-name span {
   overflow: hidden;
   color: #fff;
-  font-size: 1.55rem;
+  font-size: clamp(1.55rem, 1.55vw, 2.25rem);
   line-height: 1;
   font-weight: 950;
   letter-spacing: 0;
@@ -1168,12 +1168,46 @@ body {
 
 .arcade-player-card > strong {
   color: var(--player);
-  font-size: 4rem;
+  font-size: clamp(4.4rem, 4.9vw, 6.8rem);
   line-height: 0.82;
   font-weight: 950;
   letter-spacing: 0;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 30px rgba(var(--player-rgb), 0.46);
+}
+
+.arcade-player-card.team {
+  min-height: 170px;
+  padding: 22px 28px;
+  background:
+    radial-gradient(80% 120% at 12% 42%, rgba(var(--player-rgb), 0.34), transparent 58%),
+    linear-gradient(90deg, rgba(var(--player-rgb), 0.26), transparent 50%),
+    rgba(8, 20, 34, 0.86);
+}
+
+.arcade-player-card.team .arcade-player-name {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px;
+}
+
+.arcade-player-card.team .arcade-player-name i {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+
+.arcade-player-card.team .arcade-player-name span {
+  font-size: clamp(2rem, 2.15vw, 3.2rem);
+}
+
+.arcade-player-card.team .arcade-player-name b {
+  padding: 8px 12px;
+  font-size: clamp(0.78rem, 0.88vw, 1.05rem);
+}
+
+.arcade-player-card.team > strong {
+  font-size: clamp(6.2rem, 7.4vw, 10rem);
+  line-height: 0.78;
 }
 
 .parkour-display .arcade-player-card.compact {

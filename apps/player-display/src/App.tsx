@@ -8,6 +8,7 @@ const emptyStatus: DisplayStatus = {
   label: "Motion Levels",
   phase: "idle",
   difficulty: "easy",
+  difficultyConfigurable: false,
   playerCount: 1,
   playerConfigurable: false,
   players: [],
@@ -33,7 +34,7 @@ function isTeamScoreGame(currentGame: string): boolean {
 
 export default function App() {
   const options = useMemo(() => displayOptions(), []);
-  const demoStatus = useMemo(() => demoDisplayStatus(options.demo), [options.demo]);
+  const demoStatus = useMemo(() => demoDisplayStatus(options), [options]);
   const [status, setStatus] = useState<DisplayStatus>(emptyStatus);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState("");
@@ -204,15 +205,16 @@ function ClassicDisplay({ status, connected, error }: DisplayProps) {
 }
 
 function ArcadeDisplay({ status, connected, error }: DisplayProps) {
-  const teamScoreGame = isTeamScoreGame(status.currentGame);
+  const teamRosterGame = isTeamScoreGame(status.currentGame);
+  const teamScoreboardGame = isTeamScoreboardGame(status);
   const duelGame = status.currentGame === "duel" && status.players.length >= 2;
   const parkourGame = isParkourGame(status.currentGame);
   const levelPointsGame = isLevelPointsGame(status);
   const parkourStyleGame = parkourGame || levelPointsGame;
   const leader = useMemo(() => {
-    if (teamScoreGame || duelGame || !status.players.length) return null;
+    if (teamRosterGame || duelGame || !status.players.length) return null;
     return [...status.players].sort((left, right) => right.score - left.score)[0];
-  }, [duelGame, status.players, teamScoreGame]);
+  }, [duelGame, status.players, teamRosterGame]);
   const lifeLoss = status.lastEventCue === "miss" && status.currentGame === "lava";
   const eventClass = status.lastEventCue ? `event-${status.lastEventCue}${lifeLoss ? " event-life-loss" : ""}` : "";
   const clock = displayClock(status);
@@ -279,7 +281,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
           </div>
         </section>
       ) : (
-        <section className={`arcade-stage ${teamScoreGame ? "team-score" : ""}`}>
+        <section className={`arcade-stage ${teamRosterGame || teamScoreboardGame ? "team-score" : ""}`}>
           <article className="arcade-primary">
             <div className="arcade-ribbon">{mainMetric.label}</div>
             <strong>{mainMetric.value}</strong>
@@ -296,10 +298,10 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
 
       {!duelGame && showPlayerInfo ? (
         <section
-          className={`arcade-players ${teamScoreGame ? "team-score" : ""} count-${Math.min(Math.max(status.players.length, 1), 8)}`}
-          aria-label={teamScoreGame ? "Equipo" : "Jugadores"}
+          className={`arcade-players ${teamRosterGame || teamScoreboardGame ? "team-score" : ""} count-${Math.min(Math.max(status.players.length, 1), 8)}`}
+          aria-label={teamRosterGame || teamScoreboardGame ? "Equipos" : "Jugadores"}
         >
-          {teamScoreGame && status.players.length ? (
+          {teamRosterGame && status.players.length ? (
             <article className="arcade-team-card">
               <div>
                 <span>Equipo</span>
@@ -312,7 +314,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
               </div>
             </article>
           ) : status.players.length ? (
-            status.players.map((player) => <ArcadePlayerCard key={player.index} player={player} leader={leader?.index === player.index} compact={parkourStyleGame} />)
+            status.players.map((player) => <ArcadePlayerCard key={player.index} player={player} leader={leader?.index === player.index} compact={parkourStyleGame} team={teamScoreboardGame} />)
           ) : (
             <article className="arcade-empty">Esperando datos del juego</article>
           )}
@@ -356,12 +358,13 @@ function DuelSide({ player, side }: { player: DisplayStatus["players"][number]; 
   );
 }
 
-function ArcadePlayerCard({ player, leader, compact = false }: { player: DisplayStatus["players"][number]; leader: boolean; compact?: boolean }) {
+function ArcadePlayerCard({ player, leader, compact = false, team = false }: { player: DisplayStatus["players"][number]; leader: boolean; compact?: boolean; team?: boolean }) {
+  const label = playerLabelES(player.label);
   return (
-    <article className={`arcade-player-card ${leader ? "leader" : ""} ${compact ? "compact" : ""}`} style={{ "--player": colorCSS(player.color), "--player-rgb": colorRGB(player.color) } as CSSProperties}>
+    <article className={`arcade-player-card ${leader ? "leader" : ""} ${compact ? "compact" : ""} ${team ? "team" : ""}`} style={{ "--player": colorCSS(player.color), "--player-rgb": colorRGB(player.color) } as CSSProperties}>
       <div className="arcade-player-name">
         <i />
-        <span>{playerLabelES(player.label)}</span>
+        <span>{team ? `Equipo ${label}` : label}</span>
         {leader ? <b>Líder</b> : null}
       </div>
       <strong>{player.score}</strong>
@@ -467,6 +470,11 @@ function isTemporadaOneGame(status: Pick<DisplayStatus, "currentGame" | "label">
   return currentGame === "temporada1" || currentGame === "temporada1-niveles" || label.includes("temporada 1") || label.includes("temporada1");
 }
 
+function isTeamScoreboardGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
+  const text = normalizedDisplayText(`${status.currentGame} ${status.label}`);
+  return status.currentGame === "temporada2" || text.includes("tira") || text.includes("afloja") || text.includes("baldosas") || text.includes("tug");
+}
+
 function isLevelPointsGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
   return isTemporadaOneGame(status);
 }
@@ -527,11 +535,14 @@ function arcadeSideMetrics(status: DisplayStatus): Array<{ label: string; value:
       { label: "Mejor global", value: formatBestTime(status.bestElapsedMillis), tone: "amber" },
     ];
   }
-  return [
+  const metrics: Array<{ label: string; value: string; tone: "magenta" | "cyan" | "amber"; stars?: number }> = [
     { label: "Puntos", value: String(status.score), tone: "magenta" },
     { label: "Objetivos", value: String(status.activeTargets), tone: "cyan" },
-    { label: "Dificultad", value: difficultyLabelES(status.difficulty), tone: "amber", stars: difficultyStars(status.difficulty) },
   ];
+  if (shouldShowDifficulty(status)) {
+    metrics.push({ label: "Dificultad", value: difficultyLabelES(status.difficulty), tone: "amber", stars: difficultyStars(status.difficulty) });
+  }
+  return metrics;
 }
 
 function arcadeLevelSideMetrics(status: DisplayStatus): Array<{ label: string; value: string; tone: "magenta" | "cyan" | "amber"; stars?: number }> {
@@ -559,6 +570,10 @@ function formatBestTime(milliseconds?: number): string {
   return milliseconds && milliseconds > 0 ? formatClock(milliseconds) : "-";
 }
 
+function shouldShowDifficulty(status: DisplayStatus): boolean {
+  return status.difficultyConfigurable !== false && Boolean(status.difficulty);
+}
+
 function difficultyStars(difficulty: string): number {
   const normalized = normalizedDisplayText(difficulty);
   if (normalized === "expert" || normalized === "experto") return 4;
@@ -573,22 +588,36 @@ type DisplayProps = {
   error: string;
 };
 
-function displayOptions(): { hud: "arcade" | "classic"; demo: string } {
-  if (typeof window === "undefined") return { hud: "arcade", demo: "" };
+type DisplayOptions = {
+  hud: "arcade" | "classic";
+  demo: string;
+  demoGame: string;
+  demoLabel: string;
+  demoDifficultyConfigurable?: boolean;
+};
+
+function displayOptions(): DisplayOptions {
+  if (typeof window === "undefined") return { hud: "arcade", demo: "", demoGame: "", demoLabel: "" };
   const params = new URLSearchParams(window.location.search);
+  const difficultyParam = params.get("difficultyConfigurable");
   return {
     hud: params.get("hud") === "classic" ? "classic" : "arcade",
     demo: params.get("demo") || "",
+    demoGame: params.get("demoGame") || "",
+    demoLabel: params.get("demoLabel") || "",
+    demoDifficultyConfigurable: difficultyParam === null ? undefined : difficultyParam === "1" || difficultyParam === "true",
   };
 }
 
-function demoDisplayStatus(name: string): DisplayStatus | null {
+function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
+  const name = options.demo;
   const base: DisplayStatus = {
     ...emptyStatus,
-    currentGame: "temporada2",
-    label: "Temporada 2",
+    currentGame: options.demoGame || "arcade-demo",
+    label: options.demoLabel || "Arcade",
     phase: "running",
     difficulty: "medium",
+    difficultyConfigurable: options.demoDifficultyConfigurable ?? true,
     playerCount: 4,
     playerConfigurable: true,
     players: [
@@ -662,6 +691,26 @@ function demoDisplayStatus(name: string): DisplayStatus | null {
         activeTargets: 6,
         lastEventCue: "miss",
         lastEventMessage: "Fallo",
+      };
+    case "teams":
+      return {
+        ...base,
+        currentGame: options.demoGame || "arcade-teams",
+        label: options.demoLabel || "Tira y Afloja Baldosas",
+        difficulty: "easy",
+        difficultyConfigurable: options.demoDifficultyConfigurable ?? false,
+        playerCount: 2,
+        players: [
+          { index: 0, label: "Red", color: { r: 255, g: 41, b: 56 }, score: 42, lives: -1 },
+          { index: 1, label: "Cyan", color: { r: 30, g: 213, b: 255 }, score: 35, lives: -1 },
+        ],
+        score: 77,
+        lives: -1,
+        activeTargets: 0,
+        remainingMillis: 0,
+        elapsedMillis: 94000,
+        lastEventCue: "hit",
+        lastEventMessage: "Red +5",
       };
     case "temporada1":
       return {
