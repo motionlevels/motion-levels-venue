@@ -3293,7 +3293,10 @@ function MenuApp() {
                         {readyLabel}
                       </>
                     ) : blocked ? (
-                      blockedLabel
+                      <>
+                        {rosterBlocked ? <TeamIcon /> : levelBlocked || selectedGame.disabled || blockedLabel === "No disponible" ? <QuestionIcon /> : <PlayIcon />}
+                        {blockedLabel}
+                      </>
                     ) : (
                       <>
                         <PlayIcon />
