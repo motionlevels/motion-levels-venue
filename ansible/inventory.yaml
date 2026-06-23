@@ -77,8 +77,9 @@ all:
           motion_levels_objects_tailscale_tags: tag:motion-levels-dev
           motion_levels_objects_buckets:
             - motionlevels-media-assets
-            - motion-levels-recordings
+            - motionlevels-recordings
             - motionlevels-session-exports
+            - motionlevels-website-cdn
     motion_levels_venues:
       hosts:
         motionlevels-1:
