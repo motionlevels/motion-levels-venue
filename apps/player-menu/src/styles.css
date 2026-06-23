@@ -1674,6 +1674,7 @@ button.capsule:disabled,
   padding: 0 10px;
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
@@ -1684,6 +1685,26 @@ button.capsule:disabled,
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.game-card-meta-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  color: rgba(var(--accent-rgb), 0.95);
+}
+
+.game-card-meta-icon svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+.game-card-meta.players {
+  border-color: rgba(var(--accent-rgb), 0.2);
+  background: rgba(var(--accent-rgb), 0.075);
 }
 
 .game-card-meta.selected,

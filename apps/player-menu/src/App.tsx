@@ -162,6 +162,26 @@ function playerRangeLabel(game: GameCard): string {
   return `${count} ${plural}`;
 }
 
+function gameCardMeta(game: GameCard, active: boolean, selected: boolean): {
+  ariaLabel?: string;
+  className: string;
+  icon?: ReactNode;
+  label: string;
+} | null {
+  if (active) return { className: "live", label: "En juego" };
+  if (selected) return { className: "selected", label: "Seleccionado" };
+  if (game.players && gameRequiresPlayerCount(game)) {
+    return {
+      ariaLabel: `Jugadores: ${playerRangeLabel(game)}`,
+      className: "players",
+      icon: <TeamIcon />,
+      label: game.players,
+    };
+  }
+  if (game.duration) return { className: "duration", label: game.duration };
+  return null;
+}
+
 function remoteSessionRequestFromURL(): RemoteSessionRequest | null {
   if (typeof window === "undefined") return null;
   const params = new URLSearchParams(window.location.search);
@@ -2992,6 +3012,7 @@ function MenuApp() {
                     const engineAvailable = isGameLaunchable(game);
                     const selected = menu.selectedGame === game.id;
                     const active = selected && (status?.currentGame === runtimeGameID(game) || status?.currentGame === engineGameID(game));
+                    const meta = gameCardMeta(game, active, selected);
                     return (
                       <button
                         key={game.id}
@@ -3006,9 +3027,12 @@ function MenuApp() {
                         {renderPartyPreview(game, { compact: true, rich: selected || active })}
                         <div className="game-body">
                           <h3>{game.label}</h3>
-                          <span className={`game-card-meta ${active ? "live" : selected ? "selected" : ""}`}>
-                            {active ? "En juego" : selected ? "Seleccionado" : game.players || game.duration || "Listo"}
-                          </span>
+                          {meta ? (
+                            <span className={`game-card-meta ${meta.className}`} aria-label={meta.ariaLabel}>
+                              {meta.icon ? <span className="game-card-meta-icon" aria-hidden="true">{meta.icon}</span> : null}
+                              <span>{meta.label}</span>
+                            </span>
+                          ) : null}
                         </div>
                       </button>
                     );
