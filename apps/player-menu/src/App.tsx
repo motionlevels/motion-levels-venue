@@ -3066,7 +3066,7 @@ function MenuApp() {
                       <p>{selectedGame.description}</p>
                     </section>
                     <section className="season-level-row" aria-label="Nivel seleccionado">
-                      <div>
+                      <div className="season-level-copy">
                         <strong>{selectedLevelDisplayLabel}</strong>
                         <p>{selectedLevel.description}</p>
                       </div>
