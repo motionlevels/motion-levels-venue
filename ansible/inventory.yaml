@@ -15,6 +15,20 @@ all:
           motion_levels_platform_health_url: http://10.137.25.241:3000/api/sessions
           motion_levels_platform_bind_ip: 10.137.25.241
           motion_levels_platform_url: https://platform.motionlevels.obis.dev
+    motion_levels_platform:
+      hosts:
+        motionlevels-platform:
+          ansible_host: 100.102.24.118
+          motion_levels_repo_root: /opt/motion-levels/repo
+          motion_levels_platform_health_url: http://10.137.25.242:3000/api/sessions
+          motion_levels_platform_bind_ip: 10.137.25.242
+          motion_levels_platform_url: https://platform.motionlevels.obis.dev
+    homelab_caddy:
+      hosts:
+        caddy:
+          ansible_host: 10.137.25.208
+          motion_levels_platform_proxy_target: 10.137.25.242:3000
+          motion_levels_website_cdn_proxy_target: 192.168.1.7:9000
     motion_levels_website:
       hosts:
         motionlevels-website:
@@ -28,6 +42,43 @@ all:
           motion_levels_website_payload_urls: https://cms.motionlevels.obis.dev,https://payload.motionlevels.obis.dev
           motion_levels_website_strapi_health_url: http://127.0.0.1:1337/healthz
           motion_levels_website_strapi_url: https://strapi.motionlevels.obis.dev
+    motion_levels_postgres:
+      hosts:
+        motionlevels-postgres-1:
+          ansible_host: 100.124.16.23
+          motion_levels_postgres_version: "18"
+          motion_levels_postgres_data_device: /dev/sdb
+          motion_levels_postgres_data_partition: /dev/sdb1
+          motion_levels_postgres_data_mount: /var/lib/postgresql
+          motion_levels_postgres_backup_device: /dev/sdc
+          motion_levels_postgres_backup_partition: /dev/sdc1
+          motion_levels_postgres_backup_dir: /var/backups/motion-levels/postgres
+          motion_levels_postgres_tailscale_hostname: motionlevels-postgres-1
+          motion_levels_postgres_tailscale_tags: tag:motion-levels-dev
+          motion_levels_postgres_tailscale_ip: 100.124.16.23
+          motion_levels_postgres_listen_addresses: "127.0.0.1,100.124.16.23"
+          motion_levels_postgres_allowed_cidrs:
+            - 127.0.0.1/32
+            - 100.64.0.0/10
+    motion_levels_object_storage:
+      hosts:
+        motionlevels-objects-1:
+          ansible_host: 100.69.44.59
+          motion_levels_objects_image: rustfs/rustfs:1.0.0-beta.8
+          motion_levels_objects_data_device: /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1
+          motion_levels_objects_data_partition: /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1-part1
+          motion_levels_objects_data_mount: /srv/motion-levels/objects
+          motion_levels_objects_backup_device: /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi2
+          motion_levels_objects_backup_partition: /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi2-part1
+          motion_levels_objects_backup_dir: /var/backups/motion-levels/objects
+          motion_levels_objects_bind_ip: 100.69.44.59
+          motion_levels_objects_lan_bind_ip: "192.168.1.7"
+          motion_levels_objects_tailscale_hostname: motionlevels-objects-1
+          motion_levels_objects_tailscale_tags: tag:motion-levels-dev
+          motion_levels_objects_buckets:
+            - motionlevels-media-assets
+            - motion-levels-recordings
+            - motionlevels-session-exports
     motion_levels_venues:
       hosts:
         motionlevels-1:
