@@ -6,12 +6,10 @@ import {
   catalogDifficultyIDs,
   closestSupportedDifficulty,
   difficultyRank,
-  estimatedDurationLabel,
   gameRequiresPlayerCount,
   noPlayerRequirementLabel,
   normalizeEstimatedDurationSeconds,
   platformDifficultyLabel,
-  platformDurationLabel,
   platformLevelSupportedDifficulties,
   platformPlayerBounds,
   platformPlayerRangeLabel,
@@ -114,8 +112,6 @@ const emptyPreviewSources: string[] = [];
 const storageKey = "ml-player-menu-state-v1";
 const platformCatalogStorageKey = "ml-player-menu-platform-catalog-v2";
 const platformCatalogRefreshMillis = 5000;
-const menuBuildLabel = `${__MENU_BUILD_REVISION__} · ${formatMenuBuildDate(__MENU_BUILD_DATE__)}`;
-const menuBuildDateLabel = formatMenuBuildDate(__MENU_BUILD_DATE__);
 const maxPlayers = 8;
 const maxTeamNameLength = 24;
 const maxPlayerNameLength = 12;
@@ -134,18 +130,6 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 
 function isUUID(value: unknown): value is string {
   return typeof value === "string" && uuidPattern.test(value.trim());
-}
-
-function formatMenuBuildDate(value: string) {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "build local";
-  return new Intl.DateTimeFormat("es", {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-    timeZone: "Europe/Madrid",
-  }).format(date);
 }
 
 function clampInteger(value: number, min: number, max: number): number {
@@ -178,7 +162,6 @@ function gameCardMeta(game: GameCard, active: boolean, selected: boolean): {
       label: game.players,
     };
   }
-  if (game.duration) return { className: "duration", label: game.duration };
   return null;
 }
 
@@ -633,7 +616,6 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
         return byID;
       }, new Map<string, NonNullable<GameCard["levels"]>[number]>()).values())
     : undefined;
-  const duration = platformDurationLabel(entry) || (levels?.length ? `${levels.length} niveles` : "");
   const category = partyMiniGames?.length
     ? "versus"
     : isCategoryID(entry.catalog_category) ? entry.catalog_category : fallback?.category || "arcade";
@@ -645,7 +627,7 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
     players: platformPlayerRangeLabel(entry),
     difficulty: platformDifficultyLabel(entry),
     difficulties: supportedDifficulties,
-    duration,
+    duration: "",
     estimatedDurationSeconds,
     mode: entry.mode_label || fallback?.mode || "",
     audio: entry.audio_label || fallback?.audio || "",
@@ -3236,7 +3218,7 @@ function MenuApp() {
                   <span className="micro">Preparado</span>
                   <strong>{selectedGame.label}</strong>
                 </div>
-                <span className="launch-summary-pill">{selectedGame.players || selectedGame.duration || "Listo"}</span>
+                <span className="launch-summary-pill">{selectedGame.players || "Listo"}</span>
               </div>
             )}
             {(() => {
@@ -3569,7 +3551,6 @@ function OperatorSettingsDialog({
           <section className="settings-version-card" aria-label="Versión del menú">
             <span className="micro">Versión del menú</span>
             <strong>menu {__MENU_BUILD_REVISION__}</strong>
-            <small title={__MENU_BUILD_DATE__}>Desplegado {menuBuildDateLabel}</small>
           </section>
 
           {unlocked ? (
