@@ -1274,7 +1274,14 @@ button.capsule:disabled,
 }
 
 .games.game-grid {
-  grid-auto-rows: minmax(0, 1fr);
+  grid-auto-rows: 310px;
+}
+
+.games.count-1,
+.games.count-2,
+.games.count-3,
+.games.count-4 {
+  grid-auto-rows: auto;
 }
 
 .games.count-1,
@@ -1340,7 +1347,7 @@ button.capsule:disabled,
   min-height: 224px;
   padding: 0;
   display: grid;
-  grid-template-rows: minmax(150px, 1fr) 88px;
+  grid-template-rows: minmax(150px, 220px) 88px;
   overflow: hidden;
   border-radius: var(--r-md);
   text-align: left;
@@ -4547,9 +4554,20 @@ button.capsule:disabled,
     padding: 3px;
   }
 
+  .games.game-grid {
+    grid-auto-rows: 322px;
+  }
+
+  .games.count-1,
+  .games.count-2,
+  .games.count-3,
+  .games.count-4 {
+    grid-auto-rows: auto;
+  }
+
   .game-card {
     min-height: 300px;
-    grid-template-rows: minmax(204px, 1fr) 96px;
+    grid-template-rows: minmax(204px, 224px) 96px;
     border-radius: var(--r-lg);
   }
 

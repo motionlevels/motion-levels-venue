@@ -153,7 +153,6 @@ function gameCardMeta(game: GameCard, active: boolean, selected: boolean): {
   label: string;
 } | null {
   if (active) return { className: "live", label: "En juego" };
-  if (selected) return { className: "selected", label: "Seleccionado" };
   if (game.players && gameRequiresPlayerCount(game)) {
     return {
       ariaLabel: `Jugadores: ${playerRangeLabel(game)}`,
