@@ -1,0 +1,18 @@
+[Unit]
+Description=Motion Levels security camera recorder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/motion-levels/motion-levels.env
+EnvironmentFile=-/etc/motion-levels/platform.env
+EnvironmentFile=-/etc/motion-levels/camera.env
+EnvironmentFile=-/etc/motion-levels/security-recorder.env
+ExecStart=/usr/bin/python3 /opt/motion-levels/rebuild/src/deploy/motionlevels-pc/motion-levels-security-recorder.py
+Restart=always
+RestartSec=10
+User=root
+
+[Install]
+WantedBy=multi-user.target

@@ -78,6 +78,7 @@ all:
           motion_levels_objects_buckets:
             - motionlevels-media-assets
             - motionlevels-recordings
+            - motionlevels-security-recordings
             - motionlevels-session-exports
             - motionlevels-website-cdn
     motion_levels_venues:

@@ -65,6 +65,7 @@
       - motion-levels-floor-controller.service
       - motion-levels-game-engine.service
       - motion-levels-camera-recorder.service
+      - motion-levels-security-recorder.service
       - motion-levels-camera-helper.service
       - motion-levels-kiosk.service
     motion_levels_old_services:
@@ -198,6 +199,7 @@
           - build-essential
           - cmake
           - curl
+          - ffmpeg
           - libasound2-dev
           - libudev-dev
           - libusb-1.0-0-dev
@@ -234,6 +236,7 @@
         - /etc/caddy
         - /var/lib/motion-levels
         - /var/lib/motion-levels/camera-recordings
+        - /var/lib/motion-levels/security-recordings
 
     - name: Check installed Go version
       ansible.builtin.command:
@@ -335,6 +338,33 @@
           value: fake
         - key: MOTION_LEVELS_CAMERA_RECORDINGS_ROOT
           value: /var/lib/motion-levels/camera-recordings
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+
+    - name: Ensure security recorder env is configured
+      ansible.builtin.lineinfile:
+        path: /etc/motion-levels/motion-levels.env
+        regexp: "^{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+        mode: "0644"
+      loop:
+        - key: MOTION_LEVELS_SECURITY_RECORDER_ENABLED
+          value: "1"
+        - key: MOTION_LEVELS_SECURITY_CAMERA_ID
+          value: "130"
+        - key: MOTION_LEVELS_SECURITY_CAMERA_LABEL
+          value: "Cámara frontal"
+        - key: MOTION_LEVELS_SECURITY_CAMERA_ROLE
+          value: front
+        - key: MOTION_LEVELS_SECURITY_RECORDINGS_ROOT
+          value: /var/lib/motion-levels/security-recordings
+        - key: MOTION_LEVELS_SECURITY_RECORDER_AUDIO
+          value: "0"
+        - key: MOTION_LEVELS_SECURITY_RECORDER_SEGMENT_SECONDS
+          value: "300"
+        - key: MOTION_LEVELS_SECURITY_RECORDER_RETENTION_DAYS
+          value: "14"
+        - key: MOTION_LEVELS_SECURITY_RECORDER_DELETE_LOCAL_AFTER_UPLOAD
+          value: "1"
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Resolve local deployed stack revision
