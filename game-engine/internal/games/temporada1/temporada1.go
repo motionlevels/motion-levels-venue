@@ -785,11 +785,11 @@ func colorForPoint(point tilePoint) RGB {
 	}
 	switch point.kind {
 	case 0:
-		return RGB{R: 0, G: 230, B: 62}
+		return RGB{R: 0, G: 255, B: 0}
 	case 1:
-		return RGB{R: 20, G: 92, B: 255}
+		return RGB{R: 0, G: 0, B: 255}
 	case 2:
-		return RGB{R: 255, G: 28, B: 40}
+		return RGB{R: 255, G: 0, B: 0}
 	case 3:
 		return RGB{R: 245, G: 38, B: 255}
 	case 4:
