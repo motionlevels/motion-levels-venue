@@ -257,11 +257,11 @@ write_files:
           file_server
         }
 
-        @cameras_stream {
-          host 192.168.1.142
-          path /cam/*
-        }
-        handle @cameras_stream {
+        # Camera frame endpoint. NOT restricted to the wired LAN address: the
+        # platform pulls these snapshots over Tailscale (Host: motionlevels-1)
+        # for its own cameras page, so gating this to 192.168.1.142 would break
+        # it. Only the /cameras page above is ethernet-only.
+        handle /cam/* {
           reverse_proxy 127.0.0.1:8020
         }
 
