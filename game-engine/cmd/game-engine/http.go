@@ -372,7 +372,11 @@ func writeDisplayEvents(w http.ResponseWriter, r *http.Request, runtime *gameRun
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Connection", "keep-alive")
-	ticker := time.NewTicker(250 * time.Millisecond)
+	// The game loop advances at cfg.FPS (50 by default), so the previous 250ms
+	// (4Hz) push rate made scores, hit cues and the clock on the player display
+	// lag visibly behind play. Push at 20Hz so the TV tracks the engine closely;
+	// the payload is a small JSON snapshot, so the extra cadence is cheap.
+	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		select {
