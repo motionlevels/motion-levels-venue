@@ -1,7 +1,14 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./api";
+import { createCoalescer, isFeedStalled } from "./displayFeed";
 import { colorCSS, colorRGB, difficultyLabelES, eventMessageES, formatClock, gameTitleES, phaseLabel, playerLabelES } from "./utils";
+
+// If no stream event arrives within STALL_MS, poll the engine and rebuild the
+// stream every WATCHDOG_INTERVAL_MS until it recovers. During a healthy ~20Hz
+// stream these never fire.
+const STALL_MS = 2500;
+const WATCHDOG_INTERVAL_MS = 1000;
 
 const emptyStatus: DisplayStatus = {
   currentGame: "salvapantallas",
@@ -43,31 +50,76 @@ export default function App() {
     if (demoStatus) return;
 
     let cancelled = false;
-    fetchDisplayStatus()
-      .then((next) => {
-        if (cancelled) return;
-        setStatus(next);
-        setConnected(true);
-        setError("");
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setConnected(false);
-        setError(err instanceof Error ? err.message : "Sin conexión con el motor");
-      });
+    const monoNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+    let lastEventAt = monoNow();
 
-    const source = displayEventSource();
-    source.addEventListener("display", (event) => {
-      setStatus(JSON.parse((event as MessageEvent).data) as DisplayStatus);
+    // Render the freshest status at most once per frame so the high-frequency
+    // (~20Hz) stream never backs up the render queue on the venue PC.
+    const coalescer = createCoalescer<DisplayStatus>(
+      {
+        request: (callback) => requestAnimationFrame(callback),
+        cancel: (handle) => cancelAnimationFrame(handle),
+      },
+      (next) => {
+        if (!cancelled) setStatus(next);
+      },
+    );
+
+    const accept = (next: DisplayStatus) => {
+      if (cancelled) return;
+      lastEventAt = monoNow();
       setConnected(true);
       setError("");
-    });
-    source.onerror = () => {
+      coalescer.push(next);
+    };
+
+    const pollOnce = () => {
+      fetchDisplayStatus()
+        .then(accept)
+        .catch((err) => {
+          if (cancelled) return;
+          setConnected(false);
+          setError(err instanceof Error ? err.message : "Sin conexión con el motor");
+        });
+    };
+
+    let source = displayEventSource();
+    const onDisplay = (event: Event) => {
+      try {
+        accept(JSON.parse((event as MessageEvent).data) as DisplayStatus);
+      } catch {
+        /* ignore malformed frame */
+      }
+    };
+    const onError = () => {
+      if (cancelled) return;
       setConnected(false);
       setError("Sin conexión con el motor");
     };
+    const attach = () => {
+      source.addEventListener("display", onDisplay);
+      source.onerror = onError;
+    };
+    attach();
+
+    pollOnce();
+
+    // Watchdog: if the stream goes quiet (silently dropped or never connected),
+    // poll the engine so the display keeps updating and rebuild the stream.
+    const watchdog = window.setInterval(() => {
+      if (cancelled || !isFeedStalled(lastEventAt, monoNow(), STALL_MS)) return;
+      pollOnce();
+      source.removeEventListener("display", onDisplay);
+      source.close();
+      source = displayEventSource();
+      attach();
+    }, WATCHDOG_INTERVAL_MS);
+
     return () => {
       cancelled = true;
+      coalescer.cancel();
+      window.clearInterval(watchdog);
+      source.removeEventListener("display", onDisplay);
       source.close();
     };
   }, [demoStatus]);
