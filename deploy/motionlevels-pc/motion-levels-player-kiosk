@@ -51,30 +51,32 @@ MOTION_LEVELS_PLAYER_URL="$(env_file_value MOTION_LEVELS_PLAYER_URL http://127.0
 # attempted an explicit --mode and swallowed failures, which could leave a
 # connected TV on a phantom default resolution (e.g. 1024x768) with no signal.
 configure_display() {
-  local output mode rate attempt
-  # xinit may report the output before the EDID/mode list is ready; retry briefly.
-  for attempt in 1 2 3 4 5; do
-    output=$(/usr/bin/xrandr --query 2>/dev/null | awk '/ connected/ { print $1; exit }')
-    [ -n "${output}" ] && break
-    sleep 1
-  done
-  if [ -z "${output:-}" ]; then
-    echo "Warning: no connected display output found; leaving X at its default."
-    return
-  fi
-
-  # Always enable the connected output at its preferred mode so the TV gets a
-  # real signal even when the configured mode is unavailable.
-  /usr/bin/xrandr --output "${output}" --auto --primary || true
-
+  local output mode rate attempt geometry size
   mode="${MOTION_LEVELS_XRANDR_MODE:-}"
   rate="${MOTION_LEVELS_XRANDR_RATE:-60}"
-  if [ -n "${mode}" ]; then
-    if ! /usr/bin/xrandr --output "${output}" --mode "${mode}" --rate "${rate}"; then
-      echo "Warning: mode ${mode}@${rate} failed on ${output}; keeping preferred mode."
+  # The output may appear a few seconds after X starts (slow EDID, TV powering
+  # on), and the modeset sometimes silently leaves X on the 1024x768 dummy
+  # default. Retry detection AND the modeset until a real geometry is active, so
+  # the TV reliably ends up on a proper resolution instead of a phantom one.
+  for attempt in $(seq 1 15); do
+    output=$(/usr/bin/xrandr --query 2>/dev/null | awk '/ connected/ { print $1; exit }')
+    if [ -n "${output}" ]; then
+      # Preferred mode first so a connected TV always gets a real signal, then
+      # the configured mode on top if it is available.
+      /usr/bin/xrandr --output "${output}" --auto --primary 2>/dev/null || true
+      if [ -n "${mode}" ]; then
+        /usr/bin/xrandr --output "${output}" --mode "${mode}" --rate "${rate}" 2>/dev/null || true
+      fi
+      geometry="$(/usr/bin/xrandr --query 2>/dev/null | grep -oE '[0-9]+x[0-9]+\+0\+0' | head -1)"
+      size="${geometry%%+*}"
+      if [ -n "${geometry}" ] && [ "${size}" != "1024x768" ]; then
+        echo "Display configured: ${output} ${geometry}"
+        return 0
+      fi
     fi
-  fi
-  echo "Display configured: $(/usr/bin/xrandr --query 2>/dev/null | awk -v o="${output}" '$1==o {print; exit}')"
+    sleep 1
+  done
+  echo "Warning: could not configure a connected display after retries; leaving X at its default."
 }
 configure_display
 
