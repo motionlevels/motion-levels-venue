@@ -78,6 +78,15 @@ configure_display() {
 }
 configure_display
 
+# Capture the active screen geometry so Chromium can be forced to fill it. There
+# is no window manager under this bare xinit session, so --kiosk alone keeps the
+# Chromium window at its previously saved size; an explicit --window-size makes
+# the player cover the whole TV even after the output resolution changes.
+SCREEN_GEOMETRY="$(/usr/bin/xrandr --query 2>/dev/null | grep -oE '[0-9]+x[0-9]+\+0\+0' | head -1)"
+SCREEN_SIZE="${SCREEN_GEOMETRY%%+*}"
+SCREEN_WIDTH="${SCREEN_SIZE%x*}"
+SCREEN_HEIGHT="${SCREEN_SIZE#*x}"
+
 # 3. Ensure player user data directory exists
 USER_DATA_DIR="${MOTION_LEVELS_PLAYER_PROFILE}"
 mkdir -p "${USER_DATA_DIR}"
@@ -100,6 +109,11 @@ CHROME_FLAGS=(
   --check-for-update-interval=31536000
   --autoplay-policy=no-user-gesture-required
 )
+
+# Force the window to cover the whole screen (no WM to maximise it for us).
+if [ -n "${SCREEN_WIDTH:-}" ] && [ -n "${SCREEN_HEIGHT:-}" ]; then
+  CHROME_FLAGS+=( --window-position=0,0 "--window-size=${SCREEN_WIDTH},${SCREEN_HEIGHT}" )
+fi
 
 # Chromium won't run as root without --no-sandbox
 if [ "$(id -u)" -eq 0 ]; then

@@ -106,6 +106,11 @@ write_files:
       }
       configure_display
 
+      SCREEN_GEOMETRY="$(/usr/bin/xrandr --query 2>/dev/null | grep -oE '[0-9]+x[0-9]+\+0\+0' | head -1)"
+      SCREEN_SIZE="${SCREEN_GEOMETRY%%+*}"
+      SCREEN_WIDTH="${SCREEN_SIZE%x*}"
+      SCREEN_HEIGHT="${SCREEN_SIZE#*x}"
+
       USER_DATA_DIR="${MOTION_LEVELS_PLAYER_PROFILE}"
       mkdir -p "${USER_DATA_DIR}"
 
@@ -125,6 +130,10 @@ write_files:
         --check-for-update-interval=31536000
         --autoplay-policy=no-user-gesture-required
       )
+
+      if [ -n "${SCREEN_WIDTH:-}" ] && [ -n "${SCREEN_HEIGHT:-}" ]; then
+        CHROME_FLAGS+=( --window-position=0,0 "--window-size=${SCREEN_WIDTH},${SCREEN_HEIGHT}" )
+      fi
 
       if [ "$(id -u)" -eq 0 ]; then
         CHROME_FLAGS+=( --no-sandbox )
