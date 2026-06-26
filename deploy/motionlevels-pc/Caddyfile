@@ -18,11 +18,16 @@
 		reverse_proxy 127.0.0.1:4102
 	}
 
-	handle /cam/* {
-		reverse_proxy 127.0.0.1:8020
+	# The /tv and /cameras pages — and the platform assets/APIs and camera
+	# streams they depend on — are exposed only on the wired venue LAN address
+	# (192.168.1.142), which lives solely on the ethernet interface. Each
+	# handler ANDs the host with its path so other routes (/menu, /display,
+	# /engine, ...) keep working on 192.168.1.142, while /tv and /cameras stay
+	# unreachable from the wifi interface or any other address.
+	@platform_tv {
+		host 192.168.1.142
+		path /tv /tv/
 	}
-
-	@platform_tv path /tv /tv/
 	handle @platform_tv {
 		rewrite * /salas/motionlevels-1/tv
 		reverse_proxy https://84.7.190.81 {
@@ -34,7 +39,10 @@
 		}
 	}
 
-	@platform_cameras path /cameras /cameras/
+	@platform_cameras {
+		host 192.168.1.142
+		path /cameras /cameras/
+	}
 	handle @platform_cameras {
 		root * /opt/motion-levels/rebuild/src/deploy/motionlevels-pc
 		rewrite * /cameras.html
@@ -42,7 +50,19 @@
 		file_server
 	}
 
-	handle /_next/* {
+	# Camera frame endpoint. NOT restricted to the wired LAN address: the
+	# platform pulls these snapshots over Tailscale (Host: motionlevels-1) for
+	# its own cameras page, so gating this to 192.168.1.142 would break it.
+	# Only the /cameras page above is ethernet-only.
+	handle /cam/* {
+		reverse_proxy 127.0.0.1:8020
+	}
+
+	@platform_next {
+		host 192.168.1.142
+		path /_next/*
+	}
+	handle @platform_next {
 		reverse_proxy https://84.7.190.81 {
 			header_up Host platform.motionlevels.obis.dev
 			transport http {
@@ -52,7 +72,11 @@
 		}
 	}
 
-	handle /api/rooms/* {
+	@platform_rooms {
+		host 192.168.1.142
+		path /api/rooms/*
+	}
+	handle @platform_rooms {
 		reverse_proxy https://84.7.190.81 {
 			header_up Host platform.motionlevels.obis.dev
 			transport http {
@@ -62,7 +86,11 @@
 		}
 	}
 
-	handle /api/live-floor/* {
+	@platform_live_floor {
+		host 192.168.1.142
+		path /api/live-floor/*
+	}
+	handle @platform_live_floor {
 		reverse_proxy https://84.7.190.81 {
 			header_up Host platform.motionlevels.obis.dev
 			transport http {

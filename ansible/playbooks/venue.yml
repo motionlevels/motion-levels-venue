@@ -183,6 +183,45 @@
         state: started
       when: motion_levels_lan_interface is defined and motion_levels_lan_ipv4 is defined
 
+    - name: Prevent ARP flux on the venue LAN
+      # The venue PC can end up with both its ethernet and wifi interfaces on
+      # the same 192.168.1.0/24 LAN. With the default arp_ignore/arp_announce
+      # the box answers ARP for an interface address on every interface, so a
+      # LAN client may cache the wifi MAC for the ethernet IP and its traffic
+      # then takes an asymmetric path that switches/clients silently drop. This
+      # makes each interface only answer/announce ARP for its own address.
+      ansible.posix.sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        sysctl_file: /etc/sysctl.d/90-motion-levels-arp.conf
+        sysctl_set: true
+        reload: true
+        state: present
+      loop:
+        - { name: net.ipv4.conf.all.arp_ignore, value: "1" }
+        - { name: net.ipv4.conf.all.arp_announce, value: "2" }
+
+    - name: Pin the venue LAN address statically in dhcpcd
+      # The venue PC uses dhcpcd. A DHCP lease on the ethernet interface is not
+      # stable (it can land on a different address and wipe any IP added out of
+      # band), so the wired LAN address — the only place /tv and /cameras are
+      # served — is pinned here. This keeps the ethernet interface on the fixed
+      # 192.168.1.142 used by the Caddy host matchers.
+      ansible.builtin.blockinfile:
+        path: /etc/dhcpcd.conf
+        marker: "# {mark} MOTION LEVELS LAN"
+        block: |
+          interface {{ motion_levels_lan_interface }}
+          static ip_address={{ motion_levels_lan_ipv4 }}
+          static routers={{ motion_levels_lan_gateway }}
+          static domain_name_servers={{ motion_levels_lan_gateway }}
+        create: false
+      notify: Reconfigure dhcpcd LAN interface
+      when:
+        - motion_levels_lan_interface is defined
+        - motion_levels_lan_ipv4 is defined
+        - motion_levels_lan_gateway is defined
+
     - name: Remove legacy venue-local recording files
       ansible.builtin.file:
         path: "{{ item }}"
@@ -542,6 +581,14 @@
       loop: "{{ motion_levels_frontend_health_urls if motion_levels_deploy_mode == 'frontends' else motion_levels_health_urls }}"
 
   handlers:
+    - name: Reconfigure dhcpcd LAN interface
+      # -4 makes the running dhcpcd re-read its config and apply the static
+      # IPv4 profile to the interface; a plain rebind (-n) drops the lease
+      # without reliably applying the new static address.
+      ansible.builtin.command:
+        cmd: "dhcpcd -4 {{ motion_levels_lan_interface }}"
+      changed_when: true
+
     - name: Reload systemd
       ansible.builtin.systemd_service:
         daemon_reload: true
