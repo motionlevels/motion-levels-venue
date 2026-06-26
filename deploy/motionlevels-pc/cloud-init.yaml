@@ -83,13 +83,28 @@ write_files:
       MOTION_LEVELS_PLAYER_PROFILE="$(env_file_value MOTION_LEVELS_PLAYER_PROFILE /var/lib/motion-levels/rebuild-player-chromium)"
       MOTION_LEVELS_PLAYER_URL="$(env_file_value MOTION_LEVELS_PLAYER_URL http://127.0.0.1/display/)"
 
-      if [ -n "${MOTION_LEVELS_XRANDR_MODE:-}" ]; then
-        echo "Configuring display using xrandr..."
-        OUTPUT=$(/usr/bin/xrandr --query | awk '/ connected/ { print $1; exit }')
-        if [ -n "${OUTPUT}" ]; then
-          /usr/bin/xrandr --output "${OUTPUT}" --mode "${MOTION_LEVELS_XRANDR_MODE}" --rate "${MOTION_LEVELS_XRANDR_RATE:-60}" || true
+      configure_display() {
+        local output mode rate attempt
+        for attempt in 1 2 3 4 5; do
+          output=$(/usr/bin/xrandr --query 2>/dev/null | awk '/ connected/ { print $1; exit }')
+          [ -n "${output}" ] && break
+          sleep 1
+        done
+        if [ -z "${output:-}" ]; then
+          echo "Warning: no connected display output found; leaving X at its default."
+          return
         fi
-      fi
+        /usr/bin/xrandr --output "${output}" --auto --primary || true
+        mode="${MOTION_LEVELS_XRANDR_MODE:-}"
+        rate="${MOTION_LEVELS_XRANDR_RATE:-60}"
+        if [ -n "${mode}" ]; then
+          if ! /usr/bin/xrandr --output "${output}" --mode "${mode}" --rate "${rate}"; then
+            echo "Warning: mode ${mode}@${rate} failed on ${output}; keeping preferred mode."
+          fi
+        fi
+        echo "Display configured: $(/usr/bin/xrandr --query 2>/dev/null | awk -v o="${output}" '$1==o {print; exit}')"
+      }
+      configure_display
 
       USER_DATA_DIR="${MOTION_LEVELS_PLAYER_PROFILE}"
       mkdir -p "${USER_DATA_DIR}"
