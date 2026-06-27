@@ -4,11 +4,12 @@ import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./ap
 import { createCoalescer, isFeedStalled } from "./displayFeed";
 import { colorCSS, colorRGB, difficultyLabelES, eventMessageES, formatClock, gameTitleES, phaseLabel, playerLabelES } from "./utils";
 
-// If no stream event arrives within STALL_MS, poll the engine and rebuild the
-// stream every WATCHDOG_INTERVAL_MS until it recovers. During a healthy ~20Hz
-// stream these never fire.
-const STALL_MS = 2500;
-const WATCHDOG_INTERVAL_MS = 1000;
+// If no stream event arrives, keep the display fresh with a 250ms fallback
+// poll. Some kiosk/browser combinations can silently lose EventSource delivery;
+// do not let that degrade the TV into multi-second updates.
+const FALLBACK_UPDATE_MS = 250;
+const STALL_MS = 750;
+const STREAM_RECONNECT_MS = 3000;
 
 const emptyStatus: DisplayStatus = {
   currentGame: "salvapantallas",
@@ -35,8 +36,9 @@ const emptyStatus: DisplayStatus = {
   lastEventMessage: "",
 };
 
-function isTeamScoreGame(currentGame: string): boolean {
-  return currentGame === "lava" || currentGame === "plataformas" || currentGame === "temporada1";
+function isTeamScoreGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
+  const currentGame = compactDisplayText(status.currentGame);
+  return currentGame === "lava" || currentGame === "plataformas" || isLevelPointsGame(status);
 }
 
 export default function App() {
@@ -52,6 +54,8 @@ export default function App() {
     let cancelled = false;
     const monoNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
     let lastEventAt = monoNow();
+    let lastReconnectAt = 0;
+    let source: EventSource | null = null;
 
     // Render the freshest status at most once per frame so the high-frequency
     // (~20Hz) stream never backs up the render queue on the venue PC.
@@ -83,7 +87,6 @@ export default function App() {
         });
     };
 
-    let source = displayEventSource();
     const onDisplay = (event: Event) => {
       try {
         accept(JSON.parse((event as MessageEvent).data) as DisplayStatus);
@@ -96,7 +99,23 @@ export default function App() {
       setConnected(false);
       setError("Sin conexión con el motor");
     };
+    const closeSource = () => {
+      if (!source) return;
+      source.removeEventListener("display", onDisplay);
+      source.close();
+      source = null;
+    };
+
     const attach = () => {
+      closeSource();
+      lastReconnectAt = monoNow();
+      try {
+        source = displayEventSource();
+      } catch {
+        setConnected(false);
+        setError("Sin conexión con el motor");
+        return;
+      }
       source.addEventListener("display", onDisplay);
       source.onerror = onError;
     };
@@ -105,22 +124,20 @@ export default function App() {
     pollOnce();
 
     // Watchdog: if the stream goes quiet (silently dropped or never connected),
-    // poll the engine so the display keeps updating and rebuild the stream.
+    // poll the engine at the target display cadence and occasionally rebuild
+    // the stream. Polling is intentionally faster than reconnecting: it keeps
+    // the TV current without thrashing EventSource on fragile kiosk browsers.
     const watchdog = window.setInterval(() => {
       if (cancelled || !isFeedStalled(lastEventAt, monoNow(), STALL_MS)) return;
       pollOnce();
-      source.removeEventListener("display", onDisplay);
-      source.close();
-      source = displayEventSource();
-      attach();
-    }, WATCHDOG_INTERVAL_MS);
+      if (monoNow() - lastReconnectAt >= STREAM_RECONNECT_MS) attach();
+    }, FALLBACK_UPDATE_MS);
 
     return () => {
       cancelled = true;
       coalescer.cancel();
       window.clearInterval(watchdog);
-      source.removeEventListener("display", onDisplay);
-      source.close();
+      closeSource();
     };
   }, [demoStatus]);
 
@@ -148,7 +165,7 @@ function ScreensaverDisplay() {
 }
 
 function ClassicDisplay({ status, connected, error }: DisplayProps) {
-  const teamScoreGame = isTeamScoreGame(status.currentGame);
+  const teamScoreGame = isTeamScoreGame(status);
   const leader = useMemo(() => {
     if (teamScoreGame) return null;
     if (!status.players.length) return null;
@@ -178,7 +195,7 @@ function ClassicDisplay({ status, connected, error }: DisplayProps) {
         </div>
         <div className="game-title">
           <span>{phaseLabel(status.phase)}</span>
-          <h1>{gameTitleES(status.currentGame, status.label)}</h1>
+          <h1>{displayGameTitle(status)}</h1>
         </div>
         <div className="connection">
           <strong>{connected ? "En directo" : "Sin conexión"}</strong>
@@ -257,7 +274,7 @@ function ClassicDisplay({ status, connected, error }: DisplayProps) {
 }
 
 function ArcadeDisplay({ status, connected, error }: DisplayProps) {
-  const teamRosterGame = isTeamScoreGame(status.currentGame);
+  const teamRosterGame = isTeamScoreGame(status);
   const teamScoreboardGame = isTeamScoreboardGame(status);
   const duelGame = status.currentGame === "duel" && status.players.length >= 2;
   const parkourGame = isParkourGame(status.currentGame);
@@ -293,7 +310,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
         </div>
         <div className="arcade-title">
           <span>{phaseLabel(status.phase)}</span>
-          <h1>{gameTitleES(status.currentGame, status.label)}</h1>
+          <h1>{displayGameTitle(status)}</h1>
         </div>
         {levelLabel ? (
           <div className="arcade-level-badge">
@@ -500,7 +517,8 @@ function displayClock(status: DisplayStatus): string {
 }
 
 function isParkourGame(currentGame: string): boolean {
-  return currentGame === "parkour" || currentGame === "parkour2";
+  const game = compactDisplayText(currentGame);
+  return game === "parkour" || game === "parkour2";
 }
 
 function isScreensaverDisplay(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
@@ -516,23 +534,40 @@ function normalizedDisplayText(value: string): string {
     .toLowerCase();
 }
 
+function compactDisplayText(value: string): string {
+  return normalizedDisplayText(value).replace(/[^a-z0-9]+/g, "");
+}
+
+function isPlatformLevelGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(status.currentGame.trim());
+}
+
 function isTemporadaOneGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
-  const currentGame = normalizedDisplayText(status.currentGame);
-  const label = normalizedDisplayText(status.label);
-  return currentGame === "temporada1" || currentGame === "temporada1-niveles" || label.includes("temporada 1") || label.includes("temporada1");
+  const currentGame = compactDisplayText(status.currentGame);
+  const label = compactDisplayText(status.label);
+  const combined = `${currentGame} ${label}`;
+  return currentGame === "temporada1" || currentGame === "temporada1niveles" || combined.includes("temporada1") || combined.includes("season1");
+}
+
+function displayGameTitle(status: Pick<DisplayStatus, "currentGame" | "label">): string {
+  if (isLevelPointsGame(status) && normalizedDisplayText(status.label) === "juego de niveles") {
+    return "Temporada 1";
+  }
+  return gameTitleES(status.currentGame, status.label);
 }
 
 function isTeamScoreboardGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
   const text = normalizedDisplayText(`${status.currentGame} ${status.label}`);
-  return status.currentGame === "temporada2" || text.includes("tira") || text.includes("afloja") || text.includes("baldosas") || text.includes("tug");
+  return compactDisplayText(status.currentGame) === "temporada2" || text.includes("tira") || text.includes("afloja") || text.includes("baldosas") || text.includes("tug");
 }
 
 function isLevelPointsGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
-  return isTemporadaOneGame(status);
+  return isTemporadaOneGame(status) || isPlatformLevelGame(status);
 }
 
 function isFixedSoloDisplayGame(currentGame: string): boolean {
-  return currentGame === "parkour" || currentGame === "parkour2" || currentGame === "saltos" || currentGame === "temporada1" || currentGame === "temporada1-niveles";
+  const game = compactDisplayText(currentGame);
+  return game === "parkour" || game === "parkour2" || game === "saltos" || game === "temporada1" || game === "temporada1niveles";
 }
 
 function shouldShowPlayerInfo(status: DisplayStatus): boolean {
@@ -563,7 +598,7 @@ function primaryMetric(status: DisplayStatus): { label: string; value: string; c
   if (status.currentGame === "whack-a-mole" || status.currentGame === "temporada2") {
     return { label: "Puntos", value: String(status.score), caption: "Marcador actual" };
   }
-  if (status.activeTargets > 0 && (status.currentGame === "lava" || status.currentGame === "plataformas" || status.currentGame === "temporada1")) {
+  if (status.activeTargets > 0 && isTeamScoreGame(status)) {
     return { label: "Objetivos", value: String(status.activeTargets), caption: "Restantes" };
   }
   return { label: "Tiempo", value: displayClock(status), caption: status.remainingMillis > 0 ? "Restante" : "Transcurrido" };
@@ -767,8 +802,8 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
     case "temporada1":
       return {
         ...base,
-        currentGame: "temporada1",
-        label: "Temporada 1",
+        currentGame: options.demoGame || "temporada1",
+        label: options.demoLabel || "Temporada 1",
         difficulty: "medium",
         playerConfigurable: false,
         score: 12,
@@ -788,8 +823,8 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
     case "temporada1-20lives":
       return {
         ...base,
-        currentGame: "temporada1",
-        label: "Temporada 1",
+        currentGame: options.demoGame || "temporada1",
+        label: options.demoLabel || "Temporada 1",
         difficulty: "hard",
         playerConfigurable: false,
         score: 12,
