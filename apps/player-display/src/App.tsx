@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./api";
 import { createCoalescer, isFeedStalled } from "./displayFeed";
-import { colorCSS, colorRGB, difficultyLabelES, eventMessageES, formatClock, gameTitleES, phaseLabel, playerLabelES } from "./utils";
+import { colorCSS, colorRGB, difficultyLabelES, eventMessageES, formatClock, gameTitleES, levelLabelES, phaseLabel, playerLabelES } from "./utils";
 
 // If no stream event arrives, keep the display fresh with a 250ms fallback
 // poll. Some kiosk/browser combinations can silently lose EventSource delivery;
@@ -274,6 +274,7 @@ function ClassicDisplay({ status, connected, error }: DisplayProps) {
 }
 
 function ArcadeDisplay({ status, connected, error }: DisplayProps) {
+  const memoryGame = isMemoryGame(status);
   const teamRosterGame = isTeamScoreGame(status);
   const teamScoreboardGame = isTeamScoreboardGame(status);
   const duelGame = status.currentGame === "duel" && status.players.length >= 2;
@@ -294,10 +295,10 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
   const levelTimeDetails = arcadeLevelTimeDetails(status);
   const levelLabel = displayLevelLabel(status);
   const showPlayerInfo = shouldShowPlayerInfo(status);
-  const showFooterEvent = Boolean(eventMessage) && !levelPointsGame;
+  const showFooterEvent = Boolean(eventMessage) && !levelPointsGame && !memoryGame;
 
   return (
-    <main className={`display arcade-display ${duelGame ? "duel-game" : ""} ${parkourStyleGame ? "parkour-display" : ""} ${levelPointsGame ? "level-points-display" : ""} ${!duelGame && !showPlayerInfo ? "no-player-info" : ""} ${showFooterEvent ? "has-event" : ""} ${status.phase} ${eventClass}`}>
+    <main className={`display arcade-display ${duelGame ? "duel-game" : ""} ${memoryGame ? "memory-display" : ""} ${parkourStyleGame ? "parkour-display" : ""} ${levelPointsGame ? "level-points-display" : ""} ${!duelGame && !showPlayerInfo ? "no-player-info" : ""} ${showFooterEvent ? "has-event" : ""} ${status.phase} ${eventClass}`}>
       <header className="arcade-top">
         <div className="arcade-brand-panel">
           <span className="arcade-brand" aria-label="Motion Levels">
@@ -326,6 +327,8 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
 
       {duelGame ? (
         <DuelBoard status={status} clock={clock} />
+      ) : memoryGame ? (
+        <MemoryBoard status={status} clock={clock} />
       ) : parkourStyleGame ? (
         <section className="arcade-stage arcade-stage--level-hud">
           <div className="arcade-level-main" aria-label="Marcadores principales">
@@ -400,6 +403,40 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
         </div>
       </footer> : null}
     </main>
+  );
+}
+
+function MemoryBoard({ status, clock }: { status: DisplayStatus; clock: string }) {
+  const players = status.players.length ? status.players : [
+    { index: 0, label: "Jugador 1", color: { r: 255, g: 41, b: 56 }, score: status.score, lives: status.lives },
+  ];
+
+  return (
+    <section className="arcade-stage arcade-stage--memory-hud" aria-label="Marcador de memoria">
+      <MetricPanel className="arcade-metric--time memory-time" label="Tiempo restante" value={clock} tone="amber" />
+      <section className={`memory-scoreboard count-${Math.min(Math.max(players.length, 1), 8)}`} aria-label="Puntos por jugador">
+        <div className="memory-scoreboard__header">
+          <span>Puntos por jugador</span>
+        </div>
+        <div className="memory-scoreboard__grid">
+          {players.map((player) => (
+            <MemoryPlayerScore key={player.index} player={player} />
+          ))}
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function MemoryPlayerScore({ player }: { player: DisplayStatus["players"][number] }) {
+  return (
+    <article className="memory-player-score" style={{ "--player": colorCSS(player.color), "--player-rgb": colorRGB(player.color) } as CSSProperties}>
+      <div className="memory-player-score__name">
+        <i />
+        <span>{playerLabelES(player.label)}</span>
+      </div>
+      <strong>{player.score}</strong>
+    </article>
   );
 }
 
@@ -540,6 +577,19 @@ function isParkourGame(currentGame: string): boolean {
   return game === "parkour" || game === "parkour2";
 }
 
+function isMemoryGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
+  const currentGame = compactDisplayText(status.currentGame);
+  const label = normalizedDisplayText(status.label);
+  return (
+    currentGame === "memory"
+    || currentGame === "memorychallenge"
+    || currentGame === "authoredmemorychallenge"
+    || currentGame === "memorylights"
+    || label.includes("reto de memoria")
+    || label === "memoria"
+  );
+}
+
 function isScreensaverDisplay(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
   const currentGame = normalizedDisplayText(status.currentGame);
   return currentGame === "salvapantallas" || currentGame === "screensaver";
@@ -578,7 +628,10 @@ function isTemporadaOneGame(status: Pick<DisplayStatus, "currentGame" | "label">
 }
 
 function displayGameTitle(status: Pick<DisplayStatus, "currentGame" | "label">): string {
-  if (isLevelPointsGame(status) && normalizedDisplayText(status.label) === "juego de niveles") {
+  if (
+    isLevelPointsGame(status)
+    && (normalizedDisplayText(status.label) === "juego de niveles" || levelLabelES(status.label))
+  ) {
     return "Temporada 1";
   }
   return gameTitleES(status.currentGame, status.label);
@@ -599,6 +652,7 @@ function isFixedSoloDisplayGame(currentGame: string): boolean {
 }
 
 function shouldShowPlayerInfo(status: DisplayStatus): boolean {
+  if (isMemoryGame(status)) return false;
   if (isLevelPointsGame(status)) return false;
   if (isFixedSoloDisplayGame(status.currentGame)) return false;
   if (status.playerConfigurable === false) return false;
@@ -608,8 +662,10 @@ function shouldShowPlayerInfo(status: DisplayStatus): boolean {
 function displayLevelLabel(status: DisplayStatus): string {
   if (status.levelNumber && status.levelNumber > 0) return `Nivel ${status.levelNumber}`;
   const level = String(status.level || "").trim();
-  const match = level.match(/^level-(\d+)$/i);
-  if (match) return `Nivel ${match[1]}`;
+  const levelLabel = levelLabelES(level);
+  if (levelLabel) return levelLabel;
+  const labelLevel = levelLabelES(status.label);
+  if (labelLevel) return labelLevel;
   return level;
 }
 
@@ -831,6 +887,28 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         lastEventCue: "",
         lastEventMessage: "",
       };
+    case "parkour-level":
+      return {
+        ...base,
+        currentGame: options.demoGame || "parkour2",
+        label: options.demoLabel || "Nivel 2",
+        phase: "running",
+        difficulty: "medium",
+        playerConfigurable: false,
+        score: 0,
+        lives: 4,
+        livesStart: 5,
+        elapsedMillis: 171000,
+        sessionElapsedMillis: 171000,
+        remainingMillis: 0,
+        activeTargets: 6,
+        level: "level-1-2",
+        attemptCount: 2,
+        sessionBestElapsedMillis: 128000,
+        bestElapsedMillis: 121000,
+        lastEventCue: "",
+        lastEventMessage: "",
+      };
     case "duel":
       return {
         ...base,
@@ -927,6 +1005,28 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         bestElapsedMillis: 46800,
         lastEventCue: "",
         lastEventMessage: "",
+      };
+    case "memory":
+      return {
+        ...base,
+        currentGame: options.demoGame || "memory",
+        label: options.demoLabel || "Reto de memoria",
+        difficulty: "medium",
+        playerCount: 4,
+        players: [
+          { index: 0, label: "Jugador 1", color: { r: 255, g: 23, b: 48 }, score: 18, lives: -1 },
+          { index: 1, label: "Jugador 2", color: { r: 30, g: 213, b: 255 }, score: 15, lives: -1 },
+          { index: 2, label: "Jugador 3", color: { r: 47, g: 216, b: 108 }, score: 12, lives: -1 },
+          { index: 3, label: "Jugador 4", color: { r: 247, g: 61, b: 255 }, score: 9, lives: -1 },
+        ],
+        score: 54,
+        lives: -1,
+        elapsedMillis: 72000,
+        sessionElapsedMillis: 72000,
+        remainingMillis: 128000,
+        activeTargets: 16,
+        lastEventCue: "hit",
+        lastEventMessage: "Jugador 1 18",
       };
     case "classic":
       return base;

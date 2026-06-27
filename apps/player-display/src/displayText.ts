@@ -1,0 +1,58 @@
+// Spanish display titles per game id; falls back to the engine-provided label.
+const gameTitlesES: Record<string, string> = {
+  "whack-a-mole": "Atrapa al topo",
+  lava: "El suelo es lava",
+  parkour: "Parkour",
+  parkour2: "Parkour",
+  plataformas: "Plataformas",
+  temporada1: "Temporada 1",
+  "temporada1-niveles": "Temporada 1",
+  temporada1niveles: "Temporada 1",
+  temporada2: "Temporada 2",
+  duel: "Duelo",
+  memory: "Reto de memoria",
+  "memory-lights": "Reto de memoria",
+  memorylights: "Reto de memoria",
+  salvapantallas: "Salvapantallas",
+  "ambient-comet": "Cometas",
+  "ambient-pulse": "Pulso",
+  "ambient-spark": "Chispas",
+};
+
+function normalizedText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function compactText(value: string): string {
+  return normalizedText(value).replace(/[^a-z0-9]+/g, "");
+}
+
+export function levelLabelES(value: string): string {
+  const text = value.trim();
+  if (!text) return "";
+
+  const normalized = normalizedText(text);
+  const direct = normalized.match(/^(?:nivel|level)\s*[-#:]*\s*(\d+)$/);
+  if (direct) return `Nivel ${Number(direct[1])}`;
+
+  const levelIndex = normalized.search(/(?:^|[-_\s])(?:nivel|level)(?:[-_\s]|$)/);
+  if (levelIndex < 0) return "";
+
+  const numbers = normalized.slice(levelIndex).match(/\d+/g);
+  if (!numbers?.length) return "";
+  return `Nivel ${Number(numbers[numbers.length - 1])}`;
+}
+
+export function gameTitleES(currentGame: string, label: string): string {
+  const gameID = currentGame.trim();
+  const knownTitle = gameTitlesES[gameID] || gameTitlesES[compactText(gameID)];
+  if (knownTitle) return knownTitle;
+
+  const cleanLabel = label.trim();
+  if (cleanLabel && cleanLabel !== gameID && !levelLabelES(cleanLabel)) return cleanLabel;
+  return cleanLabel || gameID;
+}

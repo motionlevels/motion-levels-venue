@@ -1,6 +1,7 @@
 // Color math lives in the shared core package (also used by player-menu).
 // DisplayColor is structurally an RGB, so these accept it directly.
 export { colorCSS, colorRGB } from "@motion-levels/core";
+export { gameTitleES, levelLabelES } from "./displayText";
 
 export function formatClock(ms: number): string {
   const safe = Math.max(0, ms);
@@ -45,28 +46,6 @@ const colorNamesES: Record<string, string> = {
 // Engine sends color-based player labels in English (e.g. "Blue"); show them in Spanish.
 export function playerLabelES(label: string): string {
   return colorNamesES[label.trim().toLowerCase()] || label;
-}
-
-// Spanish display titles per game id; falls back to the engine-provided label.
-const gameTitlesES: Record<string, string> = {
-  "whack-a-mole": "Atrapa al topo",
-  lava: "El suelo es lava",
-  parkour: "Parkour",
-  plataformas: "Plataformas",
-  temporada1: "Temporada 1",
-  temporada2: "Temporada 2",
-  duel: "Duelo",
-  memory: "Reto de memoria",
-  salvapantallas: "Salvapantallas",
-  "ambient-comet": "Cometas",
-  "ambient-pulse": "Pulso",
-  "ambient-spark": "Chispas",
-};
-
-export function gameTitleES(currentGame: string, label: string): string {
-  const cleanLabel = label.trim();
-  if (cleanLabel && cleanLabel !== currentGame) return cleanLabel;
-  return gameTitlesES[currentGame] || cleanLabel || currentGame;
 }
 
 // Some engine event messages are still English; translate the known ones while preserving
