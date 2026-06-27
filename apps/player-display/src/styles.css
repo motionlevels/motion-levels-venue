@@ -1034,7 +1034,7 @@ body {
 
 .arcade-time-details {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: clamp(12px, 1vw, 18px);
 }
 
@@ -1051,7 +1051,7 @@ body {
 .arcade-time-details small {
   overflow: hidden;
   color: var(--cyan);
-  font-size: clamp(0.72rem, 0.78vw, 1.02rem);
+  font-size: clamp(0.68rem, 0.74vw, 0.98rem);
   line-height: 1;
   font-weight: 950;
   letter-spacing: 0.12em;
@@ -1063,7 +1063,7 @@ body {
 .arcade-time-details b {
   overflow: hidden;
   color: #fff;
-  font-size: clamp(1.65rem, 1.9vw, 2.7rem);
+  font-size: clamp(1.5rem, 1.72vw, 2.48rem);
   line-height: 1;
   font-weight: 950;
   letter-spacing: 0;

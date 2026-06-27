@@ -21,17 +21,19 @@ import (
 var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 type selectGameRequest struct {
-	Game                  string `json:"game"`
-	PlatformURL           string `json:"platformUrl"`
-	VenueSessionID        string `json:"venueSessionId"`
-	PlayerCount           int    `json:"playerCount"`
-	Difficulty            string `json:"difficulty"`
-	Level                 string `json:"level"`
-	DurationSeconds       int    `json:"durationSeconds"`
-	NarrationEnabled      *bool  `json:"narrationEnabled"`
-	CountdownFloorOverlay bool   `json:"countdownFloorOverlay"`
-	TeamName              string `json:"teamName"`
-	Players               []struct {
+	Game                   string `json:"game"`
+	PlatformURL            string `json:"platformUrl"`
+	VenueSessionID         string `json:"venueSessionId"`
+	PlayerCount            int    `json:"playerCount"`
+	Difficulty             string `json:"difficulty"`
+	Level                  string `json:"level"`
+	LevelMode              string `json:"levelMode"`
+	DurationSeconds        int    `json:"durationSeconds"`
+	ChallengeElapsedMillis int64  `json:"challengeElapsedMillis"`
+	NarrationEnabled       *bool  `json:"narrationEnabled"`
+	CountdownFloorOverlay  bool   `json:"countdownFloorOverlay"`
+	TeamName               string `json:"teamName"`
+	Players                []struct {
 		Index int          `json:"index"`
 		Label string       `json:"label"`
 		Color displayColor `json:"color"`
@@ -193,7 +195,7 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, "venueSessionId must be a UUID", http.StatusBadRequest)
 			return
 		}
-		runtime.SelectGameWithMetadata(request.Game, request.PlayerCount, request.Difficulty, request.Level, request.DurationSeconds, request.NarrationEnabled, request.CountdownFloorOverlay, request.TeamName, venueSessionID, normalizeLaunchPlatformURL(request.PlatformURL), players)
+		runtime.SelectGameWithMetadata(request.Game, request.PlayerCount, request.Difficulty, request.Level, request.LevelMode, request.DurationSeconds, request.ChallengeElapsedMillis, request.NarrationEnabled, request.CountdownFloorOverlay, request.TeamName, venueSessionID, normalizeLaunchPlatformURL(request.PlatformURL), players)
 		writeJSON(w, runtime.Status())
 	})
 	mux.HandleFunc("/api/control", func(w http.ResponseWriter, r *http.Request) {

@@ -544,9 +544,18 @@ function isPlatformLevelGame(status: Pick<DisplayStatus, "currentGame" | "label"
 
 function isTemporadaOneGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
   const currentGame = compactDisplayText(status.currentGame);
-  const label = compactDisplayText(status.label);
-  const combined = `${currentGame} ${label}`;
-  return currentGame === "temporada1" || currentGame === "temporada1niveles" || combined.includes("temporada1") || combined.includes("season1");
+  const label = normalizedDisplayText(status.label);
+  const compactLabel = compactDisplayText(status.label);
+  return (
+    currentGame === "temporada1"
+    || currentGame === "temporada1niveles"
+    || currentGame.includes("temporada1")
+    || currentGame.includes("season1")
+    || label.includes("temporada 1")
+    || label.includes("temporada1")
+    || compactLabel.includes("temporada1")
+    || compactLabel.includes("season1")
+  );
 }
 
 function displayGameTitle(status: Pick<DisplayStatus, "currentGame" | "label">): string {
@@ -646,12 +655,30 @@ function arcadeLevelSideMetrics(status: DisplayStatus): Array<{ label: string; v
 function arcadeLevelTimeDetails(status: DisplayStatus): Array<{ label: string; value: string }> {
   const details: Array<{ label: string; value: string }> = [];
   if (isParkourGame(status.currentGame) || isLevelPointsGame(status)) {
-    details.push({ label: "Tiempo total", value: formatClock(globalGameElapsedMillis(status)) });
+    if (isLevelPointsGame(status)) {
+      details.push({ label: "Modo", value: levelModeLabel(status) });
+    }
+    details.push({ label: challengeMode(status) ? "Tiempo reto" : "Tiempo total", value: formatClock(levelAggregateElapsedMillis(status)) });
     details.push({ label: "Intentos", value: String(Math.max(1, status.attemptCount || 0)) });
     details.push({ label: "Mejor sesión", value: formatBestTime(status.sessionBestElapsedMillis) });
     details.push({ label: "Mejor global", value: formatBestTime(status.bestElapsedMillis) });
   }
   return details;
+}
+
+function challengeMode(status: DisplayStatus): boolean {
+  return normalizedDisplayText(status.levelMode || "") === "challenge" || normalizedDisplayText(status.levelMode || "") === "reto";
+}
+
+function levelModeLabel(status: DisplayStatus): string {
+  return challengeMode(status) ? "Reto" : "Libre";
+}
+
+function levelAggregateElapsedMillis(status: DisplayStatus): number {
+  if (challengeMode(status)) {
+    return Math.max(0, status.challengeElapsedMillis ?? 0) + Math.max(0, status.elapsedMillis ?? 0);
+  }
+  return globalGameElapsedMillis(status);
 }
 
 function globalGameElapsedMillis(status: DisplayStatus): number {
@@ -815,11 +842,13 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         currentGame: options.demoGame || "temporada1",
         label: options.demoLabel || "Temporada 1",
         difficulty: "medium",
+        levelMode: "challenge",
         playerConfigurable: false,
         score: 12,
         lives: 7,
         elapsedMillis: 48600,
         sessionElapsedMillis: 432000,
+        challengeElapsedMillis: 174000,
         remainingMillis: 0,
         activeTargets: 8,
         level: "level-4",
@@ -837,6 +866,7 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         currentGame: options.demoGame || "temporada1",
         label: options.demoLabel || "Temporada 1",
         difficulty: "hard",
+        levelMode: "free",
         playerConfigurable: false,
         score: 12,
         lives: 20,

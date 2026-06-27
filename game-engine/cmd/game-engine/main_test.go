@@ -787,7 +787,7 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 		t.Fatalf("selected saltos status = %+v", status)
 	}
 
-	body = bytes.NewBufferString(`{"game":"temporada1","playerCount":4,"difficulty":"medium","level":"level-2"}`)
+	body = bytes.NewBufferString(`{"game":"temporada1","playerCount":4,"difficulty":"medium","level":"level-2","levelMode":"challenge","challengeElapsedMillis":123000}`)
 	response, err = http.Post(server.URL+"/api/select", "application/json", body)
 	if err != nil {
 		t.Fatal(err)
@@ -799,8 +799,20 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if status.CurrentGame != "temporada1" || status.PlayerCount != 4 || status.Difficulty != "medium" || status.Level != "level-2" {
+	if status.CurrentGame != "temporada1" || status.PlayerCount != 4 || status.Difficulty != "medium" || status.Level != "level-2" || status.LevelMode != "challenge" || status.ChallengeElapsedMillis != 123000 {
 		t.Fatalf("selected temporada1 status = %+v", status)
+	}
+	display := runtime.DisplayStatus(time.Now())
+	if display.LevelMode != "challenge" || display.ChallengeElapsedMillis != 123000 {
+		t.Fatalf("display temporada1 mode = %q challengeElapsed=%d, want challenge 123000", display.LevelMode, display.ChallengeElapsedMillis)
+	}
+	response, err = http.Post(server.URL+"/api/control", "application/json", bytes.NewBufferString(`{"action":"restart"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if runtime.Status().ChallengeElapsedMillis != 0 {
+		t.Fatalf("restart challenge elapsed = %d, want 0", runtime.Status().ChallengeElapsedMillis)
 	}
 
 	body = bytes.NewBufferString(`{"game":"temporada2","playerCount":4,"difficulty":"expert","level":"level-2"}`)

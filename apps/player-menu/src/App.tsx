@@ -2378,7 +2378,7 @@ function MenuApp() {
     setMessage((current) => (current.startsWith("Narración") ? "" : current));
   }
 
-  async function launch(gameID = selectedGame.id, options: { difficulty?: DifficultyID; levelID?: string; partyIndex?: number; partyScore?: number } = {}) {
+  async function launch(gameID = selectedGame.id, options: { difficulty?: DifficultyID; levelID?: string; partyIndex?: number; partyScore?: number; resetChallengeRun?: boolean } = {}) {
     const game = menuGames.find((candidate) => candidate.id === gameID);
     if (!game || game.disabled || !isGameLaunchable(game)) {
       captureMenuEvent("start_blocked", {
@@ -2404,6 +2404,17 @@ function MenuApp() {
     }
     if (options.difficulty) {
       nextMenu = { ...nextMenu, difficulty: options.difficulty };
+    }
+    if (options.resetChallengeRun && launchGame.levels?.length && levelModeFor(launchGame, nextMenu) === "challenge") {
+      const { [launchGame.id]: _discardedRun, ...challengeRuns } = nextMenu.challengeRuns;
+      nextMenu = {
+        ...nextMenu,
+        challengeRuns,
+        selectedLevels: {
+          ...nextMenu.selectedLevels,
+          [launchGame.id]: defaultLevelID(launchGame),
+        },
+      };
     }
     if (!nextMenu.sessionId) {
       nextMenu = {
@@ -2445,10 +2456,11 @@ function MenuApp() {
       nextMenu = { ...nextMenu, difficulty: menuDifficulty };
     }
     const challengeDifficulty = (launchDifficulty || nextMenu.difficulty) as DifficultyID;
+    const launchLevelMode = launchGame.levels?.length ? levelModeFor(launchGame, nextMenu) : undefined;
     const startsChallengeRun = Boolean(
       launchGame.levels?.length
       && selectedLevelID
-      && levelModeFor(launchGame, nextMenu) === "challenge"
+      && launchLevelMode === "challenge"
       && !challengeRunFor(launchGame, nextMenu)
     );
     if (startsChallengeRun) {
@@ -2521,7 +2533,9 @@ function MenuApp() {
         playerCount: Math.max(1, launchRoster.length),
         difficulty: launchDifficulty,
         level: selectedLevelID || undefined,
+        levelMode: launchLevelMode,
         durationSeconds: launchGame.estimatedDurationSeconds || undefined,
+        challengeElapsedMillis: launchLevelMode === "challenge" ? challengeRunFor(launchGame, nextMenu)?.totalElapsedMillis || 0 : 0,
         narrationEnabled: supportsNarration(launchGame) ? playNarration : false,
         countdownFloorOverlay: showCountdownOverlay,
         teamName: nextMenu.teamName.trim(),
@@ -2569,7 +2583,7 @@ function MenuApp() {
       game: launchedGame.id,
       level: status?.level || selectedLevelFor(launchedGame) || undefined,
     });
-    await launch(launchedGame.id);
+    await launch(launchedGame.id, { resetChallengeRun: true });
     setMessage("Reiniciando");
   }
 

@@ -206,6 +206,7 @@ type displayStatus struct {
 	Difficulty               string          `json:"difficulty"`
 	DifficultyConfigurable   bool            `json:"difficultyConfigurable"`
 	Level                    string          `json:"level,omitempty"`
+	LevelMode                string          `json:"levelMode,omitempty"`
 	TeamName                 string          `json:"teamName"`
 	PlayerCount              int             `json:"playerCount"`
 	PlayerConfigurable       bool            `json:"playerConfigurable"`
@@ -216,6 +217,7 @@ type displayStatus struct {
 	SessionStartedUnix       int64           `json:"sessionStartedUnix"`
 	EndsUnix                 int64           `json:"endsUnix"`
 	SessionElapsedMillis     int64           `json:"sessionElapsedMillis"`
+	ChallengeElapsedMillis   int64           `json:"challengeElapsedMillis,omitempty"`
 	ElapsedMillis            int64           `json:"elapsedMillis"`
 	RemainingMillis          int64           `json:"remainingMillis"`
 	IntroRemainingMillis     int64           `json:"introRemainingMillis"`
@@ -244,6 +246,7 @@ type runtimeStatus struct {
 	Label                    string                       `json:"label"`
 	Difficulty               string                       `json:"difficulty"`
 	Level                    string                       `json:"level,omitempty"`
+	LevelMode                string                       `json:"levelMode,omitempty"`
 	TeamName                 string                       `json:"teamName"`
 	PlayerCount              int                          `json:"playerCount"`
 	Players                  []displayPlayer              `json:"players"`
@@ -257,6 +260,7 @@ type runtimeStatus struct {
 	CountdownRemainingMillis int64                        `json:"countdownRemainingMillis"`
 	StartedUnix              int64                        `json:"startedUnix"`
 	ElapsedMillis            int64                        `json:"elapsedMillis"`
+	ChallengeElapsedMillis   int64                        `json:"challengeElapsedMillis,omitempty"`
 	Success                  bool                         `json:"success"`
 	SessionID                string                       `json:"sessionId"`
 	LastPressureUnix         int64                        `json:"lastPressureUnix"`
@@ -333,10 +337,10 @@ func (r *gameRuntime) SelectGameWithDifficulty(game string, players int, difficu
 }
 
 func (r *gameRuntime) SelectGameWithOptions(game string, players int, difficulty string, narrationEnabled *bool) {
-	r.SelectGameWithMetadata(game, players, difficulty, "", 0, narrationEnabled, false, "", "", "", nil)
+	r.SelectGameWithMetadata(game, players, difficulty, "", "", 0, 0, narrationEnabled, false, "", "", "", nil)
 }
 
-func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficulty string, level string, durationSeconds int, narrationEnabled *bool, countdownFloorOverlay bool, teamName string, venueSessionID string, platformURL string, roster []playerConfig) {
+func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficulty string, level string, levelMode string, durationSeconds int, challengeElapsedMillis int64, narrationEnabled *bool, countdownFloorOverlay bool, teamName string, venueSessionID string, platformURL string, roster []playerConfig) {
 	if r == nil {
 		return
 	}
@@ -350,8 +354,12 @@ func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficult
 	if level != "" {
 		cfg.Level = level
 	}
+	cfg.LevelMode = normalizeLevelMode(levelMode)
 	if durationSeconds > 0 {
 		cfg.DurationSeconds = durationSeconds
+	}
+	if challengeElapsedMillis > 0 {
+		cfg.ChallengeElapsedMillis = challengeElapsedMillis
 	}
 	cfg.CountdownFloorOverlay = countdownFloorOverlay
 	cfg.TeamName = strings.TrimSpace(teamName)
@@ -407,6 +415,9 @@ func (r *gameRuntime) ControlGame(action string) {
 		}
 	case "restart":
 		cfg := r.current
+		if cfg.LevelMode == "challenge" {
+			cfg.ChallengeElapsedMillis = 0
+		}
 		r.applyLocked(cfg, true)
 	case "narration":
 		r.playNarrationLocked(r.current, now, true)
@@ -622,6 +633,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		Difficulty:             cfg.Difficulty,
 		DifficultyConfigurable: gameHasConfigurableDifficulty(cfg.Game, cfg.PlatformURL),
 		Level:                  cfg.Level,
+		LevelMode:              cfg.LevelMode,
 		TeamName:               cfg.TeamName,
 		PlayerCount:            cfg.PlayerCount,
 		PlayerConfigurable:     gameHasConfigurablePlayers(cfg.Game, cfg.PlatformURL),
@@ -630,6 +642,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		StartedUnix:            started.Unix(),
 		SessionStartedUnix:     unixOrZero(started),
 		SessionElapsedMillis:   elapsedMillisSince(started, gameNow),
+		ChallengeElapsedMillis: cfg.ChallengeElapsedMillis,
 		AudioEnabled:           audioEnabled,
 		AudioMuted:             audioMuted,
 		LastEventUnixNanos:     lastEvent.unixNanos,
@@ -1100,6 +1113,7 @@ func (r *gameRuntime) Status() runtimeStatus {
 		Label:                    display.Label,
 		Difficulty:               display.Difficulty,
 		Level:                    display.Level,
+		LevelMode:                display.LevelMode,
 		TeamName:                 cfg.TeamName,
 		PlayerCount:              cfg.PlayerCount,
 		Players:                  display.Players,
@@ -1113,6 +1127,7 @@ func (r *gameRuntime) Status() runtimeStatus {
 		CountdownRemainingMillis: display.CountdownRemainingMillis,
 		StartedUnix:              unixOrZero(started),
 		ElapsedMillis:            display.ElapsedMillis,
+		ChallengeElapsedMillis:   display.ChallengeElapsedMillis,
 		Success:                  display.Success,
 		SessionID:                sessionID,
 		LastPressureUnix:         unixOrZero(lastPressureInput),

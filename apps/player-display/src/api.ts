@@ -18,6 +18,7 @@ export type DisplayStatus = {
   phase: string;
   difficulty: string;
   difficultyConfigurable?: boolean;
+  levelMode?: string;
   playerCount: number;
   playerConfigurable?: boolean;
   players: DisplayPlayer[];
@@ -28,6 +29,7 @@ export type DisplayStatus = {
   sessionStartedUnix?: number;
   endsUnix: number;
   sessionElapsedMillis?: number;
+  challengeElapsedMillis?: number;
   elapsedMillis: number;
   remainingMillis: number;
   introRemainingMillis: number;

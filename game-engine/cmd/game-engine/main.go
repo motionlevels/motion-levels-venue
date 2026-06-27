@@ -35,7 +35,9 @@ type config struct {
 	VenueSessionID         string
 	Difficulty             string
 	Level                  string
+	LevelMode              string
 	DurationSeconds        int
+	ChallengeElapsedMillis int64
 	PlayerCount            int
 	TeamName               string
 	Players                []playerConfig
@@ -245,6 +247,10 @@ func (c *config) normalize() {
 	}
 	if c.DurationSeconds < 0 {
 		c.DurationSeconds = 0
+	}
+	c.LevelMode = normalizeLevelMode(c.LevelMode)
+	if c.ChallengeElapsedMillis < 0 {
+		c.ChallengeElapsedMillis = 0
 	}
 	if c.ReplayKeyframeInterval <= 0 {
 		c.ReplayKeyframeInterval = 5 * time.Second
@@ -582,6 +588,17 @@ func normalizeDifficulty(value string) string {
 		return value
 	default:
 		return "easy"
+	}
+}
+
+func normalizeLevelMode(value string) string {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case "challenge", "reto":
+		return "challenge"
+	case "free", "libre":
+		return "free"
+	default:
+		return ""
 	}
 }
 
