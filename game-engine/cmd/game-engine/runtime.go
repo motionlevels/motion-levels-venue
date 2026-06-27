@@ -260,6 +260,7 @@ type runtimeStatus struct {
 	IntroRemainingMillis     int64                        `json:"introRemainingMillis"`
 	CountdownRemainingMillis int64                        `json:"countdownRemainingMillis"`
 	StartedUnix              int64                        `json:"startedUnix"`
+	SessionElapsedMillis     int64                        `json:"sessionElapsedMillis"`
 	ElapsedMillis            int64                        `json:"elapsedMillis"`
 	ChallengeElapsedMillis   int64                        `json:"challengeElapsedMillis,omitempty"`
 	ChallengeAttemptCount    int                          `json:"challengeAttemptCount,omitempty"`
@@ -1133,6 +1134,7 @@ func (r *gameRuntime) Status() runtimeStatus {
 		IntroRemainingMillis:     display.IntroRemainingMillis,
 		CountdownRemainingMillis: display.CountdownRemainingMillis,
 		StartedUnix:              unixOrZero(started),
+		SessionElapsedMillis:     display.SessionElapsedMillis,
 		ElapsedMillis:            display.ElapsedMillis,
 		ChallengeElapsedMillis:   display.ChallengeElapsedMillis,
 		ChallengeAttemptCount:    display.ChallengeAttemptCount,

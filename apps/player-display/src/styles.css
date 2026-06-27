@@ -1032,6 +1032,27 @@ body {
     8px 8px 0 rgba(255, 117, 20, 0.18);
 }
 
+.arcade-metric--level-stats {
+  align-content: center;
+}
+
+.arcade-metric--level-stats > .arcade-time-details {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.arcade-metric--level-stats .arcade-time-details span {
+  min-height: clamp(92px, 7vw, 142px);
+  align-content: center;
+}
+
+.arcade-metric--level-stats .arcade-time-details small {
+  font-size: clamp(0.82rem, 0.98vw, 1.28rem);
+}
+
+.arcade-metric--level-stats .arcade-time-details b {
+  font-size: clamp(2.25rem, 3vw, 4.4rem);
+}
+
 .arcade-time-details {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));

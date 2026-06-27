@@ -330,18 +330,22 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
         <section className="arcade-stage arcade-stage--level-hud">
           <div className="arcade-level-main" aria-label="Marcadores principales">
             <MetricPanel className="arcade-metric--lives" label="Vidas" value={<HeartMeter lives={status.lives} showAllUpTo={20} />} tone="red" />
-            <MetricPanel className="arcade-metric--time" label={mainMetric.caption === "Restante" ? "Tiempo restante" : "Tiempo transcurrido"} value={mainMetric.value} tone="amber">
-              {levelTimeDetails.length ? (
-                <div className="arcade-time-details">
-                  {levelTimeDetails.map((detail) => (
-                    <span key={detail.label}>
-                      <small>{detail.label}</small>
-                      <b>{detail.value}</b>
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </MetricPanel>
+            {levelPointsGame ? (
+              <LevelTimeStatsPanel details={levelTimeDetails} />
+            ) : (
+              <MetricPanel className="arcade-metric--time" label={mainMetric.caption === "Restante" ? "Tiempo restante" : "Tiempo transcurrido"} value={mainMetric.value} tone="amber">
+                {levelTimeDetails.length ? (
+                  <div className="arcade-time-details">
+                    {levelTimeDetails.map((detail) => (
+                      <span key={detail.label}>
+                        <small>{detail.label}</small>
+                        <b>{detail.value}</b>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </MetricPanel>
+            )}
           </div>
           <div className="arcade-level-side" aria-label="Marcadores de ronda">
             {levelSideMetrics.map((metric) => (
@@ -471,6 +475,21 @@ function MetricPanel({
       <strong>{value}</strong>
       {stars ? <DifficultyStars count={stars} /> : null}
       {children}
+    </article>
+  );
+}
+
+function LevelTimeStatsPanel({ details }: { details: Array<{ label: string; value: string }> }) {
+  return (
+    <article className="arcade-metric amber arcade-metric--time arcade-metric--level-stats" aria-label="Tiempo e intentos">
+      <div className="arcade-time-details">
+        {details.slice(0, 2).map((detail) => (
+          <span key={detail.label}>
+            <small>{detail.label}</small>
+            <b>{detail.value}</b>
+          </span>
+        ))}
+      </div>
     </article>
   );
 }
@@ -679,7 +698,7 @@ function challengeMode(status: DisplayStatus): boolean {
 
 function levelDisplayTimeMillis(status: DisplayStatus): number {
   if (!challengeMode(status)) {
-    return Math.max(0, status.elapsedMillis ?? 0);
+    return levelAggregateElapsedMillis(status);
   }
   const previousElapsed = Math.max(0, status.challengeElapsedMillis ?? 0);
   if (status.remainingMillis > 0) {
@@ -698,6 +717,10 @@ function levelDisplayAttemptCount(status: DisplayStatus): number {
 function levelAggregateElapsedMillis(status: DisplayStatus): number {
   if (challengeMode(status)) {
     return Math.max(0, status.challengeElapsedMillis ?? 0) + Math.max(0, status.elapsedMillis ?? 0);
+  }
+  const previousElapsed = Math.max(0, status.challengeElapsedMillis ?? 0);
+  if (previousElapsed > 0) {
+    return previousElapsed + Math.max(0, status.elapsedMillis ?? 0);
   }
   return globalGameElapsedMillis(status);
 }

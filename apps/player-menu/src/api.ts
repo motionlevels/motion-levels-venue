@@ -102,6 +102,7 @@ export type EngineStatus = {
   introRemainingMillis: number;
   countdownRemainingMillis: number;
   startedUnix: number;
+  sessionElapsedMillis?: number;
   elapsedMillis: number;
   sessionId: string;
   lastPressureUnix: number;

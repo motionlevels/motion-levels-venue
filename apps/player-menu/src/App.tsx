@@ -50,6 +50,7 @@ type MenuState = {
   levelModes: Record<string, LevelMode>;
   levelProgress: Record<string, LevelProgress>;
   challengeRuns: Record<string, ChallengeRun>;
+  freeRuns: Record<string, FreeRun>;
   nextPlayerId: number;
   narrationArmed: Record<string, boolean>;
   operatorUnlockLevels: boolean;
@@ -69,6 +70,12 @@ type ChallengeRun = {
   completedLevels: Record<string, number>;
   totalElapsedMillis: number;
   attemptCount: number;
+};
+
+type FreeRun = {
+  sessionId: string;
+  startedUnixMillis: number;
+  totalElapsedMillis: number;
 };
 
 type ChallengeCompletion = {
@@ -796,6 +803,18 @@ function challengeRunFor(game: GameCard, state: MenuState): ChallengeRun | null 
   };
 }
 
+function freeRunFor(game: GameCard, state: MenuState): FreeRun | null {
+  const run = state.freeRuns[game.id];
+  if (!run || typeof run !== "object") return null;
+  const sessionId = typeof run.sessionId === "string" ? run.sessionId : "";
+  if (state.sessionId && sessionId && sessionId !== state.sessionId) return null;
+  return {
+    sessionId,
+    startedUnixMillis: Number(run.startedUnixMillis) || 0,
+    totalElapsedMillis: Math.max(0, Math.round(Number(run.totalElapsedMillis) || 0)),
+  };
+}
+
 function challengeNextLevel(game: GameCard, state: MenuState): NonNullable<GameCard["levels"]>[number] | null {
   if (!game.levels?.length) return null;
   const completed = challengeRunFor(game, state)?.completedLevels || {};
@@ -813,6 +832,14 @@ function emptyChallengeRun(difficulty: DifficultyID, startedUnixMillis = Date.no
     completedLevels: {},
     totalElapsedMillis: 0,
     attemptCount: 0,
+  };
+}
+
+function emptyFreeRun(sessionId: string, startedUnixMillis = Date.now()): FreeRun {
+  return {
+    sessionId,
+    startedUnixMillis,
+    totalElapsedMillis: 0,
   };
 }
 
@@ -891,6 +918,7 @@ function recordLevelCompletion(
   const nextBestTime = { ...previous.bestTimeByLevel };
   let selectedLevels = state.selectedLevels;
   let challengeRuns = state.challengeRuns;
+  let freeRuns = state.freeRuns;
   let challengeAttemptRun: ChallengeRun | null = null;
   if (levelModeFor(game, state) === "challenge") {
     const expectedLevel = challengeNextLevel(game, state);
@@ -906,6 +934,17 @@ function recordLevelCompletion(
         [game.id]: challengeAttemptRun,
       };
     }
+  }
+  if (levelModeFor(game, state) === "free") {
+    const previousRun = freeRunFor(game, state) || emptyFreeRun(state.sessionId);
+    freeRuns = {
+      ...freeRuns,
+      [game.id]: {
+        ...previousRun,
+        sessionId: state.sessionId || previousRun.sessionId,
+        totalElapsedMillis: previousRun.totalElapsedMillis + Math.max(0, elapsedMillis || 0),
+      },
+    };
   }
   if (success) {
     nextBest[levelID] = higherDifficulty(nextBest[levelID], difficulty);
@@ -959,6 +998,7 @@ function recordLevelCompletion(
     ...state,
     selectedLevels,
     challengeRuns,
+    freeRuns,
     levelProgress: {
       ...state.levelProgress,
       [game.id]: {
@@ -1030,6 +1070,21 @@ function normalizeChallengeRuns(value: unknown): Record<string, ChallengeRun> {
   return runs;
 }
 
+function normalizeFreeRuns(value: unknown): Record<string, FreeRun> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const runs: Record<string, FreeRun> = {};
+  for (const [gameID, run] of Object.entries(value as Record<string, unknown>)) {
+    if (!run || typeof run !== "object" || Array.isArray(run)) continue;
+    const source = run as Partial<FreeRun>;
+    runs[gameID] = {
+      sessionId: typeof source.sessionId === "string" ? source.sessionId : "",
+      startedUnixMillis: Math.max(0, Math.round(Number(source.startedUnixMillis) || 0)),
+      totalElapsedMillis: Math.max(0, Math.round(Number(source.totalElapsedMillis) || 0)),
+    };
+  }
+  return runs;
+}
+
 function loadMenuState(): MenuState {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || "null") as Partial<MenuState> | null;
@@ -1039,6 +1094,7 @@ function loadMenuState(): MenuState {
       const levelModes = normalizeLevelModes(saved.levelModes);
       const levelProgress = saved.levelProgress && typeof saved.levelProgress === "object" ? saved.levelProgress : {};
       const challengeRuns = normalizeChallengeRuns(saved.challengeRuns);
+      const freeRuns = normalizeFreeRuns(saved.freeRuns);
       const savedPlayers = Array.isArray(saved.players) ? saved.players : [];
       const cleanedPlayers = savedPlayers.map((player, index) => ({
         id: Number(player?.id) || index + 1,
@@ -1062,6 +1118,7 @@ function loadMenuState(): MenuState {
         levelModes,
         levelProgress,
         challengeRuns,
+        freeRuns,
         players: cleanedPlayers.length ? cleanedPlayers : defaultPlayers,
         nextPlayerId: saved.nextPlayerId || cleanedPlayers.length || 1,
         narrationArmed,
@@ -1084,6 +1141,7 @@ function loadMenuState(): MenuState {
     levelModes: {},
     levelProgress: {},
     challengeRuns: {},
+    freeRuns: {},
     nextPlayerId: 1,
     narrationArmed: {},
     operatorUnlockLevels: envUnlockLevels,
@@ -1961,6 +2019,7 @@ function MenuApp() {
       levelModes: current.levelModes,
       levelProgress: {},
       challengeRuns: {},
+      freeRuns: {},
       nextPlayerId: Math.max(0, ...nextPlayers.map((player) => player.id)),
       narrationArmed: {},
     }));
@@ -2012,6 +2071,7 @@ function MenuApp() {
       levelModes: current.levelModes,
       levelProgress: {},
       challengeRuns: {},
+      freeRuns: {},
       nextPlayerId: 1,
       narrationArmed: {},
     }));
@@ -2204,10 +2264,13 @@ function MenuApp() {
       };
       const nextChallengeRuns = { ...current.challengeRuns };
       delete nextChallengeRuns[game.id];
+      const nextFreeRuns = { ...current.freeRuns };
+      delete nextFreeRuns[game.id];
       return {
         ...current,
         levelModes: nextLevelModes,
         challengeRuns: nextChallengeRuns,
+        freeRuns: nextFreeRuns,
         selectedLevels: {
           ...current.selectedLevels,
           [game.id]: mode === "challenge" ? defaultLevelID(game) : selectedLevelFor(game, current),
@@ -2501,6 +2564,7 @@ function MenuApp() {
       };
     }
     const launchChallengeRun = launchLevelMode === "challenge" ? challengeRunFor(launchGame, nextMenu) : null;
+    const launchFreeRun = launchLevelMode === "free" ? freeRunFor(launchGame, nextMenu) || emptyFreeRun(nextMenu.sessionId) : null;
     if (selectedLevelID && !isLevelUnlocked(launchGame, selectedLevelID, nextMenu)) {
       captureMenuEvent("start_blocked", {
         engine_game: engineGameID(launchGame),
@@ -2564,7 +2628,7 @@ function MenuApp() {
         level: selectedLevelID || undefined,
         levelMode: launchLevelMode,
         durationSeconds: launchGame.estimatedDurationSeconds || undefined,
-        challengeElapsedMillis: launchChallengeRun?.totalElapsedMillis || 0,
+        challengeElapsedMillis: launchChallengeRun?.totalElapsedMillis || launchFreeRun?.totalElapsedMillis || 0,
         challengeAttemptCount: launchChallengeRun?.attemptCount || 0,
         narrationEnabled: supportsNarration(launchGame) ? playNarration : false,
         countdownFloorOverlay: showCountdownOverlay,
@@ -2870,6 +2934,7 @@ function MenuApp() {
           levelMode={levelModeFor(launchedGame, menu)}
           selectedLevelID={selectedLevelFor(launchedGame)}
           challengeRun={challengeRunFor(launchedGame, menu)}
+          freeRun={freeRunFor(launchedGame, menu)}
           difficulty={launchedDifficulty}
           supportedDifficulties={launchedSupportedDifficulties}
           difficultyLocked={launchedLevelActive}
@@ -3699,6 +3764,7 @@ function GameControlScreen({
   levelMode,
   selectedLevelID,
   challengeRun,
+  freeRun,
   difficulty,
   supportedDifficulties,
   difficultyLocked,
@@ -3726,6 +3792,7 @@ function GameControlScreen({
   levelMode: LevelMode;
   selectedLevelID: string;
   challengeRun: ChallengeRun | null;
+  freeRun: FreeRun | null;
   difficulty: DifficultyID;
   supportedDifficulties: DifficultyID[];
   difficultyLocked: boolean;
@@ -3766,11 +3833,13 @@ function GameControlScreen({
   const launchingLevelLabel = launchingLevel ? playerLevelLabel(launchingLevel, launchingLevelIndex) : "";
   const totalMillis = Math.max(0, Math.round((game.estimatedDurationSeconds || 0) * 1000));
   const elapsedMillis = Math.max(0, Math.round(status?.elapsedMillis || 0));
-  const challengeElapsedMillis = Math.max(0, Math.round(challengeRun?.totalElapsedMillis || 0)) + elapsedMillis;
+  const activeLevelElapsedMillis = activeLevelAttempt(status, currentLevelID) ? elapsedMillis : 0;
+  const freeElapsedMillis = Math.max(0, Math.round(freeRun?.totalElapsedMillis || 0)) + activeLevelElapsedMillis;
+  const challengeElapsedMillis = Math.max(0, Math.round(challengeRun?.totalElapsedMillis || 0)) + activeLevelElapsedMillis;
   const challengeRemainingMillis = totalMillis > 0 ? Math.max(0, totalMillis - challengeElapsedMillis) : 0;
   const timeLabel = hasLevels
     ? levelModeFree
-      ? formatRuntimeTime(elapsedMillis)
+      ? formatRuntimeTime(freeElapsedMillis)
       : totalMillis > 0 ? formatRuntimeTime(challengeRemainingMillis) : formatRuntimeTime(challengeElapsedMillis)
     : totalMillis > 0 ? formatRuntimeTime(Math.max(0, totalMillis - elapsedMillis)) : formatRuntimeTime(elapsedMillis);
   const timeCaption = hasLevels ? (levelModeFree ? "Tiempo transcurrido" : totalMillis > 0 ? "Tiempo restante" : "Tiempo transcurrido") : totalMillis > 0 ? "Restante" : "Tiempo";
