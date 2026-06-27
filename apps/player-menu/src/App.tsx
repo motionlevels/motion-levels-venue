@@ -3906,7 +3906,7 @@ function GameControlScreen({
               <span>Narración</span>
             </div>
           ) : countdownValue > 0 ? (
-            <div className="countdown-overlay" aria-live="polite">
+            <div className="countdown-overlay countdown-number" aria-live="polite">
               <span>{countdownValue}</span>
             </div>
           ) : paused ? (
