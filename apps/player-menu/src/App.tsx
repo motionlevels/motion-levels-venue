@@ -791,6 +791,22 @@ function levelModeFor(game: GameCard, state: MenuState): LevelMode {
   return state.levelModes[game.id] === "challenge" ? "challenge" : "free";
 }
 
+function levelModeFromEngine(value: string | undefined): LevelMode | null {
+  const normalized = (value || "").trim().toLowerCase();
+  if (normalized === "challenge" || normalized === "reto") return "challenge";
+  if (normalized === "free" || normalized === "libre") return "free";
+  return null;
+}
+
+function activeLevelModeFor(game: GameCard, state: MenuState, status: EngineStatus | null): LevelMode {
+  const configuredMode = levelModeFor(game, state);
+  const engineMode = levelModeFromEngine(status?.levelMode);
+  if (engineMode) return engineMode;
+  if (!game.levels?.length || configuredMode === "free" || !status?.level) return configuredMode;
+  const expectedChallengeLevel = challengeNextLevel(game, state)?.id || defaultLevelID(game);
+  return status.level === expectedChallengeLevel ? "challenge" : "free";
+}
+
 function challengeRunFor(game: GameCard, state: MenuState): ChallengeRun | null {
   const run = state.challengeRuns[game.id];
   if (!run || typeof run !== "object") return null;
@@ -848,14 +864,19 @@ function unlockLevelsEnabled(state: MenuState): boolean {
 }
 
 function isLevelUnlocked(game: GameCard, levelID: string, state: MenuState): boolean {
+  return isLevelUnlockedForMode(game, levelID, state, levelModeFor(game, state));
+}
+
+function isLevelUnlockedForMode(game: GameCard, levelID: string, state: MenuState, mode: LevelMode): boolean {
   if (!game.levels?.length) return true;
   if (unlockLevelsEnabled(state)) return true;
-  if (levelModeFor(game, state) === "free") return true;
+  if (mode === "free") return true;
   return challengeNextLevel(game, state)?.id === levelID;
 }
 
-function challengeLevelPreviewRevealed(game: GameCard, levelID: string, state: MenuState, active: boolean): boolean {
+function challengeLevelPreviewRevealed(game: GameCard, levelID: string, state: MenuState, active: boolean, mode = levelModeFor(game, state)): boolean {
   if (levelModeFor(game, state) === "free") return true;
+  if (mode === "free") return true;
   if (active) return true;
   return challengeRunFor(game, state)?.completedLevels[levelID] !== undefined;
 }
@@ -1846,6 +1867,7 @@ function MenuApp() {
   const selectedChallengeProgressLabel = selectedGame.levels?.length
     ? `${Object.keys(selectedChallengeRun?.completedLevels || {}).length}/${selectedGame.levels.length}`
     : "0/0";
+  const launchedLevelMode = activeLevelModeFor(launchedGame, menu, status);
   const selectedPartyMiniGames = isPartyCard(selectedGame) ? selectedGame.partyMiniGames || [] : [];
   const levelDetail = Boolean(selectedGame.levels?.length && selectedLevel);
   const gameActive = screenMode === "game";
@@ -2362,6 +2384,7 @@ function MenuApp() {
     activeLevelID: string;
     launchingLevelID: string | null;
     launchPhase: ActiveLevelLaunchPhase | null;
+    levelMode: LevelMode;
     selectable: boolean;
     onSelect: (levelID: string) => void;
   }) {
@@ -2373,7 +2396,7 @@ function MenuApp() {
     const bestDifficulty = progress.bestByLevel[level.id];
     const previewDifficulty = closestSupportedDifficulty(menu.difficulty, supportedDifficultiesFor(game, level));
     const selectable = options.selectable && !options.launchingLevelID;
-    const revealPreview = challengeLevelPreviewRevealed(game, level.id, menu, active);
+    const revealPreview = challengeLevelPreviewRevealed(game, level.id, menu, active, options.levelMode);
     return (
       <button
         key={level.id}
@@ -2383,7 +2406,7 @@ function MenuApp() {
         role="radio"
         aria-busy={launching || undefined}
         aria-checked={active || launching}
-        aria-label={`${levelLabel}${launching ? ", cargando" : selectable ? "" : ", solo lectura durante reto"}`}
+        aria-label={`${levelLabel}${launching ? ", cargando" : selectable ? "" : options.levelMode === "challenge" ? ", solo lectura durante reto" : ""}`}
         disabled={!selectable}
         onClick={() => options.onSelect(level.id)}
       >
@@ -2469,7 +2492,7 @@ function MenuApp() {
     setMessage((current) => (current.startsWith("Narración") ? "" : current));
   }
 
-  async function launch(gameID = selectedGame.id, options: { difficulty?: DifficultyID; levelID?: string; partyIndex?: number; partyScore?: number; resetChallengeRun?: boolean } = {}) {
+  async function launch(gameID = selectedGame.id, options: { difficulty?: DifficultyID; levelID?: string; levelMode?: LevelMode; partyIndex?: number; partyScore?: number; resetChallengeRun?: boolean } = {}) {
     const game = menuGames.find((candidate) => candidate.id === gameID);
     if (!game || game.disabled || !isGameLaunchable(game)) {
       captureMenuEvent("start_blocked", {
@@ -2495,6 +2518,19 @@ function MenuApp() {
     }
     if (options.difficulty) {
       nextMenu = { ...nextMenu, difficulty: options.difficulty };
+    }
+    if (options.levelMode && launchGame.levels?.length) {
+      const nextLevelModes = {
+        ...nextMenu.levelModes,
+        [launchGame.id]: options.levelMode,
+      };
+      const nextChallengeRuns = { ...nextMenu.challengeRuns };
+      if (options.levelMode === "free") delete nextChallengeRuns[launchGame.id];
+      nextMenu = {
+        ...nextMenu,
+        levelModes: nextLevelModes,
+        challengeRuns: nextChallengeRuns,
+      };
     }
     if (options.resetChallengeRun && launchGame.levels?.length && levelModeFor(launchGame, nextMenu) === "challenge") {
       const { [launchGame.id]: _discardedRun, ...challengeRuns } = nextMenu.challengeRuns;
@@ -2684,9 +2720,10 @@ function MenuApp() {
   function requestActiveLevelSwitch(levelID: string) {
     if (!launchedGame.levels?.length) return;
     if (activeLevelLaunch?.gameID === launchedGame.id) return;
+    const activeMode = activeLevelModeFor(launchedGame, menu, status);
     const activeLevelID = status?.level || selectedLevelFor(launchedGame);
     if (levelID === activeLevelID && isLevelRuntimeActive(status, launchedGame)) return;
-    if (!isLevelUnlocked(launchedGame, levelID, menu)) {
+    if (!isLevelUnlockedForMode(launchedGame, levelID, menu, activeMode)) {
       setSelectedLevel(launchedGame, levelID);
       return;
     }
@@ -2694,12 +2731,12 @@ function MenuApp() {
       setPendingLevelSwitch({ gameID: launchedGame.id, levelID });
       return;
     }
-    void switchLaunchedLevel(launchedGame, levelID, false);
+    void switchLaunchedLevel(launchedGame, levelID, false, activeMode);
   }
 
-  async function switchLaunchedLevel(game: GameCard, levelID: string, stopCurrent: boolean) {
+  async function switchLaunchedLevel(game: GameCard, levelID: string, stopCurrent: boolean, mode = levelModeFor(game, menu)) {
     const level = game.levels?.find((candidate) => candidate.id === levelID);
-    if (!level || !isLevelUnlocked(game, levelID, menu)) return;
+    if (!level || !isLevelUnlockedForMode(game, levelID, menu, mode)) return;
     setPendingLevelSwitch(null);
     setActiveLevelLaunch({ gameID: game.id, levelID, phase: stopCurrent ? "stopping" : "loading" });
     setError("");
@@ -2722,7 +2759,7 @@ function MenuApp() {
       }
       setActiveLevelLaunch({ gameID: game.id, levelID, phase: "loading" });
       setMessage("Cambiando nivel");
-      await launch(game.id, { levelID });
+      await launch(game.id, { levelID, levelMode: mode });
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cambiar de nivel");
     } finally {
@@ -2931,7 +2968,7 @@ function MenuApp() {
           status={status}
           players={displayPlayers}
           allPlayers={displayPlayers.length > 0 ? displayPlayers : menu.players}
-          levelMode={levelModeFor(launchedGame, menu)}
+          levelMode={launchedLevelMode}
           selectedLevelID={selectedLevelFor(launchedGame)}
           challengeRun={challengeRunFor(launchedGame, menu)}
           freeRun={freeRunFor(launchedGame, menu)}
@@ -3442,7 +3479,7 @@ function MenuApp() {
           body={`Se detendrá el nivel actual y empezará ${playerLevelLabel(pendingLevelSwitchLevel, pendingLevelSwitchGame.levels?.findIndex((level) => level.id === pendingLevelSwitchLevel.id) ?? -1)}.`}
           confirmLabel="Cambiar"
           cancelLabel="Cancelar"
-          onConfirm={() => void switchLaunchedLevel(pendingLevelSwitchGame, pendingLevelSwitchLevel.id, true)}
+          onConfirm={() => void switchLaunchedLevel(pendingLevelSwitchGame, pendingLevelSwitchLevel.id, true, activeLevelModeFor(pendingLevelSwitchGame, menu, status))}
           onCancel={() => setPendingLevelSwitch(null)}
         />
       ) : null}
@@ -3800,6 +3837,7 @@ function GameControlScreen({
     activeLevelID: string;
     launchingLevelID: string | null;
     launchPhase: ActiveLevelLaunchPhase | null;
+    levelMode: LevelMode;
     selectable: boolean;
     onSelect: (levelID: string) => void;
   }) => ReactNode;
@@ -3963,9 +4001,10 @@ function GameControlScreen({
             </div>
             <div className="active-level-grid">
               {levels.map((level) => renderLevelOption(level, {
-                activeLevelID: levelModeFree ? selectedLevelID : currentLevelID,
+                activeLevelID: currentLevelID,
                 launchingLevelID: activeLevelLaunch?.levelID || null,
                 launchPhase: activeLevelLaunch?.phase || null,
+                levelMode,
                 selectable: levelModeFree && !activeLevelLaunch,
                 onSelect: onLevelSelect,
               }))}

@@ -83,6 +83,7 @@ export type EngineStatus = {
   label: string;
   difficulty: string;
   level?: string;
+  levelMode?: string;
   teamName: string;
   playerCount: number;
   players?: Array<{
