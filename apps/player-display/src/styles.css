@@ -567,6 +567,53 @@ body {
   gap: 16px;
 }
 
+.display.arcade-display.level-points-display.no-player-info {
+  padding: 24px 38px 30px;
+  gap: 22px;
+}
+
+.level-points-display .arcade-title h1 {
+  font-size: clamp(4.7rem, 5vw, 5.9rem);
+  line-height: 1.12;
+  padding-bottom: 0.06em;
+}
+
+.level-points-display.parkour-display .arcade-top {
+  min-height: 150px;
+  grid-template-columns: minmax(500px, 0.82fr) minmax(700px, 1.36fr) minmax(330px, 0.52fr);
+}
+
+.level-points-display .arcade-title span,
+.level-points-display .arcade-level-badge span,
+.level-points-display .arcade-stage--level-hud .arcade-metric span {
+  font-size: clamp(1.18rem, 1.28vw, 1.56rem);
+}
+
+.level-points-display .arcade-level-badge strong {
+  font-size: clamp(2.55rem, 3vw, 3.55rem);
+}
+
+.level-points-display.parkour-display .arcade-brand-panel {
+  min-height: 150px;
+  padding: 10px 18px;
+}
+
+.level-points-display.parkour-display .arcade-brand {
+  max-width: 500px;
+  flex-basis: 500px;
+  gap: 24px;
+}
+
+.level-points-display.parkour-display .arcade-brand-mark {
+  width: clamp(122px, 7vw, 148px);
+  height: clamp(122px, 7vw, 148px);
+}
+
+.level-points-display.parkour-display .arcade-brand-name {
+  font-size: clamp(2.05rem, 2.35vw, 2.75rem);
+  line-height: 0.92;
+}
+
 .arcade-top {
   min-height: 86px;
   display: grid;
@@ -945,6 +992,11 @@ body {
   align-items: stretch;
 }
 
+.display.arcade-display.level-points-display.no-player-info .arcade-stage--level-hud {
+  grid-template-columns: minmax(0, 1.72fr) minmax(420px, 0.68fr);
+  gap: 26px;
+}
+
 .arcade-stage--memory-hud {
   min-height: 0;
   display: grid;
@@ -964,8 +1016,17 @@ body {
   grid-template-rows: minmax(0, 1fr) minmax(0, 0.94fr);
 }
 
+.level-points-display .arcade-level-main {
+  grid-template-rows: minmax(0, 1fr) minmax(220px, 0.39fr);
+  gap: 24px;
+}
+
 .arcade-level-side {
   grid-template-rows: repeat(3, minmax(0, 1fr));
+}
+
+.level-points-display .arcade-level-side {
+  gap: 22px;
 }
 
 .arcade-metric {
@@ -989,6 +1050,36 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.09),
     inset 0 -2px 0 rgba(54, 217, 255, 0.24);
   clip-path: polygon(2.5% 0, 96.5% 0, 100% 8%, 100% 92%, 96.5% 100%, 2.5% 100%, 0 92%, 0 8%);
+}
+
+.level-points-display .arcade-stage--level-hud .arcade-metric {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(54, 217, 255, 0.82);
+  background:
+    linear-gradient(135deg, rgba(54, 217, 255, 0.08), transparent 22%),
+    radial-gradient(80% 110% at 16% 18%, rgba(54, 217, 255, 0.09), transparent 62%),
+    linear-gradient(180deg, rgba(20, 219, 255, 0.07), rgba(15, 20, 34, 0.16)),
+    rgba(5, 15, 27, 0.78);
+  box-shadow:
+    0 0 44px -28px rgba(54, 217, 255, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -2px 0 rgba(54, 217, 255, 0.32);
+}
+
+.level-points-display .arcade-stage--level-hud .arcade-metric::before {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  z-index: 0;
+  border: 1px solid rgba(54, 217, 255, 0.16);
+  clip-path: polygon(0 0, 36% 0, 42% 8%, 58% 8%, 64% 0, 100% 0, 100% 100%, 0 100%);
+  pointer-events: none;
+}
+
+.level-points-display .arcade-stage--level-hud .arcade-metric > * {
+  position: relative;
+  z-index: 1;
 }
 
 .arcade-metric strong {
@@ -1035,6 +1126,12 @@ body {
   gap: clamp(20px, 2vw, 36px);
 }
 
+.level-points-display .arcade-metric--lives {
+  padding: clamp(58px, 5.2vw, 92px) clamp(72px, 6.4vw, 118px);
+  align-content: center;
+  gap: clamp(34px, 3.4vw, 58px);
+}
+
 .arcade-metric--time {
   min-height: 0;
   padding: clamp(32px, 2.8vw, 52px) clamp(42px, 4vw, 78px);
@@ -1042,11 +1139,91 @@ body {
   gap: clamp(18px, 1.7vw, 30px);
 }
 
+.level-points-display .arcade-metric--level-stats {
+  padding: clamp(20px, 1.85vw, 34px) clamp(42px, 4vw, 72px);
+}
+
 .arcade-level-side .arcade-metric {
   min-height: 0;
   padding: clamp(26px, 2.5vw, 46px) clamp(32px, 3vw, 56px);
   align-content: center;
   gap: clamp(12px, 1.1vw, 20px);
+}
+
+.level-points-display .arcade-level-side .arcade-metric {
+  padding: clamp(26px, 2.25vw, 42px) clamp(32px, 2.7vw, 50px);
+}
+
+.level-points-display .arcade-level-side .arcade-metric strong {
+  font-size: clamp(5.15rem, 6vw, 7.4rem);
+}
+
+.level-points-display .arcade-level-side .arcade-metric--with-icon {
+  grid-template-columns: minmax(98px, 0.33fr) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: center;
+  align-items: center;
+  column-gap: clamp(24px, 2.2vw, 38px);
+}
+
+.level-points-display .arcade-level-side .arcade-metric--with-icon > span,
+.level-points-display .arcade-level-side .arcade-metric--with-icon > strong,
+.level-points-display .arcade-level-side .arcade-metric--with-icon > .difficulty-stars {
+  grid-column: 2;
+}
+
+.arcade-metric-icon {
+  display: none;
+}
+
+.level-points-display .arcade-metric-icon {
+  width: clamp(82px, 5.7vw, 116px);
+  aspect-ratio: 1;
+  grid-column: 1;
+  grid-row: 1 / -1;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(54, 217, 255, 0.42);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(54, 217, 255, 0.18), transparent 62%),
+    rgba(2, 12, 23, 0.74);
+  clip-path: polygon(50% 0, 91% 25%, 91% 75%, 50% 100%, 9% 75%, 9% 25%);
+  filter: drop-shadow(0 0 22px rgba(54, 217, 255, 0.22));
+}
+
+.level-points-display .arcade-metric-icon::before {
+  color: var(--cyan);
+  font-size: clamp(2.9rem, 3.55vw, 4.6rem);
+  line-height: 1;
+  font-weight: 950;
+  text-shadow: 0 0 20px currentColor;
+}
+
+.level-points-display .arcade-metric-icon--points {
+  border-color: rgba(249, 39, 255, 0.5);
+  filter: drop-shadow(0 0 22px rgba(249, 39, 255, 0.26));
+}
+
+.level-points-display .arcade-metric-icon--points::before {
+  content: "+";
+  color: #f927ff;
+}
+
+.level-points-display .arcade-metric-icon--targets::before {
+  content: "\2691";
+}
+
+.level-points-display .arcade-metric-icon--difficulty {
+  border-color: rgba(255, 224, 122, 0.42);
+  filter: drop-shadow(0 0 22px rgba(251, 191, 36, 0.24));
+}
+
+.level-points-display .arcade-metric-icon--difficulty::before {
+  content: "\25AE\25AE\25AE";
+  color: var(--amber-ink);
+  font-size: clamp(1.3rem, 1.62vw, 2.05rem);
+  letter-spacing: 0.06em;
+  transform: rotate(-90deg);
 }
 
 .arcade-metric--lives strong {
@@ -1062,13 +1239,28 @@ body {
   max-width: 100%;
 }
 
+.level-points-display .arcade-metric--lives .heart-meter {
+  grid-template-columns: repeat(5, minmax(86px, 118px));
+  justify-content: start;
+  gap: clamp(34px, 3.15vw, 58px);
+}
+
 .arcade-metric--lives .heart {
   width: clamp(50px, 5vw, 94px);
   height: clamp(50px, 5vw, 94px);
 }
 
+.level-points-display .arcade-metric--lives .heart {
+  width: clamp(86px, 6.2vw, 122px);
+  height: clamp(86px, 6.2vw, 122px);
+}
+
 .arcade-metric--lives .heart::before {
   font-size: clamp(64px, 6vw, 112px);
+}
+
+.level-points-display .arcade-metric--lives .heart::before {
+  font-size: clamp(104px, 7.4vw, 148px);
 }
 
 .arcade-metric--time > strong {
@@ -1220,17 +1412,88 @@ body {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.level-points-display .arcade-metric--level-stats > .arcade-time-details {
+  min-height: 0;
+  align-self: stretch;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: clamp(18px, 1.6vw, 30px);
+}
+
 .arcade-metric--level-stats .arcade-time-details span {
   min-height: clamp(92px, 7vw, 142px);
   align-content: center;
+}
+
+.level-points-display .arcade-metric--level-stats .arcade-time-details span {
+  min-height: 0;
+  padding: clamp(18px, 1.45vw, 28px) clamp(26px, 2.3vw, 44px);
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: min-content min-content;
+  align-content: center;
+  align-items: center;
+  column-gap: clamp(24px, 2.1vw, 38px);
+  row-gap: clamp(6px, 0.62vw, 12px);
+  clip-path: polygon(6% 0, 100% 0, 100% 100%, 0 100%, 0 22%);
+}
+
+.arcade-time-detail i {
+  display: none;
+}
+
+.level-points-display .arcade-time-detail i {
+  width: clamp(70px, 4.8vw, 98px);
+  aspect-ratio: 1;
+  grid-row: 1 / -1;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(54, 217, 255, 0.42);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(54, 217, 255, 0.18), transparent 62%),
+    rgba(2, 12, 23, 0.72);
+  clip-path: polygon(50% 0, 91% 25%, 91% 75%, 50% 100%, 9% 75%, 9% 25%);
+  filter: drop-shadow(0 0 18px rgba(54, 217, 255, 0.25));
+}
+
+.level-points-display .arcade-time-detail i::before {
+  color: var(--cyan);
+  font-size: clamp(2.35rem, 3vw, 3.75rem);
+  line-height: 1;
+  font-weight: 950;
+  text-shadow: 0 0 18px currentColor;
+}
+
+.level-points-display .arcade-time-detail--time i::before {
+  content: "\25F7";
+}
+
+.level-points-display .arcade-time-detail--attempts i::before {
+  content: "\21BB";
 }
 
 .arcade-metric--level-stats .arcade-time-details small {
   font-size: clamp(0.82rem, 0.98vw, 1.28rem);
 }
 
+.level-points-display .arcade-metric--level-stats .arcade-time-details small {
+  font-size: clamp(1.08rem, 1.2vw, 1.46rem);
+  line-height: 0.95;
+}
+
+.level-points-display .arcade-metric--level-stats .arcade-time-details small,
+.level-points-display .arcade-metric--level-stats .arcade-time-details b {
+  grid-column: 2;
+}
+
 .arcade-metric--level-stats .arcade-time-details b {
   font-size: clamp(2.25rem, 3vw, 4.4rem);
+}
+
+.level-points-display .arcade-metric--level-stats .arcade-time-details b {
+  display: block;
+  font-size: clamp(3.75rem, 4.1vw, 5.7rem);
+  line-height: 1.12;
+  padding-bottom: 0.06em;
 }
 
 .arcade-time-details {
@@ -1275,7 +1538,7 @@ body {
 .level-points-display .arcade-level-side .arcade-metric:nth-child(3) strong {
   overflow: visible;
   padding-block: 0.04em;
-  font-size: clamp(4.15rem, 4.85vw, 6.6rem);
+  font-size: clamp(4.75rem, 5.15vw, 6.75rem);
   line-height: 1.02;
   white-space: nowrap;
 }

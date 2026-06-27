@@ -352,7 +352,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
           </div>
           <div className="arcade-level-side" aria-label="Marcadores de ronda">
             {levelSideMetrics.map((metric) => (
-              <MetricPanel key={metric.label} label={metric.label} value={metric.value} tone={metric.tone} stars={metric.stars} />
+              <MetricPanel key={metric.label} label={metric.label} value={metric.value} tone={metric.tone} stars={metric.stars} icon={metricIcon(metric.label)} />
             ))}
           </div>
         </section>
@@ -498,6 +498,7 @@ function MetricPanel({
   stars,
   children,
   className = "",
+  icon = "",
 }: {
   label: string;
   value: ReactNode;
@@ -505,9 +506,11 @@ function MetricPanel({
   stars?: number;
   children?: ReactNode;
   className?: string;
+  icon?: "" | "points" | "targets" | "difficulty";
 }) {
   return (
-    <article className={`arcade-metric ${tone} ${className}`}>
+    <article className={`arcade-metric ${tone} ${icon ? "arcade-metric--with-icon" : ""} ${className}`}>
+      {icon ? <i className={`arcade-metric-icon arcade-metric-icon--${icon}`} aria-hidden="true" /> : null}
       <span>{label}</span>
       <strong>{value}</strong>
       {stars ? <DifficultyStars count={stars} /> : null}
@@ -521,7 +524,8 @@ function LevelTimeStatsPanel({ details }: { details: Array<{ label: string; valu
     <article className="arcade-metric amber arcade-metric--time arcade-metric--level-stats" aria-label="Tiempo e intentos">
       <div className="arcade-time-details">
         {details.slice(0, 2).map((detail) => (
-          <span key={detail.label}>
+          <span className={`arcade-time-detail arcade-time-detail--${timeDetailIcon(detail.label)}`} key={detail.label}>
+            <i aria-hidden="true" />
             <small>{detail.label}</small>
             <b>{detail.value}</b>
           </span>
@@ -529,6 +533,18 @@ function LevelTimeStatsPanel({ details }: { details: Array<{ label: string; valu
       </div>
     </article>
   );
+}
+
+function metricIcon(label: string): "" | "points" | "targets" | "difficulty" {
+  const normalized = normalizedDisplayText(label);
+  if (normalized.includes("puntos")) return "points";
+  if (normalized.includes("objetivos")) return "targets";
+  if (normalized.includes("dificultad")) return "difficulty";
+  return "";
+}
+
+function timeDetailIcon(label: string): "time" | "attempts" {
+  return normalizedDisplayText(label).includes("intentos") ? "attempts" : "time";
 }
 
 function DifficultyStars({ count }: { count: number }) {
