@@ -95,7 +95,7 @@ func main() {
 	flag.StringVar(&cfg.Level, "level", "starter", "level for games that support level selection")
 	flag.IntVar(&cfg.PlayerCount, "players", 1, "number of players for focused games")
 	flag.IntVar(&cfg.FPS, "fps", 50, "frames per second")
-	flag.IntVar(&cfg.Brightness, "brightness", 80, "brightness percentage, 1-100")
+	flag.IntVar(&cfg.Brightness, "brightness", 100, "brightness percentage, 1-100")
 	flag.BoolVar(&cfg.AudioEnabled, "audio", false, "enable local audio playback through the OS default output")
 	flag.StringVar(&cfg.AudioAssetsDir, "audio-assets", "content/audio", "directory containing audio assets")
 	flag.StringVar(&cfg.AudioPlayer, "audio-player", "", "audio player executable; empty auto-detects afplay/mpv/ffplay/mpg123")
@@ -586,7 +586,7 @@ func normalizeDifficulty(value string) string {
 }
 
 func makeFrame(sequence uint64, now time.Time, seconds float64, runtime *gameRuntime) *recordingpb.FrameRecord {
-	brightness := 80
+	brightness := 100
 	var gameColors []animation.RGB
 	sessionID := ""
 	venueSessionID := ""

@@ -26,7 +26,7 @@ The defaults are:
 - pressure event stream: `127.0.0.1:4202`
 - game: `salvapantallas`
 - desired-state frame rate: `20fps`
-- brightness: `80%`
+- brightness: `100%`
 
 ## Games
 
@@ -116,7 +116,7 @@ go run ./game-engine/cmd/game-engine \
   -controller 127.0.0.1:4201 \
   -pressure-events 127.0.0.1:4202 \
   -fps 30 \
-  -brightness 85 \
+  -brightness 100 \
   -audio \
   -audio-player native \
   -audio-assets /Users/lobis/git/motion-levels/motion-levels/web/assets/temporada1 \

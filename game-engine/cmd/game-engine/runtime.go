@@ -213,7 +213,9 @@ type displayStatus struct {
 	Score                    int             `json:"score"`
 	Lives                    int             `json:"lives"`
 	StartedUnix              int64           `json:"startedUnix"`
+	SessionStartedUnix       int64           `json:"sessionStartedUnix"`
 	EndsUnix                 int64           `json:"endsUnix"`
+	SessionElapsedMillis     int64           `json:"sessionElapsedMillis"`
 	ElapsedMillis            int64           `json:"elapsedMillis"`
 	RemainingMillis          int64           `json:"remainingMillis"`
 	IntroRemainingMillis     int64           `json:"introRemainingMillis"`
@@ -270,6 +272,13 @@ func unixOrZero(t time.Time) int64 {
 		return 0
 	}
 	return t.Unix()
+}
+
+func elapsedMillisSince(started time.Time, now time.Time) int64 {
+	if started.IsZero() || now.Before(started) {
+		return 0
+	}
+	return now.Sub(started).Milliseconds()
 }
 
 func newGameRuntime(cfg config, audioPlayer *audio.Player, recorder gameRecordWriter) *gameRuntime {
@@ -619,6 +628,8 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		Players:                defaultDisplayPlayers(cfg),
 		Lives:                  -1,
 		StartedUnix:            started.Unix(),
+		SessionStartedUnix:     unixOrZero(started),
+		SessionElapsedMillis:   elapsedMillisSince(started, gameNow),
 		AudioEnabled:           audioEnabled,
 		AudioMuted:             audioMuted,
 		LastEventUnixNanos:     lastEvent.unixNanos,

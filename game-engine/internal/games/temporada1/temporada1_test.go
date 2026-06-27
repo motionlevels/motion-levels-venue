@@ -87,6 +87,32 @@ func TestHazardDamageCanEndLevel(t *testing.T) {
 	}
 }
 
+func TestHazardDamageCooldownLastsThreeSeconds(t *testing.T) {
+	now := time.Unix(100, 0)
+	game := NewWithSeed(now, 1, 1, "hard", "level-1")
+	playAt := now.Add(countdownDuration + tickDuration)
+	game.lives = 3
+
+	if !game.damageLocked(Point{}, playAt) {
+		t.Fatal("first hazard damage should apply")
+	}
+	if got := game.lives; got != 2 {
+		t.Fatalf("lives after first damage = %d, want 2", got)
+	}
+	if game.damageLocked(Point{}, playAt.Add(2*time.Second)) {
+		t.Fatal("hazard damage reapplied before 3 second cooldown")
+	}
+	if got := game.lives; got != 2 {
+		t.Fatalf("lives during cooldown = %d, want 2", got)
+	}
+	if !game.damageLocked(Point{}, playAt.Add(3*time.Second)) {
+		t.Fatal("hazard damage should reapply after 3 seconds")
+	}
+	if got := game.lives; got != 1 {
+		t.Fatalf("lives after cooldown = %d, want 1", got)
+	}
+}
+
 func TestFailureFlashesRedThenRestartsWithoutCountdown(t *testing.T) {
 	now := time.Unix(100, 0)
 	game := NewWithSeed(now, 1, 1, "hard", "level-1")

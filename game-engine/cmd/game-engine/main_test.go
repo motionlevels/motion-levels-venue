@@ -1835,6 +1835,28 @@ func TestGameAPIDisplayStatus(t *testing.T) {
 	}
 }
 
+func TestDisplayStatusIncludesSessionElapsedMillis(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "temporada1", Level: "level-1"}, nil, nil)
+	runtime.mu.RLock()
+	attemptStarted := runtime.started
+	runtime.mu.RUnlock()
+	sessionStarted := attemptStarted.Add(-5 * time.Minute)
+	runtime.mu.Lock()
+	runtime.started = sessionStarted
+	runtime.mu.Unlock()
+
+	status := runtime.DisplayStatus(attemptStarted.Add(2 * time.Minute))
+	if status.SessionStartedUnix != sessionStarted.Unix() {
+		t.Fatalf("session started unix = %d, want %d", status.SessionStartedUnix, sessionStarted.Unix())
+	}
+	if status.SessionElapsedMillis != int64(7*time.Minute/time.Millisecond) {
+		t.Fatalf("session elapsed millis = %d, want %d", status.SessionElapsedMillis, int64(7*time.Minute/time.Millisecond))
+	}
+	if status.ElapsedMillis == status.SessionElapsedMillis {
+		t.Fatalf("attempt elapsed and session elapsed should be distinct for level games, both were %d", status.ElapsedMillis)
+	}
+}
+
 func TestPlatformLevelGameLabelDoesNotFallBackToScreensaver(t *testing.T) {
 	label := gameLabel("c1daea4f-e586-4116-8cbe-871cde887a81")
 	if label == "Salvapantallas" {

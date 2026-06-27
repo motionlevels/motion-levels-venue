@@ -646,11 +646,16 @@ function arcadeLevelSideMetrics(status: DisplayStatus): Array<{ label: string; v
 function arcadeLevelTimeDetails(status: DisplayStatus): Array<{ label: string; value: string }> {
   const details: Array<{ label: string; value: string }> = [];
   if (isParkourGame(status.currentGame) || isLevelPointsGame(status)) {
+    details.push({ label: "Tiempo total", value: formatClock(globalGameElapsedMillis(status)) });
     details.push({ label: "Intentos", value: String(Math.max(1, status.attemptCount || 0)) });
     details.push({ label: "Mejor sesión", value: formatBestTime(status.sessionBestElapsedMillis) });
     details.push({ label: "Mejor global", value: formatBestTime(status.bestElapsedMillis) });
   }
   return details;
+}
+
+function globalGameElapsedMillis(status: DisplayStatus): number {
+  return Math.max(0, status.sessionElapsedMillis ?? status.elapsedMillis ?? 0);
 }
 
 function formatBestTime(milliseconds?: number): string {
@@ -716,6 +721,7 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
     score: 128,
     lives: 5,
     elapsedMillis: 143000,
+    sessionElapsedMillis: 143000,
     remainingMillis: 137000,
     activeTargets: 17,
     audioEnabled: true,
@@ -744,6 +750,7 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         phase: "countdown",
         score: 0,
         lives: 8,
+        sessionElapsedMillis: 214000,
         countdownRemainingMillis: 19000,
         remainingMillis: 0,
         activeTargets: 23,
@@ -762,6 +769,7 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         players: base.players.slice(0, 2).map((player, index) => ({ ...player, score: index === 0 ? 12 : 9, lives: index === 0 ? 3 : 4 })),
         score: 21,
         lives: -1,
+        sessionElapsedMillis: 94000,
         remainingMillis: 156000,
         activeTargets: 0,
         lastEventCue: "hit",
@@ -775,6 +783,7 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         difficulty: "hard",
         score: 64,
         lives: 3,
+        sessionElapsedMillis: 164000,
         activeTargets: 6,
         lastEventCue: "miss",
         lastEventMessage: "Fallo",
@@ -796,6 +805,7 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         activeTargets: 0,
         remainingMillis: 0,
         elapsedMillis: 94000,
+        sessionElapsedMillis: 94000,
         lastEventCue: "hit",
         lastEventMessage: "Red +5",
       };
@@ -809,6 +819,7 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         score: 12,
         lives: 7,
         elapsedMillis: 48600,
+        sessionElapsedMillis: 432000,
         remainingMillis: 0,
         activeTargets: 8,
         level: "level-4",
@@ -830,6 +841,7 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         score: 12,
         lives: 20,
         elapsedMillis: 48600,
+        sessionElapsedMillis: 432000,
         remainingMillis: 0,
         activeTargets: 8,
         level: "level-4",

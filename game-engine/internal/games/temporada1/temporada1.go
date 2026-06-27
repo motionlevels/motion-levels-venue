@@ -23,7 +23,7 @@ const (
 	countdownDuration  = 3 * time.Second
 	transitionDuration = 1800 * time.Millisecond
 	tickDuration       = 25 * time.Millisecond
-	damageCooldown     = 1 * time.Second
+	damageCooldown     = 3 * time.Second
 	DefaultMusicRef    = "Motion/canciones/Background07.mp3"
 	DefaultMusicVolume = 0.18
 )

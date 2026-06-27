@@ -25,7 +25,9 @@ export type DisplayStatus = {
   lives: number;
   livesStart?: number;
   startedUnix: number;
+  sessionStartedUnix?: number;
   endsUnix: number;
+  sessionElapsedMillis?: number;
   elapsedMillis: number;
   remainingMillis: number;
   introRemainingMillis: number;
