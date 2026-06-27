@@ -134,6 +134,7 @@ export type SelectGameRequest = {
   levelMode?: "challenge" | "free";
   durationSeconds?: number;
   challengeElapsedMillis?: number;
+  challengeAttemptCount?: number;
   narrationEnabled?: boolean;
   countdownFloorOverlay?: boolean;
   teamName?: string;

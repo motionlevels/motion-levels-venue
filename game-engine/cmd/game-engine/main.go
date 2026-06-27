@@ -38,6 +38,7 @@ type config struct {
 	LevelMode              string
 	DurationSeconds        int
 	ChallengeElapsedMillis int64
+	ChallengeAttemptCount  int
 	PlayerCount            int
 	TeamName               string
 	Players                []playerConfig
@@ -251,6 +252,9 @@ func (c *config) normalize() {
 	c.LevelMode = normalizeLevelMode(c.LevelMode)
 	if c.ChallengeElapsedMillis < 0 {
 		c.ChallengeElapsedMillis = 0
+	}
+	if c.ChallengeAttemptCount < 0 {
+		c.ChallengeAttemptCount = 0
 	}
 	if c.ReplayKeyframeInterval <= 0 {
 		c.ReplayKeyframeInterval = 5 * time.Second

@@ -330,7 +330,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
         <section className="arcade-stage arcade-stage--level-hud">
           <div className="arcade-level-main" aria-label="Marcadores principales">
             <MetricPanel className="arcade-metric--lives" label="Vidas" value={<HeartMeter lives={status.lives} showAllUpTo={20} />} tone="red" />
-            <MetricPanel className="arcade-metric--time" label={mainMetric.caption === "Restante" ? "Tiempo restante" : "Tiempo transcurrido"} value={clock} tone="amber">
+            <MetricPanel className="arcade-metric--time" label={mainMetric.caption === "Restante" ? "Tiempo restante" : "Tiempo transcurrido"} value={mainMetric.value} tone="amber">
               {levelTimeDetails.length ? (
                 <div className="arcade-time-details">
                   {levelTimeDetails.map((detail) => (
@@ -602,7 +602,11 @@ function primaryMetric(status: DisplayStatus): { label: string; value: string; c
     return { label: "Tiempo", value: displayClock(status), caption: status.remainingMillis > 0 ? "Restante" : "Transcurrido" };
   }
   if (isLevelPointsGame(status)) {
-    return { label: "Tiempo", value: displayClock(status), caption: status.remainingMillis > 0 ? "Restante" : "Transcurrido" };
+    return {
+      label: "Tiempo",
+      value: formatClock(levelDisplayTimeMillis(status)),
+      caption: challengeMode(status) ? "Restante" : "Transcurrido",
+    };
   }
   if (status.currentGame === "whack-a-mole" || status.currentGame === "temporada2") {
     return { label: "Puntos", value: String(status.score), caption: "Marcador actual" };
@@ -654,10 +658,13 @@ function arcadeLevelSideMetrics(status: DisplayStatus): Array<{ label: string; v
 
 function arcadeLevelTimeDetails(status: DisplayStatus): Array<{ label: string; value: string }> {
   const details: Array<{ label: string; value: string }> = [];
-  if (isParkourGame(status.currentGame) || isLevelPointsGame(status)) {
-    if (isLevelPointsGame(status)) {
-      details.push({ label: "Modo", value: levelModeLabel(status) });
-    }
+  if (isLevelPointsGame(status)) {
+    details.push({
+      label: challengeMode(status) ? "Tiempo restante" : "Tiempo transcurrido",
+      value: formatClock(levelDisplayTimeMillis(status)),
+    });
+    details.push({ label: "Intentos", value: String(levelDisplayAttemptCount(status)) });
+  } else if (isParkourGame(status.currentGame)) {
     details.push({ label: challengeMode(status) ? "Tiempo reto" : "Tiempo total", value: formatClock(levelAggregateElapsedMillis(status)) });
     details.push({ label: "Intentos", value: String(Math.max(1, status.attemptCount || 0)) });
     details.push({ label: "Mejor sesión", value: formatBestTime(status.sessionBestElapsedMillis) });
@@ -670,8 +677,22 @@ function challengeMode(status: DisplayStatus): boolean {
   return normalizedDisplayText(status.levelMode || "") === "challenge" || normalizedDisplayText(status.levelMode || "") === "reto";
 }
 
-function levelModeLabel(status: DisplayStatus): string {
-  return challengeMode(status) ? "Reto" : "Libre";
+function levelDisplayTimeMillis(status: DisplayStatus): number {
+  if (!challengeMode(status)) {
+    return Math.max(0, status.elapsedMillis ?? 0);
+  }
+  const previousElapsed = Math.max(0, status.challengeElapsedMillis ?? 0);
+  if (status.remainingMillis > 0) {
+    return Math.max(0, status.remainingMillis - previousElapsed);
+  }
+  return levelAggregateElapsedMillis(status);
+}
+
+function levelDisplayAttemptCount(status: DisplayStatus): number {
+  if (challengeMode(status)) {
+    return Math.max(1, Math.max(0, status.challengeAttemptCount ?? 0) + Math.max(0, status.attemptCount || 0));
+  }
+  return Math.max(1, status.attemptCount || 0);
 }
 
 function levelAggregateElapsedMillis(status: DisplayStatus): number {
@@ -849,11 +870,12 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         elapsedMillis: 48600,
         sessionElapsedMillis: 432000,
         challengeElapsedMillis: 174000,
-        remainingMillis: 0,
+        challengeAttemptCount: 4,
+        remainingMillis: 551400,
         activeTargets: 8,
         level: "level-4",
         levelNumber: 4,
-        attemptCount: 3,
+        attemptCount: 1,
         failureCount: 1,
         sessionBestElapsedMillis: 51200,
         bestElapsedMillis: 46800,

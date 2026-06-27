@@ -30,6 +30,7 @@ export type DisplayStatus = {
   endsUnix: number;
   sessionElapsedMillis?: number;
   challengeElapsedMillis?: number;
+  challengeAttemptCount?: number;
   elapsedMillis: number;
   remainingMillis: number;
   introRemainingMillis: number;

@@ -218,6 +218,7 @@ type displayStatus struct {
 	EndsUnix                 int64           `json:"endsUnix"`
 	SessionElapsedMillis     int64           `json:"sessionElapsedMillis"`
 	ChallengeElapsedMillis   int64           `json:"challengeElapsedMillis,omitempty"`
+	ChallengeAttemptCount    int             `json:"challengeAttemptCount,omitempty"`
 	ElapsedMillis            int64           `json:"elapsedMillis"`
 	RemainingMillis          int64           `json:"remainingMillis"`
 	IntroRemainingMillis     int64           `json:"introRemainingMillis"`
@@ -261,6 +262,7 @@ type runtimeStatus struct {
 	StartedUnix              int64                        `json:"startedUnix"`
 	ElapsedMillis            int64                        `json:"elapsedMillis"`
 	ChallengeElapsedMillis   int64                        `json:"challengeElapsedMillis,omitempty"`
+	ChallengeAttemptCount    int                          `json:"challengeAttemptCount,omitempty"`
 	Success                  bool                         `json:"success"`
 	SessionID                string                       `json:"sessionId"`
 	LastPressureUnix         int64                        `json:"lastPressureUnix"`
@@ -337,10 +339,10 @@ func (r *gameRuntime) SelectGameWithDifficulty(game string, players int, difficu
 }
 
 func (r *gameRuntime) SelectGameWithOptions(game string, players int, difficulty string, narrationEnabled *bool) {
-	r.SelectGameWithMetadata(game, players, difficulty, "", "", 0, 0, narrationEnabled, false, "", "", "", nil)
+	r.SelectGameWithMetadata(game, players, difficulty, "", "", 0, 0, 0, narrationEnabled, false, "", "", "", nil)
 }
 
-func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficulty string, level string, levelMode string, durationSeconds int, challengeElapsedMillis int64, narrationEnabled *bool, countdownFloorOverlay bool, teamName string, venueSessionID string, platformURL string, roster []playerConfig) {
+func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficulty string, level string, levelMode string, durationSeconds int, challengeElapsedMillis int64, challengeAttemptCount int, narrationEnabled *bool, countdownFloorOverlay bool, teamName string, venueSessionID string, platformURL string, roster []playerConfig) {
 	if r == nil {
 		return
 	}
@@ -360,6 +362,9 @@ func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficult
 	}
 	if challengeElapsedMillis > 0 {
 		cfg.ChallengeElapsedMillis = challengeElapsedMillis
+	}
+	if challengeAttemptCount > 0 {
+		cfg.ChallengeAttemptCount = challengeAttemptCount
 	}
 	cfg.CountdownFloorOverlay = countdownFloorOverlay
 	cfg.TeamName = strings.TrimSpace(teamName)
@@ -417,6 +422,7 @@ func (r *gameRuntime) ControlGame(action string) {
 		cfg := r.current
 		if cfg.LevelMode == "challenge" {
 			cfg.ChallengeElapsedMillis = 0
+			cfg.ChallengeAttemptCount = 0
 		}
 		r.applyLocked(cfg, true)
 	case "narration":
@@ -643,6 +649,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		SessionStartedUnix:     unixOrZero(started),
 		SessionElapsedMillis:   elapsedMillisSince(started, gameNow),
 		ChallengeElapsedMillis: cfg.ChallengeElapsedMillis,
+		ChallengeAttemptCount:  cfg.ChallengeAttemptCount,
 		AudioEnabled:           audioEnabled,
 		AudioMuted:             audioMuted,
 		LastEventUnixNanos:     lastEvent.unixNanos,
@@ -1128,6 +1135,7 @@ func (r *gameRuntime) Status() runtimeStatus {
 		StartedUnix:              unixOrZero(started),
 		ElapsedMillis:            display.ElapsedMillis,
 		ChallengeElapsedMillis:   display.ChallengeElapsedMillis,
+		ChallengeAttemptCount:    display.ChallengeAttemptCount,
 		Success:                  display.Success,
 		SessionID:                sessionID,
 		LastPressureUnix:         unixOrZero(lastPressureInput),

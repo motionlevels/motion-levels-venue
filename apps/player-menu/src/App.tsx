@@ -68,6 +68,7 @@ type ChallengeRun = {
   startedUnixMillis: number;
   completedLevels: Record<string, number>;
   totalElapsedMillis: number;
+  attemptCount: number;
 };
 
 type ChallengeCompletion = {
@@ -488,11 +489,21 @@ function levelAttemptSummary(status: EngineStatus | null, game: GameCard, levelI
   if (!status || !levelID) return { attempts: 0, failures: 0 };
   const finishedAttempts = (status.finishedLevelAttempts || []).filter((attempt) => finishedAttemptMatchesLevel(attempt, game, levelID, status));
   const failures = finishedAttempts.filter((attempt) => !attempt.success || attempt.result === "failed").length;
-  const activeAttempt = !isStoppedRuntimePhase(status) && !animationIsIdleLoop(status.currentGame, status.phase) && Boolean(status.level === levelID);
+  const activeAttempt = activeLevelAttempt(status, levelID);
   return {
     attempts: finishedAttempts.length + (activeAttempt ? 1 : 0),
     failures,
   };
+}
+
+function activeLevelAttempt(status: EngineStatus | null, levelID: string): boolean {
+  return Boolean(
+    status
+    && levelID
+    && !isStoppedRuntimePhase(status)
+    && !animationIsIdleLoop(status.currentGame, status.phase)
+    && status.level === levelID,
+  );
 }
 
 function webpPreviewRef(value: string): string {
@@ -781,6 +792,7 @@ function challengeRunFor(game: GameCard, state: MenuState): ChallengeRun | null 
     startedUnixMillis: Number(run.startedUnixMillis) || 0,
     completedLevels: run.completedLevels || {},
     totalElapsedMillis: Number(run.totalElapsedMillis) || 0,
+    attemptCount: Math.max(0, Math.round(Number(run.attemptCount) || 0)),
   };
 }
 
@@ -800,6 +812,7 @@ function emptyChallengeRun(difficulty: DifficultyID, startedUnixMillis = Date.no
     startedUnixMillis,
     completedLevels: {},
     totalElapsedMillis: 0,
+    attemptCount: 0,
   };
 }
 
@@ -878,6 +891,22 @@ function recordLevelCompletion(
   const nextBestTime = { ...previous.bestTimeByLevel };
   let selectedLevels = state.selectedLevels;
   let challengeRuns = state.challengeRuns;
+  let challengeAttemptRun: ChallengeRun | null = null;
+  if (levelModeFor(game, state) === "challenge") {
+    const expectedLevel = challengeNextLevel(game, state);
+    if (expectedLevel?.id === levelID) {
+      const previousRun = challengeRunFor(game, state) || emptyChallengeRun(difficulty);
+      challengeAttemptRun = {
+        ...previousRun,
+        difficulty,
+        attemptCount: Math.max(0, previousRun.attemptCount || 0) + 1,
+      };
+      challengeRuns = {
+        ...challengeRuns,
+        [game.id]: challengeAttemptRun,
+      };
+    }
+  }
   if (success) {
     nextBest[levelID] = higherDifficulty(nextBest[levelID], difficulty);
     if (elapsedMillis > 0 && (!nextBestTime[levelID] || elapsedMillis < nextBestTime[levelID])) {
@@ -894,15 +923,13 @@ function recordLevelCompletion(
         };
       }
     } else if (levelModeFor(game, state) === "challenge") {
-      const expectedLevel = challengeNextLevel(game, state);
-      if (expectedLevel?.id === levelID) {
-        const previousRun = challengeRunFor(game, state) || emptyChallengeRun(difficulty);
+      if (challengeAttemptRun) {
         const completedLevels = {
-          ...previousRun.completedLevels,
+          ...challengeAttemptRun.completedLevels,
           [levelID]: Math.max(0, elapsedMillis || 0),
         };
         const nextRun: ChallengeRun = {
-          ...previousRun,
+          ...challengeAttemptRun,
           difficulty,
           completedLevels,
           totalElapsedMillis: challengeTotalElapsed(completedLevels),
@@ -997,6 +1024,7 @@ function normalizeChallengeRuns(value: unknown): Record<string, ChallengeRun> {
       startedUnixMillis: Math.max(0, Math.round(Number(source.startedUnixMillis) || 0)),
       completedLevels,
       totalElapsedMillis: challengeTotalElapsed(completedLevels),
+      attemptCount: Math.max(Object.keys(completedLevels).length, Math.round(Number(source.attemptCount) || 0)),
     };
   }
   return runs;
@@ -2472,6 +2500,7 @@ function MenuApp() {
         },
       };
     }
+    const launchChallengeRun = launchLevelMode === "challenge" ? challengeRunFor(launchGame, nextMenu) : null;
     if (selectedLevelID && !isLevelUnlocked(launchGame, selectedLevelID, nextMenu)) {
       captureMenuEvent("start_blocked", {
         engine_game: engineGameID(launchGame),
@@ -2535,7 +2564,8 @@ function MenuApp() {
         level: selectedLevelID || undefined,
         levelMode: launchLevelMode,
         durationSeconds: launchGame.estimatedDurationSeconds || undefined,
-        challengeElapsedMillis: launchLevelMode === "challenge" ? challengeRunFor(launchGame, nextMenu)?.totalElapsedMillis || 0 : 0,
+        challengeElapsedMillis: launchChallengeRun?.totalElapsedMillis || 0,
+        challengeAttemptCount: launchChallengeRun?.attemptCount || 0,
         narrationEnabled: supportsNarration(launchGame) ? playNarration : false,
         countdownFloorOverlay: showCountdownOverlay,
         teamName: nextMenu.teamName.trim(),
@@ -3729,7 +3759,6 @@ function GameControlScreen({
   const currentLevelID = status?.level || selectedLevelID || levels[0]?.id || "";
   const currentLevel = levels.find((level) => level.id === currentLevelID);
   const currentLevelIndex = currentLevel ? levels.findIndex((level) => level.id === currentLevel.id) : -1;
-  const pendingLevel = levels.find((level) => level.id === selectedLevelID);
   const launchingLevel = activeLevelLaunch ? levels.find((level) => level.id === activeLevelLaunch.levelID) : undefined;
   const launchingLevelIndex = launchingLevel ? levels.findIndex((level) => level.id === launchingLevel.id) : -1;
   const visibleLevel = launchingLevel || currentLevel;
@@ -3737,16 +3766,21 @@ function GameControlScreen({
   const launchingLevelLabel = launchingLevel ? playerLevelLabel(launchingLevel, launchingLevelIndex) : "";
   const totalMillis = Math.max(0, Math.round((game.estimatedDurationSeconds || 0) * 1000));
   const elapsedMillis = Math.max(0, Math.round(status?.elapsedMillis || 0));
-  const remainingMillis = totalMillis > 0 ? Math.max(0, totalMillis - elapsedMillis) : 0;
-  const timeLabel = totalMillis > 0 ? formatRuntimeTime(remainingMillis) : formatRuntimeTime(elapsedMillis);
-  const timeCaption = totalMillis > 0 ? "Restante" : "Tiempo";
+  const challengeElapsedMillis = Math.max(0, Math.round(challengeRun?.totalElapsedMillis || 0)) + elapsedMillis;
+  const challengeRemainingMillis = totalMillis > 0 ? Math.max(0, totalMillis - challengeElapsedMillis) : 0;
+  const timeLabel = hasLevels
+    ? levelModeFree
+      ? formatRuntimeTime(elapsedMillis)
+      : totalMillis > 0 ? formatRuntimeTime(challengeRemainingMillis) : formatRuntimeTime(challengeElapsedMillis)
+    : totalMillis > 0 ? formatRuntimeTime(Math.max(0, totalMillis - elapsedMillis)) : formatRuntimeTime(elapsedMillis);
+  const timeCaption = hasLevels ? (levelModeFree ? "Tiempo transcurrido" : totalMillis > 0 ? "Tiempo restante" : "Tiempo transcurrido") : totalMillis > 0 ? "Restante" : "Tiempo";
   const score = scoreFromStatus(status);
   const completedCount = Object.keys(challengeRun?.completedLevels || {}).length;
   const progressLabel = hasLevels ? `${completedCount}/${levels.length}` : "0/0";
   const stopped = isStoppedRuntimePhase(status);
   const attemptSummary = hasLevels ? levelAttemptSummary(status, game, currentLevelID) : { attempts: 0, failures: 0 };
-  const attemptCount = Math.max(1, attemptSummary.attempts || 0);
-  const failureLabel = attemptSummary.failures === 1 ? "1 caída" : `${attemptSummary.failures} caídas`;
+  const challengeAttemptCount = Math.max(0, Math.round(challengeRun?.attemptCount || 0)) + (activeLevelAttempt(status, currentLevelID) ? 1 : 0);
+  const attemptCount = hasLevels && !levelModeFree ? Math.max(1, challengeAttemptCount) : Math.max(1, attemptSummary.attempts || 0);
   const phaseLabel = activeLevelLaunch
     ? activeLevelLaunch.phase === "stopping" ? "Deteniendo nivel" : `Cargando ${launchingLevelLabel || "nivel"}`
     : ambient ? "Animación en curso" : stopped ? "Nivel detenido" : introActive ? "Narración inicial" : countdownValue > 0 ? "Preparando salida" : paused ? "Pausado" : "En curso";
@@ -3783,27 +3817,29 @@ function GameControlScreen({
           </div>
           {!ambient ? (
             <div className="active-game-stats" aria-label="Estado de partida">
-              <div>
-                <span>{timeCaption}</span>
-                <strong>{timeLabel}</strong>
-              </div>
-              <div>
-                <span>Puntos</span>
-                <strong>{score}</strong>
-              </div>
               {hasLevels ? (
-                <div>
-                  <span>{activeLevelLaunch ? "Cargando" : levelModeFree ? "Nivel" : "Progreso"}</span>
-                  <strong>{launchingLevel ? playerLevelLabel(launchingLevel, launchingLevelIndex) : levelModeFree && pendingLevel ? playerLevelLabel(pendingLevel, levels.findIndex((level) => level.id === pendingLevel.id)) : progressLabel}</strong>
-                </div>
-              ) : null}
-              {hasLevels ? (
-                <div aria-label={`Intentos: ${attemptCount}. ${failureLabel}.`}>
-                  <span>Intentos</span>
-                  <strong>{attemptCount}</strong>
-                  <small>{failureLabel}</small>
-                </div>
-              ) : null}
+                <>
+                  <div>
+                    <span>{timeCaption}</span>
+                    <strong>{timeLabel}</strong>
+                  </div>
+                  <div aria-label={`Intentos: ${attemptCount}.`}>
+                    <span>Intentos</span>
+                    <strong>{attemptCount}</strong>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <span>{timeCaption}</span>
+                    <strong>{timeLabel}</strong>
+                  </div>
+                  <div>
+                    <span>Puntos</span>
+                    <strong>{score}</strong>
+                  </div>
+                </>
+              )}
             </div>
           ) : null}
           {hasLevels && levelModeFree ? (

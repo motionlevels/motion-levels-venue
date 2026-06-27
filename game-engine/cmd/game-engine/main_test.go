@@ -787,7 +787,7 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 		t.Fatalf("selected saltos status = %+v", status)
 	}
 
-	body = bytes.NewBufferString(`{"game":"temporada1","playerCount":4,"difficulty":"medium","level":"level-2","levelMode":"challenge","challengeElapsedMillis":123000}`)
+	body = bytes.NewBufferString(`{"game":"temporada1","playerCount":4,"difficulty":"medium","level":"level-2","levelMode":"challenge","challengeElapsedMillis":123000,"challengeAttemptCount":5}`)
 	response, err = http.Post(server.URL+"/api/select", "application/json", body)
 	if err != nil {
 		t.Fatal(err)
@@ -799,20 +799,20 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if status.CurrentGame != "temporada1" || status.PlayerCount != 4 || status.Difficulty != "medium" || status.Level != "level-2" || status.LevelMode != "challenge" || status.ChallengeElapsedMillis != 123000 {
+	if status.CurrentGame != "temporada1" || status.PlayerCount != 4 || status.Difficulty != "medium" || status.Level != "level-2" || status.LevelMode != "challenge" || status.ChallengeElapsedMillis != 123000 || status.ChallengeAttemptCount != 5 {
 		t.Fatalf("selected temporada1 status = %+v", status)
 	}
 	display := runtime.DisplayStatus(time.Now())
-	if display.LevelMode != "challenge" || display.ChallengeElapsedMillis != 123000 {
-		t.Fatalf("display temporada1 mode = %q challengeElapsed=%d, want challenge 123000", display.LevelMode, display.ChallengeElapsedMillis)
+	if display.LevelMode != "challenge" || display.ChallengeElapsedMillis != 123000 || display.ChallengeAttemptCount != 5 {
+		t.Fatalf("display temporada1 mode = %q challengeElapsed=%d challengeAttempts=%d, want challenge 123000 5", display.LevelMode, display.ChallengeElapsedMillis, display.ChallengeAttemptCount)
 	}
 	response, err = http.Post(server.URL+"/api/control", "application/json", bytes.NewBufferString(`{"action":"restart"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = response.Body.Close()
-	if runtime.Status().ChallengeElapsedMillis != 0 {
-		t.Fatalf("restart challenge elapsed = %d, want 0", runtime.Status().ChallengeElapsedMillis)
+	if runtime.Status().ChallengeElapsedMillis != 0 || runtime.Status().ChallengeAttemptCount != 0 {
+		t.Fatalf("restart challenge elapsed = %d attempts = %d, want 0 0", runtime.Status().ChallengeElapsedMillis, runtime.Status().ChallengeAttemptCount)
 	}
 
 	body = bytes.NewBufferString(`{"game":"temporada2","playerCount":4,"difficulty":"expert","level":"level-2"}`)
