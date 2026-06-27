@@ -178,8 +178,16 @@ write_files:
       MOTION_LEVELS_CAMERA_RECORDER_URL=http://127.0.0.1:8030
       MOTION_LEVELS_CAMERA_RECORDER_BACKEND=fake
       MOTION_LEVELS_CAMERA_RECORDINGS_ROOT=/var/lib/motion-levels/camera-recordings
-      # Configure on the appliance, preferably in
+      # For Insta360 X4/X5 SDK control, connect the camera by USB and select
+      # Android mode on the camera prompt. Linux should then show USB vendor
+      # 2e1a. Configure real camera capture on the appliance, preferably in
       # /etc/motion-levels/camera-recorder.env:
+      # MOTION_LEVELS_CAMERA_RECORDER_BACKEND=command
+      # MOTION_LEVELS_CAMERA_MEDIA_EXTENSION=.mp4
+      # MOTION_LEVELS_CAMERA_PHOTO_EXTENSION=.jpg
+      # MOTION_LEVELS_CAMERA_START_COMMAND=/usr/local/bin/motion-levels-insta360 start
+      # MOTION_LEVELS_CAMERA_STOP_COMMAND=/usr/local/bin/motion-levels-insta360 stop
+      # MOTION_LEVELS_CAMERA_PHOTO_COMMAND=/usr/local/bin/motion-levels-insta360 photo
       # MOTION_LEVELS_CAMERA_RCLONE_DEST=motionlevels-drive:Partidas
       MOTION_LEVELS_CAMERA_RCLONE_DEST=
 
