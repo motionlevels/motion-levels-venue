@@ -365,6 +365,28 @@
         mode: "0644"
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
+    - name: Ensure HDMI audio env is configured
+      ansible.builtin.lineinfile:
+        path: /etc/motion-levels/motion-levels.env
+        regexp: "^{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+        mode: "0644"
+      loop:
+        - key: MOTION_LEVELS_HDMI_ALSA_DEVICE
+          value: plughw:0,5
+        - key: MOTION_LEVELS_FORCE_ALSA_OUTPUT
+          value: "1"
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+
+    - name: Install HDMI ALSA dmix config
+      ansible.builtin.copy:
+        src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/asound.conf"
+        dest: /etc/asound.conf
+        mode: "0644"
+        remote_src: true
+      notify: Restart motion levels services
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+
     - name: Ensure camera recorder env is configured
       ansible.builtin.lineinfile:
         path: /etc/motion-levels/motion-levels.env

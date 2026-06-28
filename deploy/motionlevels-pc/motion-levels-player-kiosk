@@ -44,8 +44,16 @@ MOTION_LEVELS_XRANDR_MODE="$(env_file_value MOTION_LEVELS_XRANDR_MODE)"
 MOTION_LEVELS_XRANDR_RATE="$(env_file_value MOTION_LEVELS_XRANDR_RATE 60)"
 MOTION_LEVELS_PLAYER_PROFILE="$(env_file_value MOTION_LEVELS_PLAYER_PROFILE /var/lib/motion-levels/rebuild-player-chromium)"
 MOTION_LEVELS_PLAYER_URL="$(env_file_value MOTION_LEVELS_PLAYER_URL http://127.0.0.1/display/)"
+MOTION_LEVELS_FORCE_ALSA_OUTPUT="$(env_file_value MOTION_LEVELS_FORCE_ALSA_OUTPUT 0)"
 MOTION_LEVELS_PLAYER_WINDOW_SIZE="${MOTION_LEVELS_XRANDR_MODE:-1920x1080}"
 MOTION_LEVELS_PLAYER_WINDOW_SIZE="${MOTION_LEVELS_PLAYER_WINDOW_SIZE//x/,}"
+
+truthy_env() {
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 # 2. Enable and configure the connected display output.
 # Whenever an output (HDMI/DP) is connected we want the player visible on it,
@@ -81,6 +89,30 @@ configure_display() {
   echo "Warning: could not configure a connected display after retries; leaving X at its default."
 }
 configure_display
+
+configure_audio_output() {
+  local output control
+  if ! truthy_env "${MOTION_LEVELS_FORCE_ALSA_OUTPUT}"; then
+    return 0
+  fi
+
+  output=$(/usr/bin/xrandr --query 2>/dev/null | awk '/ connected/ { print $1; exit }')
+  if [ -n "${output}" ]; then
+    /usr/bin/xrandr --output "${output}" --set audio on 2>/dev/null || true
+  fi
+
+  if command -v /usr/bin/amixer >/dev/null 2>&1; then
+    for control in IEC958 "IEC958,0" "IEC958,1" "IEC958,2"; do
+      /usr/bin/amixer -q sset "${control}" unmute 2>/dev/null || true
+      /usr/bin/amixer -q sset "${control}" on 2>/dev/null || true
+    done
+  fi
+
+  if command -v /usr/sbin/alsactl >/dev/null 2>&1; then
+    /usr/sbin/alsactl store >/dev/null 2>&1 || true
+  fi
+}
+configure_audio_output
 
 # Capture the active screen geometry so Chromium can be forced to fill it. There
 # is no window manager under this bare xinit session, so --kiosk alone keeps the

@@ -82,6 +82,14 @@ write_files:
       MOTION_LEVELS_XRANDR_RATE="$(env_file_value MOTION_LEVELS_XRANDR_RATE 60)"
       MOTION_LEVELS_PLAYER_PROFILE="$(env_file_value MOTION_LEVELS_PLAYER_PROFILE /var/lib/motion-levels/rebuild-player-chromium)"
       MOTION_LEVELS_PLAYER_URL="$(env_file_value MOTION_LEVELS_PLAYER_URL http://127.0.0.1/display/)"
+      MOTION_LEVELS_FORCE_ALSA_OUTPUT="$(env_file_value MOTION_LEVELS_FORCE_ALSA_OUTPUT 0)"
+
+      truthy_env() {
+        case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+          1|true|yes|on) return 0 ;;
+          *) return 1 ;;
+        esac
+      }
 
       configure_display() {
         local output mode rate attempt geometry size
@@ -106,6 +114,30 @@ write_files:
         echo "Warning: could not configure a connected display after retries; leaving X at its default."
       }
       configure_display
+
+      configure_audio_output() {
+        local output control
+        if ! truthy_env "${MOTION_LEVELS_FORCE_ALSA_OUTPUT}"; then
+          return 0
+        fi
+
+        output=$(/usr/bin/xrandr --query 2>/dev/null | awk '/ connected/ { print $1; exit }')
+        if [ -n "${output}" ]; then
+          /usr/bin/xrandr --output "${output}" --set audio on 2>/dev/null || true
+        fi
+
+        if command -v /usr/bin/amixer >/dev/null 2>&1; then
+          for control in IEC958 "IEC958,0" "IEC958,1" "IEC958,2"; do
+            /usr/bin/amixer -q sset "${control}" unmute 2>/dev/null || true
+            /usr/bin/amixer -q sset "${control}" on 2>/dev/null || true
+          done
+        fi
+
+        if command -v /usr/sbin/alsactl >/dev/null 2>&1; then
+          /usr/sbin/alsactl store >/dev/null 2>&1 || true
+        fi
+      }
+      configure_audio_output
 
       SCREEN_GEOMETRY="$(/usr/bin/xrandr --query 2>/dev/null | grep -oE '[0-9]+x[0-9]+\+0\+0' | head -1)"
       SCREEN_SIZE="${SCREEN_GEOMETRY%%+*}"
@@ -143,6 +175,42 @@ write_files:
       TARGET_URL="${MOTION_LEVELS_PLAYER_URL}"
       echo "Starting Chromium kiosk pointing to ${TARGET_URL}..."
       exec /usr/bin/chromium "${CHROME_FLAGS[@]}" "${TARGET_URL}"
+
+  - path: /etc/asound.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      pcm.!default {
+        type plug
+        slave.pcm "motionlevels_hdmi"
+      }
+
+      pcm.motionlevels_hdmi {
+        type dmix
+        ipc_key 2048
+        ipc_perm 0600
+        slave {
+          pcm {
+            type hw
+            card 0
+            device 5
+          }
+          channels 2
+          rate 48000
+          format S16_LE
+          period_size 1024
+          buffer_size 8192
+        }
+        bindings {
+          0 0
+          1 1
+        }
+      }
+
+      ctl.!default {
+        type hw
+        card 0
+      }
 
   # 2. Default runtime environment file
   - path: /etc/motion-levels/motion-levels.env
