@@ -44,6 +44,8 @@ MOTION_LEVELS_XRANDR_MODE="$(env_file_value MOTION_LEVELS_XRANDR_MODE)"
 MOTION_LEVELS_XRANDR_RATE="$(env_file_value MOTION_LEVELS_XRANDR_RATE 60)"
 MOTION_LEVELS_PLAYER_PROFILE="$(env_file_value MOTION_LEVELS_PLAYER_PROFILE /var/lib/motion-levels/rebuild-player-chromium)"
 MOTION_LEVELS_PLAYER_URL="$(env_file_value MOTION_LEVELS_PLAYER_URL http://127.0.0.1/display/)"
+MOTION_LEVELS_PLAYER_WINDOW_SIZE="${MOTION_LEVELS_XRANDR_MODE:-1920x1080}"
+MOTION_LEVELS_PLAYER_WINDOW_SIZE="${MOTION_LEVELS_PLAYER_WINDOW_SIZE//x/,}"
 
 # 2. Enable and configure the connected display output.
 # Whenever an output (HDMI/DP) is connected we want the player visible on it,
@@ -107,7 +109,11 @@ CHROME_FLAGS=(
   --noerrdialogs
   --disable-infobars
   --disable-session-crashed-bubble
+  --disable-translate
   --disable-features=Translate
+  --window-position=0,0
+  --window-size="${MOTION_LEVELS_PLAYER_WINDOW_SIZE}"
+  --start-fullscreen
   --check-for-update-interval=31536000
   --autoplay-policy=no-user-gesture-required
 )
@@ -126,4 +132,4 @@ fi
 TARGET_URL="${MOTION_LEVELS_PLAYER_URL}"
 
 echo "Starting Chromium kiosk pointing to ${TARGET_URL}..."
-exec /usr/bin/chromium "${CHROME_FLAGS[@]}" "${TARGET_URL}"
+exec /usr/bin/chromium "${CHROME_FLAGS[@]}" --app="${TARGET_URL}"

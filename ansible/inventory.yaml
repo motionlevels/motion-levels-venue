@@ -12,7 +12,7 @@ all:
         motionlevels-dev:
           ansible_host: 100.119.0.4
           motion_levels_repo_root: /opt/motion-levels/repo
-          motion_levels_platform_health_url: http://10.137.25.241:3000/api/sessions
+          motion_levels_platform_health_url: http://10.137.25.241:3000/api/healthz
           motion_levels_platform_bind_ip: 10.137.25.241
           motion_levels_platform_url: https://platform.motionlevels.obis.dev
     motion_levels_platform:
@@ -20,7 +20,7 @@ all:
         motionlevels-platform:
           ansible_host: 100.102.24.118
           motion_levels_repo_root: /opt/motion-levels/repo
-          motion_levels_platform_health_url: http://10.137.25.242:3000/api/sessions
+          motion_levels_platform_health_url: http://10.137.25.242:3000/api/healthz
           motion_levels_platform_bind_ip: 10.137.25.242
           motion_levels_platform_url: https://platform.motionlevels.obis.dev
     homelab_caddy:

@@ -247,6 +247,7 @@
           - rclone
           - rsync
           - usbutils
+          - v4l-utils
           - zstd
           - xinit
           - xserver-xorg
@@ -462,6 +463,23 @@
         dest: /usr/local/bin/motion-levels-player-kiosk
         mode: "0755"
         remote_src: true
+      notify: Restart motion levels services
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+
+    - name: Create Chromium managed policy directory
+      ansible.builtin.file:
+        path: /etc/chromium/policies/managed
+        state: directory
+        mode: "0755"
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+
+    - name: Install Chromium kiosk policy
+      ansible.builtin.copy:
+        src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/chromium-policy.json"
+        dest: /etc/chromium/policies/managed/motion-levels-kiosk.json
+        mode: "0644"
+        remote_src: true
+      notify: Restart motion levels services
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Disable old services

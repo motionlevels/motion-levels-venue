@@ -30,7 +30,7 @@ mkdir -p \
 
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y caddy python3-opencv
+  DEBIAN_FRONTEND=noninteractive apt-get install -y caddy ffmpeg python3-opencv v4l-utils
 fi
 
 if [ ! -f /etc/motion-levels/motion-levels.env ]; then
