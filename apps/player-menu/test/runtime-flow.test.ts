@@ -85,7 +85,8 @@ describe("runtime screen flow", () => {
   it("advances the selected level after free-mode success so controls follow engine status", () => {
     const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
     assert.match(source, /if \(levelModeFor\(game, state\) === "free"\)/);
-    assert.match(source, /const nextLevel = finishedIndex >= 0 \? game\.levels\[finishedIndex \+ 1\] : null;/);
+    assert.match(source, /const difficultyLevels = levelsForDifficulty\(game, difficulty\);/);
+    assert.match(source, /const nextLevel = finishedIndex >= 0 \? difficultyLevels\[finishedIndex \+ 1\] : null;/);
     assert.match(source, /\[game\.id\]: nextLevel\.id/);
   });
 });

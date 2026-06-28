@@ -29,6 +29,14 @@ import { hexToColor, hexToRGB, initials, randomUUID } from "./utils";
 import { captureMenuEvent, menuKioskID, setMenuEventForwarder } from "./analytics";
 import { platformAnimationCards } from "./animationCatalog";
 import { idleLoopSyncDecision, visibleActiveLevelLaunch, type ActiveLevelLaunch, type ActiveLevelLaunchPhase, type ScreenMode } from "./runtimeFlow";
+import {
+  closestLevelIDForDifficulty,
+  defaultLevelIDForDifficulty,
+  levelsForDifficulty,
+  levelSupportsDifficulty,
+  normalizedDifficultyForGame,
+  selectableDifficultiesForGame,
+} from "./levelSelection";
 
 type Player = {
   id: number;
@@ -755,7 +763,7 @@ function supportsNarration(game: GameCard): boolean {
 }
 
 function defaultLevelID(game: GameCard): string {
-  return game.levels?.[0]?.id || "";
+  return defaultLevelIDForDifficulty(game, selectableDifficultiesForGame(game)[0] || catalogDifficultyIDs[0]);
 }
 
 function levelNumber(levelID: string): number {
@@ -774,6 +782,13 @@ function playerLevelLabel(level: NonNullable<GameCard["levels"]>[number] | undef
 function supportedDifficultiesFor(game: GameCard, level?: NonNullable<GameCard["levels"]>[number]): DifficultyID[] {
   if (!usesDifficulty(game)) return [...catalogDifficultyIDs];
   return supportedDifficultiesForGame(game, level);
+}
+
+function activeDifficultyForGame(game: GameCard, state: MenuState): DifficultyID {
+  const requested = levelModeFor(game, state) === "challenge"
+    ? challengeRunFor(game, state)?.difficulty || state.difficulty
+    : state.difficulty;
+  return normalizedDifficultyForGame(game, requested);
 }
 
 function higherDifficulty(a: DifficultyID | undefined, b: DifficultyID): DifficultyID {
@@ -803,7 +818,8 @@ function activeLevelModeFor(game: GameCard, state: MenuState, status: EngineStat
   const engineMode = levelModeFromEngine(status?.levelMode);
   if (engineMode) return engineMode;
   if (!game.levels?.length || configuredMode === "free" || !status?.level) return configuredMode;
-  const expectedChallengeLevel = challengeNextLevel(game, state)?.id || defaultLevelID(game);
+  const difficulty = activeDifficultyForGame(game, state);
+  const expectedChallengeLevel = challengeNextLevel(game, state)?.id || defaultLevelIDForDifficulty(game, difficulty);
   return status.level === expectedChallengeLevel ? "challenge" : "free";
 }
 
@@ -834,7 +850,8 @@ function freeRunFor(game: GameCard, state: MenuState): FreeRun | null {
 function challengeNextLevel(game: GameCard, state: MenuState): NonNullable<GameCard["levels"]>[number] | null {
   if (!game.levels?.length) return null;
   const completed = challengeRunFor(game, state)?.completedLevels || {};
-  return game.levels.find((level) => !completed[level.id]) || game.levels[0] || null;
+  const levels = levelsForDifficulty(game, activeDifficultyForGame(game, state));
+  return levels.find((level) => !completed[level.id]) || levels[0] || null;
 }
 
 function challengeTotalElapsed(completedLevels: Record<string, number>): number {
@@ -869,6 +886,8 @@ function isLevelUnlocked(game: GameCard, levelID: string, state: MenuState): boo
 
 function isLevelUnlockedForMode(game: GameCard, levelID: string, state: MenuState, mode: LevelMode): boolean {
   if (!game.levels?.length) return true;
+  const level = game.levels.find((candidate) => candidate.id === levelID);
+  if (!levelSupportsDifficulty(game, level, activeDifficultyForGame(game, state))) return false;
   if (unlockLevelsEnabled(state)) return true;
   if (mode === "free") return true;
   return challengeNextLevel(game, state)?.id === levelID;
@@ -973,9 +992,10 @@ function recordLevelCompletion(
       nextBestTime[levelID] = elapsedMillis;
     }
 
+    const difficultyLevels = levelsForDifficulty(game, difficulty);
     if (levelModeFor(game, state) === "free") {
-      const finishedIndex = game.levels.findIndex((level) => level.id === levelID);
-      const nextLevel = finishedIndex >= 0 ? game.levels[finishedIndex + 1] : null;
+      const finishedIndex = difficultyLevels.findIndex((level) => level.id === levelID);
+      const nextLevel = finishedIndex >= 0 ? difficultyLevels[finishedIndex + 1] : null;
       if (nextLevel) {
         selectedLevels = {
           ...selectedLevels,
@@ -994,7 +1014,7 @@ function recordLevelCompletion(
           completedLevels,
           totalElapsedMillis: challengeTotalElapsed(completedLevels),
         };
-        const nextLevel = game.levels.find((level) => !completedLevels[level.id]);
+        const nextLevel = difficultyLevels.find((level) => !completedLevels[level.id]);
         if (nextLevel) {
           challengeRuns = {
             ...challengeRuns,
@@ -1009,7 +1029,7 @@ function recordLevelCompletion(
           challengeRuns = remainingRuns;
           selectedLevels = {
             ...selectedLevels,
-            [game.id]: defaultLevelID(game),
+            [game.id]: defaultLevelIDForDifficulty(game, difficulty),
           };
         }
       }
@@ -1043,19 +1063,20 @@ function challengeCompletionForAttempt(
   const expectedLevel = challengeNextLevel(game, state);
   if (expectedLevel?.id !== levelID) return null;
   const previousRun = challengeRunFor(game, state) || emptyChallengeRun(difficulty);
+  const difficultyLevels = levelsForDifficulty(game, difficulty);
   const completedLevels = {
     ...previousRun.completedLevels,
     [levelID]: Math.max(0, elapsedMillis || 0),
   };
-  if (!game.levels.every((level) => completedLevels[level.id] !== undefined)) return null;
+  if (!difficultyLevels.every((level) => completedLevels[level.id] !== undefined)) return null;
   const totalElapsedMillis = challengeTotalElapsed(completedLevels);
   return {
-    key: `${state.sessionId || "local"}:${game.id}:${difficulty}:${game.levels.length}:${totalElapsedMillis}`,
+    key: `${state.sessionId || "local"}:${game.id}:${difficulty}:${difficultyLevels.length}:${totalElapsedMillis}`,
     difficulty,
     gameID: game.id,
     gameLabel: game.label,
     revisionHash: game.revisionHash || null,
-    levelCount: game.levels.length,
+    levelCount: difficultyLevels.length,
     totalElapsedMillis,
   };
 }
@@ -1455,15 +1476,25 @@ function MenuApp() {
         || gamesForCategory(menuGames, current.category)[0]
         || menuGames[0];
       const category = menuCategoryForGame(selected, current.category);
-      if (current.selectedGame === selected.id && current.category === category) return current;
-      const selectedLevels = selected.levels?.length && !current.selectedLevels[selected.id]
-        ? { ...current.selectedLevels, [selected.id]: defaultLevelID(selected) }
+      const difficulty = normalizedDifficultyForGame(selected, current.difficulty);
+      const levelID = selected.levels?.length
+        ? closestLevelIDForDifficulty(selected, current.selectedLevels[selected.id] || defaultLevelIDForDifficulty(selected, difficulty), difficulty)
+        : "";
+      const selectedLevels = selected.levels?.length && current.selectedLevels[selected.id] !== levelID
+        ? { ...current.selectedLevels, [selected.id]: levelID }
         : current.selectedLevels;
-      const selectedLevel = selected.levels?.find((level) => level.id === selectedLevels[selected.id]);
+      if (
+        current.selectedGame === selected.id
+        && current.category === category
+        && current.difficulty === difficulty
+        && current.selectedLevels === selectedLevels
+      ) {
+        return current;
+      }
       return {
         ...current,
         category,
-        difficulty: closestSupportedDifficulty(current.difficulty, supportedDifficultiesFor(selected, selectedLevel)),
+        difficulty,
         selectedGame: selected.id,
         selectedLevels,
       };
@@ -1655,7 +1686,14 @@ function MenuApp() {
     }
 
     setMenu((current) => {
-      const selectedLevels = engineGame.levels?.length && status.level && current.selectedLevels[engineGame.id] !== status.level ? { ...current.selectedLevels, [engineGame.id]: status.level } : current.selectedLevels;
+      const engineDifficulty = usesDifficulty(engineGame) ? normalizedDifficultyForGame(engineGame, difficultyFromEngine(status.difficulty, current.difficulty)) : current.difficulty;
+      const statusLevel = status.level && levelSupportsDifficulty(engineGame, engineGame.levels?.find((candidate) => candidate.id === status.level), engineDifficulty)
+        ? status.level
+        : "";
+      const nextLevelID = engineGame.levels?.length
+        ? closestLevelIDForDifficulty(engineGame, statusLevel || current.selectedLevels[engineGame.id] || defaultLevelIDForDifficulty(engineGame, engineDifficulty), engineDifficulty)
+        : "";
+      const selectedLevels = engineGame.levels?.length && current.selectedLevels[engineGame.id] !== nextLevelID ? { ...current.selectedLevels, [engineGame.id]: nextLevelID } : current.selectedLevels;
       const progress = progressFor(engineGame, current);
       const syncedLevelNumber = status.level ? levelNumber(status.level) : 0;
       const levelProgress =
@@ -1668,12 +1706,10 @@ function MenuApp() {
               },
             }
           : current.levelProgress;
-      const level = engineGame.levels?.find((candidate) => candidate.id === (status.level || selectedLevels[engineGame.id] || defaultLevelID(engineGame)));
-      const difficulty = usesDifficulty(engineGame) ? closestSupportedDifficulty(difficultyFromEngine(status.difficulty, current.difficulty), supportedDifficultiesFor(engineGame, level)) : current.difficulty;
       if (
         current.selectedGame === engineGame.id &&
         current.category === menuCategoryForGame(engineGame, current.category) &&
-        current.difficulty === difficulty &&
+        current.difficulty === engineDifficulty &&
         current.selectedLevels === selectedLevels &&
         current.levelProgress === levelProgress
       ) {
@@ -1685,7 +1721,7 @@ function MenuApp() {
         selectedGame: engineGame.id,
         selectedLevels,
         levelProgress,
-        difficulty,
+        difficulty: engineDifficulty,
       };
     });
     setLaunchedGameID(engineGame.id);
@@ -1852,20 +1888,24 @@ function MenuApp() {
   const launchedGame = menuGames.find((game) => game.id === launchedGameID) || selectedGame;
   const levelBrowserGame = menuGames.find((game) => game.id === levelBrowserGameID && gameBelongsToCategory(game, menu.category) && game.levels?.length) || null;
   const browsingLevels = Boolean(levelBrowserGame);
+  const levelBrowserDifficulty = levelBrowserGame ? normalizedDifficultyForGame(levelBrowserGame, menu.difficulty) : menu.difficulty;
+  const levelBrowserLevels = levelBrowserGame ? levelsForDifficulty(levelBrowserGame, levelBrowserDifficulty) : [];
   const visibleGames = gamesForCategory(menuGames, menu.category);
-  const selectedLevel = selectedGame.levels?.find((level) => level.id === selectedLevelFor(selectedGame));
-  const selectedSupportedDifficulties = supportedDifficultiesFor(selectedGame, selectedLevel);
+  const selectedSupportedDifficulties = usesDifficulty(selectedGame) ? selectableDifficultiesForGame(selectedGame) : supportedDifficultiesFor(selectedGame);
   const effectiveDifficulty = closestSupportedDifficulty(menu.difficulty, selectedSupportedDifficulties);
+  const selectedVisibleLevels = levelsForDifficulty(selectedGame, effectiveDifficulty);
+  const selectedLevelID = selectedLevelFor(selectedGame);
+  const selectedLevel = selectedVisibleLevels.find((level) => level.id === selectedLevelID) || selectedGame.levels?.find((level) => level.id === selectedLevelID);
   const selectedLevelProgress = progressFor(selectedGame, menu);
   const selectedLevelMode = levelModeFor(selectedGame, menu);
   const selectedChallengeRun = challengeRunFor(selectedGame, menu);
-  const selectedLevelIndex = selectedLevel && selectedGame.levels?.length ? selectedGame.levels.findIndex((level) => level.id === selectedLevel.id) + 1 : 0;
+  const selectedLevelIndex = selectedLevel && selectedVisibleLevels.length ? selectedVisibleLevels.findIndex((level) => level.id === selectedLevel.id) + 1 : 0;
   const selectedLevelDisplayLabel = playerLevelLabel(selectedLevel, selectedLevelIndex > 0 ? selectedLevelIndex - 1 : undefined);
   const selectedLevelBest = selectedLevel ? selectedLevelProgress.bestByLevel[selectedLevel.id] : undefined;
   const selectedLevelBestTime = selectedLevel ? selectedLevelProgress.bestTimeByLevel[selectedLevel.id] : undefined;
   const selectedLevelBestLabel = selectedLevelBestTime ? formatBestTime(selectedLevelBestTime) : selectedLevelBest ? difficulties.find((difficulty) => difficulty.id === selectedLevelBest)?.label || selectedLevelBest : "Sin superar";
   const selectedChallengeProgressLabel = selectedGame.levels?.length
-    ? `${Object.keys(selectedChallengeRun?.completedLevels || {}).length}/${selectedGame.levels.length}`
+    ? `${selectedVisibleLevels.filter((level) => selectedChallengeRun?.completedLevels[level.id] !== undefined).length}/${selectedVisibleLevels.length}`
     : "0/0";
   const launchedLevelMode = activeLevelModeFor(launchedGame, menu, status);
   const selectedPartyMiniGames = isPartyCard(selectedGame) ? selectedGame.partyMiniGames || [] : [];
@@ -1875,7 +1915,7 @@ function MenuApp() {
   const displayPlayers = gameActive && enginePlayers.length > 0 ? enginePlayers : launchedPlayers;
   const headerPlayers = gameActive && enginePlayers.length > 0 ? enginePlayers : activePlayers;
   const launchedLevel = launchedGame.levels?.find((level) => level.id === (status?.level || selectedLevelFor(launchedGame)));
-  const launchedSupportedDifficulties = supportedDifficultiesFor(launchedGame, launchedLevel);
+  const launchedSupportedDifficulties = usesDifficulty(launchedGame) ? selectableDifficultiesForGame(launchedGame) : supportedDifficultiesFor(launchedGame, launchedLevel);
   const launchedDifficulty = closestSupportedDifficulty(menu.difficulty, launchedSupportedDifficulties);
   const launchedLevelActive = isLevelRuntimeActive(status, launchedGame);
   const activeLevelLaunchView = visibleActiveLevelLaunch({
@@ -1900,10 +1940,22 @@ function MenuApp() {
   }, []);
 
   useEffect(() => {
-    if (menu.difficulty !== effectiveDifficulty) {
-      setMenu((current) => (current.difficulty === effectiveDifficulty ? current : { ...current, difficulty: effectiveDifficulty }));
-    }
-  }, [effectiveDifficulty, menu.difficulty]);
+    setMenu((current) => {
+      const game = menuGames.find((candidate) => candidate.id === current.selectedGame) || selectedGame;
+      const difficulty = normalizedDifficultyForGame(game, current.difficulty);
+      const currentLevelID = game.levels?.length ? current.selectedLevels[game.id] || defaultLevelIDForDifficulty(game, difficulty) : "";
+      const nextLevelID = game.levels?.length ? closestLevelIDForDifficulty(game, currentLevelID, difficulty) : "";
+      const selectedLevels = game.levels?.length && current.selectedLevels[game.id] !== nextLevelID
+        ? { ...current.selectedLevels, [game.id]: nextLevelID }
+        : current.selectedLevels;
+      if (current.difficulty === difficulty && selectedLevels === current.selectedLevels) return current;
+      return {
+        ...current,
+        difficulty,
+        selectedLevels,
+      };
+    });
+  }, [menu.difficulty, menu.selectedGame, menu.selectedLevels, menuGames, selectedGame]);
 
   function addPlayer() {
     const previousPlayerCount = activePlayers.length;
@@ -2248,12 +2300,14 @@ function MenuApp() {
       });
     }
     setMenu((current) => {
-      const selectedLevels = game?.levels?.length && !current.selectedLevels[gameID] ? { ...current.selectedLevels, [gameID]: defaultLevelID(game) } : current.selectedLevels;
-      const levelID = game?.levels?.length ? selectedLevels[gameID] || defaultLevelID(game) : "";
-      const level = game?.levels?.find((candidate) => candidate.id === levelID);
+      const difficulty = game ? normalizedDifficultyForGame(game, current.difficulty) : current.difficulty;
+      const levelID = game?.levels?.length
+        ? closestLevelIDForDifficulty(game, current.selectedLevels[gameID] || defaultLevelIDForDifficulty(game, difficulty), difficulty)
+        : "";
+      const selectedLevels = game?.levels?.length && current.selectedLevels[gameID] !== levelID ? { ...current.selectedLevels, [gameID]: levelID } : current.selectedLevels;
       return {
         ...current,
-        difficulty: game ? closestSupportedDifficulty(current.difficulty, supportedDifficultiesFor(game, level)) : current.difficulty,
+        difficulty,
         selectedGame: gameID,
         selectedLevels,
       };
@@ -2266,9 +2320,10 @@ function MenuApp() {
 
   function selectedLevelFor(game: GameCard, state = menu): string {
     if (!game.levels?.length) return "";
-    const selected = state.selectedLevels[game.id] || defaultLevelID(game);
+    const difficulty = activeDifficultyForGame(game, state);
+    const selected = closestLevelIDForDifficulty(game, state.selectedLevels[game.id] || defaultLevelIDForDifficulty(game, difficulty), difficulty);
     if (isLevelUnlocked(game, selected, state)) return selected;
-    return challengeNextLevel(game, state)?.id || defaultLevelID(game);
+    return challengeNextLevel(game, state)?.id || defaultLevelIDForDifficulty(game, difficulty);
   }
 
   function setLevelMode(game: GameCard, mode: LevelMode) {
@@ -2288,6 +2343,10 @@ function MenuApp() {
       delete nextChallengeRuns[game.id];
       const nextFreeRuns = { ...current.freeRuns };
       delete nextFreeRuns[game.id];
+      const difficulty = activeDifficultyForGame(game, current);
+      const selected = mode === "challenge"
+        ? defaultLevelIDForDifficulty(game, difficulty)
+        : closestLevelIDForDifficulty(game, selectedLevelFor(game, current), difficulty);
       return {
         ...current,
         levelModes: nextLevelModes,
@@ -2295,14 +2354,16 @@ function MenuApp() {
         freeRuns: nextFreeRuns,
         selectedLevels: {
           ...current.selectedLevels,
-          [game.id]: mode === "challenge" ? defaultLevelID(game) : selectedLevelFor(game, current),
+          [game.id]: selected,
         },
       };
     });
   }
 
   function setSelectedLevel(game: GameCard, levelID: string) {
-    if (!isLevelUnlocked(game, levelID, menu)) {
+    const difficulty = activeDifficultyForGame(game, menu);
+    const level = game.levels?.find((candidate) => candidate.id === levelID);
+    if (!levelSupportsDifficulty(game, level, difficulty) || !isLevelUnlocked(game, levelID, menu)) {
       captureMenuEvent("locked_level_tapped", {
         engine_game: engineGameID(game),
         game: game.id,
@@ -2311,9 +2372,8 @@ function MenuApp() {
       });
       return;
     }
-    const level = game.levels?.find((candidate) => candidate.id === levelID);
     captureMenuEvent("level_selected", {
-      difficulty: closestSupportedDifficulty(menu.difficulty, supportedDifficultiesFor(game, level)),
+      difficulty,
       engine_game: engineGameID(game),
       game: game.id,
       level: levelID,
@@ -2321,7 +2381,7 @@ function MenuApp() {
     });
     setMenu((current) => ({
       ...current,
-      difficulty: closestSupportedDifficulty(current.difficulty, supportedDifficultiesFor(game, level)),
+      difficulty: normalizedDifficultyForGame(game, current.difficulty),
       selectedLevels: {
         ...current.selectedLevels,
         [game.id]: levelID,
@@ -2534,12 +2594,13 @@ function MenuApp() {
     }
     if (options.resetChallengeRun && launchGame.levels?.length && levelModeFor(launchGame, nextMenu) === "challenge") {
       const { [launchGame.id]: _discardedRun, ...challengeRuns } = nextMenu.challengeRuns;
+      const resetDifficulty = usesDifficulty(launchGame) ? normalizedDifficultyForGame(launchGame, nextMenu.difficulty) : nextMenu.difficulty;
       nextMenu = {
         ...nextMenu,
         challengeRuns,
         selectedLevels: {
           ...nextMenu.selectedLevels,
-          [launchGame.id]: defaultLevelID(launchGame),
+          [launchGame.id]: defaultLevelIDForDifficulty(launchGame, resetDifficulty),
         },
       };
     }
@@ -2568,19 +2629,31 @@ function MenuApp() {
     const playNarration = narrationArmedFor(game, nextMenu);
     const showCountdownOverlay = launchGame.countdownFloorOverlay === true;
     const launchRoster = rosterForGame(game, nextMenu.players);
-    const selectedLevelID = partyFirstMiniGame?.level || levelOverride || selectedLevelFor(launchGame, nextMenu);
-    const launchLevel = launchGame.levels?.find((level) => level.id === selectedLevelID);
     const partyParentDifficulty = isPartyCard(game) && usesDifficulty(game)
-      ? closestSupportedDifficulty(nextMenu.difficulty, supportedDifficultiesFor(game))
+      ? normalizedDifficultyForGame(game, nextMenu.difficulty)
       : undefined;
     const partyChildDifficulty = partyFirstMiniGame?.difficultyMode === "override" && partyFirstMiniGame.difficulty
       ? partyFirstMiniGame.difficulty
       : partyParentDifficulty;
     const requestedDifficulty = partyChildDifficulty || nextMenu.difficulty;
-    const launchDifficulty = usesDifficulty(launchGame) ? closestSupportedDifficulty(requestedDifficulty, supportedDifficultiesFor(launchGame, launchLevel)) : undefined;
+    const launchDifficulty = usesDifficulty(launchGame) ? normalizedDifficultyForGame(launchGame, requestedDifficulty) : undefined;
+    const requestedLevelID = partyFirstMiniGame?.level || levelOverride || selectedLevelFor(launchGame, nextMenu);
+    const selectedLevelID = launchGame.levels?.length && launchDifficulty
+      ? closestLevelIDForDifficulty(launchGame, requestedLevelID, launchDifficulty)
+      : requestedLevelID;
+    const launchLevel = launchGame.levels?.find((level) => level.id === selectedLevelID);
     const menuDifficulty = isPartyCard(game) ? partyParentDifficulty : launchDifficulty;
     if (menuDifficulty && nextMenu.difficulty !== menuDifficulty) {
       nextMenu = { ...nextMenu, difficulty: menuDifficulty };
+    }
+    if (launchGame.levels?.length && selectedLevelID && nextMenu.selectedLevels[launchGame.id] !== selectedLevelID) {
+      nextMenu = {
+        ...nextMenu,
+        selectedLevels: {
+          ...nextMenu.selectedLevels,
+          [launchGame.id]: selectedLevelID,
+        },
+      };
     }
     const challengeDifficulty = (launchDifficulty || nextMenu.difficulty) as DifficultyID;
     const launchLevelMode = launchGame.levels?.length ? levelModeFor(launchGame, nextMenu) : undefined;
@@ -2601,6 +2674,7 @@ function MenuApp() {
     }
     const launchChallengeRun = launchLevelMode === "challenge" ? challengeRunFor(launchGame, nextMenu) : null;
     const launchFreeRun = launchLevelMode === "free" ? freeRunFor(launchGame, nextMenu) || emptyFreeRun(nextMenu.sessionId) : null;
+    const launchDifficultyLevels = launchGame.levels?.length && launchDifficulty ? levelsForDifficulty(launchGame, launchDifficulty) : [];
     if (selectedLevelID && !isLevelUnlocked(launchGame, selectedLevelID, nextMenu)) {
       captureMenuEvent("start_blocked", {
         engine_game: engineGameID(launchGame),
@@ -2649,7 +2723,7 @@ function MenuApp() {
         game: launchGame.id,
         game_label: launchGame.label,
         game_revision: launchGame.revisionHash || null,
-        level_count: launchGame.levels?.length || 0,
+        level_count: launchDifficultyLevels.length || launchGame.levels?.length || 0,
         revision_hash: launchGame.revisionHash || null,
         venue_session_id: nextMenu.sessionId,
       });
@@ -2737,11 +2811,12 @@ function MenuApp() {
   async function switchLaunchedLevel(game: GameCard, levelID: string, stopCurrent: boolean, mode = levelModeFor(game, menu)) {
     const level = game.levels?.find((candidate) => candidate.id === levelID);
     if (!level || !isLevelUnlockedForMode(game, levelID, menu, mode)) return;
+    const difficulty = activeDifficultyForGame(game, menu);
     setPendingLevelSwitch(null);
     setActiveLevelLaunch({ gameID: game.id, levelID, phase: stopCurrent ? "stopping" : "loading" });
     setError("");
     captureMenuEvent("level_selected", {
-      difficulty: closestSupportedDifficulty(menu.difficulty, supportedDifficultiesFor(game, level)),
+      difficulty,
       engine_game: engineGameID(game),
       game: game.id,
       level: levelID,
@@ -2895,13 +2970,15 @@ function MenuApp() {
                 });
                 setMenu((current) => {
                   const selectedGameID = first?.id || current.selectedGame;
-                  const selectedLevels = first?.levels?.length && !current.selectedLevels[selectedGameID] ? { ...current.selectedLevels, [selectedGameID]: defaultLevelID(first) } : current.selectedLevels;
-                  const levelID = first?.levels?.length ? selectedLevels[selectedGameID] || defaultLevelID(first) : "";
-                  const level = first?.levels?.find((candidate) => candidate.id === levelID);
+                  const difficulty = first ? normalizedDifficultyForGame(first, current.difficulty) : current.difficulty;
+                  const levelID = first?.levels?.length
+                    ? closestLevelIDForDifficulty(first, current.selectedLevels[selectedGameID] || defaultLevelIDForDifficulty(first, difficulty), difficulty)
+                    : "";
+                  const selectedLevels = first?.levels?.length && current.selectedLevels[selectedGameID] !== levelID ? { ...current.selectedLevels, [selectedGameID]: levelID } : current.selectedLevels;
                   return {
                     ...current,
                     category: category.id,
-                    difficulty: first ? closestSupportedDifficulty(current.difficulty, supportedDifficultiesFor(first, level)) : current.difficulty,
+                    difficulty,
                     selectedGame: selectedGameID,
                     selectedLevels,
                   };
@@ -2997,7 +3074,7 @@ function MenuApp() {
           }}
           onLevelSelect={requestActiveLevelSwitch}
           onNextLevel={() => {
-            const levels = launchedGame.levels || [];
+            const levels = levelsForDifficulty(launchedGame, launchedDifficulty);
             const currentIndex = Math.max(0, levels.findIndex((level) => level.id === selectedLevelFor(launchedGame)));
             const nextLevel = levels[(currentIndex + 1) % levels.length];
             if (nextLevel) requestActiveLevelSwitch(nextLevel.id);
@@ -3130,7 +3207,7 @@ function MenuApp() {
               </div>
               {browsingLevels && levelBrowserGame?.levels?.length ? (
                 <section key={`${levelBrowserGame.id}-levels`} className="levels-grid" role="radiogroup" aria-label={`Niveles de ${levelBrowserGame.label}`}>
-                  {levelBrowserGame.levels.map((level) => renderLevelOption(levelBrowserGame, level))}
+                  {levelBrowserLevels.map((level) => renderLevelOption(levelBrowserGame, level))}
                 </section>
               ) : (
                 <section key={menu.category} className={`games game-grid count-${Math.min(visibleGames.length, 5)}`} aria-label="Juegos">
@@ -3206,7 +3283,7 @@ function MenuApp() {
                           <h2>{selectedGame.label}</h2>
                         </span>
                         <span className="season-progress">
-                          {selectedLevelIndex}/{selectedGame.levels?.length}
+                          {selectedLevelIndex}/{selectedVisibleLevels.length || selectedGame.levels?.length}
                         </span>
                       </div>
                       <p>{selectedGame.description}</p>
@@ -3859,9 +3936,10 @@ function GameControlScreen({
 }) {
   const paused = Boolean(status?.paused);
   const levelModeFree = levelMode === "free";
-  const levels = game.levels || [];
+  const levels = levelsForDifficulty(game, difficulty);
   const hasLevels = levels.length > 0;
-  const currentLevelID = status?.level || selectedLevelID || levels[0]?.id || "";
+  const statusLevelID = status?.level && levels.some((level) => level.id === status.level) ? status.level : "";
+  const currentLevelID = statusLevelID || closestLevelIDForDifficulty(game, selectedLevelID || levels[0]?.id || "", difficulty);
   const currentLevel = levels.find((level) => level.id === currentLevelID);
   const currentLevelIndex = currentLevel ? levels.findIndex((level) => level.id === currentLevel.id) : -1;
   const launchingLevel = activeLevelLaunch ? levels.find((level) => level.id === activeLevelLaunch.levelID) : undefined;
@@ -3882,7 +3960,7 @@ function GameControlScreen({
     : totalMillis > 0 ? formatRuntimeTime(Math.max(0, totalMillis - elapsedMillis)) : formatRuntimeTime(elapsedMillis);
   const timeCaption = hasLevels ? (levelModeFree ? "Tiempo transcurrido" : totalMillis > 0 ? "Tiempo restante" : "Tiempo transcurrido") : totalMillis > 0 ? "Restante" : "Tiempo";
   const score = scoreFromStatus(status);
-  const completedCount = Object.keys(challengeRun?.completedLevels || {}).length;
+  const completedCount = levels.filter((level) => challengeRun?.completedLevels[level.id] !== undefined).length;
   const progressLabel = hasLevels ? `${completedCount}/${levels.length}` : "0/0";
   const stopped = isStoppedRuntimePhase(status);
   const attemptSummary = hasLevels ? levelAttemptSummary(status, game, currentLevelID) : { attempts: 0, failures: 0 };
@@ -4213,14 +4291,12 @@ function PartyPreview({ catalogGames, compact = false, difficulty, game, rich = 
     >
       {miniGames.map((item, index) => {
         const miniGame = catalogGames.find((candidate) => candidate.id === item.gameId || engineGameID(candidate) === item.gameId);
-        const levelID = item.level || (miniGame?.levels?.length ? defaultLevelID(miniGame) : "");
-        const level = miniGame?.levels?.find((candidate) => candidate.id === levelID);
         const previewDifficulty = miniGame
-          ? closestSupportedDifficulty(
-            item.difficultyMode === "override" && item.difficulty ? item.difficulty : difficulty,
-            supportedDifficultiesFor(miniGame, level),
-          )
+          ? normalizedDifficultyForGame(miniGame, item.difficultyMode === "override" && item.difficulty ? item.difficulty : difficulty)
           : difficulty;
+        const levelID = item.level || (miniGame?.levels?.length ? defaultLevelIDForDifficulty(miniGame, previewDifficulty) : "");
+        const selectedLevelID = miniGame?.levels?.length ? closestLevelIDForDifficulty(miniGame, levelID, previewDifficulty) : levelID;
+        const level = miniGame?.levels?.find((candidate) => candidate.id === selectedLevelID);
         const previewSrc = miniGame && level ? levelThumbnailSrc(level, miniGame) : miniGame ? gameThumbnailSrc(miniGame) : undefined;
         const previewSrcs = miniGame && level ? levelThumbnailSrcs(level, miniGame) : miniGame ? gameThumbnailSrcs(miniGame) : emptyPreviewSources;
         const richSrc = rich && miniGame ? (level ? levelPreviewSrc(miniGame, level, previewDifficulty) : miniGame.previewSrc) : undefined;
