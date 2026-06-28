@@ -523,6 +523,34 @@ func TestScoreAtLeastWinCondition(t *testing.T) {
 	}
 }
 
+func TestCompileCloudLevelUsesConfiguredResultAnimations(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        "level-1",
+		Label:       "Result animations",
+		Difficulty:  string(DifficultyMedium),
+		Life:        5,
+		FrameTickMS: 25,
+		Rules: levelRules{
+			VictoryAnimations: []string{"victory-wave"},
+			DefeatAnimations:  []string{"defeat-spark"},
+		},
+		Frames: []rawFrame{{
+			Repeat: 8,
+			Cells:  []cellTuple{{X: 4, Y: 4, Kind: 1, Uniq: "coin-a"}},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := levels[0].victoryAnimations; len(got) != 1 || got[0] != "victory-wave" {
+		t.Fatalf("victoryAnimations = %#v, want [victory-wave]", got)
+	}
+	if got := levels[0].defeatAnimations; len(got) != 1 || got[0] != "defeat-spark" {
+		t.Fatalf("defeatAnimations = %#v, want [defeat-spark]", got)
+	}
+}
+
 func TestFinalDamageEmitsDefeatCue(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/json")
