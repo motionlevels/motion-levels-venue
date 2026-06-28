@@ -689,7 +689,6 @@ export const floorAnimations: Record<string, FloorAnim> = {
   memory,
   patrones,
   parkour,
-  parkour2: parkour,
   "temporada1-level-1": temporada1Preview(1),
   temporada1: temporada1Preview(1),
   "temporada1-niveles": temporada1Preview(1),

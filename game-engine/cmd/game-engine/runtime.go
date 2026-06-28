@@ -17,7 +17,6 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/games/duel"
 	"github.com/lobis/motion-levels/game-engine/internal/games/lava"
 	"github.com/lobis/motion-levels/game-engine/internal/games/memorychallenge"
-	"github.com/lobis/motion-levels/game-engine/internal/games/parkour"
 	"github.com/lobis/motion-levels/game-engine/internal/games/patrones"
 	"github.com/lobis/motion-levels/game-engine/internal/games/plataformas"
 	"github.com/lobis/motion-levels/game-engine/internal/games/saltos"
@@ -845,43 +844,6 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		return r.withDisplayAttemptSummary(status, started)
 	}
 
-	if cfg.Game == "parkour" {
-		if parkourGame, ok := game.(*parkour.Game); ok {
-			snapshot := parkourGame.Snapshot(gameNow)
-			status.Phase = snapshot.Phase
-			status.Score = snapshot.Score
-			status.StartedUnix = snapshot.StartedUnix
-			status.EndsUnix = snapshot.EndsUnix
-			status.ElapsedMillis = snapshot.ElapsedMillis
-			status.RemainingMillis = snapshot.RemainingMillis
-			status.CountdownRemainingMillis = snapshot.CountdownMillis
-			status.ActiveTargets = snapshot.ActiveTargets
-			status.Lives = snapshot.Lives
-			status.LivesStart = snapshot.LivesStart
-			status.Difficulty = snapshot.Difficulty
-			status.Level = snapshot.Level
-			status.LevelNumber = snapshot.LevelNumber
-			status.AttemptStartedUnixNanos = snapshot.CreatedUnixNanos
-			status.GameplayStartedUnixNanos = snapshot.StartedUnixNanos
-			status.AttemptEndedUnixNanos = snapshot.EndedUnixNanos
-			status.Success = snapshot.Success
-			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
-			for _, player := range snapshot.Players {
-				status.Players = append(status.Players, displayPlayer{
-					Index: player.Index,
-					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
-					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
-					Score: player.Score,
-					Lives: player.Lives,
-				})
-			}
-		}
-		if paused && status.Phase != "finished" {
-			status.Phase = "paused"
-		}
-		return r.withDisplayAttemptSummary(status, started)
-	}
-
 	if isPlatformRuntimeGame(cfg.Game) {
 		if plataformasGame, ok := game.(*plataformas.Game); ok {
 			snapshot := plataformasGame.Snapshot(gameNow)
@@ -1517,7 +1479,7 @@ func shouldPlayCountdownCue(cfg config) bool {
 		return true
 	}
 	switch cfg.Game {
-	case "lava", "saltos", "parkour", "parkour2", "plataformas", "temporada1-niveles", "temporada1", "temporada2":
+	case "lava", "saltos", "parkour", "plataformas", "temporada1-niveles", "temporada1", "temporada2":
 		return true
 	default:
 		return false
@@ -1884,7 +1846,7 @@ func recordsLevelAttempts(game string) bool {
 		return true
 	}
 	switch game {
-	case "parkour", "parkour2", "plataformas", "temporada1-niveles", "temporada1", "temporada2":
+	case "parkour", "plataformas", "temporada1-niveles", "temporada1", "temporada2":
 		return true
 	default:
 		return false
@@ -1932,7 +1894,7 @@ func gameHasConfigurableDifficulty(game string, platformURL string) bool {
 
 func isPlatformRuntimeGame(game string) bool {
 	game = normalizeGame(game)
-	return isPlatformLevelGameID(game) || game == "plataformas" || game == "parkour2" || game == "temporada1-niveles"
+	return isPlatformLevelGameID(game) || game == "plataformas" || game == "parkour" || game == "temporada1-niveles"
 }
 
 func (r *gameRuntime) recordPressureInput(event *inputpb.PressureEvent, now time.Time) {
@@ -2109,15 +2071,12 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 	case "saltos":
 		log.Printf("game: saltos level=%s", cfg.Level)
 		return saltos.NewWithSeed(now, seed, cfg.Level)
-	case "parkour":
-		log.Printf("game: parkour difficulty=%s level=%s", cfg.Difficulty, cfg.Level)
-		return parkour.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 	case "plataformas":
 		log.Printf("game: plataformas players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 		return plataformas.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL)
-	case "parkour2":
-		log.Printf("game: parkour2 difficulty=%s level=%s", cfg.Difficulty, cfg.Level)
-		return plataformas.NewWithSeedForGame(now, seed, 1, cfg.Difficulty, cfg.Level, cfg.PlatformURL, "parkour2")
+	case "parkour":
+		log.Printf("game: parkour difficulty=%s level=%s", cfg.Difficulty, cfg.Level)
+		return plataformas.NewWithSeedForGame(now, seed, 1, cfg.Difficulty, cfg.Level, cfg.PlatformURL, "parkour")
 	case "temporada1-niveles":
 		log.Printf("game: temporada1-niveles players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 		return plataformas.NewWithSeedForGame(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL, "temporada1-niveles")
@@ -2343,13 +2302,8 @@ func configForSelection(base config, game string, players int) config {
 		cfg.MusicVolume = saltos.DefaultMusicVolume
 	case "parkour":
 		cfg.PlayerCount = 1
-		cfg.Level = parkour.NormalizeLevel(cfg.Level)
-		cfg.MusicRef = parkour.DefaultMusicRef
-		cfg.MusicVolume = parkour.DefaultMusicVolume
-	case "plataformas":
 		cfg.Level = plataformas.NormalizeLevel(cfg.Level)
-	case "parkour2":
-		cfg.PlayerCount = 1
+	case "plataformas":
 		cfg.Level = plataformas.NormalizeLevel(cfg.Level)
 	case "temporada1-niveles":
 		cfg.Level = plataformas.NormalizeLevel(cfg.Level)
@@ -2391,9 +2345,7 @@ func defaultMusicForGame(game string) (string, float64) {
 		return lava.DefaultMusicRef, lava.DefaultMusicVolume
 	case "saltos":
 		return saltos.DefaultMusicRef, saltos.DefaultMusicVolume
-	case "parkour":
-		return parkour.DefaultMusicRef, parkour.DefaultMusicVolume
-	case "plataformas", "parkour2", "temporada1-niveles":
+	case "parkour", "plataformas", "temporada1-niveles":
 		return plataformas.DefaultMusicRef, plataformas.DefaultMusicVolume
 	case "temporada1":
 		return temporada1.DefaultMusicRef, temporada1.DefaultMusicVolume
@@ -2460,18 +2412,6 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 		{
 			Game:        "parkour",
 			Label:       "Parkour",
-			Description: "Reto individual por niveles: pisa todas las plataformas azules, esquiva la lava y completa el recorrido lo más rápido posible.",
-			Music:       parkour.DefaultMusicRef,
-			Players:     true,
-			MinPlayers:  1,
-			MaxPlayers:  1,
-			Difficulty:  true,
-			Volume:      parkour.DefaultMusicVolume,
-			Levels:      parkourCatalogLevels(),
-		},
-		{
-			Game:        "parkour2",
-			Label:       "Parkour 2.0",
 			Description: "Reto individual editable desde la plataforma, con animaciones opcionales para lava y plataformas verdes.",
 			Music:       plataformas.DefaultMusicRef,
 			Players:     true,
@@ -2706,19 +2646,6 @@ func temporada2CatalogLevels() []gameLevelEntry {
 	return out
 }
 
-func parkourCatalogLevels() []gameLevelEntry {
-	levels := parkour.Levels()
-	out := make([]gameLevelEntry, 0, len(levels))
-	for _, level := range levels {
-		out = append(out, gameLevelEntry{
-			ID:          level.ID,
-			Label:       level.Label,
-			Description: level.Description,
-		})
-	}
-	return out
-}
-
 func plataformasCatalogLevels() []gameLevelEntry {
 	levels := plataformas.Levels()
 	out := make([]gameLevelEntry, 0, len(levels))
@@ -2917,7 +2844,6 @@ func preloadAudioRefs(cfg config) []string {
 		whackamole.DefaultMusicRef,
 		lava.DefaultMusicRef,
 		saltos.DefaultMusicRef,
-		parkour.DefaultMusicRef,
 		plataformas.DefaultMusicRef,
 		temporada1.DefaultMusicRef,
 		temporada2.DefaultMusicRef,

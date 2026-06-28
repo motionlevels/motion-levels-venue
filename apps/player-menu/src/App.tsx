@@ -435,7 +435,7 @@ function platformEntryEngineGame(entry: PlatformGameCatalogEntry): string {
 }
 
 function isParkourPreviewGame(engineGame: string): boolean {
-  return engineGame === "parkour" || engineGame === "parkour2";
+  return engineGame === "parkour";
 }
 
 function isPlatformLevelSource(entry: PlatformGameCatalogEntry): boolean {

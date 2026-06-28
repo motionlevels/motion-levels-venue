@@ -590,7 +590,7 @@ function displayClock(status: DisplayStatus): string {
 
 function isParkourGame(currentGame: string): boolean {
   const game = compactDisplayText(currentGame);
-  return game === "parkour" || game === "parkour2";
+  return game === "parkour";
 }
 
 function isMemoryGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
@@ -664,7 +664,7 @@ function isLevelPointsGame(status: Pick<DisplayStatus, "currentGame" | "label">)
 
 function isFixedSoloDisplayGame(currentGame: string): boolean {
   const game = compactDisplayText(currentGame);
-  return game === "parkour" || game === "parkour2" || game === "saltos" || game === "temporada1" || game === "temporada1niveles";
+  return game === "parkour" || game === "saltos" || game === "temporada1" || game === "temporada1niveles";
 }
 
 function shouldShowPlayerInfo(status: DisplayStatus): boolean {
@@ -906,7 +906,7 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
     case "parkour-level":
       return {
         ...base,
-        currentGame: options.demoGame || "parkour2",
+        currentGame: options.demoGame || "parkour",
         label: options.demoLabel || "Nivel 2",
         phase: "running",
         difficulty: "medium",

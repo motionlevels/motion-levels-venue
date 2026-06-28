@@ -78,17 +78,17 @@ func TestFetchesCloudLevelAndScoresCoin(t *testing.T) {
 	}
 }
 
-func TestFetchesParkour2CloudLevelsFromNamedGame(t *testing.T) {
+func TestFetchesParkourCloudLevelsFromNamedGame(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/level-games/parkour2/levels" {
+		if r.URL.Path != "/api/level-games/parkour/levels" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
 		w.Header().Set("content-type", "application/json")
 		_, _ = w.Write([]byte(`{
-			"gameId":"parkour2",
+			"gameId":"parkour",
 			"levels":[{
 				"slug":"level-1",
-				"label":"Parkour 2.0",
+				"label":"Parkour",
 				"description":"Fetched from named game",
 				"difficulty":"medium",
 				"life":5,
@@ -100,9 +100,9 @@ func TestFetchesParkour2CloudLevelsFromNamedGame(t *testing.T) {
 	}))
 	defer server.Close()
 
-	game := NewWithSeedForGame(time.Unix(100, 0), 1, 1, "medium", "level-1", server.URL, "parkour2")
-	if game.level.label != "Parkour 2.0" {
-		t.Fatalf("level label = %q, want Parkour 2.0", game.level.label)
+	game := NewWithSeedForGame(time.Unix(100, 0), 1, 1, "medium", "level-1", server.URL, "parkour")
+	if game.level.label != "Parkour" {
+		t.Fatalf("level label = %q, want Parkour", game.level.label)
 	}
 }
 

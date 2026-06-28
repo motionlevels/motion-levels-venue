@@ -4,7 +4,6 @@ import { gameTitleES, levelLabelES } from "../src/displayText.ts";
 
 describe("gameTitleES", () => {
   it("uses known game ids instead of level labels", () => {
-    assert.equal(gameTitleES("parkour2", "Nivel 2"), "Parkour");
     assert.equal(gameTitleES("parkour", "level-1-2"), "Parkour");
     assert.equal(gameTitleES("memory-lights", "Nivel 3"), "Reto de memoria");
   });

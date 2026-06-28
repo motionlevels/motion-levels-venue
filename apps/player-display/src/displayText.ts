@@ -3,7 +3,6 @@ const gameTitlesES: Record<string, string> = {
   "whack-a-mole": "Atrapa al topo",
   lava: "El suelo es lava",
   parkour: "Parkour",
-  parkour2: "Parkour",
   plataformas: "Plataformas",
   temporada1: "Temporada 1",
   "temporada1-niveles": "Temporada 1",

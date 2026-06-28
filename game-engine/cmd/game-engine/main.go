@@ -14,7 +14,6 @@ import (
 
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
-	"github.com/lobis/motion-levels/game-engine/internal/games/parkour"
 	"github.com/lobis/motion-levels/game-engine/internal/games/patrones"
 	"github.com/lobis/motion-levels/game-engine/internal/games/plataformas"
 	"github.com/lobis/motion-levels/game-engine/internal/games/saltos"
@@ -93,7 +92,7 @@ func main() {
 	flag.StringVar(&cfg.HTTPAddr, "http", "127.0.0.1:4102", "HTTP address for the game-engine API; empty disables")
 	flag.StringVar(&cfg.ControllerAddr, "controller", "127.0.0.1:4201", "floor-controller frame stream address")
 	flag.StringVar(&cfg.PressureAddr, "pressure-events", "127.0.0.1:4202", "floor-controller pressure event stream address")
-	flag.StringVar(&cfg.Game, "game", "salvapantallas", "game to run: salvapantallas, animations, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, parkour, parkour2, plataformas, temporada1-niveles, temporada1, temporada2, duel, memory, or patrones")
+	flag.StringVar(&cfg.Game, "game", "salvapantallas", "game to run: salvapantallas, animations, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, parkour, plataformas, temporada1-niveles, temporada1, temporada2, duel, memory, or patrones")
 	flag.StringVar(&cfg.Difficulty, "difficulty", "easy", "difficulty for games that support it: easy, medium, hard, expert")
 	flag.StringVar(&cfg.Level, "level", "starter", "level for games that support level selection")
 	flag.IntVar(&cfg.PlayerCount, "players", 1, "number of players for focused games")
@@ -205,12 +204,9 @@ func (c *config) normalize() {
 	if c.Game == "saltos" {
 		c.Level = saltos.NormalizeLevel(c.Level)
 		c.PlayerCount = 1
-	} else if c.Game == "parkour" {
-		c.Level = parkour.NormalizeLevel(c.Level)
-		c.PlayerCount = 1
-	} else if isPlatformLevelGameID(c.Game) || c.Game == "plataformas" || c.Game == "parkour2" || c.Game == "temporada1-niveles" {
+	} else if isPlatformLevelGameID(c.Game) || c.Game == "plataformas" || c.Game == "parkour" || c.Game == "temporada1-niveles" {
 		c.Level = plataformas.NormalizeLevel(c.Level)
-		if c.Game == "parkour2" {
+		if c.Game == "parkour" {
 			c.PlayerCount = 1
 		}
 	} else if c.Game == "temporada1" {
@@ -555,10 +551,8 @@ func normalizeGame(value string) string {
 		return "lava"
 	case "saltos", "jump", "salta", "salto":
 		return "saltos"
-	case "parkour", "pk":
+	case "parkour", "pk", "parkour2", "parkour-2", "parkour-2.0", "parkour2.0", "parkour-20":
 		return "parkour"
-	case "parkour2", "parkour-2", "parkour-2.0", "parkour2.0", "parkour-20":
-		return "parkour2"
 	case "plataformas", "platforms", "cloud-platforms":
 		return "plataformas"
 	case "temporada1-niveles", "temporada-1-niveles", "temporada1-levels", "season1-levels", "season-1-levels":

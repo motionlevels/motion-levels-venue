@@ -372,7 +372,7 @@ describe("catalog metadata sync", () => {
     const floorSource = fs.readFileSync(path.resolve(__dirname, "../src/floor.ts"), "utf8");
 
     assert.match(appSource, /function isParkourPreviewGame\(engineGame: string\): boolean/);
-    assert.match(appSource, /return engineGame === "parkour" \|\| engineGame === "parkour2";/);
+    assert.match(appSource, /return engineGame === "parkour";/);
     assert.match(appSource, /const forceParkourAnimation = isParkourPreviewGame\(engineGame\);/);
     assert.match(appSource, /const previewAnimation = forceParkourAnimation \? "parkour" : catalogPreviewAnimation/);
     assert.doesNotMatch(appSource, /const platformThumbnailSrcs = preferFallbackAnimation \? \[\] : uniquePreviewSources/);
@@ -391,6 +391,7 @@ describe("catalog metadata sync", () => {
     assert.match(appSource, /promoteAnimation=\{active && !levelHasPreviewMedia\(level\)\}/);
     assert.match(floorSource, /const parkour: FloorAnim =/);
     assert.match(floorSource, /export function parkourLevelPreview\(seedText: string\): FloorAnim/);
-    assert.match(floorSource, /\n  parkour,\n  parkour2: parkour,/);
+    assert.match(floorSource, /\n  parkour,\n/);
+    assert.doesNotMatch(floorSource, /parkour2: parkour/);
   });
 });
