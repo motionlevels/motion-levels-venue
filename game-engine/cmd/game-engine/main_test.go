@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1720,6 +1721,75 @@ func TestFirstNarrationHoldsLavaCountdown(t *testing.T) {
 		t.Fatalf("second launch status = %+v, want no intro hold", status)
 	}
 	backend.waitForCount(t, countdownPath, 2)
+}
+
+func TestPlatformLevelNarrationSuppressesLegacyCountdownCue(t *testing.T) {
+	dir := t.TempDir()
+	narrationRef := "Motion/narraciones/nivel-1.wav"
+	countdownRef := "Motion/narraciones/countdown-tres-dos-uno-vamos.mp3"
+	startRef := "Motion/sonidos/aparecer.mp3"
+	narrationPath := filepath.Join(dir, filepath.FromSlash(narrationRef))
+	countdownPath := filepath.Join(dir, filepath.FromSlash(countdownRef))
+	startPath := filepath.Join(dir, filepath.FromSlash(startRef))
+	for _, path := range []string{narrationPath, countdownPath, startPath} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := writeSilentWAV(path, 200*time.Millisecond); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = fmt.Fprintf(w, `{
+			"gameId":"plataformas",
+			"levels":[{
+				"id":"cloud-1",
+				"slug":"level-1",
+				"label":"Nivel nube",
+				"description":"Nivel con audio heredado",
+				"difficulty":"medium",
+				"life":5,
+				"pass_score":2,
+				"time_limit_seconds":0,
+				"frame_tick_ms":25,
+				"narration_cue_ref":%q,
+				"start_cue_ref":%q,
+				"music_ref":"",
+				"coin_cue_ref":"Motion/sonidos/coin.wav",
+				"damage_cue_ref":"Motion/sonidos/fallo.mp3",
+				"frames":[{"r":8,"c":[[7,14,0],[4,4,1,"coin-a"]]}]
+			}]
+		}`, narrationRef, countdownRef)
+	}))
+	defer server.Close()
+
+	backend := &recordingBackend{}
+	player := audio.NewPlayer(dir, backend)
+	runtime := newGameRuntime(config{
+		Brightness:      80,
+		PlayerCount:     1,
+		Game:            "salvapantallas",
+		PlatformURL:     server.URL,
+		CountdownCueRef: countdownRef,
+		StartCueRef:     "",
+		MusicRef:        "",
+		CueVolume:       0.45,
+	}, player, nil)
+
+	runtime.SelectGameWithDifficulty("plataformas", 1, "medium")
+	backend.waitForCount(t, narrationPath, 1)
+	time.Sleep(300 * time.Millisecond)
+	if got := backend.count(countdownPath); got != 0 {
+		t.Fatalf("legacy countdown cue plays = %d, want 0", got)
+	}
+	if got := backend.count(startPath); got != 0 {
+		t.Fatalf("legacy start cue plays = %d, want 0", got)
+	}
+	if got := runtime.current.CueVolume; got < 0.4 {
+		t.Fatalf("cue volume = %.2f, want louder default", got)
+	}
 }
 
 func TestWhackAMoleCountdownPlaysAfterPlayersAreReady(t *testing.T) {

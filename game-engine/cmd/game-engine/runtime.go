@@ -1281,12 +1281,8 @@ func applyPlataformasAudioConfig(cfg config, game floorGame) config {
 			cfg.MusicRef = refs.MusicRef
 			cfg.MusicVolume = clamp01(refs.MusicVolume)
 		}
-		if refs.StartCueRef != "" {
-			cfg.StartCueRef = refs.StartCueRef
-		}
-		if refs.NarrationCueRef != "" {
-			cfg.NarrationCueRef = refs.NarrationCueRef
-		}
+		cfg.StartCueRef = refs.StartCueRef
+		cfg.NarrationCueRef = refs.NarrationCueRef
 		if refs.CoinCueRef != "" {
 			cfg.CoinCueRef = refs.CoinCueRef
 		}
@@ -1339,6 +1335,7 @@ func applyPlataformasAudioConfig(cfg config, game floorGame) config {
 	if cfg.DefeatCueRef == "" {
 		cfg.DefeatCueRef = cfg.DamageCueRef
 	}
+	cfg = applyLevelNarrationDefaults(cfg)
 	return cfg
 }
 
@@ -1485,6 +1482,9 @@ func (r *gameRuntime) playCountdownLocked(cfg config, now time.Time) {
 }
 
 func shouldPlayCountdownCue(cfg config) bool {
+	if shouldUseLevelNarrationInsteadOfCountdown(cfg) {
+		return false
+	}
 	if strings.HasPrefix(cfg.Game, "authored-") {
 		return true
 	}
@@ -1497,6 +1497,10 @@ func shouldPlayCountdownCue(cfg config) bool {
 	default:
 		return false
 	}
+}
+
+func shouldUseLevelNarrationInsteadOfCountdown(cfg config) bool {
+	return isLevelNarrationGame(cfg.Game) && strings.TrimSpace(cfg.NarrationCueRef) != ""
 }
 
 func shouldPlayCountdownAfterReadyCue(cfg config) bool {
@@ -2383,6 +2387,65 @@ func defaultNarrationRef(game string) string {
 		return "Motion/narraciones/atrapa-topos-intro.mp3"
 	default:
 		return ""
+	}
+}
+
+func applyLevelNarrationDefaults(cfg config) config {
+	if cfg.NarrationCueRef == "" && isLevelNarrationGame(cfg.Game) {
+		cfg.NarrationCueRef = defaultLevelNarrationRef(cfg.Level)
+	}
+	if shouldUseLevelNarrationInsteadOfCountdown(cfg) && isBundledDefaultStartCue(cfg.StartCueRef) {
+		cfg.StartCueRef = ""
+	}
+	return cfg
+}
+
+func isLevelNarrationGame(game string) bool {
+	game = normalizeGame(game)
+	return isPlatformRuntimeGame(game) || isBuiltInLevelNarrationGame(game)
+}
+
+func isBuiltInLevelNarrationGame(game string) bool {
+	switch normalizeGame(game) {
+	case "saltos", "temporada1", "temporada2":
+		return true
+	default:
+		return false
+	}
+}
+
+func defaultLevelNarrationRef(level string) string {
+	levelNumber := levelNumberFromString(level)
+	if levelNumber < 1 || levelNumber > 50 {
+		return ""
+	}
+	return fmt.Sprintf("Motion/narraciones/nivel-%d.mp3", levelNumber)
+}
+
+func levelNumberFromString(value string) int {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		return 0
+	}
+	for _, prefix := range []string{"nivel-", "level-", "nivel ", "level "} {
+		if strings.HasPrefix(value, prefix) {
+			value = strings.TrimSpace(strings.TrimPrefix(value, prefix))
+			break
+		}
+	}
+	number, err := strconv.Atoi(value)
+	if err != nil {
+		return 0
+	}
+	return number
+}
+
+func isBundledDefaultStartCue(ref string) bool {
+	switch strings.TrimSpace(ref) {
+	case "", "Motion/sonidos/aparecer.mp3", "Motion/narraciones/countdown-tres-dos-uno-vamos.mp3":
+		return true
+	default:
+		return false
 	}
 }
 

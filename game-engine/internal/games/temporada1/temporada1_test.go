@@ -113,6 +113,45 @@ func TestHazardDamageCooldownLastsThreeSeconds(t *testing.T) {
 	}
 }
 
+func TestMovingHazardUnderPressedTileQueuesDamageCue(t *testing.T) {
+	now := time.Unix(100, 0)
+	game := NewWithSeed(now, 1, 1, "hard", "level-1")
+	game.lives = 3
+	playAt := now.Add(countdownDuration + tickDuration)
+	hazardAt := playAt.Add(time.Second)
+
+	safeFrame := game.frameAtLocked(playAt)
+	hazardFrame := game.frameAtLocked(hazardAt)
+	var target Point
+	found := false
+	for y := 0; y < GridHeight && !found; y++ {
+		for x := 0; x < GridWidth && !found; x++ {
+			if safeFrame.points[y][x].kind != 2 && hazardFrame.points[y][x].kind == 2 {
+				target = Point{X: x, Y: y}
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("level 1 has no moving hazard crossing a safe tile")
+	}
+
+	if events := game.Press(whackamole.PressEvent{X: target.X, Y: target.Y, Pressed: true}, playAt); len(events) != 0 {
+		t.Fatalf("initial events = %+v, want none before hazard arrives", events)
+	}
+	game.Render(hazardAt)
+	events := game.DrainEvents()
+	if len(events) != 1 || events[0].Cue != whackamole.CueDamage {
+		t.Fatalf("drained events = %+v, want damage cue", events)
+	}
+	if got := game.Snapshot(hazardAt).Lives; got != 2 {
+		t.Fatalf("lives = %d, want 2", got)
+	}
+	if events := game.DrainEvents(); len(events) != 0 {
+		t.Fatalf("second drain events = %+v, want none", events)
+	}
+}
+
 func TestFailureFlashesRedThenRestartsWithoutCountdown(t *testing.T) {
 	now := time.Unix(100, 0)
 	game := NewWithSeed(now, 1, 1, "hard", "level-1")

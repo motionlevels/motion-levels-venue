@@ -115,7 +115,7 @@ func main() {
 	flag.StringVar(&cfg.CountdownCueRef, "countdown-cue", "Motion/narraciones/countdown-tres-dos-uno-vamos.mp3", "countdown narration asset ref; empty disables countdown narration")
 	flag.Float64Var(&cfg.CountdownVolume, "countdown-volume", 0.90, "countdown narration volume, 0.0-1.0")
 	flag.BoolVar(&cfg.CountdownFloorOverlay, "countdown-floor-overlay", false, "show a yellow 3-2-1 overlay on the floor during the game countdown")
-	flag.Float64Var(&cfg.CueVolume, "cue-volume", 0.18, "cue volume, 0.0-1.0")
+	flag.Float64Var(&cfg.CueVolume, "cue-volume", 0.45, "cue volume, 0.0-1.0")
 	flag.BoolVar(&cfg.TestAudio, "audio-test", false, "play configured start cue and music briefly, then exit")
 	flag.StringVar(&cfg.ReplayRecordingPath, "record-replay", "game-recordings", "directory for unified .mlreplay.zst session recordings; empty disables replay recording")
 	flag.DurationVar(&cfg.ReplayKeyframeInterval, "replay-keyframe-interval", 5*time.Second, "maximum time between full replay floor keyframes")

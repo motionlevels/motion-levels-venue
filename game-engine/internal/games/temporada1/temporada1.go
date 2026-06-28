@@ -94,18 +94,19 @@ type Game struct {
 	endedAt   time.Time
 	restartAt time.Time
 
-	score        int
-	lives        int
-	success      bool
-	ended        bool
-	removed      map[string]bool
-	purpleHeld   map[string]bool
-	purplePrimed map[string]bool
-	pressed      map[Point]bool
-	lastDamageAt time.Time
-	hitFlash     map[Point]time.Time
-	transitionID int
-	seed         int64
+	score         int
+	lives         int
+	success       bool
+	ended         bool
+	removed       map[string]bool
+	purpleHeld    map[string]bool
+	purplePrimed  map[string]bool
+	pressed       map[Point]bool
+	lastDamageAt  time.Time
+	hitFlash      map[Point]time.Time
+	pendingEvents []whackamole.Event
+	transitionID  int
+	seed          int64
 }
 
 type compiledLevel struct {
@@ -309,6 +310,17 @@ func (g *Game) Render(now time.Time) []RGB {
 	return frame
 }
 
+func (g *Game) DrainEvents() []whackamole.Event {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if len(g.pendingEvents) == 0 {
+		return nil
+	}
+	events := append([]whackamole.Event(nil), g.pendingEvents...)
+	g.pendingEvents = g.pendingEvents[:0]
+	return events
+}
+
 func (g *Game) Snapshot(now time.Time) Snapshot {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -385,7 +397,13 @@ func (g *Game) tickLocked(now time.Time) {
 	}
 	for pt := range g.pressed {
 		if g.pointAtLocked(pt, now).kind == 2 {
-			_ = g.damageLocked(pt, now)
+			if g.damageLocked(pt, now) {
+				if g.ended && !g.success {
+					g.queueEventLocked(whackamole.CueDefeat, "Temporada 1 derrota")
+				} else {
+					g.queueEventLocked(whackamole.CueDamage, "Temporada 1 daño")
+				}
+			}
 			if g.ended {
 				return
 			}
@@ -420,6 +438,10 @@ func (g *Game) applyPointLocked(point tilePoint, pt Point, now time.Time) []whac
 		}
 	}
 	return nil
+}
+
+func (g *Game) queueEventLocked(cue string, message string) {
+	g.pendingEvents = append(g.pendingEvents, whackamole.Event{Cue: cue, Message: message})
 }
 
 func (g *Game) releasePurpleLocked(pt Point, now time.Time) {
@@ -476,6 +498,7 @@ func (g *Game) restartFailedLevelLocked(now time.Time) {
 	g.purplePrimed = map[string]bool{}
 	g.lastDamageAt = time.Time{}
 	g.hitFlash = map[Point]time.Time{}
+	g.pendingEvents = nil
 }
 
 func (g *Game) advanceSuccessLevelLocked(now time.Time) {
@@ -501,6 +524,7 @@ func (g *Game) advanceSuccessLevelLocked(now time.Time) {
 	g.purplePrimed = map[string]bool{}
 	g.lastDamageAt = time.Time{}
 	g.hitFlash = map[Point]time.Time{}
+	g.pendingEvents = nil
 	g.transitionID = transitionIDFromSeed(g.seed, g.level.id, now)
 }
 
