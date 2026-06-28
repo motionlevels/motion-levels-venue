@@ -16,6 +16,7 @@ new_services=(
   motion-levels-game-engine.service
   motion-levels-camera-helper.service
   motion-levels-kiosk.service
+  motion-levels-hdmi-watchdog.service
 )
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -39,6 +40,7 @@ fi
 
 install -m 0644 "$UNIT_DIR/Caddyfile" /etc/caddy/Caddyfile
 install -m 0755 "$UNIT_DIR/motion-levels-player-kiosk" /usr/local/bin/motion-levels-player-kiosk
+install -m 0755 "$UNIT_DIR/motion-levels-hdmi-watchdog" /usr/local/bin/motion-levels-hdmi-watchdog
 
 for service in "${old_services[@]}"; do
   systemctl stop "$service" 2>/dev/null || true

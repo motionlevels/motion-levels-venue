@@ -68,6 +68,7 @@
       - motion-levels-security-recorder.service
       - motion-levels-camera-helper.service
       - motion-levels-kiosk.service
+      - motion-levels-hdmi-watchdog.service
     motion_levels_old_services:
       - motion-levels-player-menu.service
       - motion-levels-player-display.service
@@ -376,6 +377,12 @@
           value: plughw:0,5
         - key: MOTION_LEVELS_FORCE_ALSA_OUTPUT
           value: "1"
+        - key: MOTION_LEVELS_HDMI_WATCHDOG_INTERVAL
+          value: "10"
+        - key: MOTION_LEVELS_HDMI_WATCHDOG_FAILURES
+          value: "3"
+        - key: MOTION_LEVELS_HDMI_WATCHDOG_RESTART_COOLDOWN
+          value: "45"
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Install HDMI ALSA dmix config
@@ -483,6 +490,15 @@
       ansible.builtin.copy:
         src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/motion-levels-player-kiosk"
         dest: /usr/local/bin/motion-levels-player-kiosk
+        mode: "0755"
+        remote_src: true
+      notify: Restart motion levels services
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+
+    - name: Install HDMI watchdog script
+      ansible.builtin.copy:
+        src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/motion-levels-hdmi-watchdog"
+        dest: /usr/local/bin/motion-levels-hdmi-watchdog
         mode: "0755"
         remote_src: true
       notify: Restart motion levels services

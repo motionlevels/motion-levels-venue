@@ -1,0 +1,17 @@
+[Unit]
+Description=Motion Levels HDMI audio/video watchdog
+After=network-online.target sound.target motion-levels-kiosk.service
+Wants=network-online.target sound.target motion-levels-kiosk.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/motion-levels/motion-levels.env
+Environment=DISPLAY=:0
+Environment=XDG_RUNTIME_DIR=/run/user/0
+WorkingDirectory=/var/lib/motion-levels
+ExecStart=/usr/local/bin/motion-levels-hdmi-watchdog
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -212,6 +212,169 @@ write_files:
         card 0
       }
 
+  - path: /usr/local/bin/motion-levels-hdmi-watchdog
+    owner: root:root
+    permissions: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      ENV_FILE=/etc/motion-levels/motion-levels.env
+
+      env_file_value() {
+        local key="$1"
+        local fallback="${2:-}"
+        local value=""
+
+        if [ -f "${ENV_FILE}" ]; then
+          value="$(awk -v key="${key}" '
+            /^[[:space:]]*#/ { next }
+            /^[[:space:]]*$/ { next }
+            index($0, key "=") == 1 {
+              sub(/^[^=]*=/, "")
+              print
+              exit
+            }
+          ' "${ENV_FILE}")"
+        fi
+
+        value="${value%$'\r'}"
+        if [ -n "${value}" ]; then
+          printf '%s' "${value}"
+        else
+          printf '%s' "${fallback}"
+        fi
+      }
+
+      truthy_env() {
+        case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+          1|true|yes|on) return 0 ;;
+          *) return 1 ;;
+        esac
+      }
+
+      log() {
+        printf 'motion-levels-hdmi-watchdog: %s\n' "$*"
+      }
+
+      MOTION_LEVELS_XRANDR_MODE="$(env_file_value MOTION_LEVELS_XRANDR_MODE)"
+      MOTION_LEVELS_XRANDR_RATE="$(env_file_value MOTION_LEVELS_XRANDR_RATE 60)"
+      MOTION_LEVELS_PLAYER_URL="$(env_file_value MOTION_LEVELS_PLAYER_URL http://127.0.0.1/display/)"
+      MOTION_LEVELS_FORCE_ALSA_OUTPUT="$(env_file_value MOTION_LEVELS_FORCE_ALSA_OUTPUT 0)"
+      POLL_SECONDS="$(env_file_value MOTION_LEVELS_HDMI_WATCHDOG_INTERVAL 10)"
+      RESTART_COOLDOWN_SECONDS="$(env_file_value MOTION_LEVELS_HDMI_WATCHDOG_RESTART_COOLDOWN 45)"
+      FAILURES_BEFORE_RESTART="$(env_file_value MOTION_LEVELS_HDMI_WATCHDOG_FAILURES 3)"
+
+      last_restart=0
+      failure_count=0
+
+      set_hdmi_audio_on() {
+        local output="$1"
+        local control
+
+        if [ -n "${output}" ]; then
+          /usr/bin/xrandr --output "${output}" --set audio on 2>/dev/null || true
+        fi
+
+        if command -v /usr/bin/amixer >/dev/null 2>&1; then
+          for control in IEC958 "IEC958,0" "IEC958,1" "IEC958,2"; do
+            /usr/bin/amixer -q sset "${control}" unmute 2>/dev/null || true
+            /usr/bin/amixer -q sset "${control}" on 2>/dev/null || true
+          done
+        fi
+      }
+
+      configure_display() {
+        local output="$1"
+        local mode="${MOTION_LEVELS_XRANDR_MODE:-}"
+        local rate="${MOTION_LEVELS_XRANDR_RATE:-60}"
+
+        /usr/bin/xrandr --output "${output}" --auto --primary 2>/dev/null || true
+        if [ -n "${mode}" ]; then
+          /usr/bin/xrandr --output "${output}" --mode "${mode}" --rate "${rate}" 2>/dev/null || true
+        fi
+      }
+
+      chromium_running() {
+        pgrep -f "/usr/lib/chromium/chromium .*--app=${MOTION_LEVELS_PLAYER_URL}" >/dev/null 2>&1 ||
+          pgrep -f "/usr/lib/chromium/chromium .*${MOTION_LEVELS_PLAYER_URL}" >/dev/null 2>&1
+      }
+
+      restart_kiosk_if_needed() {
+        local reason="$1"
+        local now
+        now="$(date +%s)"
+
+        failure_count=$((failure_count + 1))
+        if [ "${failure_count}" -lt "${FAILURES_BEFORE_RESTART}" ]; then
+          log "${reason}; failure ${failure_count}/${FAILURES_BEFORE_RESTART}"
+          return 0
+        fi
+
+        if [ $((now - last_restart)) -lt "${RESTART_COOLDOWN_SECONDS}" ]; then
+          log "${reason}; restart cooling down"
+          return 0
+        fi
+
+        log "${reason}; restarting motion-levels-kiosk.service"
+        systemctl restart motion-levels-kiosk.service || true
+        last_restart="${now}"
+        failure_count=0
+      }
+
+      while true; do
+        xrandr_output="$(/usr/bin/xrandr --query 2>/dev/null || true)"
+        output="$(printf '%s\n' "${xrandr_output}" | awk '/ connected/ { print $1; exit }')"
+
+        if [ -z "${xrandr_output}" ]; then
+          restart_kiosk_if_needed "X display is unavailable"
+          sleep "${POLL_SECONDS}"
+          continue
+        fi
+
+        if [ -z "${output}" ]; then
+          failure_count=0
+          log "no HDMI/DP output connected"
+          sleep "${POLL_SECONDS}"
+          continue
+        fi
+
+        configure_display "${output}"
+        if truthy_env "${MOTION_LEVELS_FORCE_ALSA_OUTPUT}"; then
+          set_hdmi_audio_on "${output}"
+        fi
+
+        next_xrandr_output="$(/usr/bin/xrandr --query 2>/dev/null || true)"
+        geometry="$(printf '%s\n' "${next_xrandr_output}" | grep -oE '[0-9]+x[0-9]+\+0\+0' | head -1)"
+        size="${geometry%%+*}"
+        audio_state="$(printf '%s\n' "${next_xrandr_output}" | awk -v output="${output}" '
+          $1 == output && $2 == "connected" { in_output = 1; next }
+          in_output && /^[^[:space:]]/ { in_output = 0 }
+          in_output && $1 == "audio:" { print $2; exit }
+        ')"
+
+        if [ -z "${geometry}" ] || [ "${size}" = "1024x768" ]; then
+          restart_kiosk_if_needed "bad HDMI geometry '${geometry:-none}' on ${output}"
+          sleep "${POLL_SECONDS}"
+          continue
+        fi
+
+        if truthy_env "${MOTION_LEVELS_FORCE_ALSA_OUTPUT}" && [ -n "${audio_state}" ] && [ "${audio_state}" != "on" ]; then
+          restart_kiosk_if_needed "HDMI audio state is '${audio_state}' on ${output}"
+          sleep "${POLL_SECONDS}"
+          continue
+        fi
+
+        if ! chromium_running; then
+          restart_kiosk_if_needed "Chromium kiosk is not running"
+          sleep "${POLL_SECONDS}"
+          continue
+        fi
+
+        failure_count=0
+        sleep "${POLL_SECONDS}"
+      done
+
   # 2. Default runtime environment file
   - path: /etc/motion-levels/motion-levels.env
     owner: root:root
@@ -266,6 +429,9 @@ write_files:
       MOTION_LEVELS_XRANDR_MODE=1920x1080
       MOTION_LEVELS_XRANDR_RATE=60
       MOTION_LEVELS_FORCE_ALSA_OUTPUT=1
+      MOTION_LEVELS_HDMI_WATCHDOG_INTERVAL=10
+      MOTION_LEVELS_HDMI_WATCHDOG_FAILURES=3
+      MOTION_LEVELS_HDMI_WATCHDOG_RESTART_COOLDOWN=45
 
       # Camera snapshot helper. Store secrets only on the appliance, preferably
       # in /etc/motion-levels/camera.env as MOTION_LEVELS_CAMERA_PASSWORD.
@@ -543,6 +709,29 @@ write_files:
       ExecStart=/usr/bin/xinit /usr/local/bin/motion-levels-player-kiosk -- :0 vt7 -nolisten tcp -s 0 -dpms
       Restart=always
       RestartSec=3
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # 7. Systemd unit: HDMI watchdog
+  - path: /etc/systemd/system/motion-levels-hdmi-watchdog.service
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Motion Levels HDMI audio/video watchdog
+      After=network-online.target sound.target motion-levels-kiosk.service
+      Wants=network-online.target sound.target motion-levels-kiosk.service
+
+      [Service]
+      Type=simple
+      EnvironmentFile=/etc/motion-levels/motion-levels.env
+      Environment=DISPLAY=:0
+      Environment=XDG_RUNTIME_DIR=/run/user/0
+      WorkingDirectory=/var/lib/motion-levels
+      ExecStart=/usr/local/bin/motion-levels-hdmi-watchdog
+      Restart=always
+      RestartSec=5
 
       [Install]
       WantedBy=multi-user.target
