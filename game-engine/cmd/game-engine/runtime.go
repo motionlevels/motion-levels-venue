@@ -158,6 +158,10 @@ type plataformasAudioProvider interface {
 	AudioRefs() plataformas.AudioRefs
 }
 
+type gameEventDrainer interface {
+	DrainEvents() []whackamole.Event
+}
+
 type gameCatalogEntry struct {
 	Game        string           `json:"game"`
 	Label       string           `json:"label"`
@@ -461,9 +465,11 @@ func (r *gameRuntime) Render(now time.Time) (int, []animation.RGB) {
 	}
 	r.enforceNoPressureTimeout(now)
 	r.mu.RLock()
+	cfg := r.current
 	brightness := r.current.Brightness
 	gameID := r.current.Game
 	game := r.game
+	audioPlayer := r.audio
 	started := r.started
 	gameNow := r.effectiveNowLocked(now)
 	touches := copyActiveAmbientTouchesLocked(r.ambientTouches, gameNow)
@@ -479,6 +485,9 @@ func (r *gameRuntime) Render(now time.Time) (int, []animation.RGB) {
 	}
 	begin := time.Now()
 	frame := game.Render(gameNow)
+	if eventSource, ok := game.(gameEventDrainer); ok {
+		r.handleGameEvents(cfg, audioPlayer, eventSource.DrainEvents(), gameNow)
+	}
 	r.framePerf.Observe(gameID, runtimeKind(game), time.Since(begin), time.Now())
 	return brightness, frame
 }
@@ -594,17 +603,21 @@ func (r *gameRuntime) HandlePressure(event *inputpb.PressureEvent, fallbackStart
 	}
 
 	if game != nil {
-		for _, gameEvent := range game.Press(whackamole.PressEvent{X: int(event.X), Y: int(event.Y), Pressed: event.Pressed}, gameNow) {
-			r.recordGameEvent(gameEvent.Cue, gameEvent.Message, gameNow)
-			r.playCue(cfg, audioPlayer, gameEvent.Cue, cueRef(cfg, gameEvent.Cue), gameNow)
-			if gameEvent.Cue == whackamole.CueStart && shouldPlayCountdownAfterReadyCue(cfg) {
-				r.playCountdownCue(cfg, audioPlayer, gameNow)
-			}
-		}
+		r.handleGameEvents(cfg, audioPlayer, game.Press(whackamole.PressEvent{X: int(event.X), Y: int(event.Y), Pressed: event.Pressed}, gameNow), gameNow)
 		return
 	}
 	if event.Pressed && animation.IsAmbientMode(cfg.Game) {
 		r.addAmbientTouch(int(event.X), int(event.Y), gameNow)
+	}
+}
+
+func (r *gameRuntime) handleGameEvents(cfg config, audioPlayer *audio.Player, events []whackamole.Event, gameNow time.Time) {
+	for _, gameEvent := range events {
+		r.recordGameEvent(gameEvent.Cue, gameEvent.Message, gameNow)
+		r.playCue(cfg, audioPlayer, gameEvent.Cue, cueRef(cfg, gameEvent.Cue), gameNow)
+		if gameEvent.Cue == whackamole.CueStart && shouldPlayCountdownAfterReadyCue(cfg) {
+			r.playCountdownCue(cfg, audioPlayer, gameNow)
+		}
 	}
 }
 

@@ -600,6 +600,42 @@ func TestFinalDamageEmitsDefeatCue(t *testing.T) {
 	}
 }
 
+func TestMovingHazardUnderPressedTileQueuesDamageCue(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        "level-1",
+		Label:       "Moving hazard",
+		Difficulty:  string(DifficultyMedium),
+		Life:        3,
+		FrameTickMS: 25,
+		Frames: []rawFrame{
+			{Repeat: 5, Cells: []cellTuple{{X: 4, Y: 4, Kind: 0}}},
+			{Repeat: 5, Cells: []cellTuple{{X: 4, Y: 4, Kind: 2}}},
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Unix(100, 0)
+	game := newTestGameWithLevels(levels, now)
+	playAt := game.startedAt.Add(10 * time.Millisecond)
+	if events := game.Press(whackamole.PressEvent{X: 4, Y: 4, Pressed: true}, playAt); len(events) != 0 {
+		t.Fatalf("initial events = %+v, want none on safe tile", events)
+	}
+
+	game.Render(game.startedAt.Add(150 * time.Millisecond))
+	events := game.DrainEvents()
+	if len(events) != 1 || events[0].Cue != whackamole.CueDamage {
+		t.Fatalf("drained events = %+v, want damage cue", events)
+	}
+	if got := game.Snapshot(game.startedAt.Add(151 * time.Millisecond)).Lives; got != 2 {
+		t.Fatalf("lives = %d, want 2", got)
+	}
+	if events := game.DrainEvents(); len(events) != 0 {
+		t.Fatalf("second drain events = %+v, want none", events)
+	}
+}
+
 func TestCollectAllAddsPassScoreCompletionBonus(t *testing.T) {
 	levels, err := compileCloudLevels([]cloudLevel{{
 		Slug:        "level-1",

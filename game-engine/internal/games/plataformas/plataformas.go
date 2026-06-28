@@ -115,19 +115,20 @@ type Game struct {
 	endedAt   time.Time
 	restartAt time.Time
 
-	score        int
-	lives        int
-	success      bool
-	ended        bool
-	removed      map[string]bool
-	purpleHeld   map[string]bool
-	purplePrimed map[string]bool
-	pressed      map[Point]bool
-	greenImpacts map[string]bool
-	ripples      []greenImpactRipple
-	capturedAt   map[string]time.Time
-	lastDamageAt time.Time
-	hitFlash     map[Point]time.Time
+	score         int
+	lives         int
+	success       bool
+	ended         bool
+	removed       map[string]bool
+	purpleHeld    map[string]bool
+	purplePrimed  map[string]bool
+	pressed       map[Point]bool
+	greenImpacts  map[string]bool
+	ripples       []greenImpactRipple
+	capturedAt    map[string]time.Time
+	lastDamageAt  time.Time
+	hitFlash      map[Point]time.Time
+	pendingEvents []whackamole.Event
 }
 
 type compiledLevel struct {
@@ -428,6 +429,17 @@ func (g *Game) AudioRefs() AudioRefs {
 	return g.level.audio
 }
 
+func (g *Game) DrainEvents() []whackamole.Event {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if len(g.pendingEvents) == 0 {
+		return nil
+	}
+	events := append([]whackamole.Event(nil), g.pendingEvents...)
+	g.pendingEvents = g.pendingEvents[:0]
+	return events
+}
+
 func (g *Game) tickLocked(now time.Time) {
 	g.pruneRipplesLocked(now)
 	if g.ended {
@@ -448,7 +460,13 @@ func (g *Game) tickLocked(now time.Time) {
 	}
 	for pt := range g.pressed {
 		if g.pointAtLocked(pt, now).kind == 2 {
-			_ = g.damageLocked(pt, now)
+			if g.damageLocked(pt, now) {
+				if g.ended && !g.success {
+					g.queueEventLocked(whackamole.CueDefeat, "Plataformas derrota")
+				} else {
+					g.queueEventLocked(whackamole.CueDamage, "Plataformas daño")
+				}
+			}
 			if g.ended {
 				return
 			}
@@ -493,6 +511,10 @@ func (g *Game) applyPointLocked(point tilePoint, pt Point, now time.Time) []whac
 		}
 	}
 	return nil
+}
+
+func (g *Game) queueEventLocked(cue string, message string) {
+	g.pendingEvents = append(g.pendingEvents, whackamole.Event{Cue: cue, Message: message})
 }
 
 func (g *Game) releasePurpleLocked(pt Point, now time.Time) {
@@ -580,6 +602,7 @@ func (g *Game) resetLevelRunLocked(level compiledLevel, now time.Time) {
 	g.capturedAt = map[string]time.Time{}
 	g.lastDamageAt = time.Time{}
 	g.hitFlash = map[Point]time.Time{}
+	g.pendingEvents = nil
 }
 
 func (g *Game) colorAtLocked(pt Point, now time.Time) RGB {
