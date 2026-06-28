@@ -130,6 +130,26 @@ func TestParkourLavaRuleAnimatesRedTiles(t *testing.T) {
 	}
 }
 
+func TestDefaultLevelTileColorsUsePureRGB(t *testing.T) {
+	tests := []struct {
+		name string
+		kind int
+		want RGB
+	}{
+		{name: "safe", kind: 0, want: RGB{G: 255}},
+		{name: "coin", kind: 1, want: RGB{B: 255}},
+		{name: "hazard", kind: 2, want: RGB{R: 255}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := colorForPoint(tilePoint{present: true, kind: tt.kind})
+			if got != tt.want {
+				t.Fatalf("kind %d color = %+v, want %+v", tt.kind, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCountdownDropsSafeZonesIntoPlaceByDefault(t *testing.T) {
 	levels, err := compileCloudLevels([]cloudLevel{{
 		Slug:        "level-1",

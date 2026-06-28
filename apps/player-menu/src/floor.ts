@@ -502,18 +502,18 @@ function temporada1Preview(level: number): FloorAnim {
       }
     }
     if (cellType === null) return [2, 7, 12];
-    if (cellType === 0) return [0, 230, 62];
+    if (cellType === 0) return [0, 255, 0];
     const phase = t + level * 0.07;
     if (cellType === 1) {
       const pulse = 0.82 + 0.18 * Math.sin(phase * 5.4 + x * 0.31 + y * 0.17);
-      return [20 * pulse, 92 * pulse, 255 * pulse];
+      return [0, 0, 255 * pulse];
     }
     if (cellType === 3) {
       const pulse = 0.82 + 0.18 * Math.sin(phase * 5.4 + x * 0.37 + y * 0.13);
       return [245 * pulse, 38 * pulse, 255 * pulse];
     }
     const flicker = 0.9 + 0.1 * Math.sin(phase * 8.2 + x * 0.19);
-    return [255 * flicker, 28 * flicker, 40 * flicker];
+    return [255 * flicker, 0, 0];
   };
 }
 
