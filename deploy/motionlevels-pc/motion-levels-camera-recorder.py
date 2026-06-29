@@ -269,6 +269,13 @@ def session_segment_paths(payload: dict[str, Any], segment_index: int, extension
     }
 
 
+def session_video_folder_path(payload: dict[str, Any]) -> str:
+    relative_dir = relative_upload_dir(session_dir(payload))
+    if RCLONE_DEST:
+        return f"{RCLONE_DEST}/{relative_dir}"
+    return relative_dir
+
+
 def relative_upload_path(path: Path) -> str:
     try:
         relative = path.relative_to(ROOT)
@@ -1021,6 +1028,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         payload.setdefault("startedUnixNanos", int(time.time() * 1_000_000_000))
         payload.setdefault("platformSessionPath", f"/session/{venue_id}")
+        video_folder_path = session_video_folder_path(payload)
         health = hardware_health()
         video_folder_share_url, link_event = create_session_folder_link(payload, health)
         alert_event = notify_session_start(payload, video_folder_share_url, health)
@@ -1034,6 +1042,7 @@ class Handler(BaseHTTPRequestHandler):
                     "ok": True,
                     "recording": False,
                     "venueSessionId": venue_id,
+                    "videoFolderPath": video_folder_path,
                     "videoFolderShareUrl": video_folder_share_url,
                     "hardware": health,
                     "alert": alert_event,
@@ -1043,7 +1052,19 @@ class Handler(BaseHTTPRequestHandler):
             return
         with active_lock:
             if venue_id in active_sessions:
-                self.write_json(HTTPStatus.OK, {"ok": True, "recording": True, "venueSessionId": venue_id, "alreadyActive": True})
+                session = active_sessions[venue_id]
+                self.write_json(
+                    HTTPStatus.OK,
+                    {
+                        "ok": True,
+                        "recording": True,
+                        "venueSessionId": venue_id,
+                        "alreadyActive": True,
+                        "videoFolderPath": session.get("videoFolderPath") or video_folder_path,
+                        "videoFolderShareUrl": session.get("videoFolderShareUrl"),
+                        "segmentIndex": session.get("segmentIndex"),
+                    },
+                )
                 return
             stop_event = threading.Event()
             session = {
@@ -1051,6 +1072,7 @@ class Handler(BaseHTTPRequestHandler):
                 "startedAt": datetime.now(timezone.utc).isoformat(),
                 "payload": payload,
                 "segmentSeconds": segment_duration_seconds(payload),
+                "videoFolderPath": video_folder_path,
                 "videoFolderShareUrl": video_folder_share_url,
                 "health": health,
                 "stopEvent": stop_event,
@@ -1068,6 +1090,7 @@ class Handler(BaseHTTPRequestHandler):
                 "recording": True,
                 "venueSessionId": venue_id,
                 "segmentSeconds": segment_duration_seconds(payload),
+                "videoFolderPath": video_folder_path,
                 "videoFolderShareUrl": video_folder_share_url,
                 "folderLink": link_event,
                 "hardware": health,
