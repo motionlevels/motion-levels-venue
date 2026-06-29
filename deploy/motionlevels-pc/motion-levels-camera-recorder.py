@@ -39,6 +39,12 @@ COMMAND_TIMEOUT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_COMMAND_TIM
 START_COMMAND = os.environ.get("MOTION_LEVELS_CAMERA_START_COMMAND", "").strip()
 STOP_COMMAND = os.environ.get("MOTION_LEVELS_CAMERA_STOP_COMMAND", "").strip()
 PHOTO_COMMAND = os.environ.get("MOTION_LEVELS_CAMERA_PHOTO_COMMAND", "").strip()
+STATUS_COMMAND = os.environ.get("MOTION_LEVELS_CAMERA_STATUS_COMMAND", "").strip()
+if not STATUS_COMMAND and START_COMMAND:
+    inferred_status_command = re.sub(r"(^|\s)start(\s*)$", r"\1status\2", START_COMMAND)
+    STATUS_COMMAND = inferred_status_command if inferred_status_command != START_COMMAND else ""
+CAMERA_STATUS_CACHE_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_STATUS_CACHE_SECONDS", "30"))
+CAMERA_STATUS_TIMEOUT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_STATUS_TIMEOUT_SECONDS", "10"))
 USB_VENDOR = os.environ.get("MOTION_LEVELS_CAMERA_USB_VENDOR", "2e1a").strip().lower()
 SDK_PATH = Path(os.environ.get("MOTION_LEVELS_CAMERA_SDK_PATH", "/opt/insta360/Desktop-CameraSDK-Cpp"))
 RCLONE_DEST = os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_DEST", "").strip().rstrip("/")
@@ -70,6 +76,9 @@ camera_command_lock = threading.Lock()
 active_recordings: dict[str, dict[str, Any]] = {}
 active_sessions: dict[str, dict[str, Any]] = {}
 skipped_recordings: set[str] = set()
+camera_status_cache: dict[str, Any] | None = None
+camera_status_cache_at = 0.0
+camera_status_refreshing = False
 upload_events: list[dict[str, Any]] = []
 
 
@@ -403,6 +412,90 @@ def run_camera_command(action: str, command: str, payload: dict[str, Any], recor
         event["error"] = str(exc)
     record_event(event)
     return event
+
+
+def run_camera_status_command() -> dict[str, Any]:
+    event = {
+        "ok": False,
+        "label": "camera-status",
+        "startedAt": datetime.now(timezone.utc).isoformat(),
+    }
+    if BACKEND != "command":
+        return {**event, "skipped": True, "error": "camera status is only available for command backend"}
+    if not STATUS_COMMAND:
+        return {**event, "skipped": True, "error": "MOTION_LEVELS_CAMERA_STATUS_COMMAND is not configured"}
+    if not camera_command_lock.acquire(blocking=False):
+        return {**event, "skipped": True, "error": "camera command already running"}
+    try:
+        started = time.time()
+        result = subprocess.run(
+            STATUS_COMMAND,
+            shell=True,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=CAMERA_STATUS_TIMEOUT_SECONDS,
+            env=os.environ.copy(),
+        )
+        event["durationSeconds"] = round(time.time() - started, 3)
+        event["returnCode"] = result.returncode
+        event["stdout"] = result.stdout[-4000:]
+        event["stderr"] = result.stderr[-4000:]
+        event["ok"] = result.returncode == 0
+        if result.returncode == 0:
+            lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+            if lines:
+                try:
+                    parsed = json.loads(lines[-1])
+                    if isinstance(parsed, dict):
+                        event.update(parsed)
+                        event["ok"] = bool(parsed.get("ok", True))
+                except json.JSONDecodeError as exc:
+                    event["ok"] = False
+                    event["error"] = f"invalid camera status JSON: {exc}"
+    except Exception as exc:
+        event["ok"] = False
+        event["error"] = str(exc)
+    finally:
+        camera_command_lock.release()
+    event["updatedAt"] = datetime.now(timezone.utc).isoformat()
+    return event
+
+
+def refresh_camera_status_cache() -> None:
+    global camera_status_cache, camera_status_cache_at, camera_status_refreshing
+    try:
+        status = run_camera_status_command()
+        with active_lock:
+            if not status.get("skipped"):
+                camera_status_cache = status
+                camera_status_cache_at = time.time()
+    finally:
+        with active_lock:
+            camera_status_refreshing = False
+
+
+def cached_camera_status() -> dict[str, Any]:
+    global camera_status_refreshing
+    now = time.time()
+    with active_lock:
+        cached = dict(camera_status_cache) if camera_status_cache else None
+        stale = not cached or now - camera_status_cache_at > CAMERA_STATUS_CACHE_SECONDS
+        should_refresh = stale and not camera_status_refreshing
+        if should_refresh:
+            camera_status_refreshing = True
+    if should_refresh:
+        threading.Thread(target=refresh_camera_status_cache, daemon=True).start()
+    if cached:
+        cached["refreshing"] = should_refresh
+        return cached
+    return {
+        "ok": False,
+        "pending": True,
+        "refreshing": should_refresh,
+        "label": "camera-status",
+        "error": "camera storage status is loading",
+    }
 
 
 def run_upload(local_path: Path, label: str) -> dict[str, Any]:
@@ -856,6 +949,7 @@ class Handler(BaseHTTPRequestHandler):
         ready, ready_error = backend_ready()
         photo_ready, photo_error = backend_ready("photo")
         camera = camera_probe()
+        camera_status = cached_camera_status()
         ready_to_record = ready and camera.get("detected") is True and bool(RCLONE_DEST)
         ready_to_record_error = None
         if not camera.get("detected"):
@@ -875,7 +969,9 @@ class Handler(BaseHTTPRequestHandler):
                 "photoBackendError": photo_error,
                 "commandBackendConfigured": bool(START_COMMAND and STOP_COMMAND),
                 "photoCommandConfigured": bool(PHOTO_COMMAND),
+                "statusCommandConfigured": bool(STATUS_COMMAND),
                 "camera": camera,
+                "cameraStatus": camera_status,
                 "readyToRecord": ready_to_record,
                 "readyToRecordError": ready_to_record_error,
                 "rcloneConfigured": bool(RCLONE_DEST),
