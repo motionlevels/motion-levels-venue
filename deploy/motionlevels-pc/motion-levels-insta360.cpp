@@ -149,11 +149,13 @@ std::shared_ptr<ins_camera::Camera> open_camera(ins_camera::DeviceDescriptor& se
     return camera;
 }
 
-void maybe_enable_stitching(const std::shared_ptr<ins_camera::Camera>& camera) {
-    if (!env_bool("MOTION_LEVELS_INSTA360_ENABLE_STITCHING", true)) return;
+bool maybe_enable_stitching(const std::shared_ptr<ins_camera::Camera>& camera) {
+    if (!env_bool("MOTION_LEVELS_INSTA360_ENABLE_STITCHING", true)) return false;
     if (!camera->EnableInCameraStitching(true)) {
         std::cerr << "warning: failed to enable in-camera stitching" << std::endl;
+        return false;
     }
+    return true;
 }
 
 void run_status(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camera::DeviceDescriptor& device) {
@@ -176,7 +178,7 @@ void run_status(const std::shared_ptr<ins_camera::Camera>& camera, const ins_cam
 }
 
 void run_start(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camera::DeviceDescriptor&) {
-    maybe_enable_stitching(camera);
+    bool stitching_enabled = maybe_enable_stitching(camera);
     std::string video_mode = lowercase(env_string("MOTION_LEVELS_INSTA360_VIDEO_MODE", "normal"));
     ins_camera::SubVideoMode sub_mode = ins_camera::SubVideoMode::VIDEO_NORMAL;
     ins_camera::CameraFunctionMode function_mode = ins_camera::CameraFunctionMode::FUNCTION_MODE_NORMAL_VIDEO;
@@ -198,7 +200,11 @@ void run_start(const std::shared_ptr<ins_camera::Camera>& camera, const ins_came
         }
     }
     if (!camera->StartRecording()) fail("failed to start recording");
-    std::cout << "{\"ok\":true,\"recording\":true,\"videoMode\":\"" << json_escape(video_mode) << "\"}" << std::endl;
+    std::cout
+        << "{\"ok\":true,\"recording\":true"
+        << ",\"videoMode\":\"" << json_escape(video_mode) << "\""
+        << ",\"stitchingEnabled\":" << (stitching_enabled ? "true" : "false")
+        << "}" << std::endl;
 }
 
 void run_stop(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camera::DeviceDescriptor&) {

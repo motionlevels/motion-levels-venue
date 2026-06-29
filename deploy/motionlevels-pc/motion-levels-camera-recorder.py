@@ -15,12 +15,20 @@ from urllib import error, request
 
 ROOT = Path(os.environ.get("MOTION_LEVELS_CAMERA_RECORDINGS_ROOT", "/var/lib/motion-levels/camera-recordings"))
 BACKEND = os.environ.get("MOTION_LEVELS_CAMERA_RECORDER_BACKEND", "fake").strip() or "fake"
-MEDIA_EXTENSION = os.environ.get(
-    "MOTION_LEVELS_CAMERA_MEDIA_EXTENSION",
+FALSE_VALUES = {"0", "false", "no", "off"}
+TRUE_VALUES = {"1", "true", "yes", "on"}
+REGULAR_MEDIA_EXTENSION = os.environ.get(
+    "MOTION_LEVELS_CAMERA_REGULAR_MEDIA_EXTENSION",
+    ".mock-video.txt" if BACKEND == "fake" else ".mp4",
+).strip()
+if REGULAR_MEDIA_EXTENSION and not REGULAR_MEDIA_EXTENSION.startswith("."):
+    REGULAR_MEDIA_EXTENSION = f".{REGULAR_MEDIA_EXTENSION}"
+SPHERICAL_MEDIA_EXTENSION = os.environ.get(
+    "MOTION_LEVELS_CAMERA_360_MEDIA_EXTENSION",
     ".mock-video.txt" if BACKEND == "fake" else ".insv",
 ).strip()
-if MEDIA_EXTENSION and not MEDIA_EXTENSION.startswith("."):
-    MEDIA_EXTENSION = f".{MEDIA_EXTENSION}"
+if SPHERICAL_MEDIA_EXTENSION and not SPHERICAL_MEDIA_EXTENSION.startswith("."):
+    SPHERICAL_MEDIA_EXTENSION = f".{SPHERICAL_MEDIA_EXTENSION}"
 PHOTO_EXTENSION = os.environ.get(
     "MOTION_LEVELS_CAMERA_PHOTO_EXTENSION",
     ".mock-photo.txt" if BACKEND == "fake" else ".insp",
@@ -47,8 +55,10 @@ PLATFORM_TOKEN = (
     or ""
 ).strip()
 PLATFORM_TIMEOUT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_RECORDER_PLATFORM_TIMEOUT_SECONDS", "20"))
-PUBLIC_LINKS = os.environ.get("MOTION_LEVELS_CAMERA_PUBLIC_LINKS", "1").strip().lower() not in {"0", "false", "no", "off"}
-DELETE_LOCAL_AFTER_UPLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_LOCAL_AFTER_UPLOAD", "1").strip().lower() not in {"0", "false", "no", "off"}
+PUBLIC_LINKS = os.environ.get("MOTION_LEVELS_CAMERA_PUBLIC_LINKS", "1").strip().lower() not in FALSE_VALUES
+DELETE_LOCAL_AFTER_UPLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_LOCAL_AFTER_UPLOAD", "1").strip().lower() not in FALSE_VALUES
+DEFAULT_HDR_ENABLED = os.environ.get("MOTION_LEVELS_CAMERA_HDR_DEFAULT", "1").strip().lower() not in FALSE_VALUES
+DEFAULT_VIDEO_PROJECTION = os.environ.get("MOTION_LEVELS_CAMERA_VIDEO_PROJECTION_DEFAULT", "regular").strip().lower()
 
 
 active_lock = threading.Lock()
@@ -62,6 +72,60 @@ def slug(value: Any, fallback: str = "unknown") -> str:
     text = re.sub(r"[^a-z0-9._-]+", "-", text)
     text = text.strip("-._")
     return text or fallback
+
+
+def normalized_bool(value: Any, fallback: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return fallback
+    text = str(value).strip().lower()
+    if text in TRUE_VALUES:
+        return True
+    if text in FALSE_VALUES:
+        return False
+    return fallback
+
+
+def normalized_video_projection(value: Any, fallback: str = DEFAULT_VIDEO_PROJECTION) -> str:
+    text = str(value or fallback or "regular").strip().lower()
+    text = text.replace("_", "-")
+    if text in {"360", "spherical", "sphere", "reframeable", "insv"}:
+        return "360"
+    return "regular"
+
+
+def video_capture_options(payload: dict[str, Any], recording: dict[str, Any] | None = None) -> dict[str, Any]:
+    base: dict[str, Any] = {}
+    if recording:
+        for key in ("start", "payload"):
+            value = recording.get(key)
+            if isinstance(value, dict):
+                base.update(value)
+    base.update(payload)
+    explicit_video_mode = str(base.get("videoMode") or "").strip().lower()
+    hdr_enabled = normalized_bool(base.get("hdrEnabled"), DEFAULT_HDR_ENABLED)
+    if explicit_video_mode == "hdr":
+        hdr_enabled = True
+    elif explicit_video_mode == "normal":
+        hdr_enabled = False
+    projection = normalized_video_projection(
+        base.get("videoProjection")
+        or base.get("captureProjection")
+        or base.get("projection")
+        or ("360" if normalized_bool(base.get("video360"), False) else None),
+    )
+    return {
+        "hdrEnabled": hdr_enabled,
+        "videoMode": "hdr" if hdr_enabled else "normal",
+        "videoProjection": projection,
+        "stitchingEnabled": projection == "regular",
+        "mediaExtension": SPHERICAL_MEDIA_EXTENSION if projection == "360" else REGULAR_MEDIA_EXTENSION,
+    }
+
+
+def video_media_extension(payload: dict[str, Any], recording: dict[str, Any] | None = None) -> str:
+    return str(video_capture_options(payload, recording).get("mediaExtension") or REGULAR_MEDIA_EXTENSION)
 
 
 def backend_ready(action: str = "video") -> tuple[bool, str | None]:
@@ -136,11 +200,12 @@ def unix_nanos_to_datetime(value: Any) -> datetime:
     return datetime.fromtimestamp(nanos / 1_000_000_000, tz=timezone.utc)
 
 
-def attempt_paths(start: dict[str, Any]) -> dict[str, Path]:
+def attempt_paths(start: dict[str, Any], extension: str | None = None) -> dict[str, Path]:
     started_at = unix_nanos_to_datetime(start.get("startedUnixNanos"))
     day_dir = ROOT / started_at.strftime("%Y") / started_at.strftime("%m") / started_at.strftime("%d")
     game_dir = day_dir / slug(start.get("game"), "game") / slug(start.get("level"), "level")
     timestamp = started_at.strftime("%Y%m%dT%H%M%SZ")
+    media_extension = extension or video_media_extension(start)
     stem = "-".join(
         [
             timestamp,
@@ -151,7 +216,7 @@ def attempt_paths(start: dict[str, Any]) -> dict[str, Path]:
     )
     return {
         "dir": game_dir,
-        "media": game_dir / f"{stem}{MEDIA_EXTENSION}",
+        "media": game_dir / f"{stem}{media_extension}",
         "metadata": game_dir / f"{stem}.json",
     }
 
@@ -253,6 +318,7 @@ def run_rclone(args: list[str], timeout: float) -> subprocess.CompletedProcess[s
 
 def command_env(action: str, payload: dict[str, Any], recording: dict[str, Any], media_path: Path, metadata_path: Path) -> dict[str, str]:
     env = os.environ.copy()
+    options = video_capture_options(payload, recording)
     env.update(
         {
             "MOTION_LEVELS_CAMERA_ACTION": action,
@@ -262,6 +328,10 @@ def command_env(action: str, payload: dict[str, Any], recording: dict[str, Any],
             "MOTION_LEVELS_CAMERA_ATTEMPT_ID": str(payload.get("attemptId") or recording.get("attemptId") or ""),
             "MOTION_LEVELS_CAMERA_MEDIA_PATH": str(media_path),
             "MOTION_LEVELS_CAMERA_METADATA_PATH": str(metadata_path),
+            "MOTION_LEVELS_CAMERA_HDR_ENABLED": "1" if options["hdrEnabled"] else "0",
+            "MOTION_LEVELS_CAMERA_VIDEO_PROJECTION": str(options["videoProjection"]),
+            "MOTION_LEVELS_INSTA360_VIDEO_MODE": str(options["videoMode"]),
+            "MOTION_LEVELS_INSTA360_ENABLE_STITCHING": "1" if options["stitchingEnabled"] else "0",
         }
     )
     return env
@@ -515,6 +585,13 @@ class Handler(BaseHTTPRequestHandler):
                 "rcloneConfigured": bool(RCLONE_DEST),
                 "deleteLocalAfterUpload": DELETE_LOCAL_AFTER_UPLOAD,
                 "publicLinks": PUBLIC_LINKS,
+                "videoDefaults": {
+                    "hdrEnabled": DEFAULT_HDR_ENABLED,
+                    "videoMode": "hdr" if DEFAULT_HDR_ENABLED else "normal",
+                    "videoProjection": normalized_video_projection(DEFAULT_VIDEO_PROJECTION),
+                    "regularMediaExtension": REGULAR_MEDIA_EXTENSION,
+                    "sphericalMediaExtension": SPHERICAL_MEDIA_EXTENSION,
+                },
                 "platformConfigured": bool(PLATFORM_URL),
                 "root": str(ROOT),
                 "active": active,
@@ -545,6 +622,7 @@ class Handler(BaseHTTPRequestHandler):
             self.write_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "attemptId or captureId is required"})
             return
         payload.setdefault("captureId", attempt_id)
+        capture_options = video_capture_options(payload)
         ready, ready_error = backend_ready()
         if not ready:
             self.write_json(HTTPStatus.SERVICE_UNAVAILABLE, {"ok": False, "backend": BACKEND, "error": ready_error})
@@ -553,13 +631,14 @@ class Handler(BaseHTTPRequestHandler):
             if active_recordings and attempt_id not in active_recordings:
                 self.write_json(HTTPStatus.CONFLICT, {"ok": False, "backend": BACKEND, "error": "camera recording already active"})
                 return
-        paths = attempt_paths(payload)
+        paths = attempt_paths(payload, str(capture_options["mediaExtension"]))
         paths["dir"].mkdir(parents=True, exist_ok=True)
         metadata = {
             "backend": BACKEND,
             "state": "recording",
             "startedAt": datetime.now(timezone.utc).isoformat(),
             "start": payload,
+            "captureOptions": capture_options,
             "mediaPath": str(paths["media"]),
         }
         recording = {
@@ -569,6 +648,7 @@ class Handler(BaseHTTPRequestHandler):
             "mediaPath": str(paths["media"]),
             "metadataPath": str(paths["metadata"]),
             "start": payload,
+            "captureOptions": capture_options,
             "platformIngest": bool(payload.get("attemptId") and (payload.get("sessionId") or payload.get("venueSessionId"))),
         }
         if BACKEND == "command":
@@ -636,6 +716,7 @@ class Handler(BaseHTTPRequestHandler):
             "stoppedAt": stopped_at,
             "start": recording["start"],
             "finish": payload,
+            "captureOptions": recording.get("captureOptions") or video_capture_options(payload, recording),
             "mediaPath": str(media_path),
             "rcloneDest": RCLONE_DEST,
         }
@@ -670,7 +751,8 @@ class Handler(BaseHTTPRequestHandler):
 
         payload.setdefault("label", "debug")
         duration_seconds = quick_video_duration(payload)
-        paths = capture_paths(payload, "video", MEDIA_EXTENSION)
+        capture_options = video_capture_options(payload)
+        paths = capture_paths(payload, "video", str(capture_options["mediaExtension"]))
         paths["dir"].mkdir(parents=True, exist_ok=True)
         capture_id = slug(payload.get("captureId") or paths["media"].stem, "video")
         payload.setdefault("captureId", capture_id)
@@ -682,6 +764,7 @@ class Handler(BaseHTTPRequestHandler):
             "mediaPath": str(paths["media"]),
             "metadataPath": str(paths["metadata"]),
             "payload": payload,
+            "captureOptions": capture_options,
             "platformIngest": False,
         }
         metadata = {
@@ -691,6 +774,7 @@ class Handler(BaseHTTPRequestHandler):
             "durationSeconds": duration_seconds,
             "startedAt": started_at,
             "payload": payload,
+            "captureOptions": capture_options,
             "mediaPath": str(paths["media"]),
             "rcloneDest": RCLONE_DEST,
         }

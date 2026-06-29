@@ -437,6 +437,10 @@
           value: /var/lib/motion-levels/camera-recordings
         - key: MOTION_LEVELS_CAMERA_DELETE_LOCAL_AFTER_UPLOAD
           value: "1"
+        - key: MOTION_LEVELS_CAMERA_HDR_DEFAULT
+          value: "1"
+        - key: MOTION_LEVELS_CAMERA_VIDEO_PROJECTION_DEFAULT
+          value: regular
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Ensure security recorder env is configured
