@@ -432,6 +432,7 @@ write_files:
       MOTION_LEVELS_CAMERA_HDR_DEFAULT=1
       MOTION_LEVELS_CAMERA_VIDEO_PROJECTION_DEFAULT=regular
       MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS=120
+      MOTION_LEVELS_CAMERA_SESSION_MAX_SECONDS=7200
       MOTION_LEVELS_CAMERA_DELETE_REMOTE_AFTER_DOWNLOAD=1
       # For Insta360 X4/X5 SDK control, connect the camera by USB and select
       # Android mode on the camera prompt. Linux should then show USB vendor

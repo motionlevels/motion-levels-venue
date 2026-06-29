@@ -1141,7 +1141,7 @@ func TestSessionRecordingWritesLevelAttemptRecords(t *testing.T) {
 	}
 }
 
-func TestLevelAttemptControlsCameraRecording(t *testing.T) {
+func TestLevelAttemptDoesNotControlCameraRecording(t *testing.T) {
 	runtime := newGameRuntime(config{
 		Brightness:            80,
 		PlayerCount:           2,
@@ -1196,22 +1196,11 @@ func TestLevelAttemptControlsCameraRecording(t *testing.T) {
 		AttemptEndedUnixNanos:    ended.UnixNano(),
 	}, ended)
 
-	if len(recorder.starts) != 1 {
-		t.Fatalf("camera starts = %d, want 1", len(recorder.starts))
+	if len(recorder.venueStarts) != 0 {
+		t.Fatalf("venue camera starts = %d, want 0", len(recorder.venueStarts))
 	}
-	if len(recorder.finishes) != 1 {
-		t.Fatalf("camera finishes = %d, want 1", len(recorder.finishes))
-	}
-	start := recorder.starts[0]
-	finish := recorder.finishes[0]
-	if start.Game != "temporada1" || start.Level != "level-1" || start.LevelNumber != 1 || start.TeamName != "Equipo Azul" {
-		t.Fatalf("camera start = %+v", start)
-	}
-	if start.VenueSessionID != "venue-1" || start.ControllerLabel != "Sala Test" || start.ControllerHostname != "motionlevels-test" {
-		t.Fatalf("camera start venue metadata = %+v", start)
-	}
-	if finish.AttemptID != start.AttemptID || finish.Result != "success" || !finish.Success || finish.ElapsedMillis != 42000 {
-		t.Fatalf("camera finish = %+v start=%+v", finish, start)
+	if len(recorder.venueFinishes) != 0 {
+		t.Fatalf("venue camera finishes = %d, want 0", len(recorder.venueFinishes))
 	}
 }
 
@@ -1328,8 +1317,6 @@ func TestDisplayStatusIncludesCurrentLevelAttemptSummary(t *testing.T) {
 type cameraRecorderBackend struct {
 	venueStarts   []cameraVenueSessionStart
 	venueFinishes []cameraVenueSessionFinish
-	starts        []cameraRecordingStart
-	finishes      []cameraRecordingFinish
 }
 
 func (b *cameraRecorderBackend) StartVenueSession(start cameraVenueSessionStart) {
@@ -1338,14 +1325,6 @@ func (b *cameraRecorderBackend) StartVenueSession(start cameraVenueSessionStart)
 
 func (b *cameraRecorderBackend) FinishVenueSession(finish cameraVenueSessionFinish) {
 	b.venueFinishes = append(b.venueFinishes, finish)
-}
-
-func (b *cameraRecorderBackend) StartLevelAttempt(start cameraRecordingStart) {
-	b.starts = append(b.starts, start)
-}
-
-func (b *cameraRecorderBackend) FinishLevelAttempt(finish cameraRecordingFinish) {
-	b.finishes = append(b.finishes, finish)
 }
 
 func (b *cameraRecorderBackend) Close() error {
@@ -2156,10 +2135,10 @@ func TestVenueSessionLifecycleAndMenuEvents(t *testing.T) {
 
 func TestVenueSessionControlsCameraRecorder(t *testing.T) {
 	runtime := newGameRuntime(config{
-		Brightness:          80,
-		PlayerCount:         1,
-		ControllerLabel:     "Sala Test",
-		ControllerHostname:  "motionlevels-test",
+		Brightness:         80,
+		PlayerCount:        1,
+		ControllerLabel:    "Sala Test",
+		ControllerHostname: "motionlevels-test",
 	}, nil, nil)
 	recorder := &cameraRecorderBackend{}
 	runtime.SetCameraRecorder(recorder)

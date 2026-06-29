@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import math
 import os
 import re
 import subprocess
@@ -66,6 +67,7 @@ DELETE_LOCAL_AFTER_UPLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_LOCAL_AF
 DEFAULT_HDR_ENABLED = os.environ.get("MOTION_LEVELS_CAMERA_HDR_DEFAULT", "1").strip().lower() not in FALSE_VALUES
 DEFAULT_VIDEO_PROJECTION = os.environ.get("MOTION_LEVELS_CAMERA_VIDEO_PROJECTION_DEFAULT", "regular").strip().lower()
 SESSION_SEGMENT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS", "120"))
+SESSION_MAX_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_MAX_SECONDS", "7200"))
 DELETE_REMOTE_AFTER_DOWNLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_REMOTE_AFTER_DOWNLOAD", "1").strip().lower() not in FALSE_VALUES
 TV_STATUS_URL = os.environ.get("MOTION_LEVELS_CAMERA_TV_STATUS_URL", "http://127.0.0.1:4101/tv").strip()
 DISPLAY_STATUS_URL = os.environ.get("MOTION_LEVELS_CAMERA_DISPLAY_STATUS_URL", "http://127.0.0.1:4102/api/display").strip()
@@ -780,6 +782,17 @@ def segment_duration_seconds(payload: dict[str, Any] | None = None) -> int:
     return max(10, min(900, round(parsed)))
 
 
+def max_session_seconds(payload: dict[str, Any] | None = None) -> int:
+    value: Any = SESSION_MAX_SECONDS
+    if payload:
+        value = payload.get("maxSessionSeconds") or payload.get("sessionMaxSeconds") or value
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = SESSION_MAX_SECONDS
+    return max(60, min(7200, round(parsed)))
+
+
 def create_session_folder_link(payload: dict[str, Any], health: dict[str, Any]) -> tuple[str | None, dict[str, Any] | None]:
     if not RCLONE_DEST:
         return None, None
@@ -806,7 +819,7 @@ def create_session_folder_link(payload: dict[str, Any], health: dict[str, Any]) 
     return share_url, link_event
 
 
-def run_session_segment(session: dict[str, Any], segment_index: int) -> bool:
+def run_session_segment(session: dict[str, Any], segment_index: int, duration_seconds: int) -> bool:
     payload = dict(session["payload"])
     capture_options = video_capture_options(payload)
     paths = session_segment_paths(payload, segment_index, str(capture_options["mediaExtension"]))
@@ -819,7 +832,8 @@ def run_session_segment(session: dict[str, Any], segment_index: int) -> bool:
         "attemptId": attempt_id,
         "captureId": attempt_id,
         "segmentIndex": segment_index,
-        "segmentSeconds": session["segmentSeconds"],
+        "segmentSeconds": duration_seconds,
+        "maxSessionSeconds": session["maxSeconds"],
         "startedUnixNanos": int(now.timestamp() * 1_000_000_000),
         "game": "venue-session",
         "level": f"segment-{segment_index:04d}",
@@ -840,7 +854,8 @@ def run_session_segment(session: dict[str, Any], segment_index: int) -> bool:
         "state": "recording",
         "type": "session-segment",
         "segmentIndex": segment_index,
-        "durationSeconds": session["segmentSeconds"],
+        "durationSeconds": duration_seconds,
+        "maxSessionSeconds": session["maxSeconds"],
         "startedAt": started_at,
         "payload": segment_payload,
         "captureOptions": capture_options,
@@ -853,7 +868,7 @@ def run_session_segment(session: dict[str, Any], segment_index: int) -> bool:
     start_event = None
     stop_command_event = None
     if BACKEND == "fake":
-        stop_event.wait(session["segmentSeconds"])
+        stop_event.wait(duration_seconds)
         stopped_at = datetime.now(timezone.utc).isoformat()
         paths["media"].write_text(
             "\n".join(
@@ -881,7 +896,7 @@ def run_session_segment(session: dict[str, Any], segment_index: int) -> bool:
                 write_json(paths["metadata"], metadata)
                 return False
             write_json(paths["metadata"], metadata)
-            stop_event.wait(session["segmentSeconds"])
+            stop_event.wait(duration_seconds)
             stopped_at = datetime.now(timezone.utc).isoformat()
             stop_payload = {**segment_payload, "stoppedAt": stopped_at}
             stop_command_event = run_camera_command("session-segment-stop", STOP_COMMAND, stop_payload, recording, paths["media"], paths["metadata"])
@@ -916,17 +931,31 @@ def run_session_loop(session_id: str) -> None:
         return
     record_event({"label": "session-recording-loop", "venueSessionId": session_id, "ok": True, "startedAt": datetime.now(timezone.utc).isoformat()})
     index = 1
+    completed_segments = 0
+    stop_reason = "session-finished"
+    deadline = float(session["startedMonotonic"]) + float(session["maxSeconds"])
     while not session["stopEvent"].is_set():
-        ok = run_session_segment(session, index)
+        remaining = deadline - time.monotonic()
+        if remaining < 1:
+            stop_reason = "max-duration"
+            break
+        duration_seconds = min(int(session["segmentSeconds"]), max(1, math.floor(remaining)))
+        ok = run_session_segment(session, index, duration_seconds)
+        if ok:
+            completed_segments = index
         with active_lock:
             if session_id in active_sessions:
                 active_sessions[session_id]["segmentIndex"] = index
                 active_sessions[session_id]["lastSegmentOk"] = ok
                 active_sessions[session_id]["updatedAt"] = datetime.now(timezone.utc).isoformat()
         if not ok:
+            stop_reason = "segment-failed"
+            break
+        if time.monotonic() >= deadline:
+            stop_reason = "max-duration"
             break
         index += 1
-    record_event({"label": "session-recording-loop", "venueSessionId": session_id, "ok": True, "stoppedAt": datetime.now(timezone.utc).isoformat(), "segments": index - 1})
+    record_event({"label": "session-recording-loop", "venueSessionId": session_id, "ok": True, "stoppedAt": datetime.now(timezone.utc).isoformat(), "segments": completed_segments, "stopReason": stop_reason})
     with active_lock:
         active_sessions.pop(session_id, None)
 
@@ -949,7 +978,7 @@ class Handler(BaseHTTPRequestHandler):
         with active_lock:
             active = list(active_recordings.values())
             sessions = [
-                {key: value for key, value in session.items() if key not in {"stopEvent", "thread"}}
+                {key: value for key, value in session.items() if key not in {"stopEvent", "thread", "startedMonotonic"}}
                 for session in active_sessions.values()
             ]
             uploads = list(upload_events)
@@ -990,6 +1019,8 @@ class Handler(BaseHTTPRequestHandler):
                     "videoProjection": normalized_video_projection(DEFAULT_VIDEO_PROJECTION),
                     "regularMediaExtension": REGULAR_MEDIA_EXTENSION,
                     "sphericalMediaExtension": SPHERICAL_MEDIA_EXTENSION,
+                    "sessionSegmentSeconds": segment_duration_seconds(),
+                    "sessionMaxSeconds": max_session_seconds(),
                 },
                 "platformConfigured": bool(PLATFORM_URL),
                 "root": str(ROOT),
@@ -1028,6 +1059,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         payload.setdefault("startedUnixNanos", int(time.time() * 1_000_000_000))
         payload.setdefault("platformSessionPath", f"/session/{venue_id}")
+        segment_seconds = segment_duration_seconds(payload)
+        max_seconds = max_session_seconds(payload)
+        max_ends_at = datetime.fromtimestamp(time.time() + max_seconds, timezone.utc).isoformat()
         video_folder_path = session_video_folder_path(payload)
         health = hardware_health()
         video_folder_share_url, link_event = create_session_folder_link(payload, health)
@@ -1042,6 +1076,9 @@ class Handler(BaseHTTPRequestHandler):
                     "ok": True,
                     "recording": False,
                     "venueSessionId": venue_id,
+                    "segmentSeconds": segment_seconds,
+                    "maxSeconds": max_seconds,
+                    "maxEndsAt": max_ends_at,
                     "videoFolderPath": video_folder_path,
                     "videoFolderShareUrl": video_folder_share_url,
                     "hardware": health,
@@ -1062,6 +1099,8 @@ class Handler(BaseHTTPRequestHandler):
                         "alreadyActive": True,
                         "videoFolderPath": session.get("videoFolderPath") or video_folder_path,
                         "videoFolderShareUrl": session.get("videoFolderShareUrl"),
+                        "maxSeconds": session.get("maxSeconds"),
+                        "maxEndsAt": session.get("maxEndsAt"),
                         "segmentIndex": session.get("segmentIndex"),
                     },
                 )
@@ -1071,7 +1110,10 @@ class Handler(BaseHTTPRequestHandler):
                 "venueSessionId": venue_id,
                 "startedAt": datetime.now(timezone.utc).isoformat(),
                 "payload": payload,
-                "segmentSeconds": segment_duration_seconds(payload),
+                "segmentSeconds": segment_seconds,
+                "maxSeconds": max_seconds,
+                "maxEndsAt": max_ends_at,
+                "startedMonotonic": time.monotonic(),
                 "videoFolderPath": video_folder_path,
                 "videoFolderShareUrl": video_folder_share_url,
                 "health": health,
@@ -1089,7 +1131,9 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "recording": True,
                 "venueSessionId": venue_id,
-                "segmentSeconds": segment_duration_seconds(payload),
+                "segmentSeconds": segment_seconds,
+                "maxSeconds": max_seconds,
+                "maxEndsAt": max_ends_at,
                 "videoFolderPath": video_folder_path,
                 "videoFolderShareUrl": video_folder_share_url,
                 "folderLink": link_event,
