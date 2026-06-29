@@ -432,8 +432,8 @@ write_files:
       # 2e1a. Configure real camera capture on the appliance, preferably in
       # /etc/motion-levels/camera-recorder.env:
       # MOTION_LEVELS_CAMERA_RECORDER_BACKEND=command
-      # MOTION_LEVELS_CAMERA_MEDIA_EXTENSION=.mp4
-      # MOTION_LEVELS_CAMERA_PHOTO_EXTENSION=.jpg
+      # MOTION_LEVELS_CAMERA_MEDIA_EXTENSION=.insv
+      # MOTION_LEVELS_CAMERA_PHOTO_EXTENSION=.insp
       # MOTION_LEVELS_CAMERA_START_COMMAND=/usr/local/bin/motion-levels-insta360 start
       # MOTION_LEVELS_CAMERA_STOP_COMMAND=/usr/local/bin/motion-levels-insta360 stop
       # MOTION_LEVELS_CAMERA_PHOTO_COMMAND=/usr/local/bin/motion-levels-insta360 photo
@@ -524,6 +524,21 @@ write_files:
         # it. Only the /cameras page above is ethernet-only.
         handle /cam/* {
           reverse_proxy 127.0.0.1:8020
+        }
+
+        # The recorder can start/stop the USB camera, so expose it only to
+        # callers reaching the room over Tailscale. Platform API routes provide
+        # the logged-in operator boundary before proxying here.
+        @camera_recorder_tailscale {
+          remote_ip 100.64.0.0/10
+          path /camera-recorder/*
+        }
+        handle @camera_recorder_tailscale {
+          uri strip_prefix /camera-recorder
+          reverse_proxy 127.0.0.1:8030
+        }
+        handle /camera-recorder/* {
+          respond "Not found" 404
         }
 
         @platform_next {

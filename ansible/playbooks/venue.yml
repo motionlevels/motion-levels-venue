@@ -349,6 +349,34 @@
       changed_when: true
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
+    - name: Check Insta360 CameraSDK install
+      ansible.builtin.stat:
+        path: /opt/insta360/CameraSDK/lib/libCameraSDK.so
+      register: motion_levels_insta360_sdk
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+
+    - name: Build Insta360 camera helper
+      ansible.builtin.command:
+        cmd: >-
+          g++ -std=c++17 -O2
+          -I/opt/insta360/CameraSDK/include
+          {{ motion_levels_remote_src }}/deploy/motionlevels-pc/motion-levels-insta360.cpp
+          -L/opt/insta360/CameraSDK/lib
+          -Wl,-rpath,/opt/insta360/CameraSDK/lib
+          -lCameraSDK
+          -o /usr/local/bin/motion-levels-insta360
+      changed_when: true
+      when:
+        - motion_levels_deploy_mode in motion_levels_runtime_modes
+        - motion_levels_insta360_sdk.stat.exists | default(false)
+
+    - name: Warn when Insta360 CameraSDK is missing
+      ansible.builtin.debug:
+        msg: "Insta360 CameraSDK is not installed at /opt/insta360/CameraSDK; USB camera helper was not built."
+      when:
+        - motion_levels_deploy_mode in motion_levels_runtime_modes
+        - not (motion_levels_insta360_sdk.stat.exists | default(false))
+
     - name: Install default motion-levels env if missing
       ansible.builtin.copy:
         src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/motion-levels.env"

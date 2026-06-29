@@ -17,13 +17,13 @@ ROOT = Path(os.environ.get("MOTION_LEVELS_CAMERA_RECORDINGS_ROOT", "/var/lib/mot
 BACKEND = os.environ.get("MOTION_LEVELS_CAMERA_RECORDER_BACKEND", "fake").strip() or "fake"
 MEDIA_EXTENSION = os.environ.get(
     "MOTION_LEVELS_CAMERA_MEDIA_EXTENSION",
-    ".mock-video.txt" if BACKEND == "fake" else ".mp4",
+    ".mock-video.txt" if BACKEND == "fake" else ".insv",
 ).strip()
 if MEDIA_EXTENSION and not MEDIA_EXTENSION.startswith("."):
     MEDIA_EXTENSION = f".{MEDIA_EXTENSION}"
 PHOTO_EXTENSION = os.environ.get(
     "MOTION_LEVELS_CAMERA_PHOTO_EXTENSION",
-    ".mock-photo.txt" if BACKEND == "fake" else ".jpg",
+    ".mock-photo.txt" if BACKEND == "fake" else ".insp",
 ).strip()
 if PHOTO_EXTENSION and not PHOTO_EXTENSION.startswith("."):
     PHOTO_EXTENSION = f".{PHOTO_EXTENSION}"
@@ -429,6 +429,14 @@ def upload_recording(recording: dict[str, Any], media_path: Path, metadata_path:
     upload_media(media_path, metadata_path, platform_recording)
 
 
+def quick_video_duration(payload: dict[str, Any]) -> int:
+    try:
+        value = float(payload.get("durationSeconds") or payload.get("duration") or 10)
+    except (TypeError, ValueError):
+        value = 10
+    return max(1, min(30, round(value)))
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "MotionLevelsCameraRecorder/0.1"
 
@@ -468,6 +476,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path.rstrip("/") == "/recordings/stop":
             self.handle_stop()
+            return
+        if self.path.rstrip("/") == "/recordings/quick":
+            self.handle_quick_video()
             return
         if self.path.rstrip("/") == "/photos/take":
             self.handle_take_photo()
@@ -575,6 +586,108 @@ class Handler(BaseHTTPRequestHandler):
                 "mediaReady": media_ready,
                 "uploadQueued": bool(RCLONE_DEST and media_ready and metadata["state"] == "finished"),
                 "command": command_event,
+            },
+        )
+
+    def handle_quick_video(self) -> None:
+        payload = self.read_json()
+        ready, ready_error = backend_ready()
+        if not ready:
+            self.write_json(HTTPStatus.SERVICE_UNAVAILABLE, {"ok": False, "backend": BACKEND, "error": ready_error})
+            return
+
+        payload.setdefault("label", "debug")
+        duration_seconds = quick_video_duration(payload)
+        paths = capture_paths(payload, "video", MEDIA_EXTENSION)
+        paths["dir"].mkdir(parents=True, exist_ok=True)
+        capture_id = slug(payload.get("captureId") or paths["media"].stem, "video")
+        payload.setdefault("captureId", capture_id)
+        started_at = datetime.now(timezone.utc).isoformat()
+        recording = {
+            "captureId": capture_id,
+            "startedAt": started_at,
+            "durationSeconds": duration_seconds,
+            "mediaPath": str(paths["media"]),
+            "metadataPath": str(paths["metadata"]),
+            "payload": payload,
+            "platformIngest": False,
+        }
+        metadata = {
+            "backend": BACKEND,
+            "state": "recording",
+            "type": "quick-video",
+            "durationSeconds": duration_seconds,
+            "startedAt": started_at,
+            "payload": payload,
+            "mediaPath": str(paths["media"]),
+            "rcloneDest": RCLONE_DEST,
+        }
+
+        start_event = None
+        stop_event = None
+        if BACKEND == "command":
+            start_event = run_camera_command("quick-video-start", START_COMMAND, payload, recording, paths["media"], paths["metadata"])
+            metadata["startCommand"] = start_event
+            if not start_event.get("ok"):
+                metadata["state"] = "start-failed"
+                metadata["stoppedAt"] = datetime.now(timezone.utc).isoformat()
+                write_json(paths["metadata"], metadata)
+                self.write_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "backend": BACKEND, "error": "camera start command failed", "event": start_event})
+                return
+
+        write_json(paths["metadata"], metadata)
+        with active_lock:
+            active_recordings[capture_id] = recording
+        try:
+            time.sleep(duration_seconds)
+            stopped_at = datetime.now(timezone.utc).isoformat()
+            if BACKEND == "fake":
+                paths["media"].write_text(
+                    "\n".join(
+                        [
+                            "Motion Levels fake camera quick video",
+                            f"captureId={capture_id}",
+                            f"startedAt={started_at}",
+                            f"stoppedAt={stopped_at}",
+                            f"durationSeconds={duration_seconds}",
+                            f"label={payload.get('label', '')}",
+                        ]
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+            elif BACKEND == "command":
+                stop_payload = {**payload, "durationSeconds": duration_seconds, "stoppedAt": stopped_at}
+                stop_event = run_camera_command("quick-video-stop", STOP_COMMAND, stop_payload, recording, paths["media"], paths["metadata"])
+                metadata["stopCommand"] = stop_event
+            media_ready = paths["media"].exists() and paths["media"].stat().st_size > 0
+            metadata["state"] = "finished" if media_ready and (not stop_event or stop_event.get("ok")) else "media-missing"
+            if stop_event and not stop_event.get("ok"):
+                metadata["state"] = "stop-failed"
+            metadata["contentType"] = content_type_for(paths["media"])
+            metadata["byteSize"] = paths["media"].stat().st_size if paths["media"].exists() else 0
+            metadata["stoppedAt"] = stopped_at
+            write_json(paths["metadata"], metadata)
+        finally:
+            with active_lock:
+                active_recordings.pop(capture_id, None)
+
+        upload_queued = bool(RCLONE_DEST and media_ready and metadata["state"] == "finished")
+        if upload_queued:
+            threading.Thread(target=upload_media, args=(paths["media"], paths["metadata"]), daemon=True).start()
+        self.write_json(
+            HTTPStatus.OK if media_ready and metadata["state"] == "finished" else HTTPStatus.INTERNAL_SERVER_ERROR,
+            {
+                "ok": media_ready and metadata["state"] == "finished",
+                "backend": BACKEND,
+                "captureId": capture_id,
+                "durationSeconds": duration_seconds,
+                "mediaPath": str(paths["media"]),
+                "metadataPath": str(paths["metadata"]),
+                "mediaReady": media_ready,
+                "uploadQueued": upload_queued,
+                "startCommand": start_event,
+                "stopCommand": stop_event,
             },
         )
 
