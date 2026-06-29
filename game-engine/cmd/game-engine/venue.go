@@ -164,6 +164,17 @@ func (r *gameRuntime) startVenueLocked(id, teamName, kioskID string, now time.Ti
 		"kiosk_id":  kioskID,
 		"implicit":  implicit,
 	})
+	if r.cameraRecorder != nil {
+		r.cameraRecorder.StartVenueSession(cameraVenueSessionStart{
+			VenueSessionID:      id,
+			ControllerLabel:     r.base.ControllerLabel,
+			ControllerHostname:  r.base.ControllerHostname,
+			TeamName:            teamName,
+			KioskID:             kioskID,
+			StartedUnixNanos:    now.UnixNano(),
+			PlatformSessionPath: "/session/" + id,
+		})
+	}
 	log.Printf("venue session started: id=%s implicit=%v", id, implicit)
 }
 
@@ -188,6 +199,13 @@ func (r *gameRuntime) endVenueLocked(id, reason string, now time.Time) {
 		}}
 	})
 	r.enqueueVenueEventLocked(now, "venue_lifecycle", "venue_ended", map[string]any{"reason": reason})
+	if r.cameraRecorder != nil {
+		r.cameraRecorder.FinishVenueSession(cameraVenueSessionFinish{
+			VenueSessionID: r.venueID,
+			Reason:         reason,
+			EndedUnixNanos: now.UnixNano(),
+		})
+	}
 	if r.current.VenueSessionID == r.venueID && !isAmbientActivityGame(r.current.Game) {
 		r.exitActiveGameLocked("venue session ended")
 	}

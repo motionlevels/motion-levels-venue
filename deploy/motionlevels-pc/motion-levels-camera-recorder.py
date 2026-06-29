@@ -59,11 +59,17 @@ PUBLIC_LINKS = os.environ.get("MOTION_LEVELS_CAMERA_PUBLIC_LINKS", "1").strip().
 DELETE_LOCAL_AFTER_UPLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_LOCAL_AFTER_UPLOAD", "1").strip().lower() not in FALSE_VALUES
 DEFAULT_HDR_ENABLED = os.environ.get("MOTION_LEVELS_CAMERA_HDR_DEFAULT", "1").strip().lower() not in FALSE_VALUES
 DEFAULT_VIDEO_PROJECTION = os.environ.get("MOTION_LEVELS_CAMERA_VIDEO_PROJECTION_DEFAULT", "regular").strip().lower()
+SESSION_SEGMENT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS", "120"))
+DELETE_REMOTE_AFTER_DOWNLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_REMOTE_AFTER_DOWNLOAD", "1").strip().lower() not in FALSE_VALUES
+TV_STATUS_URL = os.environ.get("MOTION_LEVELS_CAMERA_TV_STATUS_URL", "http://127.0.0.1:4101/api/tv").strip()
+DISPLAY_STATUS_URL = os.environ.get("MOTION_LEVELS_CAMERA_DISPLAY_STATUS_URL", "http://127.0.0.1:4102/api/display").strip()
 
 
 active_lock = threading.Lock()
 camera_command_lock = threading.Lock()
 active_recordings: dict[str, dict[str, Any]] = {}
+active_sessions: dict[str, dict[str, Any]] = {}
+skipped_recordings: set[str] = set()
 upload_events: list[dict[str, Any]] = []
 
 
@@ -235,7 +241,36 @@ def capture_paths(payload: dict[str, Any], kind: str, extension: str) -> dict[st
     }
 
 
+def session_dir(payload: dict[str, Any]) -> Path:
+    started_at = unix_nanos_to_datetime(payload.get("startedUnixNanos"))
+    venue_id = slug(payload.get("venueSessionId") or payload.get("sessionId"), "session")
+    return ROOT / started_at.strftime("%Y") / started_at.strftime("%m") / started_at.strftime("%d") / "sessions" / venue_id
+
+
+def session_segment_paths(payload: dict[str, Any], segment_index: int, extension: str) -> dict[str, Path]:
+    started_at = datetime.now(timezone.utc)
+    base = session_dir(payload)
+    timestamp = started_at.strftime("%Y%m%dT%H%M%SZ")
+    venue_id = slug(payload.get("venueSessionId") or payload.get("sessionId"), "session")
+    stem = f"{timestamp}-session-{venue_id}-segment-{segment_index:04d}"
+    return {
+        "dir": base,
+        "media": base / f"{stem}{extension}",
+        "metadata": base / f"{stem}.json",
+    }
+
+
 def relative_upload_path(path: Path) -> str:
+    try:
+        relative = path.relative_to(ROOT)
+    except ValueError:
+        relative = Path(path.name)
+    if RCLONE_PATH_PREFIX:
+        return f"{RCLONE_PATH_PREFIX}/{relative.as_posix()}"
+    return relative.as_posix()
+
+
+def relative_upload_dir(path: Path) -> str:
     try:
         relative = path.relative_to(ROOT)
     except ValueError:
@@ -332,6 +367,7 @@ def command_env(action: str, payload: dict[str, Any], recording: dict[str, Any],
             "MOTION_LEVELS_CAMERA_VIDEO_PROJECTION": str(options["videoProjection"]),
             "MOTION_LEVELS_INSTA360_VIDEO_MODE": str(options["videoMode"]),
             "MOTION_LEVELS_INSTA360_ENABLE_STITCHING": "1" if options["stitchingEnabled"] else "0",
+            "MOTION_LEVELS_INSTA360_DELETE_AFTER_DOWNLOAD": "1" if DELETE_REMOTE_AFTER_DOWNLOAD else "0",
         }
     )
     return env
@@ -424,6 +460,100 @@ def run_public_link(remote: str) -> tuple[str | None, dict[str, Any]]:
         return None, event
     finally:
         record_event(event)
+
+
+def fetch_json(url: str, timeout: float = 2.0) -> tuple[dict[str, Any] | None, str | None]:
+    if not url:
+        return None, "url is not configured"
+    try:
+        with request.urlopen(url, timeout=timeout) as response:
+            payload = json.loads(response.read(8192).decode("utf-8", errors="replace"))
+            return payload if isinstance(payload, dict) else {}, None
+    except Exception as exc:
+        return None, str(exc)
+
+
+def hardware_health() -> dict[str, Any]:
+    ready, ready_error = backend_ready()
+    camera = camera_probe()
+    tv, tv_error = fetch_json(TV_STATUS_URL)
+    display, display_error = fetch_json(DISPLAY_STATUS_URL)
+    hdmi_ok = bool(tv and tv.get("hdmiConnected") is True)
+    kiosk_ok = bool(tv and tv.get("kioskActive") is True)
+    audio_enabled = bool(display and display.get("audioEnabled") is True)
+    audio_muted = bool(display and display.get("audioMuted") is True)
+    return {
+        "camera": {
+            "ok": ready and camera.get("detected") is True,
+            "label": "camera",
+            "message": ready_error if not ready else ("USB camera not detected" if not camera.get("detected") else "ready"),
+            "details": camera,
+        },
+        "hdmi": {
+            "ok": hdmi_ok,
+            "label": "HDMI",
+            "message": tv_error or ("connected" if hdmi_ok else "HDMI output is not connected"),
+            "details": tv,
+        },
+        "playerDisplay": {
+            "ok": kiosk_ok,
+            "label": "player display",
+            "message": tv_error or ("kiosk active" if kiosk_ok else "kiosk service is not active"),
+            "details": tv,
+        },
+        "sound": {
+            "ok": audio_enabled and not audio_muted,
+            "label": "sound",
+            "message": display_error or ("audio ready" if audio_enabled and not audio_muted else "audio disabled or muted"),
+            "details": display,
+        },
+    }
+
+
+def notify_session_start(payload: dict[str, Any], video_folder_share_url: str | None, health: dict[str, Any]) -> dict[str, Any]:
+    event = {
+        "label": "session-start-alert",
+        "venueSessionId": payload.get("venueSessionId"),
+        "startedAt": datetime.now(timezone.utc).isoformat(),
+    }
+    if not PLATFORM_URL:
+        event["ok"] = False
+        event["skipped"] = True
+        event["error"] = "platform URL is not configured"
+        record_event(event)
+        return event
+    body = {
+        "venueSessionId": payload.get("venueSessionId"),
+        "controllerLabel": payload.get("controllerLabel"),
+        "controllerHostname": payload.get("controllerHostname"),
+        "teamName": payload.get("teamName"),
+        "startedAt": datetime.now(timezone.utc).isoformat(),
+        "platformSessionPath": payload.get("platformSessionPath") or f"/session/{payload.get('venueSessionId')}",
+        "videoFolderShareUrl": video_folder_share_url,
+        "hardware": health,
+    }
+    try:
+        req = request.Request(
+            f"{PLATFORM_URL}/api/ingest/session-start-alert",
+            data=json.dumps(body).encode("utf-8"),
+            headers={"content-type": "application/json"},
+            method="POST",
+        )
+        if PLATFORM_TOKEN:
+            req.add_header("authorization", f"Bearer {PLATFORM_TOKEN}")
+        with request.urlopen(req, timeout=PLATFORM_TIMEOUT_SECONDS) as response:
+            event["status"] = response.status
+            event["response"] = response.read(4096).decode("utf-8", errors="replace")
+            event["ok"] = 200 <= response.status < 300
+    except error.HTTPError as exc:
+        event["status"] = exc.code
+        event["response"] = exc.read(4096).decode("utf-8", errors="replace")[-2000:]
+        event["ok"] = False
+    except Exception as exc:
+        event["ok"] = False
+        event["error"] = str(exc)
+    record_event(event)
+    return event
 
 
 def post_platform_video(recording: dict[str, Any], metadata: dict[str, Any], media_event: dict[str, Any], share_url: str) -> dict[str, Any]:
@@ -539,6 +669,168 @@ def upload_recording(recording: dict[str, Any], media_path: Path, metadata_path:
     upload_media(media_path, metadata_path, platform_recording)
 
 
+def segment_duration_seconds(payload: dict[str, Any] | None = None) -> int:
+    value: Any = SESSION_SEGMENT_SECONDS
+    if payload:
+        value = payload.get("segmentSeconds") or payload.get("segmentDurationSeconds") or value
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = SESSION_SEGMENT_SECONDS
+    return max(10, min(900, round(parsed)))
+
+
+def create_session_folder_link(payload: dict[str, Any], health: dict[str, Any]) -> tuple[str | None, dict[str, Any] | None]:
+    if not RCLONE_DEST:
+        return None, None
+    base = session_dir(payload)
+    base.mkdir(parents=True, exist_ok=True)
+    manifest = base / "session-start.json"
+    write_json(
+        manifest,
+        {
+            "type": "session-start",
+            "payload": payload,
+            "hardware": health,
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    upload_event = run_upload(manifest, manifest.name)
+    remote_dir = f"{RCLONE_DEST}/{relative_upload_dir(base)}"
+    share_url = None
+    link_event = None
+    if upload_event.get("ok"):
+        share_url, link_event = run_public_link(remote_dir)
+    if DELETE_LOCAL_AFTER_UPLOAD:
+        remove_local_file(manifest, f"delete-{manifest.name}")
+    return share_url, link_event
+
+
+def run_session_segment(session: dict[str, Any], segment_index: int) -> bool:
+    payload = dict(session["payload"])
+    capture_options = video_capture_options(payload)
+    paths = session_segment_paths(payload, segment_index, str(capture_options["mediaExtension"]))
+    paths["dir"].mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc)
+    venue_id = str(payload.get("venueSessionId") or "session")
+    attempt_id = f"{venue_id}:segment:{segment_index:04d}"
+    segment_payload = {
+        **payload,
+        "attemptId": attempt_id,
+        "captureId": attempt_id,
+        "segmentIndex": segment_index,
+        "segmentSeconds": session["segmentSeconds"],
+        "startedUnixNanos": int(now.timestamp() * 1_000_000_000),
+        "game": "venue-session",
+        "level": f"segment-{segment_index:04d}",
+    }
+    started_at = now.isoformat()
+    recording = {
+        "attemptId": attempt_id,
+        "captureId": attempt_id,
+        "startedAt": started_at,
+        "mediaPath": str(paths["media"]),
+        "metadataPath": str(paths["metadata"]),
+        "start": segment_payload,
+        "captureOptions": capture_options,
+        "platformIngest": True,
+    }
+    metadata = {
+        "backend": BACKEND,
+        "state": "recording",
+        "type": "session-segment",
+        "segmentIndex": segment_index,
+        "durationSeconds": session["segmentSeconds"],
+        "startedAt": started_at,
+        "payload": segment_payload,
+        "captureOptions": capture_options,
+        "mediaPath": str(paths["media"]),
+        "rcloneDest": RCLONE_DEST,
+    }
+    write_json(paths["metadata"], metadata)
+
+    stop_event: threading.Event = session["stopEvent"]
+    start_event = None
+    stop_command_event = None
+    if BACKEND == "fake":
+        stop_event.wait(session["segmentSeconds"])
+        stopped_at = datetime.now(timezone.utc).isoformat()
+        paths["media"].write_text(
+            "\n".join(
+                [
+                    "Motion Levels fake camera session segment",
+                    f"venueSessionId={venue_id}",
+                    f"segmentIndex={segment_index}",
+                    f"startedAt={started_at}",
+                    f"stoppedAt={stopped_at}",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    elif BACKEND == "command":
+        camera_command_lock.acquire()
+        try:
+            if stop_event.is_set():
+                return False
+            start_event = run_camera_command("session-segment-start", START_COMMAND, segment_payload, recording, paths["media"], paths["metadata"])
+            metadata["startCommand"] = start_event
+            if not start_event.get("ok"):
+                metadata["state"] = "start-failed"
+                metadata["stoppedAt"] = datetime.now(timezone.utc).isoformat()
+                write_json(paths["metadata"], metadata)
+                return False
+            write_json(paths["metadata"], metadata)
+            stop_event.wait(session["segmentSeconds"])
+            stopped_at = datetime.now(timezone.utc).isoformat()
+            stop_payload = {**segment_payload, "stoppedAt": stopped_at}
+            stop_command_event = run_camera_command("session-segment-stop", STOP_COMMAND, stop_payload, recording, paths["media"], paths["metadata"])
+            metadata["stopCommand"] = stop_command_event
+        finally:
+            camera_command_lock.release()
+    else:
+        metadata["state"] = "unsupported-backend"
+        metadata["stoppedAt"] = datetime.now(timezone.utc).isoformat()
+        write_json(paths["metadata"], metadata)
+        return False
+
+    stopped_at = datetime.now(timezone.utc).isoformat()
+    media_ready = paths["media"].exists() and paths["media"].stat().st_size > 0
+    metadata["state"] = "finished" if media_ready and (not stop_command_event or stop_command_event.get("ok")) else "media-missing"
+    if stop_command_event and not stop_command_event.get("ok"):
+        metadata["state"] = "stop-failed"
+    metadata["contentType"] = content_type_for(paths["media"])
+    metadata["byteSize"] = paths["media"].stat().st_size if paths["media"].exists() else 0
+    metadata["stoppedAt"] = stopped_at
+    metadata["mediaReady"] = media_ready
+    write_json(paths["metadata"], metadata)
+    if RCLONE_DEST and media_ready and metadata["state"] == "finished":
+        threading.Thread(target=upload_recording, args=(recording, paths["media"], paths["metadata"]), daemon=True).start()
+    return media_ready and metadata["state"] == "finished"
+
+
+def run_session_loop(session_id: str) -> None:
+    with active_lock:
+        session = active_sessions.get(session_id)
+    if not session:
+        return
+    record_event({"label": "session-recording-loop", "venueSessionId": session_id, "ok": True, "startedAt": datetime.now(timezone.utc).isoformat()})
+    index = 1
+    while not session["stopEvent"].is_set():
+        ok = run_session_segment(session, index)
+        with active_lock:
+            if session_id in active_sessions:
+                active_sessions[session_id]["segmentIndex"] = index
+                active_sessions[session_id]["lastSegmentOk"] = ok
+                active_sessions[session_id]["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        if not ok:
+            break
+        index += 1
+    record_event({"label": "session-recording-loop", "venueSessionId": session_id, "ok": True, "stoppedAt": datetime.now(timezone.utc).isoformat(), "segments": index - 1})
+    with active_lock:
+        active_sessions.pop(session_id, None)
+
+
 def quick_video_duration(payload: dict[str, Any]) -> int:
     try:
         value = float(payload.get("durationSeconds") or payload.get("duration") or 10)
@@ -556,6 +848,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         with active_lock:
             active = list(active_recordings.values())
+            sessions = [
+                {key: value for key, value in session.items() if key not in {"stopEvent", "thread"}}
+                for session in active_sessions.values()
+            ]
             uploads = list(upload_events)
         ready, ready_error = backend_ready()
         photo_ready, photo_error = backend_ready("photo")
@@ -595,6 +891,7 @@ class Handler(BaseHTTPRequestHandler):
                 "platformConfigured": bool(PLATFORM_URL),
                 "root": str(ROOT),
                 "active": active,
+                "activeSessions": sessions,
                 "recentUploads": uploads,
             },
         )
@@ -612,7 +909,93 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.rstrip("/") == "/photos/take":
             self.handle_take_photo()
             return
+        if self.path.rstrip("/") == "/sessions/start":
+            self.handle_session_start()
+            return
+        if self.path.rstrip("/") == "/sessions/stop":
+            self.handle_session_stop()
+            return
         self.send_error(HTTPStatus.NOT_FOUND)
+
+    def handle_session_start(self) -> None:
+        payload = self.read_json()
+        venue_id = str(payload.get("venueSessionId") or "").strip()
+        if not venue_id:
+            self.write_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "venueSessionId is required"})
+            return
+        payload.setdefault("startedUnixNanos", int(time.time() * 1_000_000_000))
+        payload.setdefault("platformSessionPath", f"/session/{venue_id}")
+        health = hardware_health()
+        video_folder_share_url, link_event = create_session_folder_link(payload, health)
+        alert_event = notify_session_start(payload, video_folder_share_url, health)
+        ready, ready_error = backend_ready()
+        camera = camera_probe()
+        can_record = ready and camera.get("detected") is True
+        if not can_record:
+            self.write_json(
+                HTTPStatus.OK,
+                {
+                    "ok": True,
+                    "recording": False,
+                    "venueSessionId": venue_id,
+                    "videoFolderShareUrl": video_folder_share_url,
+                    "hardware": health,
+                    "alert": alert_event,
+                    "error": ready_error or "camera not detected",
+                },
+            )
+            return
+        with active_lock:
+            if venue_id in active_sessions:
+                self.write_json(HTTPStatus.OK, {"ok": True, "recording": True, "venueSessionId": venue_id, "alreadyActive": True})
+                return
+            stop_event = threading.Event()
+            session = {
+                "venueSessionId": venue_id,
+                "startedAt": datetime.now(timezone.utc).isoformat(),
+                "payload": payload,
+                "segmentSeconds": segment_duration_seconds(payload),
+                "videoFolderShareUrl": video_folder_share_url,
+                "health": health,
+                "stopEvent": stop_event,
+                "segmentIndex": 0,
+                "lastSegmentOk": None,
+            }
+            thread = threading.Thread(target=run_session_loop, args=(venue_id,), daemon=True)
+            session["thread"] = thread
+            active_sessions[venue_id] = session
+        thread.start()
+        self.write_json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "recording": True,
+                "venueSessionId": venue_id,
+                "segmentSeconds": segment_duration_seconds(payload),
+                "videoFolderShareUrl": video_folder_share_url,
+                "folderLink": link_event,
+                "hardware": health,
+                "alert": alert_event,
+            },
+        )
+
+    def handle_session_stop(self) -> None:
+        payload = self.read_json()
+        venue_id = str(payload.get("venueSessionId") or "").strip()
+        if not venue_id:
+            self.write_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "venueSessionId is required"})
+            return
+        with active_lock:
+            session = active_sessions.get(venue_id)
+        if not session:
+            self.write_json(HTTPStatus.OK, {"ok": True, "recording": False, "venueSessionId": venue_id})
+            return
+        stop_event: threading.Event = session["stopEvent"]
+        stop_event.set()
+        thread: threading.Thread | None = session.get("thread")
+        if thread:
+            thread.join(timeout=5)
+        self.write_json(HTTPStatus.OK, {"ok": True, "recording": False, "venueSessionId": venue_id, "stopping": thread.is_alive() if thread else False})
 
     def handle_start(self) -> None:
         payload = self.read_json()
@@ -623,6 +1006,25 @@ class Handler(BaseHTTPRequestHandler):
             return
         payload.setdefault("captureId", attempt_id)
         capture_options = video_capture_options(payload)
+        venue_id = str(payload.get("venueSessionId") or "").strip()
+        with active_lock:
+            session_recording_active = bool(venue_id and venue_id in active_sessions)
+            if session_recording_active:
+                skipped_recordings.add(attempt_id)
+        if session_recording_active:
+            self.write_json(
+                HTTPStatus.OK,
+                {
+                    "ok": True,
+                    "backend": BACKEND,
+                    "recordingId": attempt_id,
+                    "recording": False,
+                    "skipped": True,
+                    "reason": "venue session recording is active",
+                    "venueSessionId": venue_id,
+                },
+            )
+            return
         ready, ready_error = backend_ready()
         if not ready:
             self.write_json(HTTPStatus.SERVICE_UNAVAILABLE, {"ok": False, "backend": BACKEND, "error": ready_error})
@@ -677,9 +1079,27 @@ class Handler(BaseHTTPRequestHandler):
     def handle_stop(self) -> None:
         payload = self.read_json()
         attempt_id = str(payload.get("attemptId") or payload.get("captureId") or "").strip()
+        venue_id = str(payload.get("venueSessionId") or "").strip()
         with active_lock:
             recording = active_recordings.pop(attempt_id, None)
+            was_skipped = attempt_id in skipped_recordings
+            if was_skipped:
+                skipped_recordings.discard(attempt_id)
         if not recording:
+            if was_skipped:
+                self.write_json(
+                    HTTPStatus.OK,
+                    {
+                        "ok": True,
+                        "backend": BACKEND,
+                        "recordingId": attempt_id,
+                        "recording": False,
+                        "skipped": True,
+                        "reason": "venue session recording handled this interval",
+                        "venueSessionId": venue_id,
+                    },
+                )
+                return
             self.write_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "recording not found", "recordingId": attempt_id})
             return
         media_path = Path(recording["mediaPath"])

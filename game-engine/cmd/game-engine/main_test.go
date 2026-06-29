@@ -1326,8 +1326,18 @@ func TestDisplayStatusIncludesCurrentLevelAttemptSummary(t *testing.T) {
 }
 
 type cameraRecorderBackend struct {
-	starts   []cameraRecordingStart
-	finishes []cameraRecordingFinish
+	venueStarts   []cameraVenueSessionStart
+	venueFinishes []cameraVenueSessionFinish
+	starts        []cameraRecordingStart
+	finishes      []cameraRecordingFinish
+}
+
+func (b *cameraRecorderBackend) StartVenueSession(start cameraVenueSessionStart) {
+	b.venueStarts = append(b.venueStarts, start)
+}
+
+func (b *cameraRecorderBackend) FinishVenueSession(finish cameraVenueSessionFinish) {
+	b.venueFinishes = append(b.venueFinishes, finish)
 }
 
 func (b *cameraRecorderBackend) StartLevelAttempt(start cameraRecordingStart) {
@@ -2141,5 +2151,40 @@ func TestVenueSessionLifecycleAndMenuEvents(t *testing.T) {
 	last := events[len(events)-1]
 	if last.Name != "venue_ended" || last.Venue.Status != "ended" || last.Venue.EndReason != "manual" {
 		t.Fatalf("last outbox event = %+v", last)
+	}
+}
+
+func TestVenueSessionControlsCameraRecorder(t *testing.T) {
+	runtime := newGameRuntime(config{
+		Brightness:          80,
+		PlayerCount:         1,
+		ControllerLabel:     "Sala Test",
+		ControllerHostname:  "motionlevels-test",
+	}, nil, nil)
+	recorder := &cameraRecorderBackend{}
+	runtime.SetCameraRecorder(recorder)
+	started := time.Date(2026, 6, 4, 8, 1, 0, 0, time.UTC)
+	ended := started.Add(45 * time.Minute)
+
+	const venueSessionID = "44444444-4444-4444-8444-444444444444"
+	runtime.StartVenueSession(venueSessionID, "Equipo Test", "55555555-5555-4555-8555-555555555555", started)
+	runtime.EndVenueSession(venueSessionID, "manual", ended)
+
+	if len(recorder.venueStarts) != 1 {
+		t.Fatalf("venue starts = %d, want 1", len(recorder.venueStarts))
+	}
+	if len(recorder.venueFinishes) != 1 {
+		t.Fatalf("venue finishes = %d, want 1", len(recorder.venueFinishes))
+	}
+	start := recorder.venueStarts[0]
+	if start.VenueSessionID != venueSessionID || start.TeamName != "Equipo Test" || start.ControllerLabel != "Sala Test" || start.ControllerHostname != "motionlevels-test" {
+		t.Fatalf("venue start = %+v", start)
+	}
+	if start.StartedUnixNanos != started.UnixNano() || start.PlatformSessionPath != "/session/"+venueSessionID {
+		t.Fatalf("venue start timing/path = %+v", start)
+	}
+	finish := recorder.venueFinishes[0]
+	if finish.VenueSessionID != venueSessionID || finish.Reason != "manual" || finish.EndedUnixNanos != ended.UnixNano() {
+		t.Fatalf("venue finish = %+v", finish)
 	}
 }

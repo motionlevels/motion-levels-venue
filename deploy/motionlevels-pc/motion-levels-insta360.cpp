@@ -110,6 +110,13 @@ std::vector<std::string> download_urls(const std::shared_ptr<ins_camera::Camera>
             if (total > 0 && current == total) std::cerr << "download complete bytes=" << current << std::endl;
         });
         if (!ok) fail("failed to download camera file: " + urls[i]);
+        if (env_bool("MOTION_LEVELS_INSTA360_DELETE_AFTER_DOWNLOAD", true)) {
+            if (camera->DeleteCameraFile(urls[i])) {
+                std::cerr << "deleted camera file " << urls[i] << std::endl;
+            } else {
+                std::cerr << "warning: failed to delete camera file " << urls[i] << std::endl;
+            }
+        }
         local_paths.push_back(local.string());
     }
     return local_paths;

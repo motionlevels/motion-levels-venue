@@ -12,9 +12,27 @@ import (
 )
 
 type levelAttemptCameraRecorder interface {
+	StartVenueSession(cameraVenueSessionStart)
+	FinishVenueSession(cameraVenueSessionFinish)
 	StartLevelAttempt(cameraRecordingStart)
 	FinishLevelAttempt(cameraRecordingFinish)
 	Close() error
+}
+
+type cameraVenueSessionStart struct {
+	VenueSessionID      string `json:"venueSessionId"`
+	ControllerLabel     string `json:"controllerLabel,omitempty"`
+	ControllerHostname  string `json:"controllerHostname,omitempty"`
+	TeamName            string `json:"teamName,omitempty"`
+	KioskID             string `json:"kioskId,omitempty"`
+	StartedUnixNanos    int64  `json:"startedUnixNanos"`
+	PlatformSessionPath string `json:"platformSessionPath,omitempty"`
+}
+
+type cameraVenueSessionFinish struct {
+	VenueSessionID   string `json:"venueSessionId"`
+	Reason           string `json:"reason,omitempty"`
+	EndedUnixNanos   int64  `json:"endedUnixNanos"`
 }
 
 type cameraRecordingStart struct {
@@ -77,6 +95,14 @@ func (r *httpCameraRecorder) StartLevelAttempt(start cameraRecordingStart) {
 
 func (r *httpCameraRecorder) FinishLevelAttempt(finish cameraRecordingFinish) {
 	r.enqueue("/recordings/stop", finish)
+}
+
+func (r *httpCameraRecorder) StartVenueSession(start cameraVenueSessionStart) {
+	r.enqueue("/sessions/start", start)
+}
+
+func (r *httpCameraRecorder) FinishVenueSession(finish cameraVenueSessionFinish) {
+	r.enqueue("/sessions/stop", finish)
 }
 
 func (r *httpCameraRecorder) Close() error {
