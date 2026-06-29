@@ -41,6 +41,11 @@ int env_int(const char* name, int fallback) {
     }
 }
 
+std::string lowercase(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value;
+}
+
 std::string json_escape(const std::string& value) {
     std::ostringstream out;
     for (char c : value) {
@@ -172,19 +177,28 @@ void run_status(const std::shared_ptr<ins_camera::Camera>& camera, const ins_cam
 
 void run_start(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camera::DeviceDescriptor&) {
     maybe_enable_stitching(camera);
-    if (!camera->SetVideoSubMode(ins_camera::SubVideoMode::VIDEO_NORMAL)) {
-        std::cerr << "warning: failed to set normal video submode" << std::endl;
+    std::string video_mode = lowercase(env_string("MOTION_LEVELS_INSTA360_VIDEO_MODE", "normal"));
+    ins_camera::SubVideoMode sub_mode = ins_camera::SubVideoMode::VIDEO_NORMAL;
+    ins_camera::CameraFunctionMode function_mode = ins_camera::CameraFunctionMode::FUNCTION_MODE_NORMAL_VIDEO;
+    if (video_mode == "hdr") {
+        sub_mode = ins_camera::SubVideoMode::VIDEO_HDR;
+        function_mode = ins_camera::CameraFunctionMode::FUNCTION_MODE_HDR_VIDEO;
+    } else if (video_mode != "normal") {
+        fail("unsupported video mode: " + video_mode);
     }
-    if (env_bool("MOTION_LEVELS_INSTA360_SET_VIDEO_PARAMS", false)) {
+    if (!camera->SetVideoSubMode(sub_mode)) {
+        fail("failed to set " + video_mode + " video submode");
+    }
+    if (video_mode == "hdr" || env_bool("MOTION_LEVELS_INSTA360_SET_VIDEO_PARAMS", false)) {
         ins_camera::RecordParams params;
         params.resolution = static_cast<ins_camera::VideoResolution>(env_int("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", ins_camera::VideoResolution::RES_57KP30));
         params.bitrate = env_int("MOTION_LEVELS_INSTA360_VIDEO_BITRATE", 0);
-        if (!camera->SetVideoCaptureParams(params, ins_camera::CameraFunctionMode::FUNCTION_MODE_NORMAL_VIDEO)) {
+        if (!camera->SetVideoCaptureParams(params, function_mode)) {
             fail("failed to set video capture params");
         }
     }
     if (!camera->StartRecording()) fail("failed to start recording");
-    std::cout << "{\"ok\":true,\"recording\":true}" << std::endl;
+    std::cout << "{\"ok\":true,\"recording\":true,\"videoMode\":\"" << json_escape(video_mode) << "\"}" << std::endl;
 }
 
 void run_stop(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camera::DeviceDescriptor&) {
