@@ -66,7 +66,7 @@ PUBLIC_LINKS = os.environ.get("MOTION_LEVELS_CAMERA_PUBLIC_LINKS", "1").strip().
 DELETE_LOCAL_AFTER_UPLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_LOCAL_AFTER_UPLOAD", "1").strip().lower() not in FALSE_VALUES
 DEFAULT_HDR_ENABLED = os.environ.get("MOTION_LEVELS_CAMERA_HDR_DEFAULT", "1").strip().lower() not in FALSE_VALUES
 DEFAULT_VIDEO_PROJECTION = os.environ.get("MOTION_LEVELS_CAMERA_VIDEO_PROJECTION_DEFAULT", "regular").strip().lower()
-DEFAULT_VIDEO_RESOLUTION = os.environ.get("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", "4k30").strip().lower() or "4k30"
+DEFAULT_VIDEO_RESOLUTION = os.environ.get("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", "1080p30").strip().lower() or "1080p30"
 SESSION_SEGMENT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS", "120"))
 SESSION_MAX_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_MAX_SECONDS", "7200"))
 DELETE_REMOTE_AFTER_DOWNLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_REMOTE_AFTER_DOWNLOAD", "1").strip().lower() not in FALSE_VALUES
@@ -114,7 +114,7 @@ def normalized_video_projection(value: Any, fallback: str = DEFAULT_VIDEO_PROJEC
 
 
 def normalized_video_resolution(value: Any, fallback: str = DEFAULT_VIDEO_RESOLUTION) -> str:
-    text = str(value or fallback or "4k30").strip().lower()
+    text = str(value or fallback or "1080p30").strip().lower()
     text = text.replace("_", "").replace("-", "").replace(" ", "")
     aliases = {
         "1080": "1080p30",

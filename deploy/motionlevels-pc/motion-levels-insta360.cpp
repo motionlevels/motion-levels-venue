@@ -223,7 +223,7 @@ void run_start(const std::shared_ptr<ins_camera::Camera>& camera, const ins_came
     }
     if (video_mode == "hdr" || env_bool("MOTION_LEVELS_INSTA360_SET_VIDEO_PARAMS", false)) {
         ins_camera::RecordParams params;
-        params.resolution = env_video_resolution("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", ins_camera::VideoResolution::RES_4KP30);
+        params.resolution = env_video_resolution("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", ins_camera::VideoResolution::RES_1920_1080P30);
         params.bitrate = env_int("MOTION_LEVELS_INSTA360_VIDEO_BITRATE", 0);
         if (!camera->SetVideoCaptureParams(params, function_mode)) {
             fail("failed to set video capture params");
