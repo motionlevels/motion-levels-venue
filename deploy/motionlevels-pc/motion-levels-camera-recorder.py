@@ -48,9 +48,11 @@ PLATFORM_TOKEN = (
 ).strip()
 PLATFORM_TIMEOUT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_RECORDER_PLATFORM_TIMEOUT_SECONDS", "20"))
 PUBLIC_LINKS = os.environ.get("MOTION_LEVELS_CAMERA_PUBLIC_LINKS", "1").strip().lower() not in {"0", "false", "no", "off"}
+DELETE_LOCAL_AFTER_UPLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_LOCAL_AFTER_UPLOAD", "1").strip().lower() not in {"0", "false", "no", "off"}
 
 
 active_lock = threading.Lock()
+camera_command_lock = threading.Lock()
 active_recordings: dict[str, dict[str, Any]] = {}
 upload_events: list[dict[str, Any]] = []
 
@@ -206,6 +208,37 @@ def record_event(event: dict[str, Any]) -> None:
     with active_lock:
         upload_events.append(event)
         del upload_events[:-50]
+
+
+def camera_busy_response(action: str) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "label": "camera-command",
+        "action": action,
+        "error": "camera command already running",
+        "startedAt": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def remove_local_file(path: Path, label: str) -> dict[str, Any]:
+    event = {
+        "path": str(path),
+        "label": label,
+        "startedAt": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        if path.exists():
+            path.unlink()
+            event["deleted"] = True
+        else:
+            event["deleted"] = False
+            event["missing"] = True
+        event["ok"] = True
+    except Exception as exc:
+        event["ok"] = False
+        event["error"] = str(exc)
+    record_event(event)
+    return event
 
 
 def run_rclone(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
@@ -420,8 +453,15 @@ def upload_media(media_path: Path, metadata_path: Path, platform_recording: dict
             if platform_recording is not None:
                 ingest_event = post_platform_video(platform_recording, metadata, media_event, share_url)
                 metadata["platformIngest"] = ingest_event
+    if media_event.get("ok") and DELETE_LOCAL_AFTER_UPLOAD:
+        metadata["localDelete"] = remove_local_file(media_path, f"delete-{media_path.name}")
+        metadata["localDeletedAt"] = datetime.now(timezone.utc).isoformat()
     write_json(metadata_path, metadata)
-    run_upload(metadata_path, metadata_path.name)
+    metadata_event = run_upload(metadata_path, metadata_path.name)
+    metadata["metadataUpload"] = metadata_event
+    if metadata_event.get("ok") and DELETE_LOCAL_AFTER_UPLOAD:
+        write_json(metadata_path, metadata)
+        remove_local_file(metadata_path, f"delete-{metadata_path.name}")
 
 
 def upload_recording(recording: dict[str, Any], media_path: Path, metadata_path: Path) -> None:
@@ -449,6 +489,15 @@ class Handler(BaseHTTPRequestHandler):
             uploads = list(upload_events)
         ready, ready_error = backend_ready()
         photo_ready, photo_error = backend_ready("photo")
+        camera = camera_probe()
+        ready_to_record = ready and camera.get("detected") is True and bool(RCLONE_DEST)
+        ready_to_record_error = None
+        if not camera.get("detected"):
+            ready_to_record_error = "Insta360 camera is not connected by USB"
+        elif not ready:
+            ready_to_record_error = ready_error
+        elif not RCLONE_DEST:
+            ready_to_record_error = "rclone destination is not configured"
         self.write_json(
             HTTPStatus.OK,
             {
@@ -460,8 +509,11 @@ class Handler(BaseHTTPRequestHandler):
                 "photoBackendError": photo_error,
                 "commandBackendConfigured": bool(START_COMMAND and STOP_COMMAND),
                 "photoCommandConfigured": bool(PHOTO_COMMAND),
-                "camera": camera_probe(),
+                "camera": camera,
+                "readyToRecord": ready_to_record,
+                "readyToRecordError": ready_to_record_error,
                 "rcloneConfigured": bool(RCLONE_DEST),
+                "deleteLocalAfterUpload": DELETE_LOCAL_AFTER_UPLOAD,
                 "publicLinks": PUBLIC_LINKS,
                 "platformConfigured": bool(PLATFORM_URL),
                 "root": str(ROOT),
@@ -497,6 +549,10 @@ class Handler(BaseHTTPRequestHandler):
         if not ready:
             self.write_json(HTTPStatus.SERVICE_UNAVAILABLE, {"ok": False, "backend": BACKEND, "error": ready_error})
             return
+        with active_lock:
+            if active_recordings and attempt_id not in active_recordings:
+                self.write_json(HTTPStatus.CONFLICT, {"ok": False, "backend": BACKEND, "error": "camera recording already active"})
+                return
         paths = attempt_paths(payload)
         paths["dir"].mkdir(parents=True, exist_ok=True)
         metadata = {
@@ -516,13 +572,23 @@ class Handler(BaseHTTPRequestHandler):
             "platformIngest": bool(payload.get("attemptId") and (payload.get("sessionId") or payload.get("venueSessionId"))),
         }
         if BACKEND == "command":
-            event = run_camera_command("video-start", START_COMMAND, payload, recording, paths["media"], paths["metadata"])
-            metadata["startCommand"] = event
-            if not event.get("ok"):
-                metadata["state"] = "start-failed"
+            if not camera_command_lock.acquire(blocking=False):
+                event = camera_busy_response("video-start")
+                metadata["startCommand"] = event
+                metadata["state"] = "start-busy"
                 write_json(paths["metadata"], metadata)
-                self.write_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "backend": BACKEND, "error": "camera start command failed", "event": event})
+                self.write_json(HTTPStatus.CONFLICT, {"ok": False, "backend": BACKEND, "error": "camera command already running", "event": event})
                 return
+            try:
+                event = run_camera_command("video-start", START_COMMAND, payload, recording, paths["media"], paths["metadata"])
+                metadata["startCommand"] = event
+                if not event.get("ok"):
+                    metadata["state"] = "start-failed"
+                    write_json(paths["metadata"], metadata)
+                    self.write_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "backend": BACKEND, "error": "camera start command failed", "event": event})
+                    return
+            finally:
+                camera_command_lock.release()
         write_json(paths["metadata"], metadata)
         with active_lock:
             active_recordings[attempt_id] = recording
@@ -556,7 +622,13 @@ class Handler(BaseHTTPRequestHandler):
             )
         command_event = None
         if BACKEND == "command":
-            command_event = run_camera_command("video-stop", STOP_COMMAND, payload, recording, media_path, metadata_path)
+            if not camera_command_lock.acquire(blocking=False):
+                command_event = camera_busy_response("video-stop")
+            else:
+                try:
+                    command_event = run_camera_command("video-stop", STOP_COMMAND, payload, recording, media_path, metadata_path)
+                finally:
+                    camera_command_lock.release()
         metadata = {
             "backend": BACKEND,
             "state": "finished",
@@ -625,7 +697,17 @@ class Handler(BaseHTTPRequestHandler):
 
         start_event = None
         stop_event = None
+        lock_acquired = False
         if BACKEND == "command":
+            if not camera_command_lock.acquire(blocking=False):
+                start_event = camera_busy_response("quick-video-start")
+                metadata["startCommand"] = start_event
+                metadata["state"] = "start-busy"
+                metadata["stoppedAt"] = datetime.now(timezone.utc).isoformat()
+                write_json(paths["metadata"], metadata)
+                self.write_json(HTTPStatus.CONFLICT, {"ok": False, "backend": BACKEND, "error": "camera command already running", "event": start_event})
+                return
+            lock_acquired = True
             start_event = run_camera_command("quick-video-start", START_COMMAND, payload, recording, paths["media"], paths["metadata"])
             metadata["startCommand"] = start_event
             if not start_event.get("ok"):
@@ -633,6 +715,7 @@ class Handler(BaseHTTPRequestHandler):
                 metadata["stoppedAt"] = datetime.now(timezone.utc).isoformat()
                 write_json(paths["metadata"], metadata)
                 self.write_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "backend": BACKEND, "error": "camera start command failed", "event": start_event})
+                camera_command_lock.release()
                 return
 
         write_json(paths["metadata"], metadata)
@@ -669,6 +752,8 @@ class Handler(BaseHTTPRequestHandler):
             metadata["stoppedAt"] = stopped_at
             write_json(paths["metadata"], metadata)
         finally:
+            if lock_acquired:
+                camera_command_lock.release()
             with active_lock:
                 active_recordings.pop(capture_id, None)
 
@@ -734,12 +819,19 @@ class Handler(BaseHTTPRequestHandler):
                 encoding="utf-8",
             )
         elif BACKEND == "command":
-            command_event = run_camera_command("photo", PHOTO_COMMAND, payload, recording, paths["media"], paths["metadata"])
+            if not camera_command_lock.acquire(blocking=False):
+                command_event = camera_busy_response("photo")
+            else:
+                try:
+                    command_event = run_camera_command("photo", PHOTO_COMMAND, payload, recording, paths["media"], paths["metadata"])
+                finally:
+                    camera_command_lock.release()
             metadata["photoCommand"] = command_event
             if not command_event.get("ok"):
                 metadata["state"] = "photo-failed"
                 write_json(paths["metadata"], metadata)
-                self.write_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "backend": BACKEND, "error": "camera photo command failed", "event": command_event})
+                status = HTTPStatus.CONFLICT if command_event.get("error") == "camera command already running" else HTTPStatus.INTERNAL_SERVER_ERROR
+                self.write_json(status, {"ok": False, "backend": BACKEND, "error": "camera photo command failed", "event": command_event})
                 return
         media_ready = paths["media"].exists() and paths["media"].stat().st_size > 0
         metadata["state"] = "finished" if media_ready else "media-missing"
