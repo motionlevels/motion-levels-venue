@@ -66,6 +66,7 @@ PUBLIC_LINKS = os.environ.get("MOTION_LEVELS_CAMERA_PUBLIC_LINKS", "1").strip().
 DELETE_LOCAL_AFTER_UPLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_LOCAL_AFTER_UPLOAD", "1").strip().lower() not in FALSE_VALUES
 DEFAULT_HDR_ENABLED = os.environ.get("MOTION_LEVELS_CAMERA_HDR_DEFAULT", "1").strip().lower() not in FALSE_VALUES
 DEFAULT_VIDEO_PROJECTION = os.environ.get("MOTION_LEVELS_CAMERA_VIDEO_PROJECTION_DEFAULT", "regular").strip().lower()
+DEFAULT_VIDEO_RESOLUTION = os.environ.get("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", "4k30").strip().lower() or "4k30"
 SESSION_SEGMENT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS", "120"))
 SESSION_MAX_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_MAX_SECONDS", "7200"))
 DELETE_REMOTE_AFTER_DOWNLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_REMOTE_AFTER_DOWNLOAD", "1").strip().lower() not in FALSE_VALUES
@@ -112,6 +113,34 @@ def normalized_video_projection(value: Any, fallback: str = DEFAULT_VIDEO_PROJEC
     return "regular"
 
 
+def normalized_video_resolution(value: Any, fallback: str = DEFAULT_VIDEO_RESOLUTION) -> str:
+    text = str(value or fallback or "4k30").strip().lower()
+    text = text.replace("_", "").replace("-", "").replace(" ", "")
+    aliases = {
+        "1080": "1080p30",
+        "1080p": "1080p30",
+        "1080p30": "1080p30",
+        "19201080": "1080p30",
+        "19201080p30": "1080p30",
+        "2k": "2k30",
+        "2k30": "2k30",
+        "1920960": "2k30",
+        "1920960p30": "2k30",
+        "4k": "4k30",
+        "4k30": "4k30",
+        "4kp30": "4k30",
+        "38401920": "4k30",
+        "38401920p30": "4k30",
+        "57k": "5.7k30",
+        "57k30": "5.7k30",
+        "57kp30": "5.7k30",
+        "5.7k": "5.7k30",
+        "5.7k30": "5.7k30",
+        "5.7kp30": "5.7k30",
+    }
+    return aliases.get(text, text)
+
+
 def video_capture_options(payload: dict[str, Any], recording: dict[str, Any] | None = None) -> dict[str, Any]:
     base: dict[str, Any] = {}
     if recording:
@@ -136,6 +165,7 @@ def video_capture_options(payload: dict[str, Any], recording: dict[str, Any] | N
         "hdrEnabled": hdr_enabled,
         "videoMode": "hdr" if hdr_enabled else "normal",
         "videoProjection": projection,
+        "videoResolution": normalized_video_resolution(base.get("videoResolution") or base.get("resolution")),
         "stitchingEnabled": projection == "regular",
         "mediaExtension": SPHERICAL_MEDIA_EXTENSION if projection == "360" else REGULAR_MEDIA_EXTENSION,
     }
@@ -384,6 +414,7 @@ def command_env(action: str, payload: dict[str, Any], recording: dict[str, Any],
             "MOTION_LEVELS_CAMERA_HDR_ENABLED": "1" if options["hdrEnabled"] else "0",
             "MOTION_LEVELS_CAMERA_VIDEO_PROJECTION": str(options["videoProjection"]),
             "MOTION_LEVELS_INSTA360_VIDEO_MODE": str(options["videoMode"]),
+            "MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION": str(options["videoResolution"]),
             "MOTION_LEVELS_INSTA360_ENABLE_STITCHING": "1" if options["stitchingEnabled"] else "0",
             "MOTION_LEVELS_INSTA360_DELETE_AFTER_DOWNLOAD": "1" if DELETE_REMOTE_AFTER_DOWNLOAD else "0",
         }
@@ -1017,6 +1048,7 @@ class Handler(BaseHTTPRequestHandler):
                     "hdrEnabled": DEFAULT_HDR_ENABLED,
                     "videoMode": "hdr" if DEFAULT_HDR_ENABLED else "normal",
                     "videoProjection": normalized_video_projection(DEFAULT_VIDEO_PROJECTION),
+                    "videoResolution": normalized_video_resolution(DEFAULT_VIDEO_RESOLUTION),
                     "regularMediaExtension": REGULAR_MEDIA_EXTENSION,
                     "sphericalMediaExtension": SPHERICAL_MEDIA_EXTENSION,
                     "sessionSegmentSeconds": segment_duration_seconds(),
