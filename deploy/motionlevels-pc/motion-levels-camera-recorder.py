@@ -67,6 +67,7 @@ DELETE_LOCAL_AFTER_UPLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_LOCAL_AF
 DEFAULT_HDR_ENABLED = os.environ.get("MOTION_LEVELS_CAMERA_HDR_DEFAULT", "1").strip().lower() not in FALSE_VALUES
 DEFAULT_VIDEO_PROJECTION = os.environ.get("MOTION_LEVELS_CAMERA_VIDEO_PROJECTION_DEFAULT", "regular").strip().lower()
 DEFAULT_VIDEO_RESOLUTION = os.environ.get("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", "1080p30").strip().lower() or "1080p30"
+DEFAULT_VIDEO_FRAME_RATE = os.environ.get("MOTION_LEVELS_INSTA360_VIDEO_FRAME_RATE", "30").strip() or "30"
 SESSION_SEGMENT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS", "120"))
 SESSION_MAX_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_MAX_SECONDS", "7200"))
 DELETE_REMOTE_AFTER_DOWNLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_REMOTE_AFTER_DOWNLOAD", "1").strip().lower() not in FALSE_VALUES
@@ -120,25 +121,65 @@ def normalized_video_resolution(value: Any, fallback: str = DEFAULT_VIDEO_RESOLU
         "1080": "1080p30",
         "1080p": "1080p30",
         "1080p30": "1080p30",
+        "1080p60": "1080p60",
         "19201080": "1080p30",
         "19201080p30": "1080p30",
+        "19201080p60": "1080p60",
         "2k": "2k30",
         "2k30": "2k30",
+        "2k60": "2k60",
         "1920960": "2k30",
         "1920960p30": "2k30",
+        "1920960p60": "2k60",
         "4k": "4k30",
         "4k30": "4k30",
+        "4k60": "4k60",
         "4kp30": "4k30",
+        "4kp60": "4k60",
         "38401920": "4k30",
         "38401920p30": "4k30",
+        "38401920p60": "4k60",
         "57k": "5.7k30",
         "57k30": "5.7k30",
+        "57k60": "5.7k60",
         "57kp30": "5.7k30",
+        "57kp60": "5.7k60",
         "5.7k": "5.7k30",
         "5.7k30": "5.7k30",
+        "5.7k60": "5.7k60",
         "5.7kp30": "5.7k30",
+        "5.7kp60": "5.7k60",
     }
     return aliases.get(text, text)
+
+
+def normalized_video_frame_rate(value: Any, fallback: Any = DEFAULT_VIDEO_FRAME_RATE) -> int:
+    text = str(value or fallback or "30").strip().lower()
+    text = text.replace("fps", "").replace("p", "")
+    try:
+        number = int(float(text))
+    except (TypeError, ValueError):
+        number = 30
+    return 60 if number == 60 else 30
+
+
+def video_resolution_frame_rate(value: Any) -> int:
+    text = str(value or "").strip().lower()
+    match = re.search(r"(?:p|fps)?(30|60)$", text.replace("_", "").replace("-", "").replace(" ", ""))
+    return int(match.group(1)) if match else normalized_video_frame_rate(None)
+
+
+def with_video_frame_rate(resolution: str, frame_rate: int) -> str:
+    base = normalized_video_resolution(resolution)
+    if base.startswith("1080"):
+        return f"1080p{frame_rate}"
+    if base.startswith("2k"):
+        return f"2k{frame_rate}"
+    if base.startswith("4k"):
+        return f"4k{frame_rate}"
+    if base.startswith("5.7k"):
+        return f"5.7k{frame_rate}"
+    return base
 
 
 def video_capture_options(payload: dict[str, Any], recording: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -161,11 +202,21 @@ def video_capture_options(payload: dict[str, Any], recording: dict[str, Any] | N
         or base.get("projection")
         or ("360" if normalized_bool(base.get("video360"), False) else None),
     )
+    raw_resolution_source = base.get("videoResolution") or base.get("resolution")
+    raw_resolution = normalized_video_resolution(raw_resolution_source)
+    explicit_frame_rate = base.get("videoFrameRate") or base.get("videoFps") or base.get("fps")
+    frame_rate_fallback = normalized_video_frame_rate(DEFAULT_VIDEO_FRAME_RATE) if raw_resolution_source is None else video_resolution_frame_rate(raw_resolution)
+    frame_rate = normalized_video_frame_rate(
+        explicit_frame_rate,
+        frame_rate_fallback,
+    )
+    resolution = with_video_frame_rate(raw_resolution, frame_rate)
     return {
         "hdrEnabled": hdr_enabled,
         "videoMode": "hdr" if hdr_enabled else "normal",
         "videoProjection": projection,
-        "videoResolution": normalized_video_resolution(base.get("videoResolution") or base.get("resolution")),
+        "videoResolution": resolution,
+        "videoFrameRate": frame_rate,
         "stitchingEnabled": projection == "regular",
         "mediaExtension": SPHERICAL_MEDIA_EXTENSION if projection == "360" else REGULAR_MEDIA_EXTENSION,
     }
@@ -415,6 +466,7 @@ def command_env(action: str, payload: dict[str, Any], recording: dict[str, Any],
             "MOTION_LEVELS_CAMERA_VIDEO_PROJECTION": str(options["videoProjection"]),
             "MOTION_LEVELS_INSTA360_VIDEO_MODE": str(options["videoMode"]),
             "MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION": str(options["videoResolution"]),
+            "MOTION_LEVELS_INSTA360_VIDEO_FRAME_RATE": str(options["videoFrameRate"]),
             "MOTION_LEVELS_INSTA360_ENABLE_STITCHING": "1" if options["stitchingEnabled"] else "0",
             "MOTION_LEVELS_INSTA360_DELETE_AFTER_DOWNLOAD": "1" if DELETE_REMOTE_AFTER_DOWNLOAD else "0",
         }
@@ -1025,6 +1077,7 @@ class Handler(BaseHTTPRequestHandler):
             ready_to_record_error = ready_error
         elif not RCLONE_DEST:
             ready_to_record_error = "rclone destination is not configured"
+        default_video_options = video_capture_options({})
         self.write_json(
             HTTPStatus.OK,
             {
@@ -1045,10 +1098,11 @@ class Handler(BaseHTTPRequestHandler):
                 "deleteLocalAfterUpload": DELETE_LOCAL_AFTER_UPLOAD,
                 "publicLinks": PUBLIC_LINKS,
                 "videoDefaults": {
-                    "hdrEnabled": DEFAULT_HDR_ENABLED,
-                    "videoMode": "hdr" if DEFAULT_HDR_ENABLED else "normal",
-                    "videoProjection": normalized_video_projection(DEFAULT_VIDEO_PROJECTION),
-                    "videoResolution": normalized_video_resolution(DEFAULT_VIDEO_RESOLUTION),
+                    "hdrEnabled": default_video_options["hdrEnabled"],
+                    "videoMode": default_video_options["videoMode"],
+                    "videoProjection": default_video_options["videoProjection"],
+                    "videoResolution": default_video_options["videoResolution"],
+                    "videoFrameRate": default_video_options["videoFrameRate"],
                     "regularMediaExtension": REGULAR_MEDIA_EXTENSION,
                     "sphericalMediaExtension": SPHERICAL_MEDIA_EXTENSION,
                     "sessionSegmentSeconds": segment_duration_seconds(),
