@@ -18,6 +18,8 @@ namespace fs = std::filesystem;
 
 namespace {
 
+void fail(const std::string& message, int code = 1);
+
 std::string env_string(const char* name, const std::string& fallback = "") {
     const char* value = std::getenv(name);
     if (value == nullptr || std::string(value).empty()) return fallback;
@@ -44,6 +46,25 @@ int env_int(const char* name, int fallback) {
 std::string lowercase(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
+}
+
+ins_camera::VideoResolution env_video_resolution(const char* name, ins_camera::VideoResolution fallback) {
+    std::string value = lowercase(env_string(name));
+    if (value.empty()) return fallback;
+    value.erase(std::remove(value.begin(), value.end(), '_'), value.end());
+    value.erase(std::remove(value.begin(), value.end(), '-'), value.end());
+    if (value == "4k30" || value == "4kp30" || value == "38401920p30") return ins_camera::VideoResolution::RES_4KP30;
+    if (value == "4k25" || value == "4kp25" || value == "38401920p25") return ins_camera::VideoResolution::RES_4KP25;
+    if (value == "4k24" || value == "4kp24" || value == "38401920p24") return ins_camera::VideoResolution::RES_4KP24;
+    if (value == "57k30" || value == "57kp30" || value == "5.7k30" || value == "5.7kp30") return ins_camera::VideoResolution::RES_57KP30;
+    if (value == "57k25" || value == "57kp25" || value == "5.7k25" || value == "5.7kp25") return ins_camera::VideoResolution::RES_57KP25;
+    if (value == "57k24" || value == "57kp24" || value == "5.7k24" || value == "5.7kp24") return ins_camera::VideoResolution::RES_57KP24;
+    try {
+        return static_cast<ins_camera::VideoResolution>(std::stoi(value));
+    } catch (...) {
+        fail("unsupported video resolution: " + value);
+    }
+    return fallback;
 }
 
 std::string json_escape(const std::string& value) {
@@ -81,7 +102,7 @@ std::string json_array(const std::vector<std::string>& values) {
     return out.str();
 }
 
-void fail(const std::string& message, int code = 1) {
+void fail(const std::string& message, int code) {
     std::cout << "{\"ok\":false,\"error\":\"" << json_escape(message) << "\"}" << std::endl;
     std::exit(code);
 }
@@ -200,7 +221,7 @@ void run_start(const std::shared_ptr<ins_camera::Camera>& camera, const ins_came
     }
     if (video_mode == "hdr" || env_bool("MOTION_LEVELS_INSTA360_SET_VIDEO_PARAMS", false)) {
         ins_camera::RecordParams params;
-        params.resolution = static_cast<ins_camera::VideoResolution>(env_int("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", ins_camera::VideoResolution::RES_57KP30));
+        params.resolution = env_video_resolution("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", ins_camera::VideoResolution::RES_4KP30);
         params.bitrate = env_int("MOTION_LEVELS_INSTA360_VIDEO_BITRATE", 0);
         if (!camera->SetVideoCaptureParams(params, function_mode)) {
             fail("failed to set video capture params");
