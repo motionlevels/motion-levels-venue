@@ -128,15 +128,6 @@ def normalized_video_resolution(value: Any, fallback: str = DEFAULT_VIDEO_RESOLU
         "19201080": "1080p30",
         "19201080p30": "1080p30",
         "19201080p60": "1080p60",
-        "2k": "2k30",
-        "2k30": "2k30",
-        "2k60": "2k60",
-        "25601280": "2k30",
-        "25601280p30": "2k30",
-        "25601280p60": "2k60",
-        "1920960": "2k30",
-        "1920960p30": "2k30",
-        "1920960p60": "2k60",
         "4k": "4k30",
         "4k30": "4k30",
         "4k60": "4k60",
@@ -179,8 +170,6 @@ def with_video_frame_rate(resolution: str, frame_rate: int) -> str:
     base = normalized_video_resolution(resolution)
     if base.startswith("1080"):
         return f"1080p{frame_rate}"
-    if base.startswith("2k"):
-        return f"2k{frame_rate}"
     if base.startswith("4k"):
         return f"4k{frame_rate}"
     if base.startswith("5.7k"):

@@ -55,9 +55,6 @@ ins_camera::VideoResolution env_video_resolution(const char* name, ins_camera::V
     value.erase(std::remove(value.begin(), value.end(), '-'), value.end());
     if (value == "1080" || value == "1080p" || value == "1080p30" || value == "19201080p30") return ins_camera::VideoResolution::RES_1920_1080P30;
     if (value == "1080p60" || value == "19201080p60") return ins_camera::VideoResolution::RES_1920_1080P60;
-    if (value == "2k30" || value == "2kp30" || value == "25601280p30") return ins_camera::VideoResolution::RES_2560_1280P30;
-    if (value == "2k60" || value == "2kp60" || value == "25601280p60") return ins_camera::VideoResolution::RES_2560_1280P60;
-    if (value == "1920960p30") return ins_camera::VideoResolution::RES_1920_960P30;
     if (value == "4k30" || value == "4kp30" || value == "38401920p30") return ins_camera::VideoResolution::RES_4KP30;
     if (value == "4k60" || value == "4kp60" || value == "38401920p60") return ins_camera::VideoResolution::RES_4KP60;
     if (value == "4k25" || value == "4kp25" || value == "38401920p25") return ins_camera::VideoResolution::RES_4KP25;
