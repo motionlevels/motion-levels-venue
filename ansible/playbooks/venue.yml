@@ -394,6 +394,14 @@
         mode: "0644"
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
+    - name: Ensure LED broadcast env is configured
+      ansible.builtin.lineinfile:
+        path: /etc/motion-levels/motion-levels.env
+        regexp: '^MOTION_LEVELS_LED_BROADCAST_IP='
+        line: "MOTION_LEVELS_LED_BROADCAST_IP={{ motion_levels_led_broadcast_ip | default('255.255.255.255') }}"
+        mode: "0644"
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+
     - name: Ensure HDMI audio env is configured
       ansible.builtin.lineinfile:
         path: /etc/motion-levels/motion-levels.env
