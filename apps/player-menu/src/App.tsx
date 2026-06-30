@@ -25,7 +25,8 @@ import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GamepadIc
 import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
 import { floorAnimations, parkourLevelPreview, type FloorAnim, type RGB } from "./floor";
-import { hexToColor, hexToRGB, initials, randomUUID } from "./utils";
+import { hexToColor, hexToRGB, randomUUID } from "./utils";
+import { avatarLabel, firstAvailableColor, gameRosterIssue, playerLabel, rosterSnapshot, statusPlayersForDisplay, type Player, type RosterIssue } from "./roster";
 import { captureMenuEvent, menuKioskID, setMenuEventForwarder } from "./analytics";
 import { platformAnimationCards } from "./animationCatalog";
 import { idleLoopSyncDecision, visibleActiveLevelLaunch, type ActiveLevelLaunch, type ActiveLevelLaunchPhase, type ScreenMode } from "./runtimeFlow";
@@ -37,13 +38,6 @@ import {
   normalizedDifficultyForGame,
   selectableDifficultiesForGame,
 } from "./levelSelection";
-
-type Player = {
-  id: number;
-  name: string;
-  color: string;
-  active: boolean;
-};
 
 type MenuState = {
   sessionActive: boolean;
@@ -98,7 +92,6 @@ type ChallengeCompletion = {
 
 type FinishedLevelAttempt = NonNullable<EngineStatus["finishedLevelAttempts"]>[number];
 type KeyboardTarget = { kind: "team" } | { kind: "player"; id: number };
-type RosterIssue = { message: string; playerIds: Set<number> };
 type PartyRunState = {
   cumulativeScore: number;
   index: number;
@@ -1232,137 +1225,12 @@ function isLegacyPreviewMediaURL(value: unknown): boolean {
 }
 
 // Players get a "Jugador N" placeholder until they are named.
-function playerLabel(players: Player[], player: Player): string {
-  const name = player.name.trim();
-  if (name) return name;
-  return `Jugador ${players.indexOf(player) + 1}`;
-}
-
-function rosterSnapshot(players: Player[]) {
-  return players
-    .filter((player) => player.active)
-    .map((player, index) => ({
-      index,
-      label: playerLabel(players, player),
-      color: hexToColor(player.color),
-    }));
-}
-
 function menuSnapshotProperties(menu: MenuState) {
   return {
     team_name: menu.teamName.trim(),
     players: rosterSnapshot(menu.players),
     player_count: menu.players.filter((player) => player.active).length,
   };
-}
-
-function avatarLabel(players: Player[], player: Player): string {
-  const name = player.name.trim();
-  return name ? initials(name) : `${players.indexOf(player) + 1}`;
-}
-
-function normalizeRosterName(name: string): string {
-  return name.trim().replace(/\s+/g, " ").toLocaleLowerCase("es-ES");
-}
-
-function colorChannels(color: string): [number, number, number] {
-  const normalized = color.trim().replace(/^#/, "");
-  if (normalized.length !== 6) return [0, 0, 0];
-  return [Number.parseInt(normalized.slice(0, 2), 16), Number.parseInt(normalized.slice(2, 4), 16), Number.parseInt(normalized.slice(4, 6), 16)];
-}
-
-function channelToHex(value: number): string {
-  return Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, "0");
-}
-
-function rgbToHex(color: { r: number; g: number; b: number }): string {
-  return `#${channelToHex(color.r)}${channelToHex(color.g)}${channelToHex(color.b)}`;
-}
-
-function colorDistanceSquared(a: string, b: string): number {
-  const [ar, ag, ab] = colorChannels(a);
-  const [br, bg, bb] = colorChannels(b);
-  return (ar - br) ** 2 + (ag - bg) ** 2 + (ab - bb) ** 2;
-}
-
-function statusPlayersForDisplay(status: EngineStatus | null): Player[] {
-  if (!status?.players?.length) return [];
-  return status.players.map((player) => ({
-    id: player.index + 1,
-    name: player.label,
-    color: rgbToHex(player.color),
-    active: true,
-  }));
-}
-
-function firstAvailableColor(players: Player[], ignoredID?: number): string {
-  const used = new Set(players.filter((player) => player.active && player.id !== ignoredID).map((player) => player.color.toLowerCase()));
-  const available = playerColors.filter((color) => !used.has(color.toLowerCase()));
-  if (available.length === 0) return playerColors[0];
-
-  const activeColors = players.filter((player) => player.active && player.id !== ignoredID).map((player) => player.color);
-  if (activeColors.length === 0) return available[0];
-
-  return available.reduce((best, color) => {
-    const colorScore = Math.min(...activeColors.map((activeColor) => colorDistanceSquared(color, activeColor)));
-    const bestScore = Math.min(...activeColors.map((activeColor) => colorDistanceSquared(best, activeColor)));
-    return colorScore > bestScore ? color : best;
-  }, available[0]);
-}
-
-function activeRosterIssue(players: Player[]): RosterIssue | null {
-  const active = players.filter((player) => player.active);
-  const names = new Map<string, Player[]>();
-  const colors = new Map<string, Player[]>();
-
-  for (const player of active) {
-    const nameKey = normalizeRosterName(playerLabel(players, player));
-    if (nameKey) names.set(nameKey, [...(names.get(nameKey) || []), player]);
-
-    const colorKey = player.color.toLowerCase();
-    colors.set(colorKey, [...(colors.get(colorKey) || []), player]);
-  }
-
-  for (const duplicates of names.values()) {
-    if (duplicates.length > 1) {
-      const label = playerLabel(players, duplicates[0]);
-      return {
-        message: `El nombre "${label}" ya está en uso`,
-        playerIds: new Set(duplicates.map((player) => player.id)),
-      };
-    }
-  }
-
-  for (const duplicates of colors.values()) {
-    if (duplicates.length > 1) {
-      return {
-        message: "Cada jugador necesita un color distinto",
-        playerIds: new Set(duplicates.map((player) => player.id)),
-      };
-    }
-  }
-
-  return null;
-}
-
-function gameRosterIssue(game: GameCard, players: Player[]): RosterIssue | null {
-  const duplicateIssue = activeRosterIssue(players);
-  if (duplicateIssue) return duplicateIssue;
-  const active = players.filter((player) => player.active);
-  const { maxPlayers: gameMaxPlayers, minPlayers: gameMinPlayers } = playerBoundsForGame(game);
-  if (active.length < gameMinPlayers) {
-    return {
-      message: gameMinPlayers === 1 ? "Necesita al menos 1 jugador" : `Necesita al menos ${gameMinPlayers} jugadores`,
-      playerIds: new Set(active.map((player) => player.id)),
-    };
-  }
-  if (active.length > gameMaxPlayers) {
-    return {
-      message: gameMaxPlayers === 1 ? "Máximo 1 jugador" : `Máximo ${gameMaxPlayers} jugadores`,
-      playerIds: new Set(active.map((player) => player.id)),
-    };
-  }
-  return null;
 }
 
 export default function App() {
