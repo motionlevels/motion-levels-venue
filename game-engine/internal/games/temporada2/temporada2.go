@@ -513,17 +513,6 @@ func (g *Game) failureRestartColorAtLocked(pt Point, now time.Time) RGB {
 	return RGB{}
 }
 
-func (g *Game) countdownPointAtLocked(pt Point) tilePoint {
-	if len(g.level.frames) == 0 {
-		return tilePoint{}
-	}
-	point := g.level.frames[0].points[pt.Y][pt.X]
-	if point.kind != 0 {
-		return tilePoint{}
-	}
-	return point
-}
-
 func (g *Game) countdownColorAtLocked(pt Point, now time.Time) RGB {
 	return g.safeZoneCountdownColorAtLocked(pt, now)
 }

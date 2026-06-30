@@ -334,10 +334,6 @@ func (r *gameRuntime) refreshCloudCatalogs() {
 	}()
 }
 
-func (r *gameRuntime) SelectGame(game string, players int) {
-	r.SelectGameWithDifficulty(game, players, "")
-}
-
 func (r *gameRuntime) SelectGameWithDifficulty(game string, players int, difficulty string) {
 	r.SelectGameWithOptions(game, players, difficulty, nil)
 }
@@ -2212,18 +2208,12 @@ func configForSelection(base config, game string, players int) config {
 		cfg.normalize()
 		return cfg
 	}
+	// Music ref/volume are assigned unconditionally below via
+	// defaultMusicForGame, so per-game cases only need non-music adjustments.
 	switch cfg.Game {
-	case "whack-a-mole":
-		cfg.MusicRef = whackamole.DefaultMusicRef
-		cfg.MusicVolume = whackamole.DefaultMusicVolume
-	case "lava":
-		cfg.MusicRef = lava.DefaultMusicRef
-		cfg.MusicVolume = lava.DefaultMusicVolume
 	case "saltos":
 		cfg.PlayerCount = 1
 		cfg.Level = saltos.NormalizeLevel(cfg.Level)
-		cfg.MusicRef = saltos.DefaultMusicRef
-		cfg.MusicVolume = saltos.DefaultMusicVolume
 	case "parkour":
 		cfg.PlayerCount = 1
 		cfg.Level = plataformas.NormalizeLevel(cfg.Level)

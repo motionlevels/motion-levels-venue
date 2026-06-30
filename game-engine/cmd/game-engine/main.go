@@ -467,21 +467,6 @@ func pressureEventLoop(ctx context.Context, cfg config, runtime *gameRuntime, st
 	}
 }
 
-func handlePressureEvent(cfg config, audioPlayer *audio.Player, game floorGame, startedAt time.Time, event *inputpb.PressureEvent) {
-	if event == nil {
-		return
-	}
-	now := time.Now()
-	if event.UnixNanos > 0 {
-		now = time.Unix(0, event.UnixNanos)
-	}
-	if game != nil {
-		for _, gameEvent := range game.Press(whackamole.PressEvent{X: int(event.X), Y: int(event.Y), Pressed: event.Pressed}, now) {
-			playCue(cfg, audioPlayer, gameEvent.Cue, cueRef(cfg, gameEvent.Cue))
-		}
-	}
-}
-
 func playCue(cfg config, audioPlayer *audio.Player, cue string, ref string) {
 	if audioPlayer == nil {
 		return
