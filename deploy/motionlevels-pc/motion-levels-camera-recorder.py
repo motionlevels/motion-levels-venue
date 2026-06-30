@@ -70,6 +70,18 @@ DEFAULT_VIDEO_PROJECTION = os.environ.get("MOTION_LEVELS_CAMERA_VIDEO_PROJECTION
 DEFAULT_VIDEO_LENS = os.environ.get("MOTION_LEVELS_CAMERA_VIDEO_LENS_DEFAULT", "front").strip().lower() or "front"
 DEFAULT_VIDEO_RESOLUTION = os.environ.get("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", "1080p30").strip().lower() or "1080p30"
 DEFAULT_VIDEO_FRAME_RATE = os.environ.get("MOTION_LEVELS_INSTA360_VIDEO_FRAME_RATE", "30").strip() or "30"
+FFMPEG_COMMAND = os.environ.get("MOTION_LEVELS_CAMERA_FFMPEG_COMMAND", "ffmpeg").strip() or "ffmpeg"
+POSTPROCESS_TIMEOUT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_POSTPROCESS_TIMEOUT_SECONDS", "1800"))
+FRONT_REFRAME_ENABLED = os.environ.get("MOTION_LEVELS_CAMERA_FRONT_REFRAME_ENABLED", "1").strip().lower() not in FALSE_VALUES
+FRONT_REFRAME_STREAM_INDEX = int(os.environ.get("MOTION_LEVELS_CAMERA_FRONT_REFRAME_STREAM_INDEX", "1"))
+FRONT_REFRAME_PITCH = float(os.environ.get("MOTION_LEVELS_CAMERA_FRONT_REFRAME_PITCH", "-15"))
+FRONT_REFRAME_YAW = float(os.environ.get("MOTION_LEVELS_CAMERA_FRONT_REFRAME_YAW", "0"))
+FRONT_REFRAME_ROLL = float(os.environ.get("MOTION_LEVELS_CAMERA_FRONT_REFRAME_ROLL", "0"))
+FRONT_REFRAME_INPUT_FOV = float(os.environ.get("MOTION_LEVELS_CAMERA_FRONT_REFRAME_INPUT_FOV", "190"))
+FRONT_REFRAME_H_FOV = float(os.environ.get("MOTION_LEVELS_CAMERA_FRONT_REFRAME_H_FOV", "105"))
+FRONT_REFRAME_V_FOV = float(os.environ.get("MOTION_LEVELS_CAMERA_FRONT_REFRAME_V_FOV", "65"))
+FRONT_REFRAME_VIDEO_CRF = os.environ.get("MOTION_LEVELS_CAMERA_FRONT_REFRAME_VIDEO_CRF", "20").strip() or "20"
+DELETE_SOURCE_AFTER_REFRAME = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_SOURCE_AFTER_REFRAME", "1").strip().lower() not in FALSE_VALUES
 SESSION_SEGMENT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS", "120"))
 SESSION_MAX_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_MAX_SECONDS", "7200"))
 DELETE_REMOTE_AFTER_DOWNLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_REMOTE_AFTER_DOWNLOAD", "1").strip().lower() not in FALSE_VALUES
@@ -212,11 +224,7 @@ def video_capture_options(payload: dict[str, Any], recording: dict[str, Any] | N
     )
     if projection == "360":
         lens = "all"
-    if projection == "regular" and lens == "front":
-        # X5 screen-side video produces valid MP4s through selfie mode; normal/HDR front captures download as invalid 4-byte files.
-        video_mode = "selfie"
-        hdr_enabled = False
-    elif explicit_video_mode == "hdr":
+    if explicit_video_mode == "hdr":
         video_mode = "hdr"
         hdr_enabled = True
     elif explicit_video_mode == "normal":
@@ -236,15 +244,31 @@ def video_capture_options(payload: dict[str, Any], recording: dict[str, Any] | N
         frame_rate_fallback,
     )
     resolution = with_video_frame_rate(raw_resolution, frame_rate)
+    command_lens = lens
+    command_video_mode = video_mode
+    stitching_enabled = projection == "regular" and lens == "all"
+    post_process = None
+    source_media_extension = None
+    if projection == "regular" and lens == "front" and FRONT_REFRAME_ENABLED and video_mode != "selfie":
+        # X5 front normal/HDR single-lens downloads are invalid 4-byte files through the SDK.
+        # Record the dual-fisheye source, then reframe the front stream into the user-facing MP4.
+        command_lens = "all"
+        stitching_enabled = True
+        post_process = "front-reframe"
+        source_media_extension = SPHERICAL_MEDIA_EXTENSION
     return {
         "hdrEnabled": hdr_enabled,
         "videoMode": video_mode,
         "videoProjection": projection,
         "videoLens": lens,
+        "commandVideoMode": command_video_mode,
+        "commandVideoLens": command_lens,
         "videoResolution": resolution,
         "videoFrameRate": frame_rate,
-        "stitchingEnabled": projection == "regular" and lens == "all",
+        "stitchingEnabled": stitching_enabled,
         "mediaExtension": SPHERICAL_MEDIA_EXTENSION if projection == "360" else REGULAR_MEDIA_EXTENSION,
+        "sourceMediaExtension": source_media_extension,
+        "postProcess": post_process,
     }
 
 
@@ -479,6 +503,8 @@ def run_rclone(args: list[str], timeout: float) -> subprocess.CompletedProcess[s
 def command_env(action: str, payload: dict[str, Any], recording: dict[str, Any], media_path: Path, metadata_path: Path) -> dict[str, str]:
     env = os.environ.copy()
     options = video_capture_options(payload, recording)
+    command_lens = str(options.get("commandVideoLens") or options["videoLens"])
+    command_mode = str(options.get("commandVideoMode") or options["videoMode"])
     env.update(
         {
             "MOTION_LEVELS_CAMERA_ACTION": action,
@@ -491,8 +517,8 @@ def command_env(action: str, payload: dict[str, Any], recording: dict[str, Any],
             "MOTION_LEVELS_CAMERA_HDR_ENABLED": "1" if options["hdrEnabled"] else "0",
             "MOTION_LEVELS_CAMERA_VIDEO_PROJECTION": str(options["videoProjection"]),
             "MOTION_LEVELS_CAMERA_VIDEO_LENS": str(options["videoLens"]),
-            "MOTION_LEVELS_INSTA360_ACTIVE_SENSOR": str(options["videoLens"]),
-            "MOTION_LEVELS_INSTA360_VIDEO_MODE": str(options["videoMode"]),
+            "MOTION_LEVELS_INSTA360_ACTIVE_SENSOR": command_lens,
+            "MOTION_LEVELS_INSTA360_VIDEO_MODE": command_mode,
             "MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION": str(options["videoResolution"]),
             "MOTION_LEVELS_INSTA360_VIDEO_FRAME_RATE": str(options["videoFrameRate"]),
             "MOTION_LEVELS_INSTA360_ENABLE_STITCHING": "1" if options["stitchingEnabled"] else "0",
@@ -532,6 +558,115 @@ def run_camera_command(action: str, command: str, payload: dict[str, Any], recor
         event["error"] = str(exc)
     record_event(event)
     return event
+
+
+def command_media_path(media_path: Path, capture_options: dict[str, Any]) -> Path:
+    if BACKEND != "command" or capture_options.get("postProcess") != "front-reframe":
+        return media_path
+    source_extension = str(capture_options.get("sourceMediaExtension") or SPHERICAL_MEDIA_EXTENSION or ".insv")
+    if source_extension and not source_extension.startswith("."):
+        source_extension = f".{source_extension}"
+    return media_path.with_name(f"{media_path.stem}.source{source_extension}")
+
+
+def front_reframe_filter() -> str:
+    return (
+        "v360="
+        "input=fisheye:output=flat"
+        ":w=1920:h=1080"
+        f":ih_fov={FRONT_REFRAME_INPUT_FOV:g}:iv_fov={FRONT_REFRAME_INPUT_FOV:g}"
+        f":h_fov={FRONT_REFRAME_H_FOV:g}:v_fov={FRONT_REFRAME_V_FOV:g}"
+        f":yaw={FRONT_REFRAME_YAW:g}:pitch={FRONT_REFRAME_PITCH:g}:roll={FRONT_REFRAME_ROLL:g}"
+    )
+
+
+def post_process_media(capture_options: dict[str, Any], source_path: Path, media_path: Path) -> dict[str, Any] | None:
+    if BACKEND != "command" or capture_options.get("postProcess") != "front-reframe":
+        return None
+    started = time.time()
+    temp_path = media_path.with_name(f"{media_path.name}.tmp.mp4")
+    event = {
+        "label": "front-reframe",
+        "sourcePath": str(source_path),
+        "path": str(media_path),
+        "startedAt": datetime.now(timezone.utc).isoformat(),
+        "streamIndex": FRONT_REFRAME_STREAM_INDEX,
+        "filter": front_reframe_filter(),
+    }
+    if not source_path.exists() or source_path.stat().st_size <= 0:
+        event["ok"] = False
+        event["error"] = "source media is missing"
+        record_event(event)
+        return event
+    media_path.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        FFMPEG_COMMAND,
+        "-y",
+        "-i",
+        str(source_path),
+        "-map",
+        f"0:v:{FRONT_REFRAME_STREAM_INDEX}",
+        "-map",
+        "0:a:0?",
+        "-vf",
+        front_reframe_filter(),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        FRONT_REFRAME_VIDEO_CRF,
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "160k",
+        "-movflags",
+        "+faststart",
+        "-f",
+        "mp4",
+        str(temp_path),
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=POSTPROCESS_TIMEOUT_SECONDS,
+        )
+        event["durationSeconds"] = round(time.time() - started, 3)
+        event["returnCode"] = result.returncode
+        event["stdout"] = result.stdout[-2000:]
+        event["stderr"] = result.stderr[-4000:]
+        event["ok"] = result.returncode == 0 and temp_path.exists() and temp_path.stat().st_size > 0
+        if event["ok"]:
+            temp_path.replace(media_path)
+            event["byteSize"] = media_path.stat().st_size
+            if DELETE_SOURCE_AFTER_REFRAME:
+                event["sourceDelete"] = remove_local_file(source_path, f"delete-{source_path.name}")
+        else:
+            event["error"] = "ffmpeg reframe failed"
+            if temp_path.exists():
+                remove_local_file(temp_path, f"delete-{temp_path.name}")
+    except Exception as exc:
+        event["durationSeconds"] = round(time.time() - started, 3)
+        event["ok"] = False
+        event["error"] = str(exc)
+        if temp_path.exists():
+            remove_local_file(temp_path, f"delete-{temp_path.name}")
+    record_event(event)
+    return event
+
+
+def finalize_media(capture_options: dict[str, Any], source_path: Path, media_path: Path, metadata: dict[str, Any]) -> bool:
+    post_process_event = post_process_media(capture_options, source_path, media_path)
+    if post_process_event is not None:
+        metadata["postProcess"] = post_process_event
+        if not post_process_event.get("ok"):
+            return False
+    return media_path.exists() and media_path.stat().st_size > 0
 
 
 def run_camera_status_command() -> dict[str, Any]:
@@ -1061,6 +1196,7 @@ def run_session_segment(session: dict[str, Any], segment_index: int, duration_se
     payload = dict(session["payload"])
     capture_options = video_capture_options(payload)
     paths = session_segment_paths(payload, segment_index, str(capture_options["mediaExtension"]))
+    source_media = command_media_path(paths["media"], capture_options)
     paths["dir"].mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc)
     venue_id = str(payload.get("venueSessionId") or "session")
@@ -1098,6 +1234,7 @@ def run_session_segment(session: dict[str, Any], segment_index: int, duration_se
         "payload": segment_payload,
         "captureOptions": capture_options,
         "mediaPath": str(paths["media"]),
+        "sourceMediaPath": str(source_media) if source_media != paths["media"] else None,
         "rcloneDest": RCLONE_DEST,
     }
     write_json(paths["metadata"], metadata)
@@ -1126,7 +1263,7 @@ def run_session_segment(session: dict[str, Any], segment_index: int, duration_se
         try:
             if stop_event.is_set():
                 return False
-            start_event = run_camera_command("session-segment-start", START_COMMAND, segment_payload, recording, paths["media"], paths["metadata"])
+            start_event = run_camera_command("session-segment-start", START_COMMAND, segment_payload, recording, source_media, paths["metadata"])
             metadata["startCommand"] = start_event
             if not start_event.get("ok"):
                 metadata["state"] = "start-failed"
@@ -1137,7 +1274,7 @@ def run_session_segment(session: dict[str, Any], segment_index: int, duration_se
             stop_event.wait(duration_seconds)
             stopped_at = datetime.now(timezone.utc).isoformat()
             stop_payload = {**segment_payload, "stoppedAt": stopped_at}
-            stop_command_event = run_camera_command("session-segment-stop", STOP_COMMAND, stop_payload, recording, paths["media"], paths["metadata"])
+            stop_command_event = run_camera_command("session-segment-stop", STOP_COMMAND, stop_payload, recording, source_media, paths["metadata"])
             metadata["stopCommand"] = stop_command_event
         finally:
             camera_command_lock.release()
@@ -1148,8 +1285,10 @@ def run_session_segment(session: dict[str, Any], segment_index: int, duration_se
         return False
 
     stopped_at = datetime.now(timezone.utc).isoformat()
-    media_ready = paths["media"].exists() and paths["media"].stat().st_size > 0
+    media_ready = finalize_media(capture_options, source_media, paths["media"], metadata)
     metadata["state"] = "finished" if media_ready and (not stop_command_event or stop_command_event.get("ok")) else "media-missing"
+    if metadata.get("postProcess") and not metadata["postProcess"].get("ok"):
+        metadata["state"] = "post-process-failed"
     if stop_command_event and not stop_command_event.get("ok"):
         metadata["state"] = "stop-failed"
     metadata["contentType"] = content_type_for(paths["media"])
@@ -1455,6 +1594,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.write_json(HTTPStatus.CONFLICT, {"ok": False, "backend": BACKEND, "error": "camera recording already active"})
                 return
         paths = attempt_paths(payload, str(capture_options["mediaExtension"]))
+        source_media = command_media_path(paths["media"], capture_options)
         paths["dir"].mkdir(parents=True, exist_ok=True)
         metadata = {
             "backend": BACKEND,
@@ -1463,6 +1603,7 @@ class Handler(BaseHTTPRequestHandler):
             "start": payload,
             "captureOptions": capture_options,
             "mediaPath": str(paths["media"]),
+            "sourceMediaPath": str(source_media) if source_media != paths["media"] else None,
         }
         recording = {
             "attemptId": attempt_id,
@@ -1474,6 +1615,8 @@ class Handler(BaseHTTPRequestHandler):
             "captureOptions": capture_options,
             "platformIngest": bool(payload.get("attemptId") and (payload.get("sessionId") or payload.get("venueSessionId"))),
         }
+        if source_media != paths["media"]:
+            recording["sourceMediaPath"] = str(source_media)
         if BACKEND == "command":
             if not camera_command_lock.acquire(blocking=False):
                 event = camera_busy_response("video-start")
@@ -1483,7 +1626,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.write_json(HTTPStatus.CONFLICT, {"ok": False, "backend": BACKEND, "error": "camera command already running", "event": event})
                 return
             try:
-                event = run_camera_command("video-start", START_COMMAND, payload, recording, paths["media"], paths["metadata"])
+                event = run_camera_command("video-start", START_COMMAND, payload, recording, source_media, paths["metadata"])
                 metadata["startCommand"] = event
                 if not event.get("ok"):
                     metadata["state"] = "start-failed"
@@ -1525,6 +1668,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         media_path = Path(recording["mediaPath"])
         metadata_path = Path(recording["metadataPath"])
+        capture_options = recording.get("captureOptions") or video_capture_options(payload, recording)
+        source_media = Path(str(recording.get("sourceMediaPath") or media_path))
         media_path.parent.mkdir(parents=True, exist_ok=True)
         stopped_at = datetime.now(timezone.utc).isoformat()
         if BACKEND == "fake":
@@ -1547,7 +1692,7 @@ class Handler(BaseHTTPRequestHandler):
                 command_event = camera_busy_response("video-stop")
             else:
                 try:
-                    command_event = run_camera_command("video-stop", STOP_COMMAND, payload, recording, media_path, metadata_path)
+                    command_event = run_camera_command("video-stop", STOP_COMMAND, payload, recording, source_media, metadata_path)
                 finally:
                     camera_command_lock.release()
         metadata = {
@@ -1557,16 +1702,22 @@ class Handler(BaseHTTPRequestHandler):
             "stoppedAt": stopped_at,
             "start": recording["start"],
             "finish": payload,
-            "captureOptions": recording.get("captureOptions") or video_capture_options(payload, recording),
+            "captureOptions": capture_options,
             "mediaPath": str(media_path),
+            "sourceMediaPath": str(source_media) if source_media != media_path else None,
             "rcloneDest": RCLONE_DEST,
         }
         if command_event is not None:
             metadata["stopCommand"] = command_event
             if not command_event.get("ok"):
                 metadata["state"] = "stop-failed"
+        if metadata["state"] == "finished":
+            media_ready = finalize_media(capture_options, source_media, media_path, metadata)
+            if metadata.get("postProcess") and not metadata["postProcess"].get("ok"):
+                metadata["state"] = "post-process-failed"
+        else:
+            media_ready = media_path.exists() and media_path.stat().st_size > 0
         write_json(metadata_path, metadata)
-        media_ready = media_path.exists() and media_path.stat().st_size > 0
         if RCLONE_DEST and media_ready and metadata["state"] == "finished":
             threading.Thread(target=upload_recording, args=(recording, media_path, metadata_path), daemon=True).start()
         self.write_json(
@@ -1594,6 +1745,7 @@ class Handler(BaseHTTPRequestHandler):
         duration_seconds = quick_video_duration(payload)
         capture_options = video_capture_options(payload)
         paths = capture_paths(payload, "video", str(capture_options["mediaExtension"]))
+        source_media = command_media_path(paths["media"], capture_options)
         paths["dir"].mkdir(parents=True, exist_ok=True)
         capture_id = slug(payload.get("captureId") or paths["media"].stem, "video")
         payload.setdefault("captureId", capture_id)
@@ -1608,6 +1760,8 @@ class Handler(BaseHTTPRequestHandler):
             "captureOptions": capture_options,
             "platformIngest": False,
         }
+        if source_media != paths["media"]:
+            recording["sourceMediaPath"] = str(source_media)
         metadata = {
             "backend": BACKEND,
             "state": "recording",
@@ -1617,6 +1771,7 @@ class Handler(BaseHTTPRequestHandler):
             "payload": payload,
             "captureOptions": capture_options,
             "mediaPath": str(paths["media"]),
+            "sourceMediaPath": str(source_media) if source_media != paths["media"] else None,
             "rcloneDest": RCLONE_DEST,
         }
 
@@ -1633,7 +1788,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.write_json(HTTPStatus.CONFLICT, {"ok": False, "backend": BACKEND, "error": "camera command already running", "event": start_event})
                 return
             lock_acquired = True
-            start_event = run_camera_command("quick-video-start", START_COMMAND, payload, recording, paths["media"], paths["metadata"])
+            start_event = run_camera_command("quick-video-start", START_COMMAND, payload, recording, source_media, paths["metadata"])
             metadata["startCommand"] = start_event
             if not start_event.get("ok"):
                 metadata["state"] = "start-failed"
@@ -1666,10 +1821,12 @@ class Handler(BaseHTTPRequestHandler):
                 )
             elif BACKEND == "command":
                 stop_payload = {**payload, "durationSeconds": duration_seconds, "stoppedAt": stopped_at}
-                stop_event = run_camera_command("quick-video-stop", STOP_COMMAND, stop_payload, recording, paths["media"], paths["metadata"])
+                stop_event = run_camera_command("quick-video-stop", STOP_COMMAND, stop_payload, recording, source_media, paths["metadata"])
                 metadata["stopCommand"] = stop_event
-            media_ready = paths["media"].exists() and paths["media"].stat().st_size > 0
+            media_ready = finalize_media(capture_options, source_media, paths["media"], metadata)
             metadata["state"] = "finished" if media_ready and (not stop_event or stop_event.get("ok")) else "media-missing"
+            if metadata.get("postProcess") and not metadata["postProcess"].get("ok"):
+                metadata["state"] = "post-process-failed"
             if stop_event and not stop_event.get("ok"):
                 metadata["state"] = "stop-failed"
             metadata["contentType"] = content_type_for(paths["media"])
