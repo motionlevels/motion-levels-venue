@@ -272,9 +272,10 @@ describe("catalog metadata sync", () => {
 
   it("uses revisioned platform preview media for level cards", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
-    const cardThumbnailSources = appSource.slice(
-      appSource.indexOf("function catalogThumbnailMediaSrcs("),
-      appSource.indexOf("function catalogPreviewMediaSrcs("),
+    const previewsSource = fs.readFileSync(path.resolve(__dirname, "../src/previews.ts"), "utf8");
+    const cardThumbnailSources = previewsSource.slice(
+      previewsSource.indexOf("function catalogThumbnailMediaSrcs("),
+      previewsSource.indexOf("function catalogPreviewMediaSrcs("),
     );
     const levelThumbnailSources = appSource.slice(
       appSource.indexOf("const platformThumbnailSrcs = uniquePreviewSources(["),
@@ -370,6 +371,7 @@ describe("catalog metadata sync", () => {
   it("forces Parkour game previews to use the curated route animation without flattening level previews", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
     const floorSource = fs.readFileSync(path.resolve(__dirname, "../src/floor.ts"), "utf8");
+    const previewsSource = fs.readFileSync(path.resolve(__dirname, "../src/previews.ts"), "utf8");
 
     assert.match(appSource, /function isParkourPreviewGame\(engineGame: string\): boolean/);
     assert.match(appSource, /return engineGame === "parkour";/);
@@ -379,7 +381,7 @@ describe("catalog metadata sync", () => {
     assert.doesNotMatch(appSource, /const platformPreviewSrcs = preferFallbackAnimation \? \[\] : uniquePreviewSources/);
     assert.match(appSource, /const hasLevelMedia = platformPreviewSrcs\.length > 0 \|\| platformThumbnailSrcs\.length > 0;/);
     assert.match(appSource, /previewAnimation: hasLevelMedia \? undefined : existing\?\.previewAnimation \|\| fallbackLevel\?\.previewAnimation,/);
-    assert.match(appSource, /function levelHasPreviewMedia\(level\?: NonNullable<GameCard\["levels"\]>\[number\]\): boolean/);
+    assert.match(previewsSource, /function levelHasPreviewMedia\(level\?: NonNullable<GameCard\["levels"\]>\[number\]\): boolean/);
     assert.match(appSource, /function levelFallbackPreviewAnimationID\(game: GameCard, level\?: NonNullable<GameCard\["levels"\]>\[number\]\): string/);
     assert.match(appSource, /if \(levelHasPreviewMedia\(level\)\) return "";/);
     assert.match(appSource, /if \(level && isParkourPreviewGame\(engineGameID\(game\)\)\) return "";/);

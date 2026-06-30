@@ -27,6 +27,25 @@ import { LiveFloorView } from "./LiveFloorView";
 import { floorAnimations, parkourLevelPreview, type FloorAnim, type RGB } from "./floor";
 import { hexToColor, hexToRGB, randomUUID } from "./utils";
 import { avatarLabel, firstAvailableColor, gameRosterIssue, playerLabel, rosterSnapshot, statusPlayersForDisplay, type Player, type RosterIssue } from "./roster";
+import {
+  catalogDirectAssetSrc,
+  catalogPreviewMediaSrcs,
+  catalogThumbnailMediaSrcs,
+  catalogThumbnailSrc,
+  gamePreviewSrcs,
+  gameThumbnailSrc,
+  gameThumbnailSrcs,
+  isMotionLevelsLogoSrc,
+  levelHasPreviewMedia,
+  levelPreviewSrc,
+  levelPreviewSrcs,
+  levelThumbnailSrc,
+  levelThumbnailSrcs,
+  partyPreviewGridSize,
+  platformAssetURL,
+  uniquePreviewSources,
+  webpPreviewRef,
+} from "./previews";
 import { captureMenuEvent, menuKioskID, setMenuEventForwarder } from "./analytics";
 import { platformAnimationCards } from "./animationCatalog";
 import { idleLoopSyncDecision, visibleActiveLevelLaunch, type ActiveLevelLaunch, type ActiveLevelLaunchPhase, type ScreenMode } from "./runtimeFlow";
@@ -252,10 +271,6 @@ function previewAnimationID(game: GameCard): string {
   return game.previewAnimation || game.id;
 }
 
-function levelHasPreviewMedia(level?: NonNullable<GameCard["levels"]>[number]): boolean {
-  return Boolean(level?.previewByDifficulty || level?.previewSrc || level?.previewSrcs?.length || level?.thumbnailSrc || level?.thumbnailSrcs?.length);
-}
-
 function levelFallbackPreviewAnimationID(game: GameCard, level?: NonNullable<GameCard["levels"]>[number]): string {
   if (levelHasPreviewMedia(level)) return "";
   if (level?.previewAnimation) return level.previewAnimation;
@@ -273,46 +288,6 @@ function levelFallbackPreviewAnim(game: GameCard, level?: NonNullable<GameCard["
     level.description,
     level.previewRevisionHash || game.revisionHash || game.previewRevisionHash || "",
   ].join(":"));
-}
-
-function levelThumbnailSrc(level: NonNullable<GameCard["levels"]>[number] | undefined, game: GameCard): string | undefined {
-  return levelPreviewSrc(game, level, "medium");
-}
-
-function levelThumbnailSrcs(level: NonNullable<GameCard["levels"]>[number] | undefined, game: GameCard): string[] {
-  if (!level) return uniquePreviewSources([game.previewSrc, game.thumbnailSrc]);
-  return uniquePreviewSources([level.previewSrc, ...(level.previewSrcs || []), level.thumbnailSrc, ...(level.thumbnailSrcs || [])]);
-}
-
-function levelPreviewSrcs(game: GameCard, level: NonNullable<GameCard["levels"]>[number] | undefined, difficulty: DifficultyID): string[] {
-  if (!level) return uniquePreviewSources([game.previewSrc, game.thumbnailSrc]);
-  return uniquePreviewSources([level.previewByDifficulty?.[difficulty], level.previewSrc, ...(level.previewSrcs || []), level.thumbnailSrc, ...(level.thumbnailSrcs || [])]);
-}
-
-function gameThumbnailSrc(game: GameCard): string | undefined {
-  return game.thumbnailSrc || game.previewSrc;
-}
-
-function gameThumbnailSrcs(game: GameCard): string[] {
-  return uniquePreviewSources([...(game.thumbnailSrcs || []), game.thumbnailSrc, game.previewSrc]);
-}
-
-function gamePreviewSrcs(game: GameCard): string[] {
-  return uniquePreviewSources([game.previewSrc, ...(game.previewSrcs || []), ...(game.thumbnailSrcs || []), game.thumbnailSrc]);
-}
-
-function levelPreviewSrc(game: GameCard, level: NonNullable<GameCard["levels"]>[number] | undefined, difficulty: DifficultyID): string | undefined {
-  if (!level) return game.previewSrc || game.thumbnailSrc;
-  return level.previewByDifficulty?.[difficulty] || level.previewSrc || level.previewSrcs?.[0] || level.thumbnailSrc || level.thumbnailSrcs?.[0];
-}
-
-function partyPreviewGridSize(count: number): number {
-  if (count <= 1) return 1;
-  return Math.ceil(Math.sqrt(count));
-}
-
-function isMotionLevelsLogoSrc(src: string | undefined): boolean {
-  return Boolean(src && /(?:^|\/)motion-levels-icon\.(?:webp|png)(?:$|[?#])/i.test(src));
 }
 
 function isAmbientCard(game: GameCard): boolean {
@@ -512,57 +487,6 @@ function activeLevelAttempt(status: EngineStatus | null, levelID: string): boole
     && !animationIsIdleLoop(status.currentGame, status.phase)
     && status.level === levelID,
   );
-}
-
-function webpPreviewRef(value: string): string {
-  return value.replace(/^preview:/, "").replace(/\.(?:gif|png|webp)(?=($|[?#]))/i, ".webp");
-}
-
-function platformAssetURL(pathname: string): string {
-  const platformURL = platformBaseURL();
-  if (!platformURL) return pathname;
-  return `${platformURL.replace(/\/$/, "")}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
-}
-
-function catalogDirectAssetSrc(ref: string | undefined): string | undefined {
-  const clean = String(ref || "").trim();
-  if (!clean) return undefined;
-  if (/^data:image\/gif/i.test(clean)) return undefined;
-  if (/^(?:https?:|blob:)/i.test(clean)) return webpPreviewRef(clean);
-  if (/^data:/i.test(clean)) return clean;
-  if (clean.startsWith("/")) return platformAssetURL(webpPreviewRef(clean));
-  return undefined;
-}
-
-function catalogThumbnailSrc(ref: string | undefined): string | undefined {
-  return catalogDirectAssetSrc(ref);
-}
-
-function uniquePreviewSources(values: Array<string | undefined>): string[] {
-  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
-}
-
-function catalogThumbnailMediaSrcs(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined): string[] {
-  return uniquePreviewSources([
-    catalogDirectAssetSrc(entry.catalog_preview_url),
-    catalogDirectAssetSrc(entry.catalog_thumbnail_url),
-    catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
-    catalogThumbnailSrc(entry.catalog_thumbnail_ref),
-    ...(fallback?.thumbnailSrcs || []),
-    fallback?.thumbnailSrc,
-    fallback?.previewSrc,
-  ]);
-}
-
-function catalogPreviewMediaSrcs(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, thumbnailSrcs: string[]): string[] {
-  return uniquePreviewSources([
-    catalogDirectAssetSrc(entry.catalog_preview_url),
-    catalogDirectAssetSrc(entry.catalog_thumbnail_url),
-    catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
-    ...thumbnailSrcs,
-    ...(fallback?.previewSrcs || []),
-    fallback?.previewSrc,
-  ]);
 }
 
 function catalogPreviewAnimation(
