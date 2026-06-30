@@ -670,6 +670,15 @@ def hardware_health() -> dict[str, Any]:
     kiosk_ok = bool(tv and tv.get("kioskActive") is True)
     audio_enabled = bool(display and display.get("audioEnabled") is True)
     audio_muted = bool(display and display.get("audioMuted") is True)
+    sound_ok = hdmi_ok and audio_enabled and not audio_muted
+    if tv_error:
+        sound_message = tv_error
+    elif not hdmi_ok:
+        sound_message = "HDMI output is not connected"
+    elif display_error:
+        sound_message = display_error
+    else:
+        sound_message = "audio ready" if sound_ok else "audio disabled or muted"
     return {
         "camera": {
             "ok": ready and camera.get("detected") is True,
@@ -690,10 +699,10 @@ def hardware_health() -> dict[str, Any]:
             "details": tv,
         },
         "sound": {
-            "ok": audio_enabled and not audio_muted,
+            "ok": sound_ok,
             "label": "sound",
-            "message": display_error or ("audio ready" if audio_enabled and not audio_muted else "audio disabled or muted"),
-            "details": display,
+            "message": sound_message,
+            "details": {"display": display, "tv": tv},
         },
     }
 
