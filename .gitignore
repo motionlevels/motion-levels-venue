@@ -30,3 +30,7 @@ test-results/
 deploy/homelab/.env
 deploy/homelab/*.env.local
 deploy/homelab/secrets/
+
+# Claude Design sync tooling and generated bundle output.
+.ds-sync/
+ds-bundle/
