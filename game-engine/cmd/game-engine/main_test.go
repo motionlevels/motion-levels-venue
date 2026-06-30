@@ -1912,6 +1912,53 @@ func TestGameAPIDisplayStatus(t *testing.T) {
 	}
 }
 
+// TestDisplayStatusPlayerMappingPerGame locks the shared player-mapping helpers
+// (makeDisplayPlayer/mapDisplayPlayers) used by every per-game DisplayStatus
+// block: each game must surface the configured per-player label and color
+// overrides for the players it reports.
+func TestDisplayStatusPlayerMappingPerGame(t *testing.T) {
+	roster := []playerConfig{
+		{Index: 0, Label: "ALPHA", Color: &displayColor{R: 7, G: 8, B: 9}},
+		{Index: 1, Label: "BETA", Color: &displayColor{R: 10, G: 11, B: 12}},
+	}
+	wantLabel := map[int]string{0: "ALPHA", 1: "BETA"}
+	wantColor := map[int]displayColor{0: {R: 7, G: 8, B: 9}, 1: {R: 10, G: 11, B: 12}}
+
+	cases := []struct {
+		name string
+		cfg  config
+	}{
+		{"whack-a-mole", config{Brightness: 80, PlayerCount: 2, Game: "whack-a-mole"}},
+		{"lava", config{Brightness: 80, PlayerCount: 2, Game: "lava", Difficulty: "normal"}},
+		{"duel", config{Brightness: 80, PlayerCount: 2, Game: "duel"}},
+		{"memory", config{Brightness: 80, PlayerCount: 2, Game: "memory"}},
+		{"patrones", config{Brightness: 80, PlayerCount: 2, Game: "patrones", Difficulty: "normal", Level: "level-1"}},
+		{"saltos", config{Brightness: 80, PlayerCount: 2, Game: "saltos", Level: "level-1"}},
+		{"temporada1", config{Brightness: 80, PlayerCount: 2, Game: "temporada1", Level: "level-1"}},
+		{"temporada2", config{Brightness: 80, PlayerCount: 2, Game: "temporada2", Level: "level-1"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := tc.cfg
+			cfg.Players = roster
+			runtime := newGameRuntime(cfg, nil, nil)
+			status := runtime.DisplayStatus(time.Now())
+			if len(status.Players) == 0 {
+				t.Fatalf("%s: display status returned no players", tc.name)
+			}
+			for _, player := range status.Players {
+				if want, ok := wantLabel[player.Index]; ok && player.Label != want {
+					t.Fatalf("%s: player %d label = %q, want %q", tc.name, player.Index, player.Label, want)
+				}
+				if want, ok := wantColor[player.Index]; ok && player.Color != want {
+					t.Fatalf("%s: player %d color = %+v, want %+v", tc.name, player.Index, player.Color, want)
+				}
+			}
+		})
+	}
+}
+
 func TestDisplayStatusIncludesSessionElapsedMillis(t *testing.T) {
 	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "temporada1", Level: "level-1"}, nil, nil)
 	runtime.mu.RLock()

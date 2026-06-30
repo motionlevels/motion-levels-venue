@@ -621,6 +621,38 @@ func (r *gameRuntime) handleGameEvents(cfg config, audioPlayer *audio.Player, ev
 	}
 }
 
+// makeDisplayPlayer converts a game snapshot's per-player fields into the
+// display player shape, applying any per-venue label/color overrides. It is the
+// single source of truth shared by every per-game block in DisplayStatus.
+func makeDisplayPlayer(cfg config, index int, label string, color animation.RGB, score, lives int) displayPlayer {
+	return displayPlayer{
+		Index: index,
+		Label: configuredPlayerLabel(cfg, index, label),
+		Color: configuredPlayerColor(cfg, index, displayColor{R: int(color.R), G: int(color.G), B: int(color.B)}),
+		Score: score,
+		Lives: lives,
+	}
+}
+
+// mapDisplayPlayers builds the display player list from a game snapshot's
+// players using the supplied conversion, preserving the original pre-allocation.
+func mapDisplayPlayers[P any](players []P, convert func(P) displayPlayer) []displayPlayer {
+	out := make([]displayPlayer, 0, len(players))
+	for _, player := range players {
+		out = append(out, convert(player))
+	}
+	return out
+}
+
+// finalizeGameStatus applies the shared paused handling and attempt summary that
+// every per-game snapshot block performs before returning.
+func (r *gameRuntime) finalizeGameStatus(status displayStatus, started time.Time, paused bool) displayStatus {
+	if paused && status.Phase != "finished" {
+		status.Phase = "paused"
+	}
+	return r.withDisplayAttemptSummary(status, started)
+}
+
 func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 	if r == nil {
 		return displayStatus{
@@ -682,21 +714,11 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.CountdownRemainingMillis = snapshot.CountdownMillis
 			status.ActiveTargets = snapshot.ActiveTargets
 			status.Lives = snapshot.Lives
-			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
-			for _, player := range snapshot.Players {
-				status.Players = append(status.Players, displayPlayer{
-					Index: player.Index,
-					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
-					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
-					Score: player.Score,
-					Lives: snapshot.Lives,
-				})
-			}
+			status.Players = mapDisplayPlayers(snapshot.Players, func(player whackamole.PlayerSnapshot) displayPlayer {
+				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, snapshot.Lives)
+			})
 		}
-		if paused && status.Phase != "finished" {
-			status.Phase = "paused"
-		}
-		return r.withDisplayAttemptSummary(status, started)
+		return r.finalizeGameStatus(status, started, paused)
 	}
 
 	if cfg.Game == "lava" {
@@ -712,22 +734,12 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.ActiveTargets = snapshot.ActiveTargets
 			status.Lives = snapshot.Lives
 			status.Difficulty = snapshot.Difficulty
-			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
-			for _, player := range snapshot.Players {
-				status.Players = append(status.Players, displayPlayer{
-					Index: player.Index,
-					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
-					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
-					Score: player.Score,
-					Lives: snapshot.Lives,
-				})
-			}
+			status.Players = mapDisplayPlayers(snapshot.Players, func(player lava.PlayerSnapshot) displayPlayer {
+				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, snapshot.Lives)
+			})
 		}
 		r.applyIntroStatus(&status, gameNow, introUntil)
-		if paused && status.Phase != "finished" {
-			status.Phase = "paused"
-		}
-		return r.withDisplayAttemptSummary(status, started)
+		return r.finalizeGameStatus(status, started, paused)
 	}
 
 	if cfg.Game == "duel" {
@@ -743,21 +755,11 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.ActiveTargets = snapshot.ActiveTargets
 			status.Lives = snapshot.Lives
 			status.Success = snapshot.Success
-			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
-			for _, player := range snapshot.Players {
-				status.Players = append(status.Players, displayPlayer{
-					Index: player.Index,
-					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
-					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
-					Score: player.Score,
-					Lives: player.Lives,
-				})
-			}
+			status.Players = mapDisplayPlayers(snapshot.Players, func(player duel.PlayerSnapshot) displayPlayer {
+				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, player.Lives)
+			})
 		}
-		if paused && status.Phase != "finished" {
-			status.Phase = "paused"
-		}
-		return r.withDisplayAttemptSummary(status, started)
+		return r.finalizeGameStatus(status, started, paused)
 	}
 
 	if cfg.Game == "memory" {
@@ -773,21 +775,11 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.ActiveTargets = snapshot.ActiveTargets
 			status.Lives = snapshot.Lives
 			status.Success = snapshot.Success
-			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
-			for _, player := range snapshot.Players {
-				status.Players = append(status.Players, displayPlayer{
-					Index: player.Index,
-					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
-					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
-					Score: player.Score,
-					Lives: player.Lives,
-				})
-			}
+			status.Players = mapDisplayPlayers(snapshot.Players, func(player memorychallenge.PlayerSnapshot) displayPlayer {
+				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, player.Lives)
+			})
 		}
-		if paused && status.Phase != "finished" {
-			status.Phase = "paused"
-		}
-		return r.withDisplayAttemptSummary(status, started)
+		return r.finalizeGameStatus(status, started, paused)
 	}
 
 	if cfg.Game == "patrones" {
@@ -810,21 +802,11 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.GameplayStartedUnixNanos = snapshot.StartedUnixNanos
 			status.AttemptEndedUnixNanos = snapshot.EndedUnixNanos
 			status.Success = snapshot.Success
-			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
-			for _, player := range snapshot.Players {
-				status.Players = append(status.Players, displayPlayer{
-					Index: player.Index,
-					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
-					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
-					Score: player.Score,
-					Lives: player.Lives,
-				})
-			}
+			status.Players = mapDisplayPlayers(snapshot.Players, func(player patrones.PlayerSnapshot) displayPlayer {
+				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, player.Lives)
+			})
 		}
-		if paused && status.Phase != "finished" {
-			status.Phase = "paused"
-		}
-		return r.withDisplayAttemptSummary(status, started)
+		return r.finalizeGameStatus(status, started, paused)
 	}
 
 	if cfg.Game == "saltos" {
@@ -840,21 +822,11 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.ActiveTargets = snapshot.ActiveTargets
 			status.Lives = snapshot.Lives
 			status.Level = snapshot.Level
-			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
-			for _, player := range snapshot.Players {
-				status.Players = append(status.Players, displayPlayer{
-					Index: player.Index,
-					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
-					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
-					Score: player.Score,
-					Lives: snapshot.Lives,
-				})
-			}
+			status.Players = mapDisplayPlayers(snapshot.Players, func(player saltos.PlayerSnapshot) displayPlayer {
+				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, snapshot.Lives)
+			})
 		}
-		if paused && status.Phase != "finished" {
-			status.Phase = "paused"
-		}
-		return r.withDisplayAttemptSummary(status, started)
+		return r.finalizeGameStatus(status, started, paused)
 	}
 
 	if isPlatformRuntimeGame(cfg.Game) {
@@ -880,21 +852,11 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.GameplayStartedUnixNanos = snapshot.StartedUnixNanos
 			status.AttemptEndedUnixNanos = snapshot.EndedUnixNanos
 			status.Success = snapshot.Success
-			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
-			for _, player := range snapshot.Players {
-				status.Players = append(status.Players, displayPlayer{
-					Index: player.Index,
-					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
-					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
-					Score: player.Score,
-					Lives: player.Lives,
-				})
-			}
+			status.Players = mapDisplayPlayers(snapshot.Players, func(player plataformas.PlayerSnapshot) displayPlayer {
+				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, player.Lives)
+			})
 		}
-		if paused && status.Phase != "finished" {
-			status.Phase = "paused"
-		}
-		return r.withDisplayAttemptSummary(status, started)
+		return r.finalizeGameStatus(status, started, paused)
 	}
 
 	if strings.HasPrefix(cfg.Game, "authored-") {
@@ -914,21 +876,11 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.ActiveTargets = snapshot.ActiveTargets
 			status.Success = snapshot.Success
 			status.Lives = snapshot.Lives
-			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
-			for _, player := range snapshot.Players {
-				status.Players = append(status.Players, displayPlayer{
-					Index: player.Index,
-					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
-					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
-					Score: player.Score,
-					Lives: player.Lives,
-				})
-			}
+			status.Players = mapDisplayPlayers(snapshot.Players, func(player authored.PlayerSnapshot) displayPlayer {
+				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, player.Lives)
+			})
 		}
-		if paused && status.Phase != "finished" {
-			status.Phase = "paused"
-		}
-		return r.withDisplayAttemptSummary(status, started)
+		return r.finalizeGameStatus(status, started, paused)
 	}
 
 	if cfg.Game == "temporada1" || cfg.Game == "temporada2" {
@@ -951,16 +903,9 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.GameplayStartedUnixNanos = snapshot.StartedUnixNanos
 			status.AttemptEndedUnixNanos = snapshot.EndedUnixNanos
 			status.Success = snapshot.Success
-			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
-			for _, player := range snapshot.Players {
-				status.Players = append(status.Players, displayPlayer{
-					Index: player.Index,
-					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
-					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
-					Score: player.Score,
-					Lives: player.Lives,
-				})
-			}
+			status.Players = mapDisplayPlayers(snapshot.Players, func(player temporada1.PlayerSnapshot) displayPlayer {
+				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, player.Lives)
+			})
 		} else if temporadaGame, ok := game.(*temporada2.Game); ok {
 			snapshot := temporadaGame.Snapshot(gameNow)
 			status.Phase = snapshot.Phase
@@ -980,21 +925,11 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.GameplayStartedUnixNanos = snapshot.StartedUnixNanos
 			status.AttemptEndedUnixNanos = snapshot.EndedUnixNanos
 			status.Success = snapshot.Success
-			status.Players = make([]displayPlayer, 0, len(snapshot.Players))
-			for _, player := range snapshot.Players {
-				status.Players = append(status.Players, displayPlayer{
-					Index: player.Index,
-					Label: configuredPlayerLabel(cfg, player.Index, player.Label),
-					Color: configuredPlayerColor(cfg, player.Index, displayColor{R: int(player.Color.R), G: int(player.Color.G), B: int(player.Color.B)}),
-					Score: player.Score,
-					Lives: player.Lives,
-				})
-			}
+			status.Players = mapDisplayPlayers(snapshot.Players, func(player temporada2.PlayerSnapshot) displayPlayer {
+				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, player.Lives)
+			})
 		}
-		if paused && status.Phase != "finished" {
-			status.Phase = "paused"
-		}
-		return r.withDisplayAttemptSummary(status, started)
+		return r.finalizeGameStatus(status, started, paused)
 	}
 
 	if !started.IsZero() {
