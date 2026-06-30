@@ -569,11 +569,21 @@ def command_media_path(media_path: Path, capture_options: dict[str, Any]) -> Pat
     return media_path.with_name(f"{media_path.stem}.source{source_extension}")
 
 
-def front_reframe_filter() -> str:
+def front_reframe_size(capture_options: dict[str, Any]) -> tuple[int, int]:
+    resolution = normalized_video_resolution(capture_options.get("videoResolution"))
+    if resolution.startswith("4k") or resolution.startswith("5.7k"):
+        return 3840, 2160
+    if resolution.startswith("2k"):
+        return 2560, 1440
+    return 1920, 1080
+
+
+def front_reframe_filter(capture_options: dict[str, Any]) -> str:
+    width, height = front_reframe_size(capture_options)
     return (
         "v360="
         "input=fisheye:output=flat"
-        ":w=1920:h=1080"
+        f":w={width}:h={height}"
         f":ih_fov={FRONT_REFRAME_INPUT_FOV:g}:iv_fov={FRONT_REFRAME_INPUT_FOV:g}"
         f":h_fov={FRONT_REFRAME_H_FOV:g}:v_fov={FRONT_REFRAME_V_FOV:g}"
         f":yaw={FRONT_REFRAME_YAW:g}:pitch={FRONT_REFRAME_PITCH:g}:roll={FRONT_REFRAME_ROLL:g}"
@@ -591,7 +601,7 @@ def post_process_media(capture_options: dict[str, Any], source_path: Path, media
         "path": str(media_path),
         "startedAt": datetime.now(timezone.utc).isoformat(),
         "streamIndex": FRONT_REFRAME_STREAM_INDEX,
-        "filter": front_reframe_filter(),
+        "filter": front_reframe_filter(capture_options),
     }
     if not source_path.exists() or source_path.stat().st_size <= 0:
         event["ok"] = False
@@ -609,7 +619,7 @@ def post_process_media(capture_options: dict[str, Any], source_path: Path, media
         "-map",
         "0:a:0?",
         "-vf",
-        front_reframe_filter(),
+        front_reframe_filter(capture_options),
         "-c:v",
         "libx264",
         "-preset",

@@ -227,6 +227,24 @@ void run_status(const std::shared_ptr<ins_camera::Camera>& camera, const ins_cam
         << "}" << std::endl;
 }
 
+void run_list(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camera::DeviceDescriptor&) {
+    auto files = camera->GetCameraFilesList();
+    std::cout << "{\"ok\":true,\"files\":" << json_array(files) << "}" << std::endl;
+}
+
+void run_download(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camera::DeviceDescriptor&) {
+    std::string remote = env_string("MOTION_LEVELS_INSTA360_REMOTE_PATH");
+    if (remote.empty()) fail("MOTION_LEVELS_INSTA360_REMOTE_PATH is required", 64);
+    std::string target = env_string("MOTION_LEVELS_CAMERA_MEDIA_PATH");
+    if (target.empty()) fail("MOTION_LEVELS_CAMERA_MEDIA_PATH is required", 64);
+    auto local_paths = download_urls(camera, {remote}, fs::path(target));
+    std::cout
+        << "{\"ok\":true"
+        << ",\"remote\":\"" << json_escape(remote) << "\""
+        << ",\"localPaths\":" << json_array(local_paths)
+        << "}" << std::endl;
+}
+
 void run_start(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camera::DeviceDescriptor&) {
     ins_camera::SensorDevice active_sensor = env_active_sensor();
     if (!camera->SetActiveSensor(active_sensor)) {
@@ -246,13 +264,19 @@ void run_start(const std::shared_ptr<ins_camera::Camera>& camera, const ins_came
         fail("unsupported video mode: " + video_mode);
     }
     if (!camera->SetVideoSubMode(sub_mode)) {
-        fail("failed to set " + video_mode + " video submode");
+        if (env_bool("MOTION_LEVELS_INSTA360_REQUIRE_SUBMODE", false)) {
+            fail("failed to set " + video_mode + " video submode");
+        }
+        std::cerr << "warning: failed to set " << video_mode << " video submode; continuing with current camera mode" << std::endl;
     }
     ins_camera::RecordParams params;
     params.resolution = env_video_resolution("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", ins_camera::VideoResolution::RES_1920_1080P30);
     params.bitrate = env_int("MOTION_LEVELS_INSTA360_VIDEO_BITRATE", 0);
     if (!camera->SetVideoCaptureParams(params, function_mode)) {
-        fail("failed to set video capture params");
+        if (env_bool("MOTION_LEVELS_INSTA360_REQUIRE_CAPTURE_PARAMS", false)) {
+            fail("failed to set video capture params");
+        }
+        std::cerr << "warning: failed to set video capture params; continuing with current camera capture settings" << std::endl;
     }
     if (!camera->StartRecording()) fail("failed to start recording");
     std::cout
@@ -307,13 +331,15 @@ void run_photo(const std::shared_ptr<ins_camera::Camera>& camera, const ins_came
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        fail("usage: motion-levels-insta360 <status|start|stop|photo>", 64);
+        fail("usage: motion-levels-insta360 <status|list|download|start|stop|photo>", 64);
     }
     std::string command = argv[1];
     ins_camera::DeviceDescriptor selected;
     auto camera = open_camera(selected);
     try {
         if (command == "status") run_status(camera, selected);
+        else if (command == "list") run_list(camera, selected);
+        else if (command == "download") run_download(camera, selected);
         else if (command == "start") run_start(camera, selected);
         else if (command == "stop") run_stop(camera, selected);
         else if (command == "photo") run_photo(camera, selected);
