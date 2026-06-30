@@ -443,6 +443,8 @@
           value: "1"
         - key: MOTION_LEVELS_CAMERA_VIDEO_PROJECTION_DEFAULT
           value: regular
+        - key: MOTION_LEVELS_CAMERA_VIDEO_LENS_DEFAULT
+          value: front
         - key: MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION
           value: 1080p30
         - key: MOTION_LEVELS_INSTA360_VIDEO_FRAME_RATE

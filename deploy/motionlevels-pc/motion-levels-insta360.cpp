@@ -71,6 +71,24 @@ ins_camera::VideoResolution env_video_resolution(const char* name, ins_camera::V
     return fallback;
 }
 
+ins_camera::SensorDevice env_active_sensor() {
+    std::string value = lowercase(env_string("MOTION_LEVELS_INSTA360_ACTIVE_SENSOR", "front"));
+    value.erase(std::remove(value.begin(), value.end(), '_'), value.end());
+    value.erase(std::remove(value.begin(), value.end(), '-'), value.end());
+    value.erase(std::remove(value.begin(), value.end(), ' '), value.end());
+    if (value == "rear" || value == "back" || value == "screenback") return ins_camera::SensorDevice::SENSOR_DEVICE_REAR;
+    if (value == "all" || value == "both" || value == "360" || value == "pano" || value == "panoramic" || value == "spherical") return ins_camera::SensorDevice::SENSOR_DEVICE_ALL;
+    if (value == "front" || value == "screenside" || value == "screen") return ins_camera::SensorDevice::SENSOR_DEVICE_FRONT;
+    fail("unsupported active sensor: " + value);
+    return ins_camera::SensorDevice::SENSOR_DEVICE_FRONT;
+}
+
+std::string active_sensor_name(ins_camera::SensorDevice sensor) {
+    if (sensor == ins_camera::SensorDevice::SENSOR_DEVICE_REAR) return "rear";
+    if (sensor == ins_camera::SensorDevice::SENSOR_DEVICE_ALL) return "all";
+    return "front";
+}
+
 std::string json_escape(const std::string& value) {
     std::ostringstream out;
     for (char c : value) {
@@ -210,6 +228,10 @@ void run_status(const std::shared_ptr<ins_camera::Camera>& camera, const ins_cam
 }
 
 void run_start(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camera::DeviceDescriptor&) {
+    ins_camera::SensorDevice active_sensor = env_active_sensor();
+    if (!camera->SetActiveSensor(active_sensor)) {
+        fail("failed to set active sensor: " + active_sensor_name(active_sensor));
+    }
     bool stitching_enabled = maybe_enable_stitching(camera);
     std::string video_mode = lowercase(env_string("MOTION_LEVELS_INSTA360_VIDEO_MODE", "normal"));
     ins_camera::SubVideoMode sub_mode = ins_camera::SubVideoMode::VIDEO_NORMAL;
@@ -217,24 +239,26 @@ void run_start(const std::shared_ptr<ins_camera::Camera>& camera, const ins_came
     if (video_mode == "hdr") {
         sub_mode = ins_camera::SubVideoMode::VIDEO_HDR;
         function_mode = ins_camera::CameraFunctionMode::FUNCTION_MODE_HDR_VIDEO;
+    } else if (video_mode == "selfie") {
+        sub_mode = ins_camera::SubVideoMode::VIDEO_SELFIE;
+        function_mode = ins_camera::CameraFunctionMode::FUNCTION_MODE_SELFIE_VIDEO;
     } else if (video_mode != "normal") {
         fail("unsupported video mode: " + video_mode);
     }
     if (!camera->SetVideoSubMode(sub_mode)) {
         fail("failed to set " + video_mode + " video submode");
     }
-    if (video_mode == "hdr" || env_bool("MOTION_LEVELS_INSTA360_SET_VIDEO_PARAMS", false)) {
-        ins_camera::RecordParams params;
-        params.resolution = env_video_resolution("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", ins_camera::VideoResolution::RES_1920_1080P30);
-        params.bitrate = env_int("MOTION_LEVELS_INSTA360_VIDEO_BITRATE", 0);
-        if (!camera->SetVideoCaptureParams(params, function_mode)) {
-            fail("failed to set video capture params");
-        }
+    ins_camera::RecordParams params;
+    params.resolution = env_video_resolution("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", ins_camera::VideoResolution::RES_1920_1080P30);
+    params.bitrate = env_int("MOTION_LEVELS_INSTA360_VIDEO_BITRATE", 0);
+    if (!camera->SetVideoCaptureParams(params, function_mode)) {
+        fail("failed to set video capture params");
     }
     if (!camera->StartRecording()) fail("failed to start recording");
     std::cout
         << "{\"ok\":true,\"recording\":true"
         << ",\"videoMode\":\"" << json_escape(video_mode) << "\""
+        << ",\"activeSensor\":\"" << json_escape(active_sensor_name(active_sensor)) << "\""
         << ",\"stitchingEnabled\":" << (stitching_enabled ? "true" : "false")
         << "}" << std::endl;
 }
@@ -252,6 +276,10 @@ void run_stop(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camer
 }
 
 void run_photo(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camera::DeviceDescriptor&) {
+    ins_camera::SensorDevice active_sensor = env_active_sensor();
+    if (!camera->SetActiveSensor(active_sensor)) {
+        fail("failed to set active sensor: " + active_sensor_name(active_sensor));
+    }
     maybe_enable_stitching(camera);
     if (!camera->SetPhotoSubMode(ins_camera::SubPhotoMode::PHOTO_SINGLE)) {
         std::cerr << "warning: failed to set single photo submode" << std::endl;

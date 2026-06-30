@@ -67,6 +67,7 @@ PUBLIC_LINKS = os.environ.get("MOTION_LEVELS_CAMERA_PUBLIC_LINKS", "1").strip().
 DELETE_LOCAL_AFTER_UPLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_LOCAL_AFTER_UPLOAD", "1").strip().lower() not in FALSE_VALUES
 DEFAULT_HDR_ENABLED = os.environ.get("MOTION_LEVELS_CAMERA_HDR_DEFAULT", "1").strip().lower() not in FALSE_VALUES
 DEFAULT_VIDEO_PROJECTION = os.environ.get("MOTION_LEVELS_CAMERA_VIDEO_PROJECTION_DEFAULT", "regular").strip().lower()
+DEFAULT_VIDEO_LENS = os.environ.get("MOTION_LEVELS_CAMERA_VIDEO_LENS_DEFAULT", "front").strip().lower() or "front"
 DEFAULT_VIDEO_RESOLUTION = os.environ.get("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", "1080p30").strip().lower() or "1080p30"
 DEFAULT_VIDEO_FRAME_RATE = os.environ.get("MOTION_LEVELS_INSTA360_VIDEO_FRAME_RATE", "30").strip() or "30"
 SESSION_SEGMENT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS", "120"))
@@ -115,6 +116,16 @@ def normalized_video_projection(value: Any, fallback: str = DEFAULT_VIDEO_PROJEC
     if text in {"360", "spherical", "sphere", "reframeable", "insv"}:
         return "360"
     return "regular"
+
+
+def normalized_video_lens(value: Any, fallback: str = DEFAULT_VIDEO_LENS) -> str:
+    text = str(value or fallback or "front").strip().lower()
+    text = text.replace("_", "-").replace(" ", "-")
+    if text in {"rear", "back", "back-side", "screen-back"}:
+        return "rear"
+    if text in {"all", "both", "360", "panoramic", "pano", "spherical"}:
+        return "all"
+    return "front"
 
 
 def normalized_video_resolution(value: Any, fallback: str = DEFAULT_VIDEO_RESOLUTION) -> str:
@@ -187,16 +198,35 @@ def video_capture_options(payload: dict[str, Any], recording: dict[str, Any] | N
     base.update(payload)
     explicit_video_mode = str(base.get("videoMode") or "").strip().lower()
     hdr_enabled = normalized_bool(base.get("hdrEnabled"), DEFAULT_HDR_ENABLED)
-    if explicit_video_mode == "hdr":
-        hdr_enabled = True
-    elif explicit_video_mode == "normal":
-        hdr_enabled = False
     projection = normalized_video_projection(
         base.get("videoProjection")
         or base.get("captureProjection")
         or base.get("projection")
         or ("360" if normalized_bool(base.get("video360"), False) else None),
     )
+    lens = normalized_video_lens(
+        base.get("videoLens")
+        or base.get("cameraLens")
+        or base.get("lens")
+        or base.get("activeSensor"),
+    )
+    if projection == "360":
+        lens = "all"
+    if projection == "regular" and lens == "front":
+        # X5 screen-side video produces valid MP4s through selfie mode; normal/HDR front captures download as invalid 4-byte files.
+        video_mode = "selfie"
+        hdr_enabled = False
+    elif explicit_video_mode == "hdr":
+        video_mode = "hdr"
+        hdr_enabled = True
+    elif explicit_video_mode == "normal":
+        video_mode = "normal"
+        hdr_enabled = False
+    elif explicit_video_mode == "selfie":
+        video_mode = explicit_video_mode
+        hdr_enabled = False
+    else:
+        video_mode = "hdr" if hdr_enabled else "normal"
     raw_resolution_source = base.get("videoResolution") or base.get("resolution")
     raw_resolution = normalized_video_resolution(raw_resolution_source)
     explicit_frame_rate = base.get("videoFrameRate") or base.get("videoFps") or base.get("fps")
@@ -208,11 +238,12 @@ def video_capture_options(payload: dict[str, Any], recording: dict[str, Any] | N
     resolution = with_video_frame_rate(raw_resolution, frame_rate)
     return {
         "hdrEnabled": hdr_enabled,
-        "videoMode": "hdr" if hdr_enabled else "normal",
+        "videoMode": video_mode,
         "videoProjection": projection,
+        "videoLens": lens,
         "videoResolution": resolution,
         "videoFrameRate": frame_rate,
-        "stitchingEnabled": projection == "regular",
+        "stitchingEnabled": projection == "regular" and lens == "all",
         "mediaExtension": SPHERICAL_MEDIA_EXTENSION if projection == "360" else REGULAR_MEDIA_EXTENSION,
     }
 
@@ -459,6 +490,8 @@ def command_env(action: str, payload: dict[str, Any], recording: dict[str, Any],
             "MOTION_LEVELS_CAMERA_METADATA_PATH": str(metadata_path),
             "MOTION_LEVELS_CAMERA_HDR_ENABLED": "1" if options["hdrEnabled"] else "0",
             "MOTION_LEVELS_CAMERA_VIDEO_PROJECTION": str(options["videoProjection"]),
+            "MOTION_LEVELS_CAMERA_VIDEO_LENS": str(options["videoLens"]),
+            "MOTION_LEVELS_INSTA360_ACTIVE_SENSOR": str(options["videoLens"]),
             "MOTION_LEVELS_INSTA360_VIDEO_MODE": str(options["videoMode"]),
             "MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION": str(options["videoResolution"]),
             "MOTION_LEVELS_INSTA360_VIDEO_FRAME_RATE": str(options["videoFrameRate"]),
@@ -1231,6 +1264,7 @@ class Handler(BaseHTTPRequestHandler):
                     "hdrEnabled": default_video_options["hdrEnabled"],
                     "videoMode": default_video_options["videoMode"],
                     "videoProjection": default_video_options["videoProjection"],
+                    "videoLens": default_video_options["videoLens"],
                     "videoResolution": default_video_options["videoResolution"],
                     "videoFrameRate": default_video_options["videoFrameRate"],
                     "regularMediaExtension": REGULAR_MEDIA_EXTENSION,
