@@ -3,6 +3,7 @@ import json
 import math
 import os
 import re
+import signal
 import subprocess
 import threading
 import time
@@ -75,10 +76,12 @@ TV_STATUS_URL = os.environ.get("MOTION_LEVELS_CAMERA_TV_STATUS_URL", "http://127
 DISPLAY_STATUS_URL = os.environ.get("MOTION_LEVELS_CAMERA_DISPLAY_STATUS_URL", "http://127.0.0.1:4102/api/display").strip()
 
 
-active_lock = threading.Lock()
+active_lock = threading.RLock()
 camera_command_lock = threading.Lock()
 active_recordings: dict[str, dict[str, Any]] = {}
 active_sessions: dict[str, dict[str, Any]] = {}
+known_sessions: dict[str, dict[str, Any]] = {}
+notified_session_finishes: set[str] = set()
 skipped_recordings: set[str] = set()
 camera_status_cache: dict[str, Any] | None = None
 camera_status_cache_at = 0.0
@@ -753,6 +756,124 @@ def notify_session_start(payload: dict[str, Any], video_folder_share_url: str | 
     return event
 
 
+def iso_from_unix_nanos(value: Any) -> str | None:
+    try:
+        nanos = int(value)
+    except (TypeError, ValueError):
+        return None
+    if nanos <= 0:
+        return None
+    return datetime.fromtimestamp(nanos / 1_000_000_000, timezone.utc).isoformat()
+
+
+def parse_iso(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def remember_session(payload: dict[str, Any], video_folder_share_url: str | None, health: dict[str, Any], recording: bool) -> dict[str, Any]:
+    venue_id = str(payload.get("venueSessionId") or "").strip()
+    started_at = iso_from_unix_nanos(payload.get("startedUnixNanos")) or datetime.now(timezone.utc).isoformat()
+    session = {
+        "venueSessionId": venue_id,
+        "payload": dict(payload),
+        "startedAt": started_at,
+        "videoFolderShareUrl": video_folder_share_url,
+        "health": health,
+        "recording": recording,
+        "segmentIndex": 0,
+    }
+    with active_lock:
+        known_sessions[venue_id] = session
+        notified_session_finishes.discard(venue_id)
+    return session
+
+
+def notify_session_finish(payload: dict[str, Any], session: dict[str, Any] | None, reason: str | None = None) -> dict[str, Any]:
+    venue_id = str(payload.get("venueSessionId") or (session or {}).get("venueSessionId") or "").strip()
+    event = {
+        "label": "session-end-alert",
+        "venueSessionId": venue_id,
+        "startedAt": datetime.now(timezone.utc).isoformat(),
+    }
+    if not venue_id:
+        event["ok"] = False
+        event["error"] = "venueSessionId is required"
+        record_event(event)
+        return event
+    with active_lock:
+        if venue_id in notified_session_finishes:
+            event["ok"] = True
+            event["skipped"] = True
+            event["reason"] = "already notified"
+            record_event(event)
+            return event
+        notified_session_finishes.add(venue_id)
+        if session is None:
+            session = known_sessions.get(venue_id)
+    session = session or {}
+    session_payload = session.get("payload") if isinstance(session.get("payload"), dict) else {}
+    merged = {**session_payload, **payload}
+    ended_at = iso_from_unix_nanos(merged.get("endedUnixNanos")) or datetime.now(timezone.utc).isoformat()
+    started_at = str(session.get("startedAt") or iso_from_unix_nanos(merged.get("startedUnixNanos")) or "").strip()
+    started_dt = parse_iso(started_at)
+    ended_dt = parse_iso(ended_at)
+    duration_seconds = None
+    if started_dt and ended_dt:
+        duration_seconds = max(0, round((ended_dt - started_dt).total_seconds()))
+    finish_reason = str(reason or merged.get("reason") or session.get("stopReason") or "manual").strip() or "manual"
+    event["reason"] = finish_reason
+    if not PLATFORM_URL:
+        event["ok"] = False
+        event["skipped"] = True
+        event["error"] = "platform URL is not configured"
+        record_event(event)
+        return event
+    body = {
+        "venueSessionId": venue_id,
+        "controllerLabel": merged.get("controllerLabel"),
+        "controllerHostname": merged.get("controllerHostname"),
+        "teamName": merged.get("teamName"),
+        "startedAt": started_at,
+        "endedAt": ended_at,
+        "reason": finish_reason,
+        "durationSeconds": duration_seconds,
+        "platformSessionPath": merged.get("platformSessionPath") or f"/session/{venue_id}",
+        "videoFolderShareUrl": session.get("videoFolderShareUrl") or merged.get("videoFolderShareUrl"),
+        "recording": bool(session.get("recording")),
+        "segmentIndex": session.get("segmentIndex"),
+    }
+    try:
+        req = request.Request(
+            f"{PLATFORM_URL}/api/ingest/session-end-alert",
+            data=json.dumps(body).encode("utf-8"),
+            headers={"content-type": "application/json"},
+            method="POST",
+        )
+        if PLATFORM_TOKEN:
+            req.add_header("authorization", f"Bearer {PLATFORM_TOKEN}")
+        with request.urlopen(req, timeout=PLATFORM_TIMEOUT_SECONDS) as response:
+            event["status"] = response.status
+            event["response"] = response.read(4096).decode("utf-8", errors="replace")
+            event["ok"] = 200 <= response.status < 300
+    except error.HTTPError as exc:
+        event["status"] = exc.code
+        event["response"] = exc.read(4096).decode("utf-8", errors="replace")[-2000:]
+        event["ok"] = False
+    except Exception as exc:
+        event["ok"] = False
+        event["error"] = str(exc)
+    record_event(event)
+    return event
+
+
 def post_platform_video(recording: dict[str, Any], metadata: dict[str, Any], media_event: dict[str, Any], share_url: str) -> dict[str, Any]:
     started = time.time()
     start_payload = recording.get("start") if isinstance(recording.get("start"), dict) else {}
@@ -1050,8 +1171,16 @@ def run_session_loop(session_id: str) -> None:
             stop_reason = "max-duration"
             break
         index += 1
+    if session["stopEvent"].is_set() and stop_reason == "session-finished":
+        stop_reason = str(session.get("stopReason") or "stop-requested")
+    session["stopReason"] = stop_reason
+    session["segmentIndex"] = completed_segments
     record_event({"label": "session-recording-loop", "venueSessionId": session_id, "ok": True, "stoppedAt": datetime.now(timezone.utc).isoformat(), "segments": completed_segments, "stopReason": stop_reason})
+    notify_session_finish({"venueSessionId": session_id}, session, stop_reason)
     with active_lock:
+        if session_id in known_sessions:
+            known_sessions[session_id]["stopReason"] = stop_reason
+            known_sessions[session_id]["segmentIndex"] = completed_segments
         active_sessions.pop(session_id, None)
 
 
@@ -1167,6 +1296,7 @@ class Handler(BaseHTTPRequestHandler):
         ready, ready_error = backend_ready()
         camera = camera_probe()
         can_record = ready and camera.get("detected") is True
+        known_session = remember_session(payload, video_folder_share_url, health, can_record)
         if not can_record:
             self.write_json(
                 HTTPStatus.OK,
@@ -1215,6 +1345,7 @@ class Handler(BaseHTTPRequestHandler):
                 "videoFolderPath": video_folder_path,
                 "videoFolderShareUrl": video_folder_share_url,
                 "health": health,
+                "knownSession": known_session,
                 "stopEvent": stop_event,
                 "segmentIndex": 0,
                 "lastSegmentOk": None,
@@ -1246,17 +1377,23 @@ class Handler(BaseHTTPRequestHandler):
         if not venue_id:
             self.write_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "venueSessionId is required"})
             return
+        payload.setdefault("endedUnixNanos", int(time.time() * 1_000_000_000))
+        reason = str(payload.get("reason") or "manual").strip() or "manual"
         with active_lock:
             session = active_sessions.get(venue_id)
+            known_session = known_sessions.get(venue_id)
         if not session:
-            self.write_json(HTTPStatus.OK, {"ok": True, "recording": False, "venueSessionId": venue_id})
+            alert_event = notify_session_finish(payload, known_session, reason)
+            self.write_json(HTTPStatus.OK, {"ok": True, "recording": False, "venueSessionId": venue_id, "alert": alert_event})
             return
+        session["stopReason"] = reason
         stop_event: threading.Event = session["stopEvent"]
         stop_event.set()
         thread: threading.Thread | None = session.get("thread")
         if thread:
             thread.join(timeout=5)
-        self.write_json(HTTPStatus.OK, {"ok": True, "recording": False, "venueSessionId": venue_id, "stopping": thread.is_alive() if thread else False})
+        alert_event = notify_session_finish(payload, session, reason)
+        self.write_json(HTTPStatus.OK, {"ok": True, "recording": False, "venueSessionId": venue_id, "stopping": thread.is_alive() if thread else False, "alert": alert_event})
 
     def handle_start(self) -> None:
         payload = self.read_json()
@@ -1642,10 +1779,40 @@ class Handler(BaseHTTPRequestHandler):
         print(f"{self.log_date_time_string()} {self.address_string()} {fmt % args}", flush=True)
 
 
+def notify_open_sessions_on_shutdown(reason: str = "service-shutdown") -> None:
+    ended_unix_nanos = int(time.time() * 1_000_000_000)
+    with active_lock:
+        sessions = [
+            dict(session)
+            for venue_id, session in known_sessions.items()
+            if venue_id not in notified_session_finishes
+        ]
+    for session in sessions:
+        venue_id = str(session.get("venueSessionId") or "").strip()
+        if not venue_id:
+            continue
+        payload = {"venueSessionId": venue_id, "reason": reason, "endedUnixNanos": ended_unix_nanos}
+        try:
+            notify_session_finish(payload, session, reason)
+        except Exception as exc:
+            print(f"session shutdown alert failed for {venue_id}: {exc}", flush=True)
+
+
+def install_shutdown_handlers() -> None:
+    def handle_signal(signum: int, _frame: Any) -> None:
+        print(f"camera recorder received signal {signum}; notifying open sessions", flush=True)
+        notify_open_sessions_on_shutdown("service-shutdown")
+        raise SystemExit(0)
+
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, handle_signal)
+
+
 def main() -> None:
     bind = os.environ.get("MOTION_LEVELS_CAMERA_RECORDER_BIND", "127.0.0.1")
     port = int(os.environ.get("MOTION_LEVELS_CAMERA_RECORDER_PORT", "8030"))
     ROOT.mkdir(parents=True, exist_ok=True)
+    install_shutdown_handlers()
     print(f"camera recorder backend={BACKEND} serving http://{bind}:{port}", flush=True)
     print(f"camera recordings root={ROOT}", flush=True)
     ready, ready_error = backend_ready()
@@ -1656,7 +1823,10 @@ def main() -> None:
         print(f"rclone public links {'enabled' if PUBLIC_LINKS else 'disabled'}", flush=True)
     if PLATFORM_URL:
         print(f"platform video ingest enabled url={PLATFORM_URL}", flush=True)
-    ThreadingHTTPServer((bind, port), Handler).serve_forever()
+    try:
+        ThreadingHTTPServer((bind, port), Handler).serve_forever()
+    finally:
+        notify_open_sessions_on_shutdown("service-shutdown")
 
 
 if __name__ == "__main__":
