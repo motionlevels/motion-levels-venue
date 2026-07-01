@@ -96,6 +96,7 @@ DISPLAY_STATUS_URL = os.environ.get("MOTION_LEVELS_CAMERA_DISPLAY_STATUS_URL", "
 active_lock = threading.RLock()
 camera_command_lock = threading.Lock()
 active_recordings: dict[str, dict[str, Any]] = {}
+active_uploads: dict[str, dict[str, Any]] = {}
 active_sessions: dict[str, dict[str, Any]] = {}
 known_sessions: dict[str, dict[str, Any]] = {}
 notified_session_finishes: set[str] = set()
@@ -1229,33 +1230,50 @@ def upload_related_source_media(media_path: Path, metadata: dict[str, Any]) -> d
 
 
 def upload_media(media_path: Path, metadata_path: Path, platform_recording: dict[str, Any] | None = None) -> None:
-    media_event = run_upload(media_path, media_path.name)
     metadata: dict[str, Any] = {}
     try:
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except Exception as exc:
         metadata = {"metadataReadError": str(exc)}
-    source_media_event = upload_related_source_media(media_path, metadata)
-    if source_media_event:
-        metadata["sourceMediaUpload"] = source_media_event
-    if media_event.get("ok") and media_event.get("remote"):
-        share_url, link_event = run_public_link(str(media_event["remote"]))
-        if share_url:
-            metadata["shareUrl"] = share_url
-            metadata["remotePath"] = media_event.get("remote")
-            metadata["publicLink"] = link_event
-            if platform_recording is not None:
-                ingest_event = post_platform_video(platform_recording, metadata, media_event, share_url)
-                metadata["platformIngest"] = ingest_event
-    if media_event.get("ok") and DELETE_LOCAL_AFTER_UPLOAD:
-        metadata["localDelete"] = remove_local_file(media_path, f"delete-{media_path.name}")
-        metadata["localDeletedAt"] = datetime.now(timezone.utc).isoformat()
-    write_json(metadata_path, metadata)
-    metadata_event = run_upload(metadata_path, metadata_path.name)
-    metadata["metadataUpload"] = metadata_event
-    if metadata_event.get("ok") and DELETE_LOCAL_AFTER_UPLOAD:
+    payload = metadata.get("payload")
+    payload_capture_id = payload.get("captureId") if isinstance(payload, dict) else None
+    upload_id = str(metadata.get("captureId") or payload_capture_id or media_path.name)
+    upload_started = datetime.now(timezone.utc).isoformat()
+    with active_lock:
+        active_uploads[upload_id] = {
+            "captureId": upload_id,
+            "kind": "upload",
+            "state": "uploading",
+            "startedAt": upload_started,
+            "mediaPath": str(media_path),
+            "metadataPath": str(metadata_path),
+        }
+    try:
+        media_event = run_upload(media_path, media_path.name)
+        source_media_event = upload_related_source_media(media_path, metadata)
+        if source_media_event:
+            metadata["sourceMediaUpload"] = source_media_event
+        if media_event.get("ok") and media_event.get("remote"):
+            share_url, link_event = run_public_link(str(media_event["remote"]))
+            if share_url:
+                metadata["shareUrl"] = share_url
+                metadata["remotePath"] = media_event.get("remote")
+                metadata["publicLink"] = link_event
+                if platform_recording is not None:
+                    ingest_event = post_platform_video(platform_recording, metadata, media_event, share_url)
+                    metadata["platformIngest"] = ingest_event
+        if media_event.get("ok") and DELETE_LOCAL_AFTER_UPLOAD:
+            metadata["localDelete"] = remove_local_file(media_path, f"delete-{media_path.name}")
+            metadata["localDeletedAt"] = datetime.now(timezone.utc).isoformat()
         write_json(metadata_path, metadata)
-        remove_local_file(metadata_path, f"delete-{metadata_path.name}")
+        metadata_event = run_upload(metadata_path, metadata_path.name)
+        metadata["metadataUpload"] = metadata_event
+        if metadata_event.get("ok") and DELETE_LOCAL_AFTER_UPLOAD:
+            write_json(metadata_path, metadata)
+            remove_local_file(metadata_path, f"delete-{metadata_path.name}")
+    finally:
+        with active_lock:
+            active_uploads.pop(upload_id, None)
 
 
 def upload_recording(recording: dict[str, Any], media_path: Path, metadata_path: Path) -> None:
@@ -1480,7 +1498,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
         with active_lock:
-            active = list(active_recordings.values())
+            active = list(active_recordings.values()) + list(active_uploads.values())
             sessions = [
                 {key: value for key, value in session.items() if key not in {"stopEvent", "thread", "startedMonotonic"}}
                 for session in active_sessions.values()
@@ -1719,6 +1737,7 @@ class Handler(BaseHTTPRequestHandler):
         source_media = command_media_path(paths["media"], capture_options)
         paths["dir"].mkdir(parents=True, exist_ok=True)
         metadata = {
+            "captureId": attempt_id,
             "backend": BACKEND,
             "state": "recording",
             "startedAt": datetime.now(timezone.utc).isoformat(),
@@ -1874,6 +1893,8 @@ class Handler(BaseHTTPRequestHandler):
         started_at = datetime.now(timezone.utc).isoformat()
         recording = {
             "captureId": capture_id,
+            "kind": "video",
+            "state": "recording",
             "startedAt": started_at,
             "durationSeconds": duration_seconds,
             "mediaPath": str(paths["media"]),
@@ -1885,6 +1906,7 @@ class Handler(BaseHTTPRequestHandler):
         if source_media != paths["media"]:
             recording["sourceMediaPath"] = str(source_media)
         metadata = {
+            "captureId": capture_id,
             "backend": BACKEND,
             "state": "recording",
             "type": "quick-video",
@@ -1942,9 +1964,15 @@ class Handler(BaseHTTPRequestHandler):
                     encoding="utf-8",
                 )
             elif BACKEND == "command":
+                with active_lock:
+                    if capture_id in active_recordings:
+                        active_recordings[capture_id]["state"] = "stopping"
                 stop_payload = {**payload, "durationSeconds": duration_seconds, "stoppedAt": stopped_at}
                 stop_event = run_camera_command("quick-video-stop", STOP_COMMAND, stop_payload, recording, source_media, paths["metadata"])
                 metadata["stopCommand"] = stop_event
+            with active_lock:
+                if capture_id in active_recordings:
+                    active_recordings[capture_id]["state"] = "processing"
             media_ready = finalize_media(capture_options, source_media, paths["media"], metadata)
             metadata["state"] = "finished" if media_ready and (not stop_event or stop_event.get("ok")) else "media-missing"
             if metadata.get("postProcess") and not metadata["postProcess"].get("ok"):
@@ -1992,6 +2020,7 @@ class Handler(BaseHTTPRequestHandler):
         payload.setdefault("captureId", capture_id)
         started_at = datetime.now(timezone.utc).isoformat()
         metadata = {
+            "captureId": capture_id,
             "backend": BACKEND,
             "state": "capturing",
             "type": "photo",
@@ -2002,6 +2031,8 @@ class Handler(BaseHTTPRequestHandler):
         }
         recording = {
             "captureId": capture_id,
+            "kind": "photo",
+            "state": "capturing",
             "startedAt": started_at,
             "mediaPath": str(paths["media"]),
             "metadataPath": str(paths["metadata"]),
@@ -2009,6 +2040,8 @@ class Handler(BaseHTTPRequestHandler):
             "platformIngest": False,
         }
         command_event = None
+        with active_lock:
+            active_recordings[capture_id] = recording
         if BACKEND == "fake":
             paths["media"].write_text(
                 "\n".join(
@@ -2034,8 +2067,12 @@ class Handler(BaseHTTPRequestHandler):
             if not command_event.get("ok"):
                 metadata["state"] = "photo-failed"
                 write_json(paths["metadata"], metadata)
-                status = HTTPStatus.CONFLICT if command_event.get("error") == "camera command already running" else HTTPStatus.INTERNAL_SERVER_ERROR
-                self.write_json(status, {"ok": False, "backend": BACKEND, "error": "camera photo command failed", "event": command_event})
+                with active_lock:
+                    active_recordings.pop(capture_id, None)
+                busy = command_event.get("error") == "camera command already running"
+                status = HTTPStatus.CONFLICT if busy else HTTPStatus.INTERNAL_SERVER_ERROR
+                message = "camera command already running" if busy else "camera photo command failed"
+                self.write_json(status, {"ok": False, "backend": BACKEND, "error": message, "event": command_event})
                 return
         media_ready = paths["media"].exists() and paths["media"].stat().st_size > 0
         metadata["state"] = "finished" if media_ready else "media-missing"
@@ -2043,6 +2080,8 @@ class Handler(BaseHTTPRequestHandler):
         metadata["byteSize"] = paths["media"].stat().st_size if paths["media"].exists() else 0
         metadata["stoppedAt"] = datetime.now(timezone.utc).isoformat()
         write_json(paths["metadata"], metadata)
+        with active_lock:
+            active_recordings.pop(capture_id, None)
         if RCLONE_DEST and media_ready:
             threading.Thread(target=upload_media, args=(paths["media"], paths["metadata"]), daemon=True).start()
         self.write_json(
@@ -2071,11 +2110,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def write_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
         body = json.dumps(payload, sort_keys=True).encode("utf-8") + b"\n"
-        self.send_response(status)
-        self.send_header("content-type", "application/json")
-        self.send_header("content-length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            print("client disconnected before recorder response was delivered", flush=True)
 
     def log_message(self, fmt: str, *args: Any) -> None:
         print(f"{self.log_date_time_string()} {self.address_string()} {fmt % args}", flush=True)
