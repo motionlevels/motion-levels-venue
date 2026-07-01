@@ -56,6 +56,7 @@ SDK_PATH = Path(os.environ.get("MOTION_LEVELS_CAMERA_SDK_PATH", "/opt/insta360/D
 RCLONE_DEST = os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_DEST", "").strip().rstrip("/")
 RCLONE_PATH_PREFIX = os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_PATH_PREFIX", "Motion Levels").strip().strip("/")
 RCLONE_TIMEOUT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_TIMEOUT_SECONDS", "900"))
+RCLONE_LINK_TIMEOUT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_LINK_TIMEOUT_SECONDS", "120"))
 RCLONE_RETRY_COUNT = max(1, int(os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_RETRY_COUNT", "3")))
 RCLONE_RETRY_DELAY_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_RETRY_DELAY_SECONDS", "5"))
 UPLOAD_RESCUE_INTERVAL_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_UPLOAD_RESCUE_INTERVAL_SECONDS", "300"))
@@ -906,7 +907,7 @@ def run_public_link(remote: str) -> tuple[str | None, dict[str, Any]]:
         record_event(event)
         return None, event
     try:
-        result = run_rclone_with_retries(["link", remote], RCLONE_TIMEOUT_SECONDS)
+        result = run_rclone_with_retries(["link", remote], RCLONE_LINK_TIMEOUT_SECONDS)
         link = result.stdout.strip().splitlines()[-1].strip() if result.stdout.strip() else ""
         event["durationSeconds"] = round(time.time() - started, 3)
         event["returnCode"] = result.returncode
