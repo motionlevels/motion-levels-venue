@@ -59,6 +59,7 @@ RCLONE_TIMEOUT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_TIMEO
 RCLONE_RETRY_COUNT = max(1, int(os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_RETRY_COUNT", "3")))
 RCLONE_RETRY_DELAY_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_RETRY_DELAY_SECONDS", "5"))
 UPLOAD_RESCUE_INTERVAL_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_UPLOAD_RESCUE_INTERVAL_SECONDS", "300"))
+UPLOAD_RESCUE_MAX_PER_SCAN = max(0, int(os.environ.get("MOTION_LEVELS_CAMERA_UPLOAD_RESCUE_MAX_PER_SCAN", "2")))
 PLATFORM_URL = (
     os.environ.get("MOTION_LEVELS_CAMERA_RECORDER_PLATFORM_URL")
     or os.environ.get("MOTION_LEVELS_PLATFORM_URL")
@@ -1350,9 +1351,12 @@ def rescue_remote_metadata(metadata_path: Path, metadata: dict[str, Any], remote
 
 
 def rescue_pending_uploads_once() -> None:
-    if not RCLONE_DEST:
+    if not RCLONE_DEST or UPLOAD_RESCUE_MAX_PER_SCAN <= 0:
         return
+    rescued = 0
     for metadata_path in ROOT.rglob("*.json"):
+        if rescued >= UPLOAD_RESCUE_MAX_PER_SCAN:
+            return
         try:
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         except Exception:
@@ -1374,13 +1378,19 @@ def rescue_pending_uploads_once() -> None:
         if media_path and media_path.exists() and (needs_link or needs_metadata or not remote):
             print(f"rescuing pending camera upload {metadata_path}", flush=True)
             threading.Thread(target=upload_media, args=(media_path, metadata_path), daemon=True).start()
+            rescued += 1
             continue
         if remote and (needs_link or needs_metadata):
             print(f"rescuing pending camera upload metadata {metadata_path}", flush=True)
-            try:
-                rescue_remote_metadata(metadata_path, metadata, remote)
-            except Exception as exc:
-                print(f"pending upload metadata rescue failed for {metadata_path}: {exc}", flush=True)
+            threading.Thread(target=rescue_remote_metadata_safe, args=(metadata_path, metadata, remote), daemon=True).start()
+            rescued += 1
+
+
+def rescue_remote_metadata_safe(metadata_path: Path, metadata: dict[str, Any], remote: str) -> None:
+    try:
+        rescue_remote_metadata(metadata_path, metadata, remote)
+    except Exception as exc:
+        print(f"pending upload metadata rescue failed for {metadata_path}: {exc}", flush=True)
 
 
 def upload_rescue_loop() -> None:
