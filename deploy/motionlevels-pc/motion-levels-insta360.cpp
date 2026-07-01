@@ -124,6 +124,12 @@ std::string json_array(const std::vector<std::string>& values) {
     return out.str();
 }
 
+struct VideoSettingsResult {
+    std::string video_mode;
+    std::string active_sensor;
+    bool stitching_enabled;
+};
+
 void fail(const std::string& message, int code) {
     std::cout << "{\"ok\":false,\"error\":\"" << json_escape(message) << "\"}" << std::endl;
     std::exit(code);
@@ -208,6 +214,52 @@ bool maybe_enable_stitching(const std::shared_ptr<ins_camera::Camera>& camera) {
     return true;
 }
 
+VideoSettingsResult apply_video_settings(const std::shared_ptr<ins_camera::Camera>& camera) {
+    ins_camera::SensorDevice active_sensor = env_active_sensor();
+    if (!camera->SetActiveSensor(active_sensor)) {
+        fail("failed to set active sensor: " + active_sensor_name(active_sensor));
+    }
+    bool stitching_enabled = maybe_enable_stitching(camera);
+    std::string video_mode = lowercase(env_string("MOTION_LEVELS_INSTA360_VIDEO_MODE", "normal"));
+    ins_camera::SubVideoMode sub_mode = ins_camera::SubVideoMode::VIDEO_NORMAL;
+    ins_camera::CameraFunctionMode function_mode = ins_camera::CameraFunctionMode::FUNCTION_MODE_NORMAL_VIDEO;
+    if (video_mode == "hdr") {
+        sub_mode = ins_camera::SubVideoMode::VIDEO_HDR;
+        function_mode = ins_camera::CameraFunctionMode::FUNCTION_MODE_HDR_VIDEO;
+    } else if (video_mode == "selfie") {
+        sub_mode = ins_camera::SubVideoMode::VIDEO_SELFIE;
+        function_mode = ins_camera::CameraFunctionMode::FUNCTION_MODE_SELFIE_VIDEO;
+    } else if (video_mode != "normal") {
+        fail("unsupported video mode: " + video_mode);
+    }
+    if (!camera->SetVideoSubMode(sub_mode)) {
+        if (env_bool("MOTION_LEVELS_INSTA360_REQUIRE_SUBMODE", false)) {
+            fail("failed to set " + video_mode + " video submode");
+        }
+        std::cerr << "warning: failed to set " << video_mode << " video submode; continuing with current camera mode" << std::endl;
+    }
+    ins_camera::RecordParams params;
+    params.resolution = env_video_resolution("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", ins_camera::VideoResolution::RES_1920_1080P30);
+    params.bitrate = env_int("MOTION_LEVELS_INSTA360_VIDEO_BITRATE", 0);
+    if (!camera->SetVideoCaptureParams(params, function_mode)) {
+        if (env_bool("MOTION_LEVELS_INSTA360_REQUIRE_CAPTURE_PARAMS", false)) {
+            fail("failed to set video capture params");
+        }
+        std::cerr << "warning: failed to set video capture params; continuing with current camera capture settings" << std::endl;
+    }
+    return {video_mode, active_sensor_name(active_sensor), stitching_enabled};
+}
+
+void print_video_settings_result(const VideoSettingsResult& result, bool recording) {
+    std::cout
+        << "{\"ok\":true"
+        << ",\"recording\":" << (recording ? "true" : "false")
+        << ",\"videoMode\":\"" << json_escape(result.video_mode) << "\""
+        << ",\"activeSensor\":\"" << json_escape(result.active_sensor) << "\""
+        << ",\"stitchingEnabled\":" << (result.stitching_enabled ? "true" : "false")
+        << "}" << std::endl;
+}
+
 void run_status(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camera::DeviceDescriptor& device) {
     ins_camera::BatteryStatus battery{};
     ins_camera::StorageStatus storage{};
@@ -246,45 +298,14 @@ void run_download(const std::shared_ptr<ins_camera::Camera>& camera, const ins_c
 }
 
 void run_start(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camera::DeviceDescriptor&) {
-    ins_camera::SensorDevice active_sensor = env_active_sensor();
-    if (!camera->SetActiveSensor(active_sensor)) {
-        fail("failed to set active sensor: " + active_sensor_name(active_sensor));
-    }
-    bool stitching_enabled = maybe_enable_stitching(camera);
-    std::string video_mode = lowercase(env_string("MOTION_LEVELS_INSTA360_VIDEO_MODE", "normal"));
-    ins_camera::SubVideoMode sub_mode = ins_camera::SubVideoMode::VIDEO_NORMAL;
-    ins_camera::CameraFunctionMode function_mode = ins_camera::CameraFunctionMode::FUNCTION_MODE_NORMAL_VIDEO;
-    if (video_mode == "hdr") {
-        sub_mode = ins_camera::SubVideoMode::VIDEO_HDR;
-        function_mode = ins_camera::CameraFunctionMode::FUNCTION_MODE_HDR_VIDEO;
-    } else if (video_mode == "selfie") {
-        sub_mode = ins_camera::SubVideoMode::VIDEO_SELFIE;
-        function_mode = ins_camera::CameraFunctionMode::FUNCTION_MODE_SELFIE_VIDEO;
-    } else if (video_mode != "normal") {
-        fail("unsupported video mode: " + video_mode);
-    }
-    if (!camera->SetVideoSubMode(sub_mode)) {
-        if (env_bool("MOTION_LEVELS_INSTA360_REQUIRE_SUBMODE", false)) {
-            fail("failed to set " + video_mode + " video submode");
-        }
-        std::cerr << "warning: failed to set " << video_mode << " video submode; continuing with current camera mode" << std::endl;
-    }
-    ins_camera::RecordParams params;
-    params.resolution = env_video_resolution("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", ins_camera::VideoResolution::RES_1920_1080P30);
-    params.bitrate = env_int("MOTION_LEVELS_INSTA360_VIDEO_BITRATE", 0);
-    if (!camera->SetVideoCaptureParams(params, function_mode)) {
-        if (env_bool("MOTION_LEVELS_INSTA360_REQUIRE_CAPTURE_PARAMS", false)) {
-            fail("failed to set video capture params");
-        }
-        std::cerr << "warning: failed to set video capture params; continuing with current camera capture settings" << std::endl;
-    }
+    VideoSettingsResult settings = apply_video_settings(camera);
     if (!camera->StartRecording()) fail("failed to start recording");
-    std::cout
-        << "{\"ok\":true,\"recording\":true"
-        << ",\"videoMode\":\"" << json_escape(video_mode) << "\""
-        << ",\"activeSensor\":\"" << json_escape(active_sensor_name(active_sensor)) << "\""
-        << ",\"stitchingEnabled\":" << (stitching_enabled ? "true" : "false")
-        << "}" << std::endl;
+    print_video_settings_result(settings, true);
+}
+
+void run_configure(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camera::DeviceDescriptor&) {
+    VideoSettingsResult settings = apply_video_settings(camera);
+    print_video_settings_result(settings, false);
 }
 
 void run_stop(const std::shared_ptr<ins_camera::Camera>& camera, const ins_camera::DeviceDescriptor&) {
@@ -331,7 +352,7 @@ void run_photo(const std::shared_ptr<ins_camera::Camera>& camera, const ins_came
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        fail("usage: motion-levels-insta360 <status|list|download|start|stop|photo>", 64);
+        fail("usage: motion-levels-insta360 <status|list|download|configure|start|stop|photo>", 64);
     }
     std::string command = argv[1];
     ins_camera::DeviceDescriptor selected;
@@ -340,6 +361,7 @@ int main(int argc, char** argv) {
         if (command == "status") run_status(camera, selected);
         else if (command == "list") run_list(camera, selected);
         else if (command == "download") run_download(camera, selected);
+        else if (command == "configure") run_configure(camera, selected);
         else if (command == "start") run_start(camera, selected);
         else if (command == "stop") run_stop(camera, selected);
         else if (command == "photo") run_photo(camera, selected);

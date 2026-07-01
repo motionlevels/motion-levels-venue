@@ -40,8 +40,12 @@ if PHOTO_EXTENSION and not PHOTO_EXTENSION.startswith("."):
 COMMAND_TIMEOUT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_COMMAND_TIMEOUT_SECONDS", "120"))
 START_COMMAND = os.environ.get("MOTION_LEVELS_CAMERA_START_COMMAND", "").strip()
 STOP_COMMAND = os.environ.get("MOTION_LEVELS_CAMERA_STOP_COMMAND", "").strip()
+CONFIGURE_COMMAND = os.environ.get("MOTION_LEVELS_CAMERA_CONFIGURE_COMMAND", "").strip()
 PHOTO_COMMAND = os.environ.get("MOTION_LEVELS_CAMERA_PHOTO_COMMAND", "").strip()
 STATUS_COMMAND = os.environ.get("MOTION_LEVELS_CAMERA_STATUS_COMMAND", "").strip()
+if not CONFIGURE_COMMAND and START_COMMAND:
+    inferred_configure_command = re.sub(r"(^|\s)start(\s*)$", r"\1configure\2", START_COMMAND)
+    CONFIGURE_COMMAND = inferred_configure_command if inferred_configure_command != START_COMMAND else ""
 if not STATUS_COMMAND and START_COMMAND:
     inferred_status_command = re.sub(r"(^|\s)start(\s*)$", r"\1status\2", START_COMMAND)
     STATUS_COMMAND = inferred_status_command if inferred_status_command != START_COMMAND else ""
@@ -99,6 +103,8 @@ skipped_recordings: set[str] = set()
 camera_status_cache: dict[str, Any] | None = None
 camera_status_cache_at = 0.0
 camera_status_refreshing = False
+video_settings_cache: dict[str, Any] | None = None
+video_settings_committed_at = ""
 upload_events: list[dict[str, Any]] = []
 
 
@@ -272,6 +278,34 @@ def video_capture_options(payload: dict[str, Any], recording: dict[str, Any] | N
     }
 
 
+def video_defaults_payload(options: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "hdrEnabled": options["hdrEnabled"],
+        "videoMode": options["videoMode"],
+        "videoProjection": options["videoProjection"],
+        "videoLens": options["videoLens"],
+        "videoResolution": options["videoResolution"],
+        "videoFrameRate": options["videoFrameRate"],
+        "regularMediaExtension": REGULAR_MEDIA_EXTENSION,
+        "sphericalMediaExtension": SPHERICAL_MEDIA_EXTENSION,
+        "sessionSegmentSeconds": segment_duration_seconds(),
+        "sessionMaxSeconds": max_session_seconds(),
+    }
+
+
+def current_video_options() -> dict[str, Any]:
+    with active_lock:
+        cached = dict(video_settings_cache) if video_settings_cache else None
+    return cached or video_capture_options({})
+
+
+def cache_video_options(options: dict[str, Any]) -> None:
+    global video_settings_cache, video_settings_committed_at
+    with active_lock:
+        video_settings_cache = dict(options)
+        video_settings_committed_at = datetime.now(timezone.utc).isoformat()
+
+
 def video_media_extension(payload: dict[str, Any], recording: dict[str, Any] | None = None) -> str:
     return str(video_capture_options(payload, recording).get("mediaExtension") or REGULAR_MEDIA_EXTENSION)
 
@@ -280,6 +314,10 @@ def backend_ready(action: str = "video") -> tuple[bool, str | None]:
     if BACKEND == "fake":
         return True, None
     if BACKEND == "command":
+        if action == "configure":
+            if not CONFIGURE_COMMAND:
+                return False, "MOTION_LEVELS_CAMERA_CONFIGURE_COMMAND is not configured"
+            return True, None
         if action == "photo":
             if not PHOTO_COMMAND:
                 return False, "MOTION_LEVELS_CAMERA_PHOTO_COMMAND is not configured"
@@ -759,6 +797,49 @@ def cached_camera_status() -> dict[str, Any]:
         "label": "camera-status",
         "error": "camera storage status is loading",
     }
+
+
+def settings_paths() -> tuple[Path, Path]:
+    settings_dir = ROOT / "settings"
+    return settings_dir / "camera-settings.json", settings_dir / "camera-settings-command.json"
+
+
+def commit_video_settings(payload: dict[str, Any]) -> tuple[bool, dict[str, Any], dict[str, Any] | None]:
+    ready, ready_error = backend_ready("configure")
+    if not ready:
+        return False, {"ok": False, "error": ready_error}, None
+    options = video_capture_options(payload)
+    settings_path, command_metadata_path = settings_paths()
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    recording = {
+        "captureId": "camera-settings",
+        "startedAt": datetime.now(timezone.utc).isoformat(),
+        "mediaPath": str(settings_path),
+        "metadataPath": str(command_metadata_path),
+        "payload": payload,
+        "captureOptions": options,
+    }
+    command_event = None
+    if BACKEND == "command":
+        if not camera_command_lock.acquire(blocking=False):
+            command_event = camera_busy_response("video-settings")
+            return False, {"ok": False, "error": "camera command already running", "event": command_event}, command_event
+        try:
+            command_event = run_camera_command("video-settings", CONFIGURE_COMMAND, payload, recording, settings_path, command_metadata_path)
+        finally:
+            camera_command_lock.release()
+        if not command_event.get("ok"):
+            return False, {"ok": False, "error": "camera settings command failed", "event": command_event}, command_event
+    cache_video_options(options)
+    settings_payload = {
+        "ok": True,
+        "settings": video_defaults_payload(options),
+        "videoDefaults": video_defaults_payload(options),
+        "committedAt": video_settings_committed_at,
+        "command": command_event,
+    }
+    write_json(settings_path, settings_payload)
+    return True, settings_payload, command_event
 
 
 def run_upload(local_path: Path, label: str) -> dict[str, Any]:
@@ -1417,7 +1498,8 @@ class Handler(BaseHTTPRequestHandler):
             ready_to_record_error = ready_error
         elif not RCLONE_DEST:
             ready_to_record_error = "rclone destination is not configured"
-        default_video_options = video_capture_options({})
+        default_video_options = current_video_options()
+        video_defaults = video_defaults_payload(default_video_options)
         self.write_json(
             HTTPStatus.OK,
             {
@@ -1428,6 +1510,7 @@ class Handler(BaseHTTPRequestHandler):
                 "photoBackendReady": photo_ready,
                 "photoBackendError": photo_error,
                 "commandBackendConfigured": bool(START_COMMAND and STOP_COMMAND),
+                "configureCommandConfigured": bool(CONFIGURE_COMMAND),
                 "photoCommandConfigured": bool(PHOTO_COMMAND),
                 "statusCommandConfigured": bool(STATUS_COMMAND),
                 "camera": camera,
@@ -1437,17 +1520,10 @@ class Handler(BaseHTTPRequestHandler):
                 "rcloneConfigured": bool(RCLONE_DEST),
                 "deleteLocalAfterUpload": DELETE_LOCAL_AFTER_UPLOAD,
                 "publicLinks": PUBLIC_LINKS,
-                "videoDefaults": {
-                    "hdrEnabled": default_video_options["hdrEnabled"],
-                    "videoMode": default_video_options["videoMode"],
-                    "videoProjection": default_video_options["videoProjection"],
-                    "videoLens": default_video_options["videoLens"],
-                    "videoResolution": default_video_options["videoResolution"],
-                    "videoFrameRate": default_video_options["videoFrameRate"],
-                    "regularMediaExtension": REGULAR_MEDIA_EXTENSION,
-                    "sphericalMediaExtension": SPHERICAL_MEDIA_EXTENSION,
-                    "sessionSegmentSeconds": segment_duration_seconds(),
-                    "sessionMaxSeconds": max_session_seconds(),
+                "videoDefaults": video_defaults,
+                "videoSettings": {
+                    **video_defaults,
+                    "committedAt": video_settings_committed_at or None,
                 },
                 "platformConfigured": bool(PLATFORM_URL),
                 "root": str(ROOT),
@@ -1467,6 +1543,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.rstrip("/") == "/recordings/quick":
             self.handle_quick_video()
             return
+        if self.path.rstrip("/") == "/settings":
+            self.handle_settings()
+            return
         if self.path.rstrip("/") == "/photos/take":
             self.handle_take_photo()
             return
@@ -1477,6 +1556,11 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_session_stop()
             return
         self.send_error(HTTPStatus.NOT_FOUND)
+
+    def handle_settings(self) -> None:
+        payload = self.read_json()
+        ok, result, _command_event = commit_video_settings(payload)
+        self.write_json(HTTPStatus.OK if ok else HTTPStatus.CONFLICT, result)
 
     def handle_session_start(self) -> None:
         payload = self.read_json()
