@@ -283,6 +283,36 @@ func TestScreensaverRefreshesAndPrefersFeaturedAnimations(t *testing.T) {
 	}
 }
 
+func TestScreensaverNewFeaturedAnimationReplacesCachedVisibleCycle(t *testing.T) {
+	resetAnimationLevelCacheForTest(t)
+	cacheMu.Lock()
+	cachedLevels = []CompiledLevel{
+		mustCompileTestAnimationLevel(t, "visible-a", false),
+		mustCompileTestAnimationLevel(t, "visible-b", false),
+	}
+	cacheExpire = time.Now().Add(time.Hour)
+	cacheMu.Unlock()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/level-games/animations/levels" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"levels":[` +
+			testAnimationLevelJSON("visible-a", false) + `,` +
+			testAnimationLevelJSON("new-favorite", true) +
+			`]}`))
+	}))
+	defer server.Close()
+
+	game := NewScreensaverWithSeed(time.Unix(0, 0), 7, 1, "", server.URL, time.Second)
+	if game.level.id == "new-favorite" {
+		t.Fatal("test setup used fresh favorite before refresh")
+	}
+	waitForScreensaverLevel(t, game, "new-favorite")
+}
+
 func waitForScreensaverLevel(t *testing.T, game *Game, want string) {
 	t.Helper()
 	deadline := time.Now().Add(time.Second)
@@ -309,17 +339,17 @@ func TestScreensaverFallsBackToVisibleAnimationsWhenNoFeaturedExist(t *testing.T
 	}
 }
 
-func TestFetchLevelsRequestsSummaryPayload(t *testing.T) {
+func TestFetchLevelsRequestsRenderablePayload(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/level-games/animations/levels" {
 			http.NotFound(w, r)
 			return
 		}
-		if got := r.URL.Query().Get("summary"); got != "1" {
-			t.Fatalf("summary query = %q, want 1", got)
+		if got := r.URL.Query().Get("summary"); got != "0" {
+			t.Fatalf("summary query = %q, want 0", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"levels":[` + testAnimationLevelJSON("featured-a", true) + `]}`))
+		_, _ = w.Write([]byte(`{"levels":[` + testAnimationFrameLevelJSON("featured-a", true) + `]}`))
 	}))
 	defer server.Close()
 
@@ -330,6 +360,24 @@ func TestFetchLevelsRequestsSummaryPayload(t *testing.T) {
 	if len(levels) != 1 || levels[0].id != "featured-a" {
 		t.Fatalf("levels = %+v, want featured-a", levels)
 	}
+}
+
+func mustCompileTestAnimationLevel(t *testing.T, slug string, featured bool) CompiledLevel {
+	t.Helper()
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        slug,
+		Label:       slug,
+		FrameTickMS: 50,
+		Rules:       cloudRules{CatalogFeatured: featured},
+		TileEffects: map[string]TileEffect{
+			"0": {Label: "Base", Color: "#141e28", Press: "safe"},
+		},
+		Frames: []rawFrame{{Repeat: 1, Cells: []cellTuple{{X: 0, Y: 0, Kind: 0}}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return levels[0]
 }
 
 func resetAnimationLevelCacheForTest(t *testing.T) {
@@ -354,4 +402,12 @@ func testAnimationLevelJSON(slug string, featured bool) string {
 		featuredJSON = "true"
 	}
 	return `{"slug":"` + slug + `","label":"` + slug + `","frame_tick_ms":50,"rules":{"catalog_featured":` + featuredJSON + `,"animation_source":{"type":"procedure","language":"motion-dsl-v1","code":"color = rgb(20, 30, 40)","loop_seconds":2}}}`
+}
+
+func testAnimationFrameLevelJSON(slug string, featured bool) string {
+	featuredJSON := "false"
+	if featured {
+		featuredJSON = "true"
+	}
+	return `{"slug":"` + slug + `","label":"` + slug + `","frame_tick_ms":50,"rules":{"catalog_featured":` + featuredJSON + `},"tile_effects":{"0":{"label":"Base","color":"#141e28","press":"safe"}},"frames":[{"r":1,"c":[[0,0,0]]}]}`
 }

@@ -413,8 +413,10 @@ func (g *Game) startRefreshLocked() {
 			return
 		}
 		if candidates := screensaverLevels(levels); len(candidates) > 0 {
+			previousLevelsKey := levelListKey(g.levels)
 			g.levels = candidates
-			if indexOfLevel(g.levels, g.level.id) < 0 {
+			cycleChanged := previousLevelsKey != levelListKey(candidates)
+			if indexOfLevel(g.levels, g.level.id) < 0 || (cycleChanged && !g.currentLevelFeaturedLocked() && anyFeatured(candidates)) {
 				g.level = rotatingLevelAt(g.levels, g.rotationSeed, g.rotationIndex, -1)
 			}
 		}
@@ -435,6 +437,42 @@ func screensaverLevels(levels []CompiledLevel) []CompiledLevel {
 		return featured
 	}
 	return levels
+}
+
+func (g *Game) currentLevelFeaturedLocked() bool {
+	for _, level := range g.levels {
+		if level.id == g.level.id {
+			return level.featured
+		}
+	}
+	return false
+}
+
+func anyFeatured(levels []CompiledLevel) bool {
+	for _, level := range levels {
+		if level.featured {
+			return true
+		}
+	}
+	return false
+}
+
+func levelListKey(levels []CompiledLevel) string {
+	if len(levels) == 0 {
+		return ""
+	}
+	var builder strings.Builder
+	for _, level := range levels {
+		builder.WriteString(level.id)
+		builder.WriteByte(':')
+		if level.featured {
+			builder.WriteByte('1')
+		} else {
+			builder.WriteByte('0')
+		}
+		builder.WriteByte(';')
+	}
+	return builder.String()
 }
 
 func rotatingLevelAt(levels []CompiledLevel, seed int64, rotationIndex int64, previous int) CompiledLevel {
@@ -638,11 +676,6 @@ func GetOrFetchLevels(platformURL string) ([]CompiledLevel, error) {
 func RefreshLevels(platformURL string) ([]CompiledLevel, error) {
 	levels, err := fetchLevels(platformURL)
 	if err != nil {
-		cacheMu.Lock()
-		defer cacheMu.Unlock()
-		if len(cachedLevels) > 0 {
-			return cachedLevels, nil
-		}
 		return nil, err
 	}
 	cacheMu.Lock()
@@ -662,7 +695,7 @@ func fetchLevels(platformURL string) ([]CompiledLevel, error) {
 		return nil, err
 	}
 	query := endpoint.Query()
-	query.Set("summary", "1")
+	query.Set("summary", "0")
 	endpoint.RawQuery = query.Encode()
 	client := &http.Client{Timeout: levelFetchTimeout}
 	response, err := client.Get(endpoint.String())
