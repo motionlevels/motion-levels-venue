@@ -654,8 +654,6 @@ def post_process_media(capture_options: dict[str, Any], source_path: Path, media
         if event["ok"]:
             temp_path.replace(media_path)
             event["byteSize"] = media_path.stat().st_size
-            if DELETE_SOURCE_AFTER_REFRAME:
-                event["sourceDelete"] = remove_local_file(source_path, f"delete-{source_path.name}")
         else:
             event["error"] = "ffmpeg reframe failed"
             if temp_path.exists():
@@ -1122,6 +1120,33 @@ def post_platform_video(recording: dict[str, Any], metadata: dict[str, Any], med
     return ingest_event
 
 
+def upload_related_source_media(media_path: Path, metadata: dict[str, Any]) -> dict[str, Any] | None:
+    source_path_text = str(metadata.get("sourceMediaPath") or "").strip()
+    if not source_path_text:
+        return None
+    source_path = Path(source_path_text)
+    if source_path == media_path:
+        return None
+
+    upload_event = run_upload(source_path, source_path.name)
+    source_metadata: dict[str, Any] = {
+        "path": str(source_path),
+        "contentType": content_type_for(source_path),
+        "byteSize": source_path.stat().st_size if source_path.exists() else 0,
+        "upload": upload_event,
+    }
+    if upload_event.get("ok") and upload_event.get("remote"):
+        source_metadata["remotePath"] = upload_event.get("remote")
+        share_url, link_event = run_public_link(str(upload_event["remote"]))
+        source_metadata["publicLink"] = link_event
+        if share_url:
+            source_metadata["shareUrl"] = share_url
+        if DELETE_LOCAL_AFTER_UPLOAD and DELETE_SOURCE_AFTER_REFRAME:
+            source_metadata["localDelete"] = remove_local_file(source_path, f"delete-{source_path.name}")
+            source_metadata["localDeletedAt"] = datetime.now(timezone.utc).isoformat()
+    return source_metadata
+
+
 def upload_media(media_path: Path, metadata_path: Path, platform_recording: dict[str, Any] | None = None) -> None:
     media_event = run_upload(media_path, media_path.name)
     metadata: dict[str, Any] = {}
@@ -1129,6 +1154,9 @@ def upload_media(media_path: Path, metadata_path: Path, platform_recording: dict
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except Exception as exc:
         metadata = {"metadataReadError": str(exc)}
+    source_media_event = upload_related_source_media(media_path, metadata)
+    if source_media_event:
+        metadata["sourceMediaUpload"] = source_media_event
     if media_event.get("ok") and media_event.get("remote"):
         share_url, link_event = run_public_link(str(media_event["remote"]))
         if share_url:
