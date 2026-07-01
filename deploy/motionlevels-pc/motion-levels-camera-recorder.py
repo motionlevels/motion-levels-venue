@@ -56,6 +56,9 @@ SDK_PATH = Path(os.environ.get("MOTION_LEVELS_CAMERA_SDK_PATH", "/opt/insta360/D
 RCLONE_DEST = os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_DEST", "").strip().rstrip("/")
 RCLONE_PATH_PREFIX = os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_PATH_PREFIX", "Motion Levels").strip().strip("/")
 RCLONE_TIMEOUT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_TIMEOUT_SECONDS", "900"))
+RCLONE_RETRY_COUNT = max(1, int(os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_RETRY_COUNT", "3")))
+RCLONE_RETRY_DELAY_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_RCLONE_RETRY_DELAY_SECONDS", "5"))
+UPLOAD_RESCUE_INTERVAL_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_UPLOAD_RESCUE_INTERVAL_SECONDS", "300"))
 PLATFORM_URL = (
     os.environ.get("MOTION_LEVELS_CAMERA_RECORDER_PLATFORM_URL")
     or os.environ.get("MOTION_LEVELS_PLATFORM_URL")
@@ -539,6 +542,26 @@ def run_rclone(args: list[str], timeout: float) -> subprocess.CompletedProcess[s
     )
 
 
+def run_rclone_with_retries(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
+    last_result: subprocess.CompletedProcess[str] | None = None
+    for attempt in range(1, RCLONE_RETRY_COUNT + 1):
+        try:
+            result = run_rclone(args, timeout)
+        except subprocess.TimeoutExpired:
+            if attempt >= RCLONE_RETRY_COUNT:
+                raise
+            time.sleep(RCLONE_RETRY_DELAY_SECONDS * attempt)
+            continue
+        last_result = result
+        if result.returncode == 0:
+            return result
+        if attempt < RCLONE_RETRY_COUNT:
+            time.sleep(RCLONE_RETRY_DELAY_SECONDS * attempt)
+    if last_result is not None:
+        return last_result
+    return run_rclone(args, timeout)
+
+
 def command_env(action: str, payload: dict[str, Any], recording: dict[str, Any], media_path: Path, metadata_path: Path) -> dict[str, str]:
     env = os.environ.copy()
     options = video_capture_options(payload, recording)
@@ -855,7 +878,7 @@ def run_upload(local_path: Path, label: str) -> dict[str, Any]:
         "startedAt": datetime.now(timezone.utc).isoformat(),
     }
     try:
-        result = run_rclone(["copyto", str(local_path), remote], RCLONE_TIMEOUT_SECONDS)
+        result = run_rclone_with_retries(["copyto", str(local_path), remote], RCLONE_TIMEOUT_SECONDS)
         event["durationSeconds"] = round(time.time() - started, 3)
         event["returnCode"] = result.returncode
         event["stdout"] = result.stdout[-2000:]
@@ -882,7 +905,7 @@ def run_public_link(remote: str) -> tuple[str | None, dict[str, Any]]:
         record_event(event)
         return None, event
     try:
-        result = run_rclone(["link", remote], RCLONE_TIMEOUT_SECONDS)
+        result = run_rclone_with_retries(["link", remote], RCLONE_TIMEOUT_SECONDS)
         link = result.stdout.strip().splitlines()[-1].strip() if result.stdout.strip() else ""
         event["durationSeconds"] = round(time.time() - started, 3)
         event["returnCode"] = result.returncode
@@ -1229,6 +1252,14 @@ def upload_related_source_media(media_path: Path, metadata: dict[str, Any]) -> d
     return source_metadata
 
 
+def set_active_upload_state(upload_id: str, state: str) -> None:
+    with active_lock:
+        upload = active_uploads.get(upload_id)
+        if upload:
+            upload["state"] = state
+            upload["updatedAt"] = datetime.now(timezone.utc).isoformat()
+
+
 def upload_media(media_path: Path, metadata_path: Path, platform_recording: dict[str, Any] | None = None) -> None:
     metadata: dict[str, Any] = {}
     try:
@@ -1249,28 +1280,42 @@ def upload_media(media_path: Path, metadata_path: Path, platform_recording: dict
             "metadataPath": str(metadata_path),
         }
     try:
+        metadata["uploadStartedAt"] = upload_started
+        set_active_upload_state(upload_id, "uploading")
         media_event = run_upload(media_path, media_path.name)
+        metadata["mediaUpload"] = media_event
         source_media_event = upload_related_source_media(media_path, metadata)
         if source_media_event:
             metadata["sourceMediaUpload"] = source_media_event
         if media_event.get("ok") and media_event.get("remote"):
+            metadata["remotePath"] = media_event.get("remote")
+            set_active_upload_state(upload_id, "linking")
             share_url, link_event = run_public_link(str(media_event["remote"]))
+            metadata["publicLink"] = link_event
             if share_url:
                 metadata["shareUrl"] = share_url
-                metadata["remotePath"] = media_event.get("remote")
-                metadata["publicLink"] = link_event
                 if platform_recording is not None:
+                    set_active_upload_state(upload_id, "ingesting")
                     ingest_event = post_platform_video(platform_recording, metadata, media_event, share_url)
                     metadata["platformIngest"] = ingest_event
         if media_event.get("ok") and DELETE_LOCAL_AFTER_UPLOAD:
             metadata["localDelete"] = remove_local_file(media_path, f"delete-{media_path.name}")
             metadata["localDeletedAt"] = datetime.now(timezone.utc).isoformat()
         write_json(metadata_path, metadata)
+        set_active_upload_state(upload_id, "metadata")
         metadata_event = run_upload(metadata_path, metadata_path.name)
         metadata["metadataUpload"] = metadata_event
+        metadata["uploadFinishedAt"] = datetime.now(timezone.utc).isoformat()
         if metadata_event.get("ok") and DELETE_LOCAL_AFTER_UPLOAD:
             write_json(metadata_path, metadata)
             remove_local_file(metadata_path, f"delete-{metadata_path.name}")
+    except Exception as exc:
+        metadata["uploadError"] = str(exc)
+        metadata["uploadFailedAt"] = datetime.now(timezone.utc).isoformat()
+        try:
+            write_json(metadata_path, metadata)
+        except Exception as write_exc:
+            print(f"failed to persist upload error for {metadata_path}: {write_exc}", flush=True)
     finally:
         with active_lock:
             active_uploads.pop(upload_id, None)
@@ -1279,6 +1324,77 @@ def upload_media(media_path: Path, metadata_path: Path, platform_recording: dict
 def upload_recording(recording: dict[str, Any], media_path: Path, metadata_path: Path) -> None:
     platform_recording = recording if recording.get("platformIngest") else None
     upload_media(media_path, metadata_path, platform_recording)
+
+
+def rescue_remote_metadata(metadata_path: Path, metadata: dict[str, Any], remote: str) -> bool:
+    changed = False
+    if PUBLIC_LINKS and not metadata.get("shareUrl"):
+        share_url, link_event = run_public_link(remote)
+        metadata["publicLink"] = link_event
+        changed = True
+        if share_url:
+            metadata["shareUrl"] = share_url
+            metadata["remotePath"] = remote
+    metadata_event = metadata.get("metadataUpload")
+    if not isinstance(metadata_event, dict) or not metadata_event.get("ok"):
+        write_json(metadata_path, metadata)
+        metadata["metadataUpload"] = run_upload(metadata_path, metadata_path.name)
+        metadata["uploadFinishedAt"] = datetime.now(timezone.utc).isoformat()
+        changed = True
+        if metadata["metadataUpload"].get("ok") and DELETE_LOCAL_AFTER_UPLOAD:
+            write_json(metadata_path, metadata)
+            remove_local_file(metadata_path, f"delete-{metadata_path.name}")
+    elif changed:
+        write_json(metadata_path, metadata)
+    return changed
+
+
+def rescue_pending_uploads_once() -> None:
+    if not RCLONE_DEST:
+        return
+    for metadata_path in ROOT.rglob("*.json"):
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(metadata, dict) or metadata.get("state") != "finished":
+            continue
+        upload_id = str(metadata.get("captureId") or metadata_path.stem)
+        with active_lock:
+            if upload_id in active_uploads:
+                continue
+        media_path_text = str(metadata.get("mediaPath") or "").strip()
+        media_path = Path(media_path_text) if media_path_text else None
+        media_upload = metadata.get("mediaUpload")
+        media_upload_remote = media_upload.get("remote") if isinstance(media_upload, dict) else ""
+        remote = str(metadata.get("remotePath") or media_upload_remote or "").strip()
+        needs_link = PUBLIC_LINKS and bool(remote) and not metadata.get("shareUrl")
+        metadata_event = metadata.get("metadataUpload")
+        needs_metadata = not isinstance(metadata_event, dict) or not metadata_event.get("ok")
+        if media_path and media_path.exists() and (needs_link or needs_metadata or not remote):
+            print(f"rescuing pending camera upload {metadata_path}", flush=True)
+            threading.Thread(target=upload_media, args=(media_path, metadata_path), daemon=True).start()
+            continue
+        if remote and (needs_link or needs_metadata):
+            print(f"rescuing pending camera upload metadata {metadata_path}", flush=True)
+            try:
+                rescue_remote_metadata(metadata_path, metadata, remote)
+            except Exception as exc:
+                print(f"pending upload metadata rescue failed for {metadata_path}: {exc}", flush=True)
+
+
+def upload_rescue_loop() -> None:
+    time.sleep(10)
+    try:
+        rescue_pending_uploads_once()
+    except Exception as exc:
+        print(f"initial pending upload rescue scan failed: {exc}", flush=True)
+    while True:
+        time.sleep(max(30, UPLOAD_RESCUE_INTERVAL_SECONDS))
+        try:
+            rescue_pending_uploads_once()
+        except Exception as exc:
+            print(f"pending upload rescue scan failed: {exc}", flush=True)
 
 
 def segment_duration_seconds(payload: dict[str, Any] | None = None) -> int:
@@ -2165,6 +2281,7 @@ def main() -> None:
     if RCLONE_DEST:
         print(f"rclone uploads enabled dest={RCLONE_DEST}", flush=True)
         print(f"rclone public links {'enabled' if PUBLIC_LINKS else 'disabled'}", flush=True)
+        threading.Thread(target=upload_rescue_loop, daemon=True).start()
     if PLATFORM_URL:
         print(f"platform video ingest enabled url={PLATFORM_URL}", flush=True)
     try:
