@@ -76,8 +76,8 @@ export function uniquePreviewSources(values: Array<string | undefined>): string[
 export function catalogThumbnailMediaSrcs(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined): string[] {
   return uniquePreviewSources([
     catalogDirectAssetSrc(entry.catalog_preview_url),
-    catalogDirectAssetSrc(entry.catalog_thumbnail_url),
     catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
+    catalogDirectAssetSrc(entry.catalog_thumbnail_url),
     catalogThumbnailSrc(entry.catalog_thumbnail_ref),
     ...(fallback?.thumbnailSrcs || []),
     fallback?.thumbnailSrc,
@@ -88,8 +88,8 @@ export function catalogThumbnailMediaSrcs(entry: PlatformGameCatalogEntry, fallb
 export function catalogPreviewMediaSrcs(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, thumbnailSrcs: string[]): string[] {
   return uniquePreviewSources([
     catalogDirectAssetSrc(entry.catalog_preview_url),
-    catalogDirectAssetSrc(entry.catalog_thumbnail_url),
     catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
+    catalogDirectAssetSrc(entry.catalog_thumbnail_url),
     ...thumbnailSrcs,
     ...(fallback?.previewSrcs || []),
     fallback?.previewSrc,

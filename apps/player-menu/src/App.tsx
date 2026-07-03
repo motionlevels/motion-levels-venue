@@ -29,8 +29,6 @@ import { hexToColor, hexToRGB, randomUUID } from "./utils";
 import { avatarLabel, firstAvailableColor, gameRosterIssue, playerLabel, rosterSnapshot, statusPlayersForDisplay, type Player, type RosterIssue } from "./roster";
 import {
   catalogDirectAssetSrc,
-  catalogPreviewMediaSrcs,
-  catalogThumbnailMediaSrcs,
   catalogThumbnailSrc,
   gamePreviewSrcs,
   gameThumbnailSrc,
@@ -509,8 +507,23 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
   const forceParkourAnimation = isParkourPreviewGame(engineGame);
   const preferFallbackAnimation = forceParkourAnimation || shouldPreferCatalogFallbackPreviewAnimation(entry, fallback);
   const previewAnimation = forceParkourAnimation ? "parkour" : catalogPreviewAnimation(entry, fallback, engineGame, preferFallbackAnimation);
-  const thumbnailSrcs = preferFallbackAnimation ? [] : catalogThumbnailMediaSrcs(entry, fallback);
-  const previewSrcs = preferFallbackAnimation ? [] : catalogPreviewMediaSrcs(entry, fallback, thumbnailSrcs);
+  const thumbnailSrcs = preferFallbackAnimation ? [] : uniquePreviewSources([
+    catalogDirectAssetSrc(entry.catalog_preview_url),
+    catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
+    catalogDirectAssetSrc(entry.catalog_thumbnail_url),
+    catalogThumbnailSrc(entry.catalog_thumbnail_ref),
+    ...(fallback?.thumbnailSrcs || []),
+    fallback?.thumbnailSrc,
+    fallback?.previewSrc,
+  ]);
+  const previewSrcs = preferFallbackAnimation ? [] : uniquePreviewSources([
+    catalogDirectAssetSrc(entry.catalog_preview_url),
+    catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
+    catalogDirectAssetSrc(entry.catalog_thumbnail_url),
+    ...thumbnailSrcs,
+    ...(fallback?.previewSrcs || []),
+    fallback?.previewSrc,
+  ]);
   const thumbnailSrc = thumbnailSrcs[0];
   const previewSrc = previewSrcs[0];
   const playerBounds = platformPlayerBounds(entry);
@@ -526,16 +539,16 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
 	        const levelDifficulties = platformLevelSupportedDifficulties(lvl);
 	        const platformThumbnailSrcs = uniquePreviewSources([
 	          catalogDirectAssetSrc(lvl.catalog_preview_url),
-	          catalogDirectAssetSrc(lvl.catalog_thumbnail_url),
 	          catalogDirectAssetSrc(lvl.catalog_thumbnail_small_url),
+	          catalogDirectAssetSrc(lvl.catalog_thumbnail_url),
 	          fallbackLevel?.thumbnailSrc,
 	          ...(fallbackLevel?.thumbnailSrcs || []),
 	          fallbackLevel?.previewSrc,
 	        ]);
 	        const platformPreviewSrcs = uniquePreviewSources([
 	          catalogDirectAssetSrc(lvl.catalog_preview_url),
-	          catalogDirectAssetSrc(lvl.catalog_thumbnail_url),
 	          catalogDirectAssetSrc(lvl.catalog_thumbnail_small_url),
+	          catalogDirectAssetSrc(lvl.catalog_thumbnail_url),
 	          ...platformThumbnailSrcs,
 	          fallbackLevel?.previewSrc,
 	          ...(fallbackLevel?.previewSrcs || []),
