@@ -242,6 +242,34 @@ func TestRandomRotationSwitchesEveryMinuteWithoutImmediateRepeat(t *testing.T) {
 	}
 }
 
+func TestRotatingLevelAtNeverRepeatsPreviousWhenAlternativesExist(t *testing.T) {
+	levels := []CompiledLevel{
+		{id: "aurora"},
+		{id: "lava"},
+		{id: "ocean"},
+		{id: "comet"},
+	}
+
+	for previous := range levels {
+		for seed := int64(-100); seed <= 100; seed++ {
+			for rotationIndex := int64(0); rotationIndex < 500; rotationIndex++ {
+				got := rotatingLevelAt(levels, seed, rotationIndex, previous)
+				if got.id == levels[previous].id {
+					t.Fatalf("rotatingLevelAt repeated previous %q for seed=%d rotation=%d", got.id, seed, rotationIndex)
+				}
+			}
+		}
+	}
+}
+
+func TestRotatingLevelAtAllowsRepeatWhenOnlyOneAnimationExists(t *testing.T) {
+	levels := []CompiledLevel{{id: "only"}}
+	got := rotatingLevelAt(levels, 42, 1, 0)
+	if got.id != "only" {
+		t.Fatalf("rotatingLevelAt single animation = %q, want only", got.id)
+	}
+}
+
 func TestScreensaverRefreshesAndPrefersFeaturedAnimations(t *testing.T) {
 	resetAnimationLevelCacheForTest(t)
 	requests := 0

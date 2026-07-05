@@ -321,8 +321,8 @@ func TestWhackAMoleUsesFocusedGameMusic(t *testing.T) {
 	cfg := config{Game: "mole", MusicRef: "Motion/canciones/Background01.mp3", MusicVolume: 0.5, PlayerCount: 1}
 	cfg.normalize()
 
-	if cfg.Game != "whack-a-mole" {
-		t.Fatalf("game = %q, want whack-a-mole", cfg.Game)
+	if cfg.Game != "authored-whack-a-mole-go" {
+		t.Fatalf("game = %q, want authored-whack-a-mole-go", cfg.Game)
 	}
 	if cfg.MusicRef != "Motion/canciones/Musica8.mp3" {
 		t.Fatalf("music = %q, want Musica8", cfg.MusicRef)
@@ -336,7 +336,7 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 	base := config{Brightness: 80, PlayerCount: 1, MusicRef: "custom.mp3", MusicVolume: 0.5}
 
 	mole := configForSelection(base, "mole", 4)
-	if mole.Game != "whack-a-mole" || mole.PlayerCount != 4 {
+	if mole.Game != "authored-whack-a-mole-go" || mole.PlayerCount != 4 {
 		t.Fatalf("mole selection = %+v", mole)
 	}
 	if mole.MusicRef != "Motion/canciones/Musica8.mp3" {
@@ -347,7 +347,7 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 	}
 
 	lava := configForSelection(base, "el-suelo-es-lava", 3)
-	if lava.Game != "lava" || lava.PlayerCount != 3 {
+	if lava.Game != "authored-lava" || lava.PlayerCount != 3 {
 		t.Fatalf("lava selection = %+v", lava)
 	}
 	if lava.MusicRef != "Motion/canciones/Background07.mp3" {
@@ -361,7 +361,7 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 	}
 
 	saltos := configForSelection(base, "jump", 4)
-	if saltos.Game != "saltos" || saltos.PlayerCount != 1 || saltos.Level != "starter" {
+	if saltos.Game != "authored-saltos" || saltos.PlayerCount != 1 || saltos.Level != "starter" {
 		t.Fatalf("saltos selection = %+v", saltos)
 	}
 	if saltos.MusicRef != "Motion/canciones/Background07.mp3" {
@@ -401,7 +401,7 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 	}
 
 	duel := configForSelection(base, "duelo", 6)
-	if duel.Game != "duel" || duel.PlayerCount != 4 {
+	if duel.Game != "authored-duel" || duel.PlayerCount != 6 {
 		t.Fatalf("duel selection = %+v", duel)
 	}
 	if duel.MusicRef != "Motion/canciones/Musica8.mp3" {
@@ -409,7 +409,7 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 	}
 
 	memory := configForSelection(base, "memoria", 6)
-	if memory.Game != "memory" || memory.PlayerCount != 4 {
+	if memory.Game != "authored-memory-challenge" || memory.PlayerCount != 4 {
 		t.Fatalf("memory selection = %+v", memory)
 	}
 	if memory.MusicRef != memorychallenge.DefaultMusicRef || memory.MusicVolume != memorychallenge.DefaultMusicVolume {
@@ -774,7 +774,7 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if status.CurrentGame != "lava" || status.PlayerCount != 3 || status.Difficulty != "expert" {
+	if status.CurrentGame != "authored-lava" || status.PlayerCount != 3 || status.Difficulty != "expert" {
 		t.Fatalf("selected status = %+v", status)
 	}
 
@@ -790,7 +790,7 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if status.CurrentGame != "saltos" || status.PlayerCount != 1 || status.Level != "classic" {
+	if status.CurrentGame != "authored-saltos" || status.PlayerCount != 1 || status.Level != "classic" {
 		t.Fatalf("selected saltos status = %+v", status)
 	}
 
@@ -850,7 +850,7 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if status.CurrentGame != "patrones" || status.PlayerCount != 4 || status.Difficulty != "hard" || status.Level != "level-3" || status.Phase != "countdown" {
+	if status.CurrentGame != "authored-patrones" || status.PlayerCount != 4 || status.Difficulty != "hard" || status.Level != "level-3" || status.Phase != "countdown" {
 		t.Fatalf("selected patrones status = %+v", status)
 	}
 }
@@ -1363,7 +1363,7 @@ func TestPlatformSyncPostsSessionSnapshot(t *testing.T) {
 	if auth != "Bearer test-token" {
 		t.Fatalf("authorization = %q", auth)
 	}
-	if payload.ControllerID != "controller-1" || payload.Game != "lava" || payload.Label != "El suelo es lava" {
+	if payload.ControllerID != "controller-1" || payload.Game != "authored-lava" || payload.Label != "El suelo es lava" {
 		t.Fatalf("payload metadata = %+v", payload)
 	}
 	if payload.SessionID == "" || payload.Status != "open" || payload.StartedAt == "" {
@@ -1504,7 +1504,7 @@ func TestGameAPIControlPauseRestartAndExit(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if !status.Paused || status.CurrentGame != "lava" {
+	if !status.Paused || status.CurrentGame != "authored-lava" {
 		t.Fatalf("paused status = %+v", status)
 	}
 
@@ -1516,8 +1516,8 @@ func TestGameAPIControlPauseRestartAndExit(t *testing.T) {
 	if runtime.Status().Paused {
 		t.Fatal("restart should clear pause")
 	}
-	if runtime.Status().CurrentGame != "lava" {
-		t.Fatalf("restart game = %q, want lava", runtime.Status().CurrentGame)
+	if runtime.Status().CurrentGame != "authored-lava" {
+		t.Fatalf("restart game = %q, want authored-lava", runtime.Status().CurrentGame)
 	}
 
 	response, err = http.Post(server.URL+"/api/control", "application/json", bytes.NewBufferString(`{"action":"exit"}`))
@@ -1567,8 +1567,8 @@ func TestRuntimePressureInputPreventsNoPressureTimeout(t *testing.T) {
 	runtime.HandlePressure(&inputpb.PressureEvent{X: 0, Y: 0, Pressed: true, UnixNanos: now.UnixNano()}, now)
 
 	status := runtime.Status()
-	if status.CurrentGame != "lava" {
-		t.Fatalf("game after pressure input = %q, want lava", status.CurrentGame)
+	if status.CurrentGame != "authored-lava" {
+		t.Fatalf("game after pressure input = %q, want authored-lava", status.CurrentGame)
 	}
 }
 
@@ -1901,7 +1901,7 @@ func TestGameAPIDisplayStatus(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&display); err != nil {
 		t.Fatal(err)
 	}
-	if display.CurrentGame != "whack-a-mole" {
+	if display.CurrentGame != "authored-whack-a-mole-go" {
 		t.Fatalf("display game = %q", display.CurrentGame)
 	}
 	if len(display.Players) != 2 {
@@ -2108,8 +2108,8 @@ func TestVenueSessionLifecycleAndMenuEvents(t *testing.T) {
 	if got := runtime.Status().VenueSessionID; got != venueSessionID {
 		t.Fatalf("status venue session id = %q, want %q", got, venueSessionID)
 	}
-	if got := runtime.Status().CurrentGame; got != "whack-a-mole" {
-		t.Fatalf("current game before venue end = %q, want whack-a-mole", got)
+	if got := runtime.Status().CurrentGame; got != "authored-whack-a-mole-go" {
+		t.Fatalf("current game before venue end = %q, want authored-whack-a-mole-go", got)
 	}
 	if response := post("/api/venue-session", `{"action":"end","venueSessionId":"`+venueSessionID+`","reason":"manual"}`); response.StatusCode != http.StatusOK {
 		t.Fatalf("venue end response = %d", response.StatusCode)

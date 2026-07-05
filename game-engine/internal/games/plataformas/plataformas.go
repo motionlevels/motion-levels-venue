@@ -127,6 +127,7 @@ type Game struct {
 	ripples       []greenImpactRipple
 	capturedAt    map[string]time.Time
 	lastDamageAt  time.Time
+	lastDamageBy  map[Point]time.Time
 	hitFlash      map[Point]time.Time
 	pendingEvents []whackamole.Event
 }
@@ -150,6 +151,7 @@ type compiledLevel struct {
 	greenLoadSide     string
 	blueTurnGreen     bool
 	blueCapture       bool
+	damageGrace       bool
 	totalDuration     time.Duration
 	frames            []compiledFrame
 	scoreUniqs        map[string]struct{}
@@ -215,6 +217,7 @@ type levelRules struct {
 	DefeatAnimations          []string                     `json:"defeat_animations"`
 	DifficultySettings        map[string]difficultySetting `json:"difficulty_settings"`
 	RedFloorAnimation         string                       `json:"red_floor_animation"`
+	RedDamageGracePeriod      *bool                        `json:"red_damage_grace_period"`
 	GreenPlatformLoad         *bool                        `json:"green_platform_load_animation"`
 	GreenPlatformLoadSide     string                       `json:"green_platform_load_side"`
 	GreenPlatformDisappear    bool                         `json:"green_platform_disappear"`
@@ -307,9 +310,13 @@ func NewWithSeed(now time.Time, seed int64, playerCount int, difficulty string, 
 }
 
 func NewWithSeedForGame(now time.Time, seed int64, playerCount int, difficulty string, level string, platformURL string, gameID string) *Game {
+	return NewWithSeedForGameMode(now, seed, playerCount, difficulty, level, platformURL, gameID, "challenge")
+}
+
+func NewWithSeedForGameMode(now time.Time, seed int64, playerCount int, difficulty string, level string, platformURL string, gameID string, levelMode string) *Game {
 	_ = seed
 	diff := NormalizeDifficulty(difficulty)
-	levels, err := fetchLevels(platformURL, diff, gameID)
+	levels, err := fetchLevels(platformURL, diff, gameID, levelMode)
 	if err != nil {
 		log.Printf("%s: platform level fetch failed: %v", gameID, err)
 		levels = fallbackCompiledLevels()
@@ -334,6 +341,7 @@ func NewWithSeedForGame(now time.Time, seed int64, playerCount int, difficulty s
 		pressed:      map[Point]bool{},
 		greenImpacts: map[string]bool{},
 		capturedAt:   map[string]time.Time{},
+		lastDamageBy: map[Point]time.Time{},
 		hitFlash:     map[Point]time.Time{},
 	}
 }
@@ -532,10 +540,20 @@ func (g *Game) releasePurpleLocked(pt Point, now time.Time) {
 }
 
 func (g *Game) damageLocked(pt Point, now time.Time) bool {
-	if !g.lastDamageAt.IsZero() && now.Sub(g.lastDamageAt) < damageCooldown {
-		return false
+	if g.level.damageGrace {
+		if !g.lastDamageAt.IsZero() && now.Sub(g.lastDamageAt) < damageCooldown {
+			return false
+		}
+		g.lastDamageAt = now
+	} else {
+		if g.lastDamageBy == nil {
+			g.lastDamageBy = map[Point]time.Time{}
+		}
+		if last, ok := g.lastDamageBy[pt]; ok && now.Sub(last) < damageCooldown {
+			return false
+		}
+		g.lastDamageBy[pt] = now
 	}
-	g.lastDamageAt = now
 	g.hitFlash[pt] = now.Add(350 * time.Millisecond)
 	if g.lives > 0 {
 		g.lives--
@@ -601,6 +619,7 @@ func (g *Game) resetLevelRunLocked(level compiledLevel, now time.Time) {
 	g.ripples = nil
 	g.capturedAt = map[string]time.Time{}
 	g.lastDamageAt = time.Time{}
+	g.lastDamageBy = map[Point]time.Time{}
 	g.hitFlash = map[Point]time.Time{}
 	g.pendingEvents = nil
 }
@@ -978,6 +997,9 @@ func (g *Game) safeZoneCountdownColorAtLocked(pt Point, now time.Time) RGB {
 			continue
 		}
 		if target.X == pt.X && countdownFallingY(target.Y, tileProgress, g.level.greenLoadSide) == pt.Y {
+			if tileProgress >= 1 {
+				return animation.SafeZoneGreen
+			}
 			return countdownPulseGreen(target, now, g.createdAt)
 		}
 	}
@@ -1012,7 +1034,7 @@ func (g *Game) endsUnixLocked() int64 {
 	return g.startedAt.Add(g.level.timeLimit).Unix()
 }
 
-func fetchLevels(platformURL string, diff Difficulty, gameID string) ([]compiledLevel, error) {
+func fetchLevels(platformURL string, diff Difficulty, gameID string, levelMode string) ([]compiledLevel, error) {
 	base := strings.TrimRight(strings.TrimSpace(platformURL), "/")
 	if base == "" {
 		return nil, fmt.Errorf("platform URL is empty")
@@ -1021,18 +1043,18 @@ func fetchLevels(platformURL string, diff Difficulty, gameID string) ([]compiled
 	if cleanGameID == "" {
 		cleanGameID = "plataformas"
 	}
-	levels, err := fetchLevelsForDifficulty(base, cleanGameID, string(diff))
+	levels, err := fetchLevelsForDifficulty(base, cleanGameID, string(diff), levelMode)
 	if err == nil {
 		return levels, nil
 	}
-	withoutDifficulty, fallbackErr := fetchLevelsForDifficulty(base, cleanGameID, "")
+	withoutDifficulty, fallbackErr := fetchLevelsForDifficulty(base, cleanGameID, "", levelMode)
 	if fallbackErr == nil {
 		return withoutDifficulty, nil
 	}
 	return nil, err
 }
 
-func fetchLevelsForDifficulty(base string, gameID string, difficulty string) ([]compiledLevel, error) {
+func fetchLevelsForDifficulty(base string, gameID string, difficulty string, levelMode string) ([]compiledLevel, error) {
 	endpoint, err := url.Parse(base + "/api/level-games/" + url.PathEscape(gameID) + "/levels")
 	if err != nil {
 		return nil, err
@@ -1055,10 +1077,15 @@ func fetchLevelsForDifficulty(base string, gameID string, difficulty string) ([]
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 		return nil, err
 	}
-	return compileCloudLevels(payload.Levels)
+	return compileCloudLevelsForMode(payload.Levels, levelMode)
 }
 
 func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
+	return compileCloudLevelsForMode(raw, "challenge")
+}
+
+func compileCloudLevelsForMode(raw []cloudLevel, levelMode string) ([]compiledLevel, error) {
+	challengeMode := strings.EqualFold(strings.TrimSpace(levelMode), "challenge")
 	levels := make([]compiledLevel, 0, len(raw))
 	for index, level := range raw {
 		id := level.Slug
@@ -1079,7 +1106,11 @@ func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
 				lives = settings.GameplayLives
 			}
 			if settings.GameplayTimeLimitSeconds > 0 {
-				timeLimit = time.Duration(settings.GameplayTimeLimitSeconds) * time.Second
+				if challengeMode {
+					timeLimit = time.Duration(settings.GameplayTimeLimitSeconds) * time.Second
+				} else if level.TimeLimitSeconds == settings.GameplayTimeLimitSeconds {
+					timeLimit = 0
+				}
 			}
 			if settings.FrameDurationMS > 0 {
 				frameTick = time.Duration(settings.FrameDurationMS) * time.Millisecond
@@ -1114,6 +1145,7 @@ func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
 			greenLoadSide:     normalizeGreenPlatformLoadSide(level.Rules.GreenPlatformLoadSide),
 			blueTurnGreen:     level.Rules.BluePlatformTurnGreen,
 			blueCapture:       level.Rules.BluePlatformCaptureArea,
+			damageGrace:       boolPtrTrue(level.Rules.RedDamageGracePeriod),
 			scoreUniqs:        map[string]struct{}{},
 			audio:             normalizeAudioRefs(level),
 		}
@@ -1229,7 +1261,7 @@ func colorForPoint(point tilePoint) RGB {
 	}
 	switch point.kind {
 	case 0:
-		return RGB{G: 255}
+		return animation.SafeZoneGreen
 	case 1:
 		return RGB{B: 255}
 	case 2:
@@ -1259,6 +1291,10 @@ func normalizeGreenPlatformLoadSide(value string) string {
 
 func boolDefaultTrue(value *bool) bool {
 	return value == nil || *value
+}
+
+func boolPtrTrue(value *bool) bool {
+	return value != nil && *value
 }
 
 func lavaColor(pt Point, now time.Time) RGB {
@@ -1531,7 +1567,8 @@ func countdownProgress(now, createdAt, startedAt time.Time) float64 {
 
 func countdownTileProgress(countdownProgress float64, order int, total int) float64 {
 	if total <= 1 {
-		return countdownProgress
+		// Match the multi-tile schedule: fully settled by the final beat of the countdown.
+		return math.Min(countdownProgress/0.92, 1)
 	}
 	// Spread the starts across the countdown, but leave a final beat where all tiles are settled.
 	delay := float64(order) / float64(total-1) * 0.68
@@ -1585,11 +1622,7 @@ func countdownSafeTiles(frame *compiledFrame, side string) []Point {
 func countdownPulseGreen(pt Point, now time.Time, createdAt time.Time) RGB {
 	phase := now.Sub(createdAt).Seconds()*math.Pi*4 + float64(pt.X+pt.Y)*0.22
 	pulse := 0.5 + 0.5*math.Sin(phase)
-	return RGB{
-		R: 0,
-		G: byte(232 + 23*pulse),
-		B: byte(68 + 18*pulse),
-	}
+	return scaleRGB(animation.SafeZoneGreen, 0.78+0.22*pulse)
 }
 
 func levelNumber(id string) int {

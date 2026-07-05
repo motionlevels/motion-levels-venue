@@ -1720,7 +1720,9 @@ function MenuApp() {
   const displayPlayers = gameActive && enginePlayers.length > 0 ? enginePlayers : launchedPlayers;
   const headerPlayers = gameActive && enginePlayers.length > 0 ? enginePlayers : activePlayers;
   const launchedLevel = launchedGame.levels?.find((level) => level.id === (status?.level || selectedLevelFor(launchedGame)));
-  const launchedSupportedDifficulties = usesDifficulty(launchedGame) ? selectableDifficultiesForGame(launchedGame) : supportedDifficultiesFor(launchedGame, launchedLevel);
+  const launchedSupportedDifficulties = launchedGame.levels?.length
+    ? selectableDifficultiesForGame(launchedGame)
+    : usesDifficulty(launchedGame) ? selectableDifficultiesForGame(launchedGame) : supportedDifficultiesFor(launchedGame, launchedLevel);
   const launchedDifficulty = closestSupportedDifficulty(menu.difficulty, launchedSupportedDifficulties);
   const launchedLevelActive = isLevelRuntimeActive(status, launchedGame);
   const activeLevelLaunchView = visibleActiveLevelLaunch({
@@ -2864,10 +2866,6 @@ function MenuApp() {
           countdownValue={countdownValue}
           error={error}
           onDifficultyChange={(difficulty) => {
-            if (launchedLevelActive) {
-              setMessage("Detén el nivel para cambiar dificultad");
-              return;
-            }
             captureMenuEvent("difficulty_changed", {
               difficulty,
               engine_game: engineGameID(launchedGame),
@@ -2880,8 +2878,12 @@ function MenuApp() {
           onLevelSelect={requestActiveLevelSwitch}
           onNextLevel={() => {
             const levels = levelsForDifficulty(launchedGame, launchedDifficulty);
-            const currentIndex = Math.max(0, levels.findIndex((level) => level.id === selectedLevelFor(launchedGame)));
-            const nextLevel = levels[(currentIndex + 1) % levels.length];
+            if (!levels.length) return;
+            const currentLevelID = status?.level && levels.some((level) => level.id === status.level)
+              ? status.level
+              : selectedLevelFor(launchedGame);
+            const currentIndex = levels.findIndex((level) => level.id === currentLevelID);
+            const nextLevel = currentIndex < 0 ? levels[0] : levels[(currentIndex + 1) % levels.length];
             if (nextLevel) requestActiveLevelSwitch(nextLevel.id);
           }}
           onPauseToggle={() => sendGameControl(status?.paused ? "resume" : "pause")}
@@ -3001,6 +3003,38 @@ function MenuApp() {
                 {browsingLevels ? (
                   <div className="level-browser-actions">
                     {levelsUnlocked ? <span className="dev-unlock-pill">Dev: niveles abiertos</span> : null}
+                    {levelBrowserGame && usesDifficulty(levelBrowserGame) ? (
+                      <div className="level-browser-difficulty" role="group" aria-label="Dificultad">
+                        {difficulties.map((difficulty) => {
+                          const supported = selectableDifficultiesForGame(levelBrowserGame).includes(difficulty.id);
+                          return (
+                            <button
+                              key={difficulty.id}
+                              className={`level-browser-difficulty-button ${levelBrowserDifficulty === difficulty.id ? "active" : ""}`}
+                              style={{ "--difficulty-color": difficulty.color, "--difficulty-rgb": hexToRGB(difficulty.color) } as CSSProperties}
+                              type="button"
+                              disabled={!supported}
+                              aria-pressed={levelBrowserDifficulty === difficulty.id}
+                              title={supported ? undefined : "Sin niveles en esta dificultad"}
+                              onClick={() => {
+                                if (!supported || levelBrowserDifficulty === difficulty.id) return;
+                                captureMenuEvent("difficulty_changed", {
+                                  difficulty: difficulty.id,
+                                  engine_game: engineGameID(levelBrowserGame),
+                                  game: levelBrowserGame.id,
+                                  level: selectedLevelFor(levelBrowserGame) || undefined,
+                                  source: "level_browser",
+                                });
+                                setMenu((current) => ({ ...current, difficulty: difficulty.id }));
+                              }}
+                            >
+                              <span className="difficulty-label">{difficulty.label}</span>
+                              <StarRating difficulty={difficulty.id} label={difficulty.label} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                     <button className="btn compact back-to-games" type="button" onClick={() => setLevelBrowserGameID(null)}>
                       <ArrowLeftIcon />
                       Juegos

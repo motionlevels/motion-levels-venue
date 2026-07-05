@@ -15,6 +15,8 @@ export const FLOOR_ROWS = 32;
 export type RGB = [number, number, number];
 export type FloorAnim = (x: number, y: number, cols: number, rows: number, t: number) => RGB;
 
+const safeZoneGreen: RGB = [0, 255, 0];
+
 // Engine player colors.
 const playerColors: RGB[] = [
   [255, 0, 0], // red
@@ -364,7 +366,7 @@ const patrones: FloorAnim = (x, y, cols, rows, t) => {
   if (!points.has(`${x},${y}`)) return [0, 0, 0];
   const order = [...points].sort().findIndex((key) => key === `${x},${y}`);
   const progress = Math.floor(mod(t, 3.5) / 3.5 * (points.size + 1));
-  if (order >= 0 && order < progress) return [0, 255, 0];
+  if (order >= 0 && order < progress) return safeZoneGreen;
   const pulse = 0.78 + 0.22 * Math.sin(t * 4.4 + order * 0.5);
   return [20 * pulse, 104 * pulse, 255 * pulse];
 };
@@ -502,7 +504,7 @@ function temporada1Preview(level: number): FloorAnim {
       }
     }
     if (cellType === null) return [2, 7, 12];
-    if (cellType === 0) return [0, 255, 0];
+    if (cellType === 0) return safeZoneGreen;
     const phase = t + level * 0.07;
     if (cellType === 1) {
       const pulse = 0.82 + 0.18 * Math.sin(phase * 5.4 + x * 0.31 + y * 0.17);

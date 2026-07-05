@@ -1243,6 +1243,75 @@ button.capsule:disabled,
   gap: 10px;
 }
 
+.level-browser-difficulty {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.level-browser-difficulty-button {
+  min-height: 44px;
+  padding: 0 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
+    rgba(9, 15, 24, 0.74);
+  color: var(--soft);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    border-color 160ms var(--ease),
+    background 160ms var(--ease),
+    color 160ms var(--ease);
+}
+
+.level-browser-difficulty-button .difficulty-label {
+  font-size: 14px;
+}
+
+.level-browser-difficulty-button .star-rating {
+  font-size: 12px;
+}
+
+.level-browser-difficulty-button .star-rating .filled {
+  color: var(--difficulty-color, var(--accent));
+  text-shadow: 0 0 10px rgba(var(--difficulty-rgb, var(--accent-rgb)), 0.45);
+}
+
+.level-browser-difficulty-button:hover:not(:disabled) {
+  border-color: var(--line-strong);
+}
+
+.level-browser-difficulty-button:disabled {
+  color: rgba(206, 215, 230, 0.42);
+  cursor: not-allowed;
+  filter: grayscale(0.9);
+  opacity: 0.46;
+}
+
+.level-browser-difficulty-button:disabled .star-rating .filled {
+  color: rgba(206, 215, 230, 0.36);
+  text-shadow: none;
+}
+
+.level-browser-difficulty-button.active {
+  color: #f7fbff;
+  border-color: rgba(var(--difficulty-rgb, var(--accent-rgb)), 0.6);
+  background:
+    linear-gradient(180deg, rgba(var(--difficulty-rgb, var(--accent-rgb)), 0.2), rgba(var(--difficulty-rgb, var(--accent-rgb)), 0.08)),
+    rgba(9, 15, 24, 0.9);
+}
+
+.level-browser-difficulty-button.active .star-rating,
+.level-browser-difficulty-button.active .star-rating .filled {
+  color: #f7fbff;
+  text-shadow: none;
+}
+
 .dev-unlock-pill {
   min-height: 34px;
   padding: 0 13px;

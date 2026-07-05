@@ -60,6 +60,23 @@ describe("level difficulty selection", () => {
     assert.equal(defaultLevelIDForDifficulty(game, "hard"), "level-1");
   });
 
+  it("prefers the nearest level in authored order over later matches", () => {
+    const game = levelGame({
+      difficulties: ["easy", "medium"],
+      levels: [
+        { id: "level-1", label: "Nivel 1", description: "", difficulties: ["medium"] },
+        { id: "level-2", label: "Nivel 2", description: "", difficulties: ["easy"] },
+        { id: "level-3", label: "Nivel 3", description: "", difficulties: ["medium"] },
+        { id: "level-4", label: "Nivel 4", description: "", difficulties: ["medium"] },
+        { id: "level-5", label: "Nivel 5", description: "", difficulties: ["easy"] },
+      ],
+    });
+
+    // level-3 sits next to level-2; a naive index mapping would jump to level-5.
+    assert.equal(closestLevelIDForDifficulty(game, "level-3", "easy"), "level-2");
+    assert.equal(closestLevelIDForDifficulty(game, "level-4", "easy"), "level-5");
+  });
+
   it("treats levels without explicit metadata as available for every game difficulty", () => {
     const game = levelGame({
       difficulties: ["medium", "hard"],

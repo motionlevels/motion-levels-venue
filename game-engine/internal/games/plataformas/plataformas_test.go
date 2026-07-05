@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 )
 
@@ -130,13 +131,13 @@ func TestParkourLavaRuleAnimatesRedTiles(t *testing.T) {
 	}
 }
 
-func TestDefaultLevelTileColorsUsePureRGB(t *testing.T) {
+func TestDefaultLevelTileColorsUseCanonicalSafeGreen(t *testing.T) {
 	tests := []struct {
 		name string
 		kind int
 		want RGB
 	}{
-		{name: "safe", kind: 0, want: RGB{G: 255}},
+		{name: "safe", kind: 0, want: animation.SafeZoneGreen},
 		{name: "coin", kind: 1, want: RGB{B: 255}},
 		{name: "hazard", kind: 2, want: RGB{R: 255}},
 	}
@@ -182,8 +183,8 @@ func TestCountdownDropsSafeZonesIntoPlaceByDefault(t *testing.T) {
 	}
 
 	settled := game.Render(game.startedAt.Add(-50 * time.Millisecond))
-	if color := settled[28*GridWidth+5]; color.G < 220 || color.R != 0 {
-		t.Fatalf("settled safe tile color = %+v, want bright green at target position", color)
+	if color := settled[28*GridWidth+5]; color != animation.SafeZoneGreen {
+		t.Fatalf("settled safe tile color = %+v, want canonical safe green at target position %+v", color, animation.SafeZoneGreen)
 	}
 }
 
@@ -307,7 +308,7 @@ func TestSuccessAdvancesToNextLevelAfterResultAnimation(t *testing.T) {
 }
 
 func TestDifficultySettingsOverrideRuntimeTimingAndLimits(t *testing.T) {
-	levels, err := compileCloudLevels([]cloudLevel{{
+	rawLevels := []cloudLevel{{
 		Slug:             "level-1",
 		Label:            "Tuned difficulty",
 		Difficulty:       string(DifficultyMedium),
@@ -324,7 +325,8 @@ func TestDifficultySettingsOverrideRuntimeTimingAndLimits(t *testing.T) {
 			},
 		}},
 		Frames: []rawFrame{{Repeat: 2, Cells: []cellTuple{{X: 5, Y: 5, Kind: 0}}}},
-	}})
+	}}
+	levels, err := compileCloudLevelsForMode(rawLevels, "challenge")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,6 +338,22 @@ func TestDifficultySettingsOverrideRuntimeTimingAndLimits(t *testing.T) {
 	}
 	if got := levels[0].frameTick; got != 25*time.Millisecond {
 		t.Fatalf("frameTick = %s, want speed-adjusted 25ms", got)
+	}
+	freeLevels, err := compileCloudLevelsForMode(rawLevels, "free")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := freeLevels[0].timeLimit; got != 30*time.Second {
+		t.Fatalf("free mode timeLimit = %s, want base 30s", got)
+	}
+	legacyMirrored := append([]cloudLevel(nil), rawLevels...)
+	legacyMirrored[0].TimeLimitSeconds = 90
+	legacyFreeLevels, err := compileCloudLevelsForMode(legacyMirrored, "free")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := legacyFreeLevels[0].timeLimit; got != 0 {
+		t.Fatalf("legacy mirrored free mode timeLimit = %s, want unlimited", got)
 	}
 }
 
@@ -636,6 +654,86 @@ func TestMovingHazardUnderPressedTileQueuesDamageCue(t *testing.T) {
 	}
 }
 
+func TestRedDamageDefaultsToPerTileNoMercy(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        "level-1",
+		Label:       "No mercy hazards",
+		Difficulty:  string(DifficultyMedium),
+		Life:        5,
+		FrameTickMS: 25,
+		Frames: []rawFrame{{
+			Repeat: 8,
+			Cells: []cellTuple{
+				{X: 4, Y: 4, Kind: 2},
+				{X: 5, Y: 4, Kind: 2},
+			},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	game := newTestGameWithLevels(levels, time.Unix(100, 0))
+	playAt := game.startedAt.Add(10 * time.Millisecond)
+	if events := game.Press(whackamole.PressEvent{X: 4, Y: 4, Pressed: true}, playAt); len(events) != 1 || events[0].Cue != whackamole.CueDamage {
+		t.Fatalf("first damage events = %+v, want damage cue", events)
+	}
+	if events := game.Press(whackamole.PressEvent{X: 5, Y: 4, Pressed: true}, playAt); len(events) != 1 || events[0].Cue != whackamole.CueDamage {
+		t.Fatalf("adjacent damage events = %+v, want second damage cue", events)
+	}
+	if got := game.Snapshot(playAt).Lives; got != 3 {
+		t.Fatalf("lives after adjacent hazards = %d, want 3", got)
+	}
+	game.Press(whackamole.PressEvent{X: 4, Y: 4, Pressed: false}, playAt.Add(50*time.Millisecond))
+	if events := game.Press(whackamole.PressEvent{X: 4, Y: 4, Pressed: true}, playAt.Add(100*time.Millisecond)); len(events) != 0 {
+		t.Fatalf("same tile quick re-press events = %+v, want none", events)
+	}
+	if got := game.Snapshot(playAt.Add(100 * time.Millisecond)).Lives; got != 3 {
+		t.Fatalf("lives after same tile quick re-press = %d, want 3", got)
+	}
+}
+
+func TestRedDamageGracePeriodSharesCooldownAcrossTiles(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        "level-1",
+		Label:       "Grace hazards",
+		Difficulty:  string(DifficultyMedium),
+		Life:        5,
+		FrameTickMS: 25,
+		Rules:       levelRules{RedDamageGracePeriod: boolPtr(true)},
+		Frames: []rawFrame{{
+			Repeat: 8,
+			Cells: []cellTuple{
+				{X: 4, Y: 4, Kind: 2},
+				{X: 5, Y: 4, Kind: 2},
+			},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	game := newTestGameWithLevels(levels, time.Unix(100, 0))
+	playAt := game.startedAt.Add(10 * time.Millisecond)
+	if events := game.Press(whackamole.PressEvent{X: 4, Y: 4, Pressed: true}, playAt); len(events) != 1 || events[0].Cue != whackamole.CueDamage {
+		t.Fatalf("first damage events = %+v, want damage cue", events)
+	}
+	game.Press(whackamole.PressEvent{X: 4, Y: 4, Pressed: false}, playAt.Add(50*time.Millisecond))
+	if events := game.Press(whackamole.PressEvent{X: 5, Y: 4, Pressed: true}, playAt.Add(100*time.Millisecond)); len(events) != 0 {
+		t.Fatalf("grace-period adjacent events = %+v, want none", events)
+	}
+	if got := game.Snapshot(playAt.Add(100 * time.Millisecond)).Lives; got != 4 {
+		t.Fatalf("lives during grace period = %d, want 4", got)
+	}
+	game.Press(whackamole.PressEvent{X: 5, Y: 4, Pressed: false}, playAt.Add(150*time.Millisecond))
+	if events := game.Press(whackamole.PressEvent{X: 5, Y: 4, Pressed: true}, playAt.Add(damageCooldown+10*time.Millisecond)); len(events) != 1 || events[0].Cue != whackamole.CueDamage {
+		t.Fatalf("post-grace adjacent events = %+v, want damage cue", events)
+	}
+	if got := game.Snapshot(playAt.Add(damageCooldown + 10*time.Millisecond)).Lives; got != 3 {
+		t.Fatalf("lives after grace expires = %d, want 3", got)
+	}
+}
+
 func TestCollectAllAddsPassScoreCompletionBonus(t *testing.T) {
 	levels, err := compileCloudLevels([]cloudLevel{{
 		Slug:        "level-1",
@@ -754,7 +852,7 @@ func boolPtr(value bool) *bool {
 func countVisibleGreen(frame []RGB) int {
 	count := 0
 	for _, color := range frame {
-		if color.G > 180 && color.R < 32 && color.B > 40 {
+		if color.G >= 198 && color.R == 0 && color.B == 0 {
 			count++
 		}
 	}

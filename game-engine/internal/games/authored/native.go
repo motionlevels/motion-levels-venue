@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -48,9 +49,128 @@ var nativeFactories = map[string]func() NativeABI{
 	"authored-whack-a-mole-go":  func() NativeABI { return whackamolego.NewABI() },
 }
 
+var nativeCatalogEntries = map[string]CatalogEntry{
+	"authored-duel": {
+		ID:                 "duel",
+		EngineGame:         "authored-duel",
+		Label:              "Duelo",
+		Description:        "Cada jugador empieza en su zona. Gana quien reclame antes todas sus baldosas.",
+		DefaultMusicRef:    duelgo.DefaultMusicRef,
+		DefaultMusicVolume: 0.14,
+		MinPlayers:         2,
+		MaxPlayers:         8,
+		GameSource:         nativeMotionGoSpec(),
+	},
+	"authored-lava": {
+		ID:                 "lava",
+		EngineGame:         "authored-lava",
+		Label:              "El suelo es lava",
+		Description:        "Evitad las baldosas rojas, descubrid plataformas seguras nuevas y cuidad las vidas del equipo.",
+		DefaultMusicRef:    lavago.DefaultMusicRef,
+		DefaultMusicVolume: 0.20,
+		MinPlayers:         1,
+		MaxPlayers:         6,
+		GameSource:         nativeMotionGoSpec(),
+	},
+	"authored-memory-challenge": {
+		ID:                 "memory-lights",
+		EngineGame:         "authored-memory-challenge",
+		Label:              "Reto de memoria",
+		Description:        "Memorizad el camino iluminado y recorredlo sin verlo.",
+		DefaultMusicRef:    "Motion/canciones/Background07.mp3",
+		DefaultMusicVolume: 0.14,
+		MinPlayers:         1,
+		MaxPlayers:         4,
+		GameSource:         nativeMotionGoSpec(),
+	},
+	"authored-patrones": {
+		ID:                 "patrones",
+		EngineGame:         "authored-patrones",
+		Label:              "Patrones",
+		Description:        "Reconstruid patrones azules en el canvas central sin errores.",
+		DefaultMusicRef:    "Motion/canciones/Background09.mp3",
+		DefaultMusicVolume: 0.18,
+		MinPlayers:         1,
+		MaxPlayers:         6,
+		GameSource:         nativeMotionGoSpec(),
+	},
+	"authored-ping-pong-motion": {
+		ID:                 "ping-pong-motion",
+		EngineGame:         "authored-ping-pong-motion",
+		Label:              "Ping Pong Motion",
+		Description:        "Pelota de pista para dos equipos.",
+		DefaultMusicRef:    DefaultMusicRef,
+		DefaultMusicVolume: DefaultMusicVolume,
+		MinPlayers:         2,
+		MaxPlayers:         8,
+		GameSource:         nativeMotionGoSpec(),
+	},
+	"authored-saltos": {
+		ID:                 "saltos",
+		EngineGame:         "authored-saltos",
+		Label:              "Saltos",
+		Description:        "Salta de la plataforma azul a la verde sin tocar la lava.",
+		DefaultMusicRef:    "Motion/canciones/Background07.mp3",
+		DefaultMusicVolume: 0.18,
+		MinPlayers:         1,
+		MaxPlayers:         1,
+		GameSource:         nativeMotionGoSpec(),
+	},
+	"authored-tetris": {
+		ID:                 "tetris",
+		EngineGame:         "authored-tetris",
+		Label:              "Tetris",
+		Description:        "Piezas que caen en una pista de 10 columnas.",
+		DefaultMusicRef:    DefaultMusicRef,
+		DefaultMusicVolume: DefaultMusicVolume,
+		MinPlayers:         1,
+		MaxPlayers:         4,
+		GameSource:         nativeMotionGoSpec(),
+	},
+	"authored-whack-a-mole-go": {
+		ID:                 "whack-a-mole-go",
+		EngineGame:         "authored-whack-a-mole-go",
+		Label:              "Atrapa al topo",
+		Description:        "Pisa los objetivos 2x2 antes de que se apaguen.",
+		DefaultMusicRef:    DefaultMusicRef,
+		DefaultMusicVolume: DefaultMusicVolume,
+		MinPlayers:         1,
+		MaxPlayers:         8,
+		GameSource:         nativeMotionGoSpec(),
+	},
+}
+
+func nativeMotionGoSpec() Spec {
+	return Spec{Schema: "motion-go-v1", Kind: "wasm", Language: "go", Version: 1}
+}
+
 func HasNative(engineGame string) bool {
 	_, ok := nativeFactories[engineGame]
 	return ok
+}
+
+func NativeCatalogEntry(engineGame string) (CatalogEntry, bool) {
+	entry, ok := nativeCatalogEntries[strings.TrimSpace(engineGame)]
+	if !ok {
+		return CatalogEntry{}, false
+	}
+	entry.GameSource = NormalizeSpec(entry.GameSource)
+	return entry, true
+}
+
+func NativeCatalogEntries() []CatalogEntry {
+	ids := make([]string, 0, len(nativeCatalogEntries))
+	for id := range nativeCatalogEntries {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]CatalogEntry, 0, len(ids))
+	for _, id := range ids {
+		if entry, ok := NativeCatalogEntry(id); ok {
+			out = append(out, entry)
+		}
+	}
+	return out
 }
 
 func NativeGameIDs() []string {

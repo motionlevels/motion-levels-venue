@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 )
 
@@ -169,8 +170,8 @@ func TestFailureFlashesRedThenRestartsWithoutCountdown(t *testing.T) {
 		t.Fatalf("hazard flash on color = %+v, want red", hazardOn)
 	}
 	safeColor := flashOn[safe.Y*GridWidth+safe.X]
-	if safeColor.G < 200 || safeColor.R > 20 {
-		t.Fatalf("safe color during failure = %+v, want green", safeColor)
+	if safeColor != animation.SafeZoneGreen {
+		t.Fatalf("safe color during failure = %+v, want canonical safe green %+v", safeColor, animation.SafeZoneGreen)
 	}
 
 	flashOff := game.Render(playAt.Add(130 * time.Millisecond))
@@ -321,8 +322,8 @@ func TestCountdownDropsSafeZoneIntoPlaceForAllLevels(t *testing.T) {
 			settledFrame := game.Render(game.startedAt.Add(-50 * time.Millisecond))
 			for _, safe := range safeTiles {
 				settledColor := settledFrame[safe.Y*GridWidth+safe.X]
-				if settledColor.G < 220 {
-					t.Fatalf("settled safe tile %+v color = %+v, want bright green", safe, settledColor)
+				if settledColor != animation.SafeZoneGreen {
+					t.Fatalf("settled safe tile %+v color = %+v, want canonical safe green %+v", safe, settledColor, animation.SafeZoneGreen)
 				}
 			}
 		})
@@ -348,7 +349,7 @@ func findTileKind(t *testing.T, frame *compiledFrame, kind int) Point {
 func visibleGreenTiles(frame []RGB) int {
 	count := 0
 	for _, color := range frame {
-		if color.G >= 220 && color.R < 20 {
+		if color.G >= 198 && color.R == 0 && color.B == 0 {
 			count++
 		}
 	}

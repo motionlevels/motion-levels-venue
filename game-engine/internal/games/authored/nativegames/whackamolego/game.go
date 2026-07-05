@@ -163,6 +163,7 @@ func gameSnapshot(ptr uint32, length uint32) uint64 {
 			Label: player.Label,
 			Color: player.Color,
 			Score: playerScore[i],
+			Lives: -1,
 		})
 	}
 	return motiongo.Respond(motiongo.Snapshot{
@@ -174,6 +175,7 @@ func gameSnapshot(ptr uint32, length uint32) uint64 {
 		RemainingMillis: remaining,
 		CountdownMillis: lobby.CountdownMillis(req.NowUnixNS),
 		ActiveTargets:   activeTargetCount(),
+		Lives:           -1,
 		Success:         true,
 		Players:         snapPlayers,
 	})

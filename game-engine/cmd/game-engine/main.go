@@ -201,9 +201,8 @@ func main() {
 func (c *config) normalize() {
 	c.Game = normalizeGame(c.Game)
 	c.Difficulty = normalizeDifficulty(c.Difficulty)
-	if c.Game == "saltos" {
-		c.Level = saltos.NormalizeLevel(c.Level)
-		c.PlayerCount = 1
+	if strings.HasPrefix(c.Game, "authored-") {
+		normalizeAuthoredGameConfig(c)
 	} else if isPlatformLevelGameID(c.Game) || c.Game == "plataformas" || c.Game == "parkour" || c.Game == "temporada1-niveles" {
 		c.Level = plataformas.NormalizeLevel(c.Level)
 		if c.Game == "parkour" {
@@ -214,13 +213,6 @@ func (c *config) normalize() {
 	} else if c.Game == "temporada2" {
 		c.Level = temporada2.NormalizeLevel(c.Level)
 		c.Difficulty = string(temporada2.NormalizeDifficulty(c.Difficulty))
-	} else if c.Game == "duel" {
-		c.PlayerCount = clampInt(c.PlayerCount, 2, 4)
-	} else if c.Game == "memory" {
-		c.PlayerCount = clampInt(c.PlayerCount, 1, 4)
-	} else if c.Game == "patrones" {
-		c.Level = patrones.NormalizeLevel(c.Level)
-		c.PlayerCount = clampInt(c.PlayerCount, 1, 6)
 	} else {
 		c.Level = ""
 	}
@@ -519,7 +511,7 @@ func clamp01(value float64) float64 {
 }
 
 func normalizeGame(value string) string {
-	value = strings.TrimSpace(value)
+	value = strings.ToLower(strings.TrimSpace(value))
 	if strings.HasPrefix(value, "authored-") {
 		return value
 	}
@@ -531,11 +523,11 @@ func normalizeGame(value string) string {
 	}
 	switch value {
 	case "whack-a-mole", "whackamole", "mole":
-		return "whack-a-mole"
+		return "authored-whack-a-mole-go"
 	case "lava", "floor-is-lava", "el-suelo-es-lava":
-		return "lava"
+		return "authored-lava"
 	case "saltos", "jump", "salta", "salto":
-		return "saltos"
+		return "authored-saltos"
 	case "parkour", "pk", "parkour2", "parkour-2", "parkour-2.0", "parkour2.0", "parkour-20":
 		return "parkour"
 	case "plataformas", "platforms", "cloud-platforms":
@@ -547,17 +539,36 @@ func normalizeGame(value string) string {
 	case "temporada2", "temporada-2", "season2", "season-2":
 		return "temporada2"
 	case "duel", "duelo", "versus-duel":
-		return "duel"
+		return "authored-duel"
 	case "memory", "memory-challenge", "memoria", "reto-memoria":
-		return "memory"
+		return "authored-memory-challenge"
 	case "patrones", "patterns", "pattern", "reto-patrones":
-		return "patrones"
+		return "authored-patrones"
 	case "salvapantallas", "screensaver", "screen-saver":
 		return "salvapantallas"
 	case "animations", "ambient-comet", "ambient-pulse", "ambient-spark":
 		return value
 	default:
 		return "salvapantallas"
+	}
+}
+
+func normalizeAuthoredGameConfig(c *config) {
+	switch c.Game {
+	case "authored-duel":
+		c.PlayerCount = clampInt(c.PlayerCount, 2, 6)
+	case "authored-memory-challenge":
+		c.PlayerCount = clampInt(c.PlayerCount, 1, 4)
+	case "authored-patrones":
+		c.PlayerCount = clampInt(c.PlayerCount, 1, 6)
+		c.Level = patrones.NormalizeLevel(c.Level)
+	case "authored-saltos":
+		c.PlayerCount = 1
+		c.Level = saltos.NormalizeLevel(c.Level)
+	case "authored-lava", "authored-whack-a-mole-go":
+		c.PlayerCount = clampInt(c.PlayerCount, 1, 6)
+	default:
+		c.PlayerCount = clampInt(c.PlayerCount, 1, 6)
 	}
 }
 

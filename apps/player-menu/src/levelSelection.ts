@@ -51,8 +51,20 @@ export function closestLevelIDForDifficulty(
   if (!available.length) return levels[0]?.id || "";
   const currentIndex = levels.findIndex((level) => level.id === levelID);
   if (currentIndex < 0) return available[0].id;
-  const nextIndex = Math.min(currentIndex, available.length - 1);
-  return available[nextIndex]?.id || available[0].id;
+
+  // Keep the player near where they were: pick the available level closest in
+  // authored order, preferring the later one on ties.
+  let closest = available[0];
+  let closestDistance = Number.POSITIVE_INFINITY;
+  for (const level of available) {
+    const index = levels.findIndex((candidate) => candidate.id === level.id);
+    const distance = Math.abs(index - currentIndex);
+    if (distance < closestDistance || (distance === closestDistance && index > currentIndex)) {
+      closest = level;
+      closestDistance = distance;
+    }
+  }
+  return closest.id;
 }
 
 export function normalizedDifficultyForGame(game: Pick<GameCard, "difficulties" | "levels">, difficulty: DifficultyID): DifficultyID {

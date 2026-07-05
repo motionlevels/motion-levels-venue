@@ -254,7 +254,15 @@ func NewWithSeed(now time.Time, seed int64, engineGame string, playerCount int, 
 func NewWithSeedRuntime(now time.Time, seed int64, engineGame string, playerCount int, players []whackamole.PlayerConfig, platformURL string, difficulty string, level string, runtimeKind string) (RuntimeGame, error) {
 	entry, err := FetchGame(platformURL, engineGame)
 	if err != nil {
-		return nil, err
+		if runtimeKind == "wasm" {
+			return nil, err
+		}
+		fallback, ok := NativeCatalogEntry(engineGame)
+		if !ok {
+			return nil, err
+		}
+		log.Printf("motion-go native game %q using embedded catalog fallback: %v", engineGame, err)
+		entry = fallback
 	}
 	if entry.GameSource.Schema == "motion-go-v1" {
 		if runtimeKind != "wasm" && HasNative(entry.EngineGame) {

@@ -876,6 +876,9 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, player.Lives)
 			})
 		}
+		if cfg.Game == "authored-lava" {
+			r.applyIntroStatus(&status, gameNow, introUntil)
+		}
 		return r.finalizeGameStatus(status, started, paused)
 	}
 
@@ -1417,6 +1420,10 @@ func shouldPlayCountdownCue(cfg config) bool {
 		return false
 	}
 	if strings.HasPrefix(cfg.Game, "authored-") {
+		switch cfg.Game {
+		case "authored-duel", "authored-whack-a-mole-go":
+			return false
+		}
 		return true
 	}
 	if isPlatformRuntimeGame(cfg.Game) {
@@ -1436,7 +1443,7 @@ func shouldUseLevelNarrationInsteadOfCountdown(cfg config) bool {
 
 func shouldPlayCountdownAfterReadyCue(cfg config) bool {
 	switch cfg.Game {
-	case "whack-a-mole", "duel":
+	case "authored-duel", "authored-whack-a-mole-go", "whack-a-mole", "duel":
 		return true
 	default:
 		return false
@@ -1965,8 +1972,8 @@ func newUUID() (string, error) {
 
 func makeGame(cfg config, seed int64, now time.Time) floorGame {
 	if isPlatformLevelGameID(cfg.Game) {
-		log.Printf("game: platform-level id=%s players=%d difficulty=%s level=%s", cfg.Game, cfg.PlayerCount, cfg.Difficulty, cfg.Level)
-		return plataformas.NewWithSeedForGame(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL, cfg.Game)
+		log.Printf("game: platform-level id=%s players=%d difficulty=%s level=%s mode=%s", cfg.Game, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.LevelMode)
+		return plataformas.NewWithSeedForGameMode(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL, cfg.Game, cfg.LevelMode)
 	}
 	if strings.HasPrefix(cfg.Game, "animation-") {
 		cfg.Level = strings.TrimPrefix(cfg.Game, "animation-")
@@ -1992,14 +1999,14 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 		log.Printf("game: saltos level=%s", cfg.Level)
 		return saltos.NewWithSeed(now, seed, cfg.Level)
 	case "plataformas":
-		log.Printf("game: plataformas players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
-		return plataformas.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL)
+		log.Printf("game: plataformas players=%d difficulty=%s level=%s mode=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.LevelMode)
+		return plataformas.NewWithSeedForGameMode(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL, "plataformas", cfg.LevelMode)
 	case "parkour":
-		log.Printf("game: parkour difficulty=%s level=%s", cfg.Difficulty, cfg.Level)
-		return plataformas.NewWithSeedForGame(now, seed, 1, cfg.Difficulty, cfg.Level, cfg.PlatformURL, "parkour")
+		log.Printf("game: parkour difficulty=%s level=%s mode=%s", cfg.Difficulty, cfg.Level, cfg.LevelMode)
+		return plataformas.NewWithSeedForGameMode(now, seed, 1, cfg.Difficulty, cfg.Level, cfg.PlatformURL, "parkour", cfg.LevelMode)
 	case "temporada1-niveles":
-		log.Printf("game: temporada1-niveles players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
-		return plataformas.NewWithSeedForGame(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL, "temporada1-niveles")
+		log.Printf("game: temporada1-niveles players=%d difficulty=%s level=%s mode=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.LevelMode)
+		return plataformas.NewWithSeedForGameMode(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL, "temporada1-niveles", cfg.LevelMode)
 	case "animations":
 		log.Printf("game: animations players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 		return animations.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL)
@@ -2193,10 +2200,8 @@ func configForSelection(base config, game string, players int) config {
 	cfg.Game = normalizeGame(game)
 	cfg.PlayerCount = players
 	if strings.HasPrefix(cfg.Game, "authored-") {
-		cfg.PlayerCount = clampInt(players, 1, 6)
 		cfg.Level = ""
-		cfg.MusicRef = authored.DefaultMusicRef
-		cfg.MusicVolume = authored.DefaultMusicVolume
+		cfg.MusicRef, cfg.MusicVolume = defaultMusicForGame(cfg.Game)
 		cfg.normalize()
 		return cfg
 	}
@@ -2246,13 +2251,17 @@ func configForSelection(base config, game string, players int) config {
 }
 
 func defaultMusicForGame(game string) (string, float64) {
-	if strings.HasPrefix(normalizeGame(game), "authored-") {
+	normalized := normalizeGame(game)
+	if strings.HasPrefix(normalized, "authored-") {
+		if entry, ok := authored.NativeCatalogEntry(normalized); ok {
+			return nonEmptyString(entry.DefaultMusicRef, authored.DefaultMusicRef), nonZeroFloat(entry.DefaultMusicVolume, authored.DefaultMusicVolume)
+		}
 		return authored.DefaultMusicRef, authored.DefaultMusicVolume
 	}
-	if isPlatformLevelGameID(normalizeGame(game)) {
+	if isPlatformLevelGameID(normalized) {
 		return plataformas.DefaultMusicRef, plataformas.DefaultMusicVolume
 	}
-	switch normalizeGame(game) {
+	switch normalized {
 	case "whack-a-mole":
 		return whackamole.DefaultMusicRef, whackamole.DefaultMusicVolume
 	case "lava":
@@ -2278,9 +2287,9 @@ func defaultMusicForGame(game string) (string, float64) {
 
 func defaultNarrationRef(game string) string {
 	switch normalizeGame(game) {
-	case "lava":
+	case "authored-lava", "lava":
 		return "Motion/narraciones/lava-intro.mp3"
-	case "whack-a-mole":
+	case "authored-whack-a-mole-go", "whack-a-mole":
 		return "Motion/narraciones/atrapa-topos-intro.mp3"
 	default:
 		return ""
@@ -2304,7 +2313,7 @@ func isLevelNarrationGame(game string) bool {
 
 func isBuiltInLevelNarrationGame(game string) bool {
 	switch normalizeGame(game) {
-	case "saltos", "temporada1", "temporada2":
+	case "authored-patrones", "authored-saltos", "saltos", "temporada1", "temporada2":
 		return true
 	default:
 		return false
@@ -2533,21 +2542,15 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 		},
 	}
 
-	if platformURL != "" {
-		for _, game := range authored.CachedCatalog() {
-			entries = append(entries, gameCatalogEntry{
-				Game:        game.EngineGame,
-				Label:       game.Label,
-				Description: game.Description,
-				Music:       nonEmptyString(game.DefaultMusicRef, authored.DefaultMusicRef),
-				Players:     true,
-				MinPlayers:  clampInt(game.MinPlayers, 1, 6),
-				MaxPlayers:  max(clampInt(game.MinPlayers, 1, 6), clampInt(game.MaxPlayers, 1, 6)),
-				Difficulty:  false,
-				Volume:      nonZeroFloat(game.DefaultMusicVolume, authored.DefaultMusicVolume),
-			})
-		}
+	entries = filterRetiredEngineCatalogEntries(entries)
+	for _, game := range authored.CachedCatalog() {
+		entries = appendAuthoredCatalogEntry(entries, game)
+	}
+	for _, game := range authored.NativeCatalogEntries() {
+		entries = appendAuthoredCatalogEntry(entries, game)
+	}
 
+	if platformURL != "" {
 		for _, level := range animations.CachedLevels() {
 			entries = append(entries, gameCatalogEntry{
 				Game:        "animation-" + level.ID(),
@@ -2564,6 +2567,59 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 	}
 
 	return entries
+}
+
+var retiredEngineCatalogGames = map[string]bool{
+	"duel":         true,
+	"lava":         true,
+	"memory":       true,
+	"patrones":     true,
+	"saltos":       true,
+	"temporada1":   true,
+	"temporada2":   true,
+	"whack-a-mole": true,
+}
+
+func filterRetiredEngineCatalogEntries(entries []gameCatalogEntry) []gameCatalogEntry {
+	out := entries[:0]
+	for _, entry := range entries {
+		if retiredEngineCatalogGames[normalizeGame(entry.Game)] || retiredEngineCatalogGames[entry.Game] {
+			continue
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+func appendAuthoredCatalogEntry(entries []gameCatalogEntry, game authored.CatalogEntry) []gameCatalogEntry {
+	if strings.TrimSpace(game.EngineGame) == "" {
+		return entries
+	}
+	for _, entry := range entries {
+		if entry.Game == game.EngineGame {
+			return entries
+		}
+	}
+	return append(entries, gameCatalogEntry{
+		Game:        game.EngineGame,
+		Label:       game.Label,
+		Description: game.Description,
+		Music:       nonEmptyString(game.DefaultMusicRef, authored.DefaultMusicRef),
+		Players:     true,
+		MinPlayers:  clampInt(game.MinPlayers, 1, 6),
+		MaxPlayers:  max(clampInt(game.MinPlayers, 1, 6), clampInt(game.MaxPlayers, 1, 6)),
+		Difficulty:  authoredGameHasDifficulty(game.EngineGame),
+		Volume:      nonZeroFloat(game.DefaultMusicVolume, authored.DefaultMusicVolume),
+	})
+}
+
+func authoredGameHasDifficulty(engineGame string) bool {
+	switch engineGame {
+	case "authored-duel", "authored-lava", "authored-patrones", "authored-whack-a-mole-go":
+		return true
+	default:
+		return false
+	}
 }
 
 func nonEmptyString(value string, fallback string) string {

@@ -13,6 +13,8 @@ type RGB struct {
 	B byte
 }
 
+var SafeZoneGreen = RGB{G: 255}
+
 func LoopColor(x, y int, seconds float64) RGB {
 	widthPhase := float64(x) / float64(GridWidth)
 	heightPhase := float64(y) / float64(GridHeight)

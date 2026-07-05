@@ -436,7 +436,7 @@ func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isAPIPath(r.URL.Path) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
@@ -490,12 +490,7 @@ func withAPILogging(runtime *gameRuntime, next http.Handler) http.Handler {
 }
 
 func isAPIPath(path string) bool {
-	switch path {
-	case "/api/health", "/api/status", "/api/performance", "/api/select", "/api/control", "/api/display", "/api/display/events", "/api/menu-state", "/api/menu-state/events", "/api/animation-preview":
-		return true
-	default:
-		return false
-	}
+	return strings.HasPrefix(path, "/api/")
 }
 
 func writeJSON(w http.ResponseWriter, payload any) {

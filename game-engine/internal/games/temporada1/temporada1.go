@@ -600,6 +600,9 @@ func (g *Game) safeZoneCountdownColorAtLocked(pt Point, now time.Time) RGB {
 			continue
 		}
 		if target.X == pt.X && countdownFallingY(target.Y, tileProgress) == pt.Y {
+			if tileProgress >= 1 {
+				return animation.SafeZoneGreen
+			}
 			return countdownPulseGreen(target, now, g.createdAt)
 		}
 	}
@@ -798,7 +801,7 @@ func colorForPoint(point tilePoint) RGB {
 	}
 	switch point.kind {
 	case 0:
-		return RGB{R: 0, G: 255, B: 0}
+		return animation.SafeZoneGreen
 	case 1:
 		return RGB{R: 0, G: 0, B: 255}
 	case 2:
@@ -1046,7 +1049,8 @@ func countdownProgress(now, createdAt, startedAt time.Time) float64 {
 
 func countdownTileProgress(countdownProgress float64, order int, total int) float64 {
 	if total <= 1 {
-		return countdownProgress
+		// Match the multi-tile schedule: fully settled by the final beat of the countdown.
+		return math.Min(countdownProgress/0.92, 1)
 	}
 	// Spread the starts across the countdown, but leave a final beat where all tiles are settled.
 	delay := float64(order) / float64(total-1) * 0.68
@@ -1093,10 +1097,11 @@ func countdownSafeTiles(frame *compiledFrame) []Point {
 func countdownPulseGreen(pt Point, now time.Time, createdAt time.Time) RGB {
 	phase := now.Sub(createdAt).Seconds()*math.Pi*4 + float64(pt.X+pt.Y)*0.22
 	pulse := 0.5 + 0.5*math.Sin(phase)
+	scale := 0.78 + 0.22*pulse
 	return RGB{
-		R: 0,
-		G: byte(232 + 23*pulse),
-		B: byte(68 + 18*pulse),
+		R: byte(float64(animation.SafeZoneGreen.R) * scale),
+		G: byte(float64(animation.SafeZoneGreen.G) * scale),
+		B: byte(float64(animation.SafeZoneGreen.B) * scale),
 	}
 }
 

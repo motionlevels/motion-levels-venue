@@ -479,12 +479,14 @@ func rotatingLevelAt(levels []CompiledLevel, seed int64, rotationIndex int64, pr
 	if len(levels) == 0 {
 		return CompiledLevel{}
 	}
-	index := int(uintHashFloat(float64(seed/9973)+float64(rotationIndex)*131.0) % uint32(len(levels)))
-	if len(levels) > 1 && index == previous {
-		index = (index + 1 + int(uintHashFloat(float64(seed)+float64(rotationIndex)*17.0)%uint32(len(levels)-1))) % len(levels)
-		if index == previous {
-			index = (index + 1) % len(levels)
-		}
+	if len(levels) == 1 || previous < 0 || previous >= len(levels) {
+		index := int(uintHashFloat(float64(seed/9973)+float64(rotationIndex)*131.0) % uint32(len(levels)))
+		return levels[index]
+	}
+
+	index := int(uintHashFloat(float64(seed/9973)+float64(rotationIndex)*131.0) % uint32(len(levels)-1))
+	if index >= previous {
+		index++
 	}
 	return levels[index]
 }
