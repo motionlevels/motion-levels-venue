@@ -7,7 +7,7 @@ export const DEFAULT_FLOOR_COLS = 16;
 export const DEFAULT_FLOOR_ROWS = 32;
 export const DEFAULT_FLOOR_EMPTY_COLOR = "#05070a";
 
-export type FloorBoardOrientation = "data" | "clockwise" | "transpose";
+export type FloorBoardOrientation = "rotate-0" | "rotate-90" | "rotate-180" | "rotate-270" | "data" | "clockwise" | "transpose";
 
 export type FloorBoardCell = {
   x: number;
@@ -172,13 +172,15 @@ export function floorDisplayCells<TCell extends FloorBoardCell>(
   orientation: FloorBoardOrientation = "data",
   emptyColor = DEFAULT_FLOOR_EMPTY_COLOR,
 ): DisplayCells<TCell> {
-  const displayCols = orientation === "clockwise" || orientation === "transpose" ? height : width;
-  const displayRows = orientation === "clockwise" || orientation === "transpose" ? width : height;
+  const normalizedOrientation = normalizeFloorBoardOrientation(orientation);
+  const rotatedSideways = normalizedOrientation === "rotate-90" || normalizedOrientation === "rotate-270";
+  const displayCols = rotatedSideways ? height : width;
+  const displayRows = rotatedSideways ? width : height;
   const cellsByCoordinate = new Map(cells.map((cell) => [floorCoordinateKey(cell.x, cell.y), cell]));
   const displayCells = Array.from({ length: displayCols * displayRows }, (_, index) => {
     const displayX = index % displayCols;
     const displayY = Math.floor(index / displayCols);
-    const { x, y } = displayToFloorCoordinate(displayX, displayY, height, orientation);
+    const { x, y } = displayToFloorCoordinate(displayX, displayY, width, height, normalizedOrientation);
     return cellsByCoordinate.get(floorCoordinateKey(x, y)) ?? ({ x, y, color: emptyColor, empty: true } as TCell);
   });
   return { displayCols, displayRows, displayCells };
@@ -231,12 +233,22 @@ export function floorCoordinateKey(x: number, y: number) {
   return `${x},${y}`;
 }
 
-function displayToFloorCoordinate(displayX: number, displayY: number, height: number, orientation: FloorBoardOrientation) {
-  if (orientation === "clockwise") {
+function normalizeFloorBoardOrientation(orientation: FloorBoardOrientation): Exclude<FloorBoardOrientation, "data" | "clockwise" | "transpose"> {
+  if (orientation === "clockwise") return "rotate-90";
+  if (orientation === "transpose") return "rotate-270";
+  if (orientation === "rotate-90" || orientation === "rotate-180" || orientation === "rotate-270") return orientation;
+  return "rotate-0";
+}
+
+function displayToFloorCoordinate(displayX: number, displayY: number, width: number, height: number, orientation: ReturnType<typeof normalizeFloorBoardOrientation>) {
+  if (orientation === "rotate-90") {
     return { x: displayY, y: height - 1 - displayX };
   }
-  if (orientation === "transpose") {
-    return { x: displayY, y: displayX };
+  if (orientation === "rotate-180") {
+    return { x: width - 1 - displayX, y: height - 1 - displayY };
+  }
+  if (orientation === "rotate-270") {
+    return { x: width - 1 - displayY, y: displayX };
   }
   return { x: displayX, y: displayY };
 }
