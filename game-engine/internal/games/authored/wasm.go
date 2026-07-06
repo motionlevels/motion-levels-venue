@@ -25,6 +25,7 @@ type WASMGame struct {
 	module  api.Module
 	entry   CatalogEntry
 	players []playerInfo
+	pending []whackamole.Event
 	failed  bool
 	failErr error
 }
@@ -120,7 +121,7 @@ func NewWASMWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount 
 	for i, player := range game.players {
 		initPlayers = append(initPlayers, wasmPlayer{Index: i, Label: player.label, Color: rgbHex(player.rgb)})
 	}
-	if _, err := game.call("init", wasmInitRequest{
+	raw, err := game.call("init", wasmInitRequest{
 		EngineGame: entry.EngineGame,
 		Label:      entry.Label,
 		Seed:       seed,
@@ -131,10 +132,12 @@ func NewWASMWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount 
 		Height:     GridHeight,
 		Players:    initPlayers,
 		Spec:       entry.GameSource,
-	}); err != nil {
+	})
+	if err != nil {
 		_ = runtime.Close(ctx)
 		return nil, err
 	}
+	game.queueEvents(initEvents(parseGameEvents(raw)))
 	return game, nil
 }
 
@@ -163,25 +166,43 @@ func (g *WASMGame) Press(event whackamole.PressEvent, now time.Time) []whackamol
 		return nil
 	}
 	raw, err := g.call("press", wasmPressRequest{NowUnixNS: now.UnixNano(), X: event.X, Y: event.Y, Pressed: event.Pressed})
-	if err != nil || len(raw) == 0 {
+	if err != nil {
 		return nil
 	}
-	var events []wasmEvent
-	if err := json.Unmarshal(raw, &events); err != nil {
-		return nil
-	}
-	out := make([]whackamole.Event, 0, len(events))
-	for _, event := range events {
-		out = append(out, whackamole.Event{Cue: event.Cue, Message: event.Message})
-	}
-	return out
+	return parseGameEvents(raw)
 }
 
 func (g *WASMGame) Tick(now time.Time) {
 	if g == nil || g.isFailed() {
 		return
 	}
-	_, _ = g.call("tick", wasmTimeRequest{NowUnixNS: now.UnixNano()})
+	raw, err := g.call("tick", wasmTimeRequest{NowUnixNS: now.UnixNano()})
+	if err != nil {
+		return
+	}
+	g.queueEvents(parseGameEvents(raw))
+}
+
+// DrainEvents returns events queued from init and tick calls so the runtime can
+// play cues and update the last-event display for time-based game moments.
+func (g *WASMGame) DrainEvents() []whackamole.Event {
+	if g == nil {
+		return nil
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := g.pending
+	g.pending = nil
+	return out
+}
+
+func (g *WASMGame) queueEvents(events []whackamole.Event) {
+	if g == nil || len(events) == 0 {
+		return
+	}
+	g.mu.Lock()
+	g.pending = append(g.pending, events...)
+	g.mu.Unlock()
 }
 
 func (g *WASMGame) Render(now time.Time) []RGB {

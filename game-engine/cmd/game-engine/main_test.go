@@ -407,6 +407,14 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 	if duel.MusicRef != "Motion/canciones/Musica8.mp3" {
 		t.Fatalf("duel music = %q, want Musica8", duel.MusicRef)
 	}
+	duelFull := configForSelection(base, "duelo", 8)
+	if duelFull.PlayerCount != 8 {
+		t.Fatalf("duel eight-player selection = %+v, want PlayerCount 8", duelFull)
+	}
+	duelSolo := configForSelection(base, "duelo", 1)
+	if duelSolo.PlayerCount != 2 {
+		t.Fatalf("duel solo selection = %+v, want PlayerCount clamped to 2", duelSolo)
+	}
 
 	memory := configForSelection(base, "memoria", 6)
 	if memory.Game != "authored-memory-challenge" || memory.PlayerCount != 4 {
@@ -1025,6 +1033,21 @@ func catalogHasGame(catalog []gameCatalogEntry, game string) bool {
 		}
 	}
 	return false
+}
+
+func TestAuthoredInitEventReachesDisplayAsReady(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 2, Game: "duelo"}, nil, nil)
+	now := time.Now()
+	if _, frame := runtime.Render(now); len(frame) != animation.GridWidth*animation.GridHeight {
+		t.Fatalf("duel frame len = %d", len(frame))
+	}
+	display := runtime.DisplayStatus(now)
+	if display.CurrentGame != "authored-duel" || display.Phase != "ready" {
+		t.Fatalf("display = %+v, want ready authored-duel", display)
+	}
+	if display.LastEventCue != "ready" || display.LastEventMessage != "Duelo listo" {
+		t.Fatalf("last event = %q %q, want ready / Duelo listo", display.LastEventCue, display.LastEventMessage)
+	}
 }
 
 func TestGameAPIRejectsDuplicatePlayerNames(t *testing.T) {

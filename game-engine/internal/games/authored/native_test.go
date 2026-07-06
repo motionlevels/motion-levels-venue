@@ -105,6 +105,99 @@ func TestNativeDuelDifficultyControlsFloorFill(t *testing.T) {
 	}
 }
 
+func TestNativeDuelFullMatchFlow(t *testing.T) {
+	start := time.Unix(1_700_000_000, 0)
+	entry := CatalogEntry{
+		EngineGame: "authored-duel",
+		Label:      "Duelo",
+		GameSource: Spec{Schema: "motion-go-v1", Kind: "wasm", Version: 1},
+	}
+	game, err := NewNativeWithSeed(start, 7, entry, 2, nil, "medium", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	initDrained := game.DrainEvents()
+	if len(initDrained) != 1 || initDrained[0].Cue != "ready" {
+		t.Fatalf("init events = %+v, want single ready event", initDrained)
+	}
+	if drained := game.DrainEvents(); len(drained) != 0 {
+		t.Fatalf("second drain = %+v, want empty", drained)
+	}
+	if phase := game.Snapshot(start).Phase; phase != "ready" {
+		t.Fatalf("phase before pads = %q, want ready", phase)
+	}
+
+	// Two players: pads sit at the left/right middle rows. Occupying both
+	// starts the countdown and emits the start cue.
+	padTime := start.Add(time.Second)
+	if events := game.Press(pressEvent(0, (GridHeight-4)/2, true), padTime); len(events) != 0 {
+		t.Fatalf("first pad press events = %+v, want none", events)
+	}
+	events := game.Press(pressEvent(GridWidth-1, (GridHeight-4)/2, true), padTime)
+	if len(events) != 1 || events[0].Cue != "start" {
+		t.Fatalf("second pad press events = %+v, want start", events)
+	}
+	countdown := game.Snapshot(padTime.Add(time.Second))
+	if countdown.Phase != "countdown" || countdown.CountdownMillis <= 0 {
+		t.Fatalf("countdown snapshot = %+v", countdown)
+	}
+
+	// Claim every tile after the countdown; the first player to finish their
+	// zone wins and the win cue fires exactly once.
+	runTime := padTime.Add(4 * time.Second)
+	if phase := game.Snapshot(runTime).Phase; phase != "running" {
+		t.Fatalf("phase after countdown = %q, want running", phase)
+	}
+	winEvents := 0
+	for y := 0; y < GridHeight; y++ {
+		for x := 0; x < GridWidth; x++ {
+			for _, event := range game.Press(pressEvent(x, y, true), runTime) {
+				if event.Cue == "win" {
+					winEvents++
+				}
+			}
+		}
+	}
+	if winEvents != 1 {
+		t.Fatalf("win events = %d, want 1", winEvents)
+	}
+	final := game.Snapshot(runTime.Add(time.Second))
+	if final.Phase != "finished" || !final.Success {
+		t.Fatalf("final snapshot = %+v, want finished success", final)
+	}
+	frame := game.Render(runTime.Add(time.Second))
+	if len(frame) != GridWidth*GridHeight {
+		t.Fatalf("winner frame len = %d", len(frame))
+	}
+	lit := 0
+	for _, color := range frame {
+		if int(color.R)+int(color.G)+int(color.B) > 60 {
+			lit++
+		}
+	}
+	if lit < GridWidth*GridHeight/2 {
+		t.Fatalf("winner animation lights %d tiles, want a full-floor celebration", lit)
+	}
+}
+
+func TestNativeDuelSupportsEightPlayers(t *testing.T) {
+	start := time.Unix(1_700_000_000, 0)
+	entry := CatalogEntry{
+		EngineGame: "authored-duel",
+		Label:      "Duelo",
+		GameSource: Spec{Schema: "motion-go-v1", Kind: "wasm", Version: 1},
+	}
+	game, err := NewNativeWithSeed(start, 7, entry, 8, nil, "hard", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := game.Snapshot(start)
+	if len(snapshot.Players) != 8 {
+		t.Fatalf("players = %d, want 8", len(snapshot.Players))
+	}
+}
+
 func TestNativeLavaRunsWithLivesAndDamage(t *testing.T) {
 	start := time.Unix(1_700_000_000, 0)
 	entry := CatalogEntry{

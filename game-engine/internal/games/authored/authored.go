@@ -68,6 +68,35 @@ type RuntimeGame interface {
 	Press(event whackamole.PressEvent, now time.Time) []whackamole.Event
 }
 
+// parseGameEvents decodes the JSON event list a motion-go call returned.
+func parseGameEvents(raw []byte) []whackamole.Event {
+	if len(raw) == 0 {
+		return nil
+	}
+	var events []wasmEvent
+	if err := json.Unmarshal(raw, &events); err != nil {
+		return nil
+	}
+	out := make([]whackamole.Event, 0, len(events))
+	for _, event := range events {
+		out = append(out, whackamole.Event{Cue: event.Cue, Message: event.Message})
+	}
+	return out
+}
+
+// initEvents adapts events returned by init before they reach the runtime. The
+// engine already plays the configured start cue when a session begins, so a
+// "start" cue from init is delivered as "ready": the message still reaches the
+// displays but no duplicate start audio or post-ready countdown is triggered.
+func initEvents(events []whackamole.Event) []whackamole.Event {
+	for i := range events {
+		if events[i].Cue == whackamole.CueStart {
+			events[i].Cue = "ready"
+		}
+	}
+	return events
+}
+
 type catalogResponse struct {
 	Games []CatalogEntry `json:"games"`
 }
@@ -651,7 +680,7 @@ func normalizePlayers(playerCount int, players []whackamole.PlayerConfig, spec S
 	if playerCount < 1 {
 		playerCount = len(players)
 	}
-	playerCount = clampInt(playerCount, 1, 6, 1)
+	playerCount = clampInt(playerCount, 1, 8, 1)
 	out := make([]playerInfo, playerCount)
 	for i := range out {
 		out[i] = playerInfo{

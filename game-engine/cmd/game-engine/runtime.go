@@ -14,7 +14,6 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
 	"github.com/lobis/motion-levels/game-engine/internal/games/animations"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored"
-	"github.com/lobis/motion-levels/game-engine/internal/games/duel"
 	"github.com/lobis/motion-levels/game-engine/internal/games/lava"
 	"github.com/lobis/motion-levels/game-engine/internal/games/memorychallenge"
 	"github.com/lobis/motion-levels/game-engine/internal/games/patrones"
@@ -735,26 +734,6 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			})
 		}
 		r.applyIntroStatus(&status, gameNow, introUntil)
-		return r.finalizeGameStatus(status, started, paused)
-	}
-
-	if cfg.Game == "duel" {
-		if duelGame, ok := game.(*duel.Game); ok {
-			snapshot := duelGame.Snapshot(gameNow)
-			status.Phase = snapshot.Phase
-			status.Score = snapshot.Score
-			status.StartedUnix = snapshot.StartedUnix
-			status.EndsUnix = snapshot.EndsUnix
-			status.ElapsedMillis = snapshot.ElapsedMillis
-			status.RemainingMillis = snapshot.RemainingMillis
-			status.CountdownRemainingMillis = snapshot.CountdownMillis
-			status.ActiveTargets = snapshot.ActiveTargets
-			status.Lives = snapshot.Lives
-			status.Success = snapshot.Success
-			status.Players = mapDisplayPlayers(snapshot.Players, func(player duel.PlayerSnapshot) displayPlayer {
-				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, player.Lives)
-			})
-		}
 		return r.finalizeGameStatus(status, started, paused)
 	}
 
@@ -2020,9 +1999,6 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 	case "temporada2":
 		log.Printf("game: temporada2 players=%d level=%s", cfg.PlayerCount, cfg.Level)
 		return temporada2.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level)
-	case "duel":
-		log.Printf("game: duel players=%d", cfg.PlayerCount)
-		return duel.NewWithSeedAndPlayers(whackPlayersFromConfig(cfg), now, seed)
 	case "memory":
 		log.Printf("game: memory players=%d", cfg.PlayerCount)
 		return memorychallenge.NewWithSeedAndPlayers(now, seed, whackPlayersFromConfig(cfg))
@@ -2230,8 +2206,6 @@ func configForSelection(base config, game string, players int) config {
 		cfg.Level = temporada1.NormalizeLevel(cfg.Level)
 	case "temporada2":
 		cfg.Level = temporada2.NormalizeLevel(cfg.Level)
-	case "duel":
-		cfg.PlayerCount = clampInt(players, 2, 4)
 	case "memory":
 		cfg.PlayerCount = clampInt(players, 1, 4)
 	case "patrones":
@@ -2274,8 +2248,6 @@ func defaultMusicForGame(game string) (string, float64) {
 		return temporada1.DefaultMusicRef, temporada1.DefaultMusicVolume
 	case "temporada2":
 		return temporada2.DefaultMusicRef, temporada2.DefaultMusicVolume
-	case "duel":
-		return duel.DefaultMusicRef, duel.DefaultMusicVolume
 	case "memory":
 		return memorychallenge.DefaultMusicRef, memorychallenge.DefaultMusicVolume
 	case "patrones":
@@ -2452,17 +2424,6 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 			Levels:      temporada2CatalogLevels(),
 		},
 		{
-			Game:        "duel",
-			Label:       "Duelo",
-			Description: "Cada jugador empieza en su zona 4x4. Al arrancar, el suelo se reparte en colores equilibrados; gana quien reclame primero todas sus baldosas.",
-			Music:       duel.DefaultMusicRef,
-			Players:     true,
-			MinPlayers:  2,
-			MaxPlayers:  4,
-			Difficulty:  false,
-			Volume:      duel.DefaultMusicVolume,
-		},
-		{
 			Game:        "memory",
 			Label:       "Reto de memoria",
 			Description: "Memoriza el camino iluminado, sal de la zona inicial y recorre la ruta sin verla. Si pisas fuera, vuelve al inicio.",
@@ -2606,8 +2567,8 @@ func appendAuthoredCatalogEntry(entries []gameCatalogEntry, game authored.Catalo
 		Description: game.Description,
 		Music:       nonEmptyString(game.DefaultMusicRef, authored.DefaultMusicRef),
 		Players:     true,
-		MinPlayers:  clampInt(game.MinPlayers, 1, 6),
-		MaxPlayers:  max(clampInt(game.MinPlayers, 1, 6), clampInt(game.MaxPlayers, 1, 6)),
+		MinPlayers:  clampInt(game.MinPlayers, 1, maxAuthoredPlayers),
+		MaxPlayers:  max(clampInt(game.MinPlayers, 1, maxAuthoredPlayers), clampInt(game.MaxPlayers, 1, maxAuthoredPlayers)),
 		Difficulty:  authoredGameHasDifficulty(game.EngineGame),
 		Volume:      nonZeroFloat(game.DefaultMusicVolume, authored.DefaultMusicVolume),
 	})
@@ -2725,8 +2686,8 @@ func defaultDisplayPlayers(cfg config) []displayPlayer {
 	if playerCount < 1 {
 		playerCount = 1
 	}
-	if playerCount > 6 {
-		playerCount = 6
+	if playerCount > maxAuthoredPlayers {
+		playerCount = maxAuthoredPlayers
 	}
 	colors := []displayColor{
 		{R: 255, G: 0, B: 0},
@@ -2735,6 +2696,8 @@ func defaultDisplayPlayers(cfg config) []displayPlayer {
 		{R: 255, G: 0, B: 255},
 		{R: 0, G: 0, B: 255},
 		{R: 255, G: 255, B: 0},
+		{R: 167, G: 139, B: 250},
+		{R: 251, G: 146, B: 60},
 	}
 	players := make([]displayPlayer, 0, playerCount)
 	for i := 0; i < playerCount; i++ {
@@ -2835,8 +2798,8 @@ func normalizeRosterPlayerCount(playerCount int) int {
 	if playerCount < 1 {
 		return 1
 	}
-	if playerCount > 6 {
-		return 6
+	if playerCount > maxAuthoredPlayers {
+		return maxAuthoredPlayers
 	}
 	return playerCount
 }
@@ -2876,7 +2839,6 @@ func preloadAudioRefs(cfg config) []string {
 		plataformas.DefaultMusicRef,
 		temporada1.DefaultMusicRef,
 		temporada2.DefaultMusicRef,
-		duel.DefaultMusicRef,
 		memorychallenge.DefaultMusicRef,
 		cfg.MusicRef,
 		cfg.StartCueRef,
@@ -2888,6 +2850,9 @@ func preloadAudioRefs(cfg config) []string {
 		cfg.PressureCueRef,
 		cfg.NarrationCueRef,
 		cfg.CountdownCueRef,
+	}
+	for _, entry := range authored.NativeCatalogEntries() {
+		refs = append(refs, entry.DefaultMusicRef)
 	}
 	seen := make(map[string]bool)
 	out := make([]string, 0, len(refs))

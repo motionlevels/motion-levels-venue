@@ -14,6 +14,7 @@ import (
 
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
+	"github.com/lobis/motion-levels/game-engine/internal/games/authored"
 	"github.com/lobis/motion-levels/game-engine/internal/games/patrones"
 	"github.com/lobis/motion-levels/game-engine/internal/games/plataformas"
 	"github.com/lobis/motion-levels/game-engine/internal/games/saltos"
@@ -219,8 +220,8 @@ func (c *config) normalize() {
 	if c.PlayerCount < 1 {
 		c.PlayerCount = 1
 	}
-	if c.PlayerCount > 6 {
-		c.PlayerCount = 6
+	if c.PlayerCount > maxConfigPlayers(c.Game) {
+		c.PlayerCount = maxConfigPlayers(c.Game)
 	}
 	if c.FPS < 1 {
 		c.FPS = 1
@@ -555,21 +556,28 @@ func normalizeGame(value string) string {
 
 func normalizeAuthoredGameConfig(c *config) {
 	switch c.Game {
-	case "authored-duel":
-		c.PlayerCount = clampInt(c.PlayerCount, 2, 6)
-	case "authored-memory-challenge":
-		c.PlayerCount = clampInt(c.PlayerCount, 1, 4)
 	case "authored-patrones":
-		c.PlayerCount = clampInt(c.PlayerCount, 1, 6)
 		c.Level = patrones.NormalizeLevel(c.Level)
 	case "authored-saltos":
-		c.PlayerCount = 1
 		c.Level = saltos.NormalizeLevel(c.Level)
-	case "authored-lava", "authored-whack-a-mole-go":
-		c.PlayerCount = clampInt(c.PlayerCount, 1, 6)
-	default:
-		c.PlayerCount = clampInt(c.PlayerCount, 1, 6)
 	}
+	minPlayers, maxPlayers := 1, maxAuthoredPlayers
+	if entry, ok := authored.NativeCatalogEntry(c.Game); ok {
+		minPlayers = clampInt(entry.MinPlayers, 1, maxAuthoredPlayers)
+		maxPlayers = clampInt(entry.MaxPlayers, minPlayers, maxAuthoredPlayers)
+	}
+	c.PlayerCount = clampInt(c.PlayerCount, minPlayers, maxPlayers)
+}
+
+// maxAuthoredPlayers matches the motion-go start-pad limit; the floor fits
+// eight 4x4 pads, so authored games may advertise up to eight players.
+const maxAuthoredPlayers = 8
+
+func maxConfigPlayers(game string) int {
+	if strings.HasPrefix(game, "authored-") {
+		return maxAuthoredPlayers
+	}
+	return 6
 }
 
 func isPlatformLevelGameID(value string) bool {
