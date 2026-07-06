@@ -417,7 +417,7 @@ func (s *platformSyncer) payload(status runtimeStatus, display displayStatus, no
 func platformDisplayLabel(display displayStatus) string {
 	base := strings.TrimSpace(display.Label)
 	if base == "" {
-		base = gameLabel(display.CurrentGame)
+		base = staticGameLabel(display.CurrentGame)
 	}
 	level := platformLevelLabel(display.Level, display.LevelNumber)
 	if level == "" {

@@ -612,7 +612,7 @@ func TestSelectPlatformLevelGameByUUIDUsesLaunchPlatformURL(t *testing.T) {
 	api := httptest.NewServer(gameAPIHandler(runtime))
 	defer api.Close()
 
-	body := bytes.NewBufferString(`{"game":"` + gameID + `","platformUrl":"` + server.URL + `","playerCount":1,"difficulty":"medium","level":"level-2"}`)
+	body := bytes.NewBufferString(`{"game":"` + gameID + `","gameLabel":"Parkour","platformUrl":"` + server.URL + `","playerCount":1,"difficulty":"medium","level":"level-2"}`)
 	response, err := http.Post(api.URL+"/api/select", "application/json", body)
 	if err != nil {
 		t.Fatal(err)
@@ -625,8 +625,12 @@ func TestSelectPlatformLevelGameByUUIDUsesLaunchPlatformURL(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if status.CurrentGame != gameID || status.Level != "level-2" || status.Label != "UUID Parkour" {
+	if status.CurrentGame != gameID || status.Level != "level-2" || status.Label != "Parkour" {
 		t.Fatalf("status = %+v, want UUID platform game", status)
+	}
+	display := runtime.DisplayStatus(time.Now())
+	if display.Label != "Parkour" || display.Level != "level-2" || display.LevelNumber != 2 {
+		t.Fatalf("display = %+v, want Parkour title with level-2 metadata", display)
 	}
 	if fetchedPath != "/api/level-games/"+gameID+"/levels" {
 		t.Fatalf("fetched path = %q", fetchedPath)
@@ -687,7 +691,7 @@ func TestSelectPlatformLevelGameByUUIDIgnoresLoopbackLaunchPlatformURLWhenConfig
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if status.CurrentGame != gameID || status.Level != "level-1" || status.Label != "Configured Platform Parkour" {
+	if status.CurrentGame != gameID || status.Level != "level-1" || status.Label != "Juego de niveles" {
 		t.Fatalf("status = %+v, want configured platform game", status)
 	}
 	if fetchedPath != "/api/level-games/"+gameID+"/levels" {
@@ -2005,7 +2009,7 @@ func TestDisplayStatusIncludesSessionElapsedMillis(t *testing.T) {
 }
 
 func TestPlatformLevelGameLabelDoesNotFallBackToScreensaver(t *testing.T) {
-	label := gameLabel("c1daea4f-e586-4116-8cbe-871cde887a81")
+	label := staticGameLabel("c1daea4f-e586-4116-8cbe-871cde887a81")
 	if label == "Salvapantallas" {
 		t.Fatal("platform level UUID was mislabeled as screensaver")
 	}

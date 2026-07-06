@@ -95,4 +95,9 @@ describe("runtime screen flow", () => {
     assert.match(source, /durationSeconds: launchGame\.levels\?\.length \? undefined : launchGame\.estimatedDurationSeconds \|\| undefined/);
     assert.match(source, /const totalMillis = hasLevels \? 0 : Math\.max\(0, Math\.round\(\(game\.estimatedDurationSeconds \|\| 0\) \* 1000\)\);/);
   });
+
+  it("sends the selected catalog label to the engine for UUID level games", () => {
+    const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    assert.match(source, /gameLabel: launchGame\.label/);
+  });
 });

@@ -32,6 +32,7 @@ type config struct {
 	ControllerAddr         string
 	PressureAddr           string
 	Game                   string
+	GameLabel              string
 	VenueSessionID         string
 	Difficulty             string
 	Level                  string

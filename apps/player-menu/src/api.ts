@@ -128,6 +128,7 @@ export type AnimationPreview = {
 
 export type SelectGameRequest = {
   game: string;
+  gameLabel?: string;
   platformUrl?: string;
   venueSessionId?: string;
   playerCount: number;

@@ -340,14 +340,15 @@ func (r *gameRuntime) SelectGameWithDifficulty(game string, players int, difficu
 }
 
 func (r *gameRuntime) SelectGameWithOptions(game string, players int, difficulty string, narrationEnabled *bool) {
-	r.SelectGameWithMetadata(game, players, difficulty, "", "", 0, 0, 0, narrationEnabled, false, "", "", "", nil)
+	r.SelectGameWithMetadata(game, "", players, difficulty, "", "", 0, 0, 0, narrationEnabled, false, "", "", "", nil)
 }
 
-func (r *gameRuntime) SelectGameWithMetadata(game string, players int, difficulty string, level string, levelMode string, durationSeconds int, challengeElapsedMillis int64, challengeAttemptCount int, narrationEnabled *bool, countdownFloorOverlay bool, teamName string, venueSessionID string, platformURL string, roster []playerConfig) {
+func (r *gameRuntime) SelectGameWithMetadata(game string, gameLabel string, players int, difficulty string, level string, levelMode string, durationSeconds int, challengeElapsedMillis int64, challengeAttemptCount int, narrationEnabled *bool, countdownFloorOverlay bool, teamName string, venueSessionID string, platformURL string, roster []playerConfig) {
 	if r == nil {
 		return
 	}
 	cfg := configForSelection(r.base, game, players)
+	cfg.GameLabel = strings.TrimSpace(gameLabel)
 	if shouldUseLaunchPlatformURL(r.base.PlatformURL, platformURL) {
 		cfg.PlatformURL = platformURL
 	}
@@ -674,7 +675,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		return displayStatus{
 			CurrentGame:    "salvapantallas",
 			VenueSessionID: "",
-			Label:          gameLabel("salvapantallas"),
+			Label:          staticGameLabel("salvapantallas"),
 			Phase:          "idle",
 			Lives:          -1,
 		}
@@ -695,7 +696,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 	status := displayStatus{
 		CurrentGame:            cfg.Game,
 		VenueSessionID:         cfg.VenueSessionID,
-		Label:                  gameLabel(cfg.Game),
+		Label:                  displayGameLabel(cfg),
 		Phase:                  "idle",
 		Difficulty:             cfg.Difficulty,
 		DifficultyConfigurable: gameHasConfigurableDifficulty(cfg.Game, cfg.PlatformURL),
@@ -839,9 +840,6 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.ActiveTargets = snapshot.ActiveTargets
 			status.Lives = snapshot.Lives
 			status.LivesStart = snapshot.LivesStart
-			if snapshot.Label != "" {
-				status.Label = snapshot.Label
-			}
 			status.Difficulty = snapshot.Difficulty
 			status.Level = snapshot.Level
 			status.LevelNumber = snapshot.LevelNumber
@@ -1150,8 +1148,8 @@ func (r *gameRuntime) applyLockedWithNarrationReasonPrepared(cfg config, playAud
 		game = makeGame(cfg, r.rngSeed, gameNow)
 		cfg = applyPlataformasAudioConfig(cfg, game)
 	}
-	label := gameLabel(cfg.Game)
-	if labeled, ok := game.(interface{ Label() string }); ok {
+	label := displayGameLabel(cfg)
+	if labeled, ok := game.(interface{ Label() string }); ok && !isPlatformRuntimeGame(cfg.Game) {
 		label = labeled.Label()
 	}
 	r.current = cfg
@@ -2684,7 +2682,14 @@ func patronesCatalogLevels() []gameLevelEntry {
 	return out
 }
 
-func gameLabel(game string) string {
+func displayGameLabel(cfg config) string {
+	if label := strings.TrimSpace(cfg.GameLabel); label != "" {
+		return label
+	}
+	return staticGameLabel(cfg.Game)
+}
+
+func staticGameLabel(game string) string {
 	clean := strings.TrimSpace(game)
 	if strings.HasPrefix(game, "animation-") {
 		return animations.GetLabel(strings.TrimPrefix(game, "animation-"))

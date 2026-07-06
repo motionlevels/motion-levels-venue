@@ -18,6 +18,8 @@ const gameTitlesES: Record<string, string> = {
   "ambient-spark": "Chispas",
 };
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function normalizedText(value: string): string {
   return value
     .normalize("NFD")
@@ -38,7 +40,7 @@ export function levelLabelES(value: string): string {
   const direct = normalized.match(/^(?:nivel|level)\s*[-#:]*\s*(\d+)$/);
   if (direct) return `Nivel ${Number(direct[1])}`;
 
-  const levelIndex = normalized.search(/(?:^|[-_\s])(?:nivel|level)(?:[-_\s]|$)/);
+  const levelIndex = normalized.search(/(?:^|[^a-z0-9])(?:nivel|level)(?:[^a-z0-9]|$)/);
   if (levelIndex < 0) return "";
 
   const numbers = normalized.slice(levelIndex).match(/\d+/g);
@@ -52,6 +54,8 @@ export function gameTitleES(currentGame: string, label: string): string {
   if (knownTitle) return knownTitle;
 
   const cleanLabel = label.trim();
-  if (cleanLabel && cleanLabel !== gameID && !levelLabelES(cleanLabel)) return cleanLabel;
-  return cleanLabel || gameID;
+  const labelIsLevel = Boolean(levelLabelES(cleanLabel));
+  if (cleanLabel && cleanLabel !== gameID && !labelIsLevel) return cleanLabel;
+  if (gameID && labelIsLevel) return uuidPattern.test(gameID) ? "Juego de niveles" : gameID;
+  return cleanLabel || gameID || "Motion Levels";
 }

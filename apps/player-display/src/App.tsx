@@ -661,12 +661,6 @@ function isTemporadaOneGame(status: Pick<DisplayStatus, "currentGame" | "label">
 }
 
 function displayGameTitle(status: Pick<DisplayStatus, "currentGame" | "label">): string {
-  if (
-    isLevelPointsGame(status)
-    && (normalizedDisplayText(status.label) === "juego de niveles" || levelLabelES(status.label))
-  ) {
-    return "Temporada 1";
-  }
   return gameTitleES(status.currentGame, status.label);
 }
 

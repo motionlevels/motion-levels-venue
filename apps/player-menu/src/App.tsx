@@ -2538,6 +2538,7 @@ function MenuApp() {
     try {
       const nextStatus = await selectGame({
         game: runtimeGameID(launchGame),
+        gameLabel: launchGame.label,
         platformUrl: platformBaseURL() || undefined,
         venueSessionId: nextMenu.sessionId,
         playerCount: Math.max(1, launchRoster.length),
