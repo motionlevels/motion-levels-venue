@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { levelDisplayLives, levelDisplayTimeMillis } from "../src/displayMetrics.ts";
+import { heartMeterSlotCount, levelDisplayLives, levelDisplayTimeMillis } from "../src/displayMetrics.ts";
 
 describe("levelDisplayTimeMillis", () => {
   it("uses whole-challenge remaining time for challenge-mode level games", () => {
@@ -32,5 +32,12 @@ describe("levelDisplayLives", () => {
 
   it("shows current lives while the level is running", () => {
     assert.equal(levelDisplayLives({ phase: "running", lives: 3, livesStart: 7 }), 3);
+  });
+});
+
+describe("heartMeterSlotCount", () => {
+  it("uses the real finite life count instead of padding to five hearts", () => {
+    assert.equal(heartMeterSlotCount(1), 1);
+    assert.equal(heartMeterSlotCount(5), 5);
   });
 });

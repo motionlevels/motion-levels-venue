@@ -1102,7 +1102,7 @@ func compileCloudLevelsForMode(raw []cloudLevel, levelMode string) ([]compiledLe
 			if settings.Life > 0 {
 				lives = settings.Life
 			}
-			if settings.GameplayLives > 0 {
+			if challengeMode && settings.GameplayLives > 0 {
 				lives = settings.GameplayLives
 			}
 			if settings.GameplayTimeLimitSeconds > 0 {
@@ -1111,9 +1111,6 @@ func compileCloudLevelsForMode(raw []cloudLevel, levelMode string) ([]compiledLe
 				} else if level.TimeLimitSeconds == settings.GameplayTimeLimitSeconds {
 					timeLimit = 0
 				}
-			}
-			if settings.FrameDurationMS > 0 {
-				frameTick = time.Duration(settings.FrameDurationMS) * time.Millisecond
 			}
 			if settings.SpeedMultiplier > 0 {
 				frameTick = time.Duration(float64(frameTick) / settings.SpeedMultiplier)

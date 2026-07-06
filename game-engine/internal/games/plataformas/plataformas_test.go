@@ -336,12 +336,15 @@ func TestDifficultySettingsOverrideRuntimeTimingAndLimits(t *testing.T) {
 	if got := levels[0].timeLimit; got != 90*time.Second {
 		t.Fatalf("timeLimit = %s, want 90s", got)
 	}
-	if got := levels[0].frameTick; got != 25*time.Millisecond {
-		t.Fatalf("frameTick = %s, want speed-adjusted 25ms", got)
+	if got := levels[0].frameTick; got != 20*time.Millisecond {
+		t.Fatalf("frameTick = %s, want base 40ms adjusted by 2x speed", got)
 	}
 	freeLevels, err := compileCloudLevelsForMode(rawLevels, "free")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if got := freeLevels[0].lives; got != 4 {
+		t.Fatalf("free mode lives = %d, want per-level difficulty lives", got)
 	}
 	if got := freeLevels[0].timeLimit; got != 30*time.Second {
 		t.Fatalf("free mode timeLimit = %s, want base 30s", got)

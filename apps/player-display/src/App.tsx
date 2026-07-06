@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./api";
 import { createCoalescer, isFeedStalled } from "./displayFeed";
-import { challengeMode, levelAggregateElapsedMillis, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeMillis } from "./displayMetrics";
+import { challengeMode, heartMeterSlotCount, levelAggregateElapsedMillis, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeMillis } from "./displayMetrics";
 import { colorCSS, colorRGB, difficultyLabelES, eventMessageES, formatClock, gameTitleES, levelLabelES, phaseLabel, playerLabelES } from "./utils";
 
 // If no stream event arrives, keep the display fresh with a 250ms fallback
@@ -582,7 +582,7 @@ function HeartMeter({ lives, compact = false, showAllUpTo = 8 }: { lives: number
       </div>
     );
   }
-  const slots = Math.max(compact ? Math.min(5, Math.max(lives, 3)) : 5, lives);
+  const slots = heartMeterSlotCount(lives, compact);
   return (
     <div className={`heart-meter ${compact ? "compact" : ""}`}>
       {Array.from({ length: slots }, (_, index) => (

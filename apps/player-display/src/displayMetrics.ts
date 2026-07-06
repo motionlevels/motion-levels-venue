@@ -46,6 +46,16 @@ export function levelDisplayLives(status: LevelLivesStatus): number {
   return status.lives;
 }
 
+export function heartMeterSlotCount(lives: number, compact = false): number {
+  if (lives <= 0) {
+    return 0;
+  }
+  if (compact) {
+    return Math.min(5, lives);
+  }
+  return lives;
+}
+
 function globalGameElapsedMillis(status: Pick<DisplayStatus, "sessionElapsedMillis" | "elapsedMillis">): number {
   return nonNegativeMillis(status.sessionElapsedMillis ?? status.elapsedMillis);
 }
