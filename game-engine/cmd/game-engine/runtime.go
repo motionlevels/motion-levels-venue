@@ -14,11 +14,7 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
 	"github.com/lobis/motion-levels/game-engine/internal/games/animations"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored"
-	"github.com/lobis/motion-levels/game-engine/internal/games/lava"
-	"github.com/lobis/motion-levels/game-engine/internal/games/memorychallenge"
 	"github.com/lobis/motion-levels/game-engine/internal/games/niveles"
-	"github.com/lobis/motion-levels/game-engine/internal/games/patrones"
-	"github.com/lobis/motion-levels/game-engine/internal/games/saltos"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
 	"github.com/lobis/motion-levels/packages/contracts/gamepb"
@@ -718,114 +714,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		LastEventMessage:       lastEvent.message,
 	}
 
-	if cfg.Game == "whack-a-mole" {
-		if mole, ok := game.(*whackamole.Game); ok {
-			snapshot := mole.Snapshot(gameNow)
-			status.Phase = snapshot.Phase
-			status.Score = snapshot.Score
-			status.StartedUnix = snapshot.StartedUnix
-			status.EndsUnix = snapshot.EndsUnix
-			status.ElapsedMillis = snapshot.ElapsedMillis
-			status.RemainingMillis = snapshot.RemainingMillis
-			status.CountdownRemainingMillis = snapshot.CountdownMillis
-			status.ActiveTargets = snapshot.ActiveTargets
-			status.Lives = snapshot.Lives
-			status.Players = mapDisplayPlayers(snapshot.Players, func(player whackamole.PlayerSnapshot) displayPlayer {
-				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, snapshot.Lives)
-			})
-		}
-		return r.finalizeGameStatus(status, started, paused)
-	}
-
-	if cfg.Game == "lava" {
-		if lavaGame, ok := game.(*lava.Game); ok {
-			snapshot := lavaGame.Snapshot(gameNow)
-			status.Phase = snapshot.Phase
-			status.Score = snapshot.Score
-			status.StartedUnix = snapshot.StartedUnix
-			status.EndsUnix = snapshot.EndsUnix
-			status.ElapsedMillis = snapshot.ElapsedMillis
-			status.RemainingMillis = snapshot.RemainingMillis
-			status.CountdownRemainingMillis = snapshot.CountdownMillis
-			status.ActiveTargets = snapshot.ActiveTargets
-			status.Lives = snapshot.Lives
-			status.Difficulty = snapshot.Difficulty
-			status.Players = mapDisplayPlayers(snapshot.Players, func(player lava.PlayerSnapshot) displayPlayer {
-				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, snapshot.Lives)
-			})
-		}
-		r.applyIntroStatus(&status, gameNow, introUntil)
-		return r.finalizeGameStatus(status, started, paused)
-	}
-
-	if cfg.Game == "memory" {
-		if memoryGame, ok := game.(*memorychallenge.Game); ok {
-			snapshot := memoryGame.Snapshot(gameNow)
-			status.Phase = snapshot.Phase
-			status.Score = snapshot.Score
-			status.StartedUnix = snapshot.StartedUnix
-			status.EndsUnix = snapshot.EndsUnix
-			status.ElapsedMillis = snapshot.ElapsedMillis
-			status.RemainingMillis = snapshot.RemainingMillis
-			status.CountdownRemainingMillis = snapshot.CountdownMillis
-			status.ActiveTargets = snapshot.ActiveTargets
-			status.Lives = snapshot.Lives
-			status.Success = snapshot.Success
-			status.Players = mapDisplayPlayers(snapshot.Players, func(player memorychallenge.PlayerSnapshot) displayPlayer {
-				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, player.Lives)
-			})
-		}
-		return r.finalizeGameStatus(status, started, paused)
-	}
-
-	if cfg.Game == "patrones" {
-		if patronesGame, ok := game.(*patrones.Game); ok {
-			snapshot := patronesGame.Snapshot(gameNow)
-			status.Phase = snapshot.Phase
-			status.Score = snapshot.Score
-			status.StartedUnix = snapshot.StartedUnix
-			status.EndsUnix = snapshot.EndsUnix
-			status.ElapsedMillis = snapshot.ElapsedMillis
-			status.RemainingMillis = snapshot.RemainingMillis
-			status.CountdownRemainingMillis = snapshot.CountdownMillis
-			status.ActiveTargets = snapshot.ActiveTargets
-			status.Lives = snapshot.Lives
-			status.LivesStart = snapshot.LivesStart
-			status.Difficulty = snapshot.Difficulty
-			status.Level = snapshot.Level
-			status.LevelNumber = snapshot.LevelNumber
-			status.AttemptStartedUnixNanos = snapshot.CreatedUnixNanos
-			status.GameplayStartedUnixNanos = snapshot.StartedUnixNanos
-			status.AttemptEndedUnixNanos = snapshot.EndedUnixNanos
-			status.Success = snapshot.Success
-			status.Players = mapDisplayPlayers(snapshot.Players, func(player patrones.PlayerSnapshot) displayPlayer {
-				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, player.Lives)
-			})
-		}
-		return r.finalizeGameStatus(status, started, paused)
-	}
-
-	if cfg.Game == "saltos" {
-		if saltosGame, ok := game.(*saltos.Game); ok {
-			snapshot := saltosGame.Snapshot(gameNow)
-			status.Phase = snapshot.Phase
-			status.Score = snapshot.Score
-			status.StartedUnix = snapshot.StartedUnix
-			status.EndsUnix = snapshot.EndsUnix
-			status.ElapsedMillis = snapshot.ElapsedMillis
-			status.RemainingMillis = snapshot.RemainingMillis
-			status.CountdownRemainingMillis = snapshot.CountdownMillis
-			status.ActiveTargets = snapshot.ActiveTargets
-			status.Lives = snapshot.Lives
-			status.Level = snapshot.Level
-			status.Players = mapDisplayPlayers(snapshot.Players, func(player saltos.PlayerSnapshot) displayPlayer {
-				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, snapshot.Lives)
-			})
-		}
-		return r.finalizeGameStatus(status, started, paused)
-	}
-
-	if isPlatformRuntimeGame(cfg.Game) {
+	if isNivelesRuntimeGame(cfg.Game) {
 		if nivelesGame, ok := game.(*niveles.Game); ok {
 			snapshot := nivelesGame.Snapshot(gameNow)
 			status.Phase = snapshot.Phase
@@ -1098,7 +987,7 @@ func (r *gameRuntime) applyLockedWithNarrationReasonPrepared(cfg config, playAud
 		cfg = applyNivelesAudioConfig(cfg, game)
 	}
 	label := displayGameLabel(cfg)
-	if labeled, ok := game.(interface{ Label() string }); ok && !isPlatformRuntimeGame(cfg.Game) {
+	if labeled, ok := game.(interface{ Label() string }); ok && !isNivelesRuntimeGame(cfg.Game) {
 		label = labeled.Label()
 	}
 	r.current = cfg
@@ -1153,7 +1042,7 @@ func (r *gameRuntime) preparedLaunchIntroHold(cfg config, mode narrationMode) ti
 }
 
 func applyNivelesAudioConfig(cfg config, game floorGame) config {
-	if isPlatformRuntimeGame(cfg.Game) {
+	if isNivelesRuntimeGame(cfg.Game) {
 		provider, ok := game.(nivelesAudioProvider)
 		if !ok {
 			return cfg
@@ -1374,15 +1263,10 @@ func shouldPlayCountdownCue(cfg config) bool {
 		}
 		return true
 	}
-	if isPlatformRuntimeGame(cfg.Game) {
+	if isNivelesRuntimeGame(cfg.Game) {
 		return true
 	}
-	switch cfg.Game {
-	case "lava", "saltos", "parkour", "niveles", "temporada1-niveles":
-		return true
-	default:
-		return false
-	}
+	return false
 }
 
 func shouldUseLevelNarrationInsteadOfCountdown(cfg config) bool {
@@ -1391,7 +1275,7 @@ func shouldUseLevelNarrationInsteadOfCountdown(cfg config) bool {
 
 func shouldPlayCountdownAfterReadyCue(cfg config) bool {
 	switch cfg.Game {
-	case "authored-duel", "authored-whack-a-mole-go", "whack-a-mole", "duel":
+	case "authored-duel", "authored-whack-a-mole-go":
 		return true
 	default:
 		return false
@@ -1717,15 +1601,7 @@ func (r *gameRuntime) StartDisplaySnapshotRecording(interval time.Duration) {
 }
 
 func recordsLevelAttempts(game string) bool {
-	if isPlatformRuntimeGame(game) {
-		return true
-	}
-	switch game {
-	case "parkour", "niveles", "temporada1-niveles":
-		return true
-	default:
-		return false
-	}
+	return isNivelesRuntimeGame(game)
 }
 
 func levelAttemptRecordKey(game string, level string, difficulty string) string {
@@ -1767,9 +1643,13 @@ func gameHasConfigurableDifficulty(game string, platformURL string) bool {
 	return strings.HasPrefix(normalized, "authored-") || isPlatformLevelGameID(normalized)
 }
 
-func isPlatformRuntimeGame(game string) bool {
+func isNivelesRuntimeGame(game string) bool {
 	game = normalizeGame(game)
-	return isPlatformLevelGameID(game) || game == "niveles" || game == "parkour" || game == "temporada1-niveles"
+	if isPlatformLevelGameID(game) {
+		return true
+	}
+	_, ok := levelCatalogEntry(game)
+	return ok
 }
 
 func (r *gameRuntime) recordPressureInput(event *inputpb.PressureEvent, now time.Time) {
@@ -1936,25 +1816,15 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 		}
 		return game
 	}
+	if entry, ok := levelCatalogEntry(cfg.Game); ok {
+		players := cfg.PlayerCount
+		if !entry.Players {
+			players = clampInt(entry.MinPlayers, 1, maxAuthoredPlayers)
+		}
+		log.Printf("game: niveles id=%s players=%d difficulty=%s level=%s mode=%s", cfg.Game, players, cfg.Difficulty, cfg.Level, cfg.LevelMode)
+		return niveles.NewWithSeedForGameMode(now, seed, players, cfg.Difficulty, cfg.Level, cfg.PlatformURL, cfg.Game, cfg.LevelMode)
+	}
 	switch cfg.Game {
-	case "whack-a-mole":
-		log.Printf("game: whack-a-mole players=%d", cfg.PlayerCount)
-		return whackamole.NewWithSeedAndPlayers(whackPlayersFromConfig(cfg), now, seed)
-	case "lava":
-		log.Printf("game: lava players=%d difficulty=%s", cfg.PlayerCount, cfg.Difficulty)
-		return lava.NewWithSeed(cfg.PlayerCount, now, seed, cfg.Difficulty)
-	case "saltos":
-		log.Printf("game: saltos level=%s", cfg.Level)
-		return saltos.NewWithSeed(now, seed, cfg.Level)
-	case "niveles":
-		log.Printf("game: niveles players=%d difficulty=%s level=%s mode=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.LevelMode)
-		return niveles.NewWithSeedForGameMode(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL, "niveles", cfg.LevelMode)
-	case "parkour":
-		log.Printf("game: parkour difficulty=%s level=%s mode=%s", cfg.Difficulty, cfg.Level, cfg.LevelMode)
-		return niveles.NewWithSeedForGameMode(now, seed, 1, cfg.Difficulty, cfg.Level, cfg.PlatformURL, "parkour", cfg.LevelMode)
-	case "temporada1-niveles":
-		log.Printf("game: temporada1-niveles players=%d difficulty=%s level=%s mode=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.LevelMode)
-		return niveles.NewWithSeedForGameMode(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL, "temporada1-niveles", cfg.LevelMode)
 	case "animations":
 		log.Printf("game: animations players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 		return animations.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL)
@@ -1962,12 +1832,6 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 		rotationEvery := time.Duration(cfg.DurationSeconds) * time.Second
 		log.Printf("game: salvapantallas rotation=%s", rotationEvery)
 		return animations.NewScreensaverWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.PlatformURL, rotationEvery)
-	case "memory":
-		log.Printf("game: memory players=%d", cfg.PlayerCount)
-		return memorychallenge.NewWithSeedAndPlayers(now, seed, whackPlayersFromConfig(cfg))
-	case "patrones":
-		log.Printf("game: patrones players=%d difficulty=%s level=%s", cfg.PlayerCount, cfg.Difficulty, cfg.Level)
-		return patrones.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level)
 	default:
 		log.Printf("game: %s", cfg.Game)
 		return nil
@@ -2152,24 +2016,21 @@ func configForSelection(base config, game string, players int) config {
 		cfg.normalize()
 		return cfg
 	}
+	if entry, ok := levelCatalogEntry(cfg.Game); ok {
+		if entry.Players {
+			cfg.PlayerCount = clampInt(players, clampInt(entry.MinPlayers, 1, maxAuthoredPlayers), clampInt(entry.MaxPlayers, 1, maxAuthoredPlayers))
+		} else {
+			cfg.PlayerCount = clampInt(entry.MinPlayers, 1, maxAuthoredPlayers)
+		}
+		cfg.Level = niveles.NormalizeLevel(cfg.Level)
+		cfg.MusicRef = nonEmptyString(entry.Music, niveles.DefaultMusicRef)
+		cfg.MusicVolume = nonZeroFloat(entry.Volume, niveles.DefaultMusicVolume)
+		cfg.normalize()
+		return cfg
+	}
 	// Music ref/volume are assigned unconditionally below via
 	// defaultMusicForGame, so per-game cases only need non-music adjustments.
 	switch cfg.Game {
-	case "saltos":
-		cfg.PlayerCount = 1
-		cfg.Level = saltos.NormalizeLevel(cfg.Level)
-	case "parkour":
-		cfg.PlayerCount = 1
-		cfg.Level = niveles.NormalizeLevel(cfg.Level)
-	case "niveles":
-		cfg.Level = niveles.NormalizeLevel(cfg.Level)
-	case "temporada1-niveles":
-		cfg.Level = niveles.NormalizeLevel(cfg.Level)
-	case "memory":
-		cfg.PlayerCount = clampInt(players, 1, 4)
-	case "patrones":
-		cfg.PlayerCount = clampInt(players, 1, 6)
-		cfg.Level = patrones.NormalizeLevel(cfg.Level)
 	case "animations":
 		cfg.PlayerCount = 1
 		cfg.Level = ""
@@ -2194,29 +2055,17 @@ func defaultMusicForGame(game string) (string, float64) {
 	if isPlatformLevelGameID(normalized) {
 		return niveles.DefaultMusicRef, niveles.DefaultMusicVolume
 	}
-	switch normalized {
-	case "whack-a-mole":
-		return whackamole.DefaultMusicRef, whackamole.DefaultMusicVolume
-	case "lava":
-		return lava.DefaultMusicRef, lava.DefaultMusicVolume
-	case "saltos":
-		return saltos.DefaultMusicRef, saltos.DefaultMusicVolume
-	case "parkour", "niveles", "temporada1-niveles":
-		return niveles.DefaultMusicRef, niveles.DefaultMusicVolume
-	case "memory":
-		return memorychallenge.DefaultMusicRef, memorychallenge.DefaultMusicVolume
-	case "patrones":
-		return patrones.DefaultMusicRef, patrones.DefaultMusicVolume
-	default:
-		return loopMusicRef, 0.10
+	if entry, ok := catalogEntry(normalized); ok {
+		return nonEmptyString(entry.Music, loopMusicRef), nonZeroFloat(entry.Volume, 0.10)
 	}
+	return loopMusicRef, 0.10
 }
 
 func defaultNarrationRef(game string) string {
 	switch normalizeGame(game) {
-	case "authored-lava", "lava":
+	case "authored-lava":
 		return "Motion/narraciones/lava-intro.mp3"
-	case "authored-whack-a-mole-go", "whack-a-mole":
+	case "authored-whack-a-mole-go":
 		return "Motion/narraciones/atrapa-topos-intro.mp3"
 	default:
 		return ""
@@ -2235,16 +2084,11 @@ func applyLevelNarrationDefaults(cfg config) config {
 
 func isLevelNarrationGame(game string) bool {
 	game = normalizeGame(game)
-	return isPlatformRuntimeGame(game) || isBuiltInLevelNarrationGame(game)
-}
-
-func isBuiltInLevelNarrationGame(game string) bool {
-	switch normalizeGame(game) {
-	case "authored-patrones", "authored-saltos", "saltos":
+	if isNivelesRuntimeGame(game) {
 		return true
-	default:
-		return false
 	}
+	entry, ok := authored.NativeCatalogEntry(game)
+	return ok && entry.LevelNarration
 }
 
 func defaultLevelNarrationRef(level string) string {
@@ -2282,42 +2126,8 @@ func isBundledDefaultStartCue(ref string) bool {
 	}
 }
 
-func gameCatalog(platformURL string) []gameCatalogEntry {
-	entries := []gameCatalogEntry{
-		{
-			Game:        "whack-a-mole",
-			Label:       "Atrapa al topo",
-			Description: "Step onto your color, wait for the countdown, then hit your team's 2x2 targets.",
-			Music:       whackamole.DefaultMusicRef,
-			Players:     true,
-			MinPlayers:  1,
-			MaxPlayers:  6,
-			Difficulty:  true,
-			Volume:      whackamole.DefaultMusicVolume,
-		},
-		{
-			Game:        "lava",
-			Label:       "El suelo es lava",
-			Description: "Avoid flowing lava tiles, keep shared team lives, and claim as many unique safe platforms as possible.",
-			Music:       lava.DefaultMusicRef,
-			Players:     true,
-			MinPlayers:  1,
-			MaxPlayers:  6,
-			Difficulty:  true,
-			Volume:      lava.DefaultMusicVolume,
-		},
-		{
-			Game:        "saltos",
-			Label:       "Saltos",
-			Description: "Salta desde la plataforma azul hacia la plataforma verde y evita pisar lava.",
-			Music:       saltos.DefaultMusicRef,
-			Players:     true,
-			MinPlayers:  1,
-			MaxPlayers:  1,
-			Difficulty:  false,
-			Volume:      saltos.DefaultMusicVolume,
-			Levels:      saltosCatalogLevels(),
-		},
+func baseGameCatalogEntries() []gameCatalogEntry {
+	return []gameCatalogEntry{
 		{
 			Game:        "parkour",
 			Label:       "Parkour",
@@ -2326,18 +2136,6 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 			Players:     true,
 			MinPlayers:  1,
 			MaxPlayers:  1,
-			Difficulty:  true,
-			Volume:      niveles.DefaultMusicVolume,
-			Levels:      nivelesCatalogLevels(),
-		},
-		{
-			Game:        "niveles",
-			Label:       "Niveles",
-			Description: "Niveles visibles desde la plataforma, creados como secuencias reutilizables de fotogramas.",
-			Music:       niveles.DefaultMusicRef,
-			Players:     true,
-			MinPlayers:  1,
-			MaxPlayers:  6,
 			Difficulty:  true,
 			Volume:      niveles.DefaultMusicVolume,
 			Levels:      nivelesCatalogLevels(),
@@ -2353,29 +2151,6 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 			Difficulty:  true,
 			Volume:      niveles.DefaultMusicVolume,
 			Levels:      nivelesCatalogLevels(),
-		},
-		{
-			Game:        "memory",
-			Label:       "Reto de memoria",
-			Description: "Memoriza el camino iluminado, sal de la zona inicial y recorre la ruta sin verla. Si pisas fuera, vuelve al inicio.",
-			Music:       memorychallenge.DefaultMusicRef,
-			Players:     true,
-			MinPlayers:  1,
-			MaxPlayers:  4,
-			Difficulty:  false,
-			Volume:      memorychallenge.DefaultMusicVolume,
-		},
-		{
-			Game:        "patrones",
-			Label:       "Patrones",
-			Description: "Reconstruid patrones azules en el canvas central sin pisar el fondo negro. Las zonas verdes alrededor son seguras.",
-			Music:       patrones.DefaultMusicRef,
-			Players:     true,
-			MinPlayers:  1,
-			MaxPlayers:  6,
-			Difficulty:  true,
-			Volume:      patrones.DefaultMusicVolume,
-			Levels:      patronesCatalogLevels(),
 		},
 		{
 			Game:        "salvapantallas",
@@ -2433,8 +2208,11 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 			Volume:      0.10,
 		},
 	}
+}
 
-	entries = filterRetiredEngineCatalogEntries(entries)
+func gameCatalog(platformURL string) []gameCatalogEntry {
+	entries := baseGameCatalogEntries()
+
 	for _, game := range authored.CachedCatalog() {
 		entries = appendAuthoredCatalogEntry(entries, game)
 	}
@@ -2461,24 +2239,32 @@ func gameCatalog(platformURL string) []gameCatalogEntry {
 	return entries
 }
 
-var retiredEngineCatalogGames = map[string]bool{
-	"duel":         true,
-	"lava":         true,
-	"memory":       true,
-	"patrones":     true,
-	"saltos":       true,
-	"whack-a-mole": true,
+func catalogEntry(game string) (gameCatalogEntry, bool) {
+	normalized := normalizeGame(game)
+	for _, entry := range gameCatalog("") {
+		if normalizeGame(entry.Game) == normalized {
+			return entry, true
+		}
+	}
+	return gameCatalogEntry{}, false
 }
 
-func filterRetiredEngineCatalogEntries(entries []gameCatalogEntry) []gameCatalogEntry {
-	out := entries[:0]
-	for _, entry := range entries {
-		if retiredEngineCatalogGames[normalizeGame(entry.Game)] || retiredEngineCatalogGames[entry.Game] {
-			continue
-		}
-		out = append(out, entry)
+func levelCatalogEntry(game string) (gameCatalogEntry, bool) {
+	entry, ok := catalogEntry(game)
+	if !ok || len(entry.Levels) == 0 {
+		return gameCatalogEntry{}, false
 	}
-	return out
+	return entry, true
+}
+
+func isBaseCatalogGameID(game string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(game))
+	for _, entry := range baseGameCatalogEntries() {
+		if strings.ToLower(strings.TrimSpace(entry.Game)) == normalized {
+			return true
+		}
+	}
+	return false
 }
 
 func appendAuthoredCatalogEntry(entries []gameCatalogEntry, game authored.CatalogEntry) []gameCatalogEntry {
@@ -2526,34 +2312,8 @@ func nonZeroFloat(value float64, fallback float64) float64 {
 	return value
 }
 
-func saltosCatalogLevels() []gameLevelEntry {
-	levels := saltos.Levels()
-	out := make([]gameLevelEntry, 0, len(levels))
-	for _, level := range levels {
-		out = append(out, gameLevelEntry{
-			ID:          level.ID,
-			Label:       level.Label,
-			Description: level.Description,
-		})
-	}
-	return out
-}
-
 func nivelesCatalogLevels() []gameLevelEntry {
 	levels := niveles.Levels()
-	out := make([]gameLevelEntry, 0, len(levels))
-	for _, level := range levels {
-		out = append(out, gameLevelEntry{
-			ID:          level.ID,
-			Label:       level.Label,
-			Description: level.Description,
-		})
-	}
-	return out
-}
-
-func patronesCatalogLevels() []gameLevelEntry {
-	levels := patrones.Levels()
 	out := make([]gameLevelEntry, 0, len(levels))
 	for _, level := range levels {
 		out = append(out, gameLevelEntry{
@@ -2743,11 +2503,7 @@ func configuredPlayerColor(cfg config, index int, fallback displayColor) display
 func preloadAudioRefs(cfg config) []string {
 	refs := []string{
 		loopMusicRef,
-		whackamole.DefaultMusicRef,
-		lava.DefaultMusicRef,
-		saltos.DefaultMusicRef,
 		niveles.DefaultMusicRef,
-		memorychallenge.DefaultMusicRef,
 		cfg.MusicRef,
 		cfg.StartCueRef,
 		cfg.CoinCueRef,

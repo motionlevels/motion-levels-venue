@@ -4,9 +4,14 @@ import { describe, it } from "node:test";
 import { gameTitleES, levelLabelES } from "../src/displayText.ts";
 
 describe("gameTitleES", () => {
-  it("uses known game ids instead of level labels", () => {
-    assert.equal(gameTitleES("parkour", "level-1-2"), "Parkour");
+  it("uses native runtime ids instead of level labels", () => {
     assert.equal(gameTitleES("memory-lights", "Nivel 3"), "Reto de memoria");
+  });
+
+  it("uses catalog labels for level games instead of local id exceptions", () => {
+    assert.equal(gameTitleES("parkour", "Parkour"), "Parkour");
+    assert.equal(gameTitleES("temporada1-niveles", "Temporada 1"), "Temporada 1");
+    assert.equal(gameTitleES("parkour", "level-1-2"), "parkour");
   });
 
   it("keeps custom labels for unknown non-level games", () => {

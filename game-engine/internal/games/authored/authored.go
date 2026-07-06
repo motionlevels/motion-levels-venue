@@ -60,6 +60,7 @@ type CatalogEntry struct {
 	DefaultMusicVolume float64 `json:"default_music_volume"`
 	MinPlayers         int     `json:"min_players"`
 	MaxPlayers         int     `json:"max_players"`
+	LevelNarration     bool    `json:"level_narration,omitempty"`
 	GameSource         Spec    `json:"game_source"`
 }
 

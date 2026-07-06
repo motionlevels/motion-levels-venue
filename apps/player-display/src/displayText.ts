@@ -1,11 +1,7 @@
-// Spanish display titles per game id; falls back to the engine-provided label.
+// Spanish display titles for native runtime ids; level games use the engine/catalog label.
 const gameTitlesES: Record<string, string> = {
   "whack-a-mole": "Atrapa al topo",
   lava: "El suelo es lava",
-  parkour: "Parkour",
-  niveles: "Niveles",
-  "temporada1-niveles": "Temporada 1",
-  temporada1niveles: "Temporada 1",
   duel: "Duelo",
   memory: "Reto de memoria",
   "memory-lights": "Reto de memoria",

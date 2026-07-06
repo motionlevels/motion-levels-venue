@@ -93,6 +93,7 @@ var nativeCatalogEntries = map[string]CatalogEntry{
 		DefaultMusicVolume: 0.18,
 		MinPlayers:         1,
 		MaxPlayers:         6,
+		LevelNarration:     true,
 		GameSource:         nativeMotionGoSpec(),
 	},
 	"authored-ping-pong-motion": {
@@ -115,6 +116,7 @@ var nativeCatalogEntries = map[string]CatalogEntry{
 		DefaultMusicVolume: 0.18,
 		MinPlayers:         1,
 		MaxPlayers:         1,
+		LevelNarration:     true,
 		GameSource:         nativeMotionGoSpec(),
 	},
 	"authored-tetris": {

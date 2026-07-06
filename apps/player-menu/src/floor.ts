@@ -29,20 +29,6 @@ const playerColors: RGB[] = [
   [128, 0, 255], // purple
 ];
 
-const temporada1Level1FrameCells = [
-  [13, 8, 1], [12, 8, 1], [5, 6, 1], [0, 4, 1], [6, 4, 1], [10, 4, 1], [11, 4, 1], [14, 4, 1],
-  [3, 24, 1], [4, 27, 1], [4, 28, 1], [13, 28, 1], [11, 22, 1], [10, 27, 1], [1, 15, 1], [5, 0, 1], [13, 1, 1],
-  [9, 3, 3], [2, 11, 3], [13, 22, 3], [2, 20, 3], [7, 28, 3], [7, 19, 3],
-  [0, 0, 2], [1, 0, 2], [2, 0, 2], [3, 0, 2], [4, 0, 2], [5, 0, 2], [6, 0, 2], [7, 0, 2],
-  [8, 0, 2], [9, 0, 2], [10, 0, 2], [11, 0, 2], [12, 0, 2], [13, 0, 2], [14, 0, 2], [15, 0, 2],
-  [0, 16, 2], [1, 16, 2], [2, 16, 2], [3, 16, 2], [4, 16, 2], [5, 16, 2], [6, 16, 2], [7, 16, 2],
-  [8, 16, 2], [9, 16, 2], [10, 16, 2], [11, 16, 2], [12, 16, 2], [13, 16, 2], [14, 16, 2], [15, 16, 2],
-  [9, 18, 0], [7, 10, 0], [7, 11, 0], [7, 12, 0], [7, 13, 0], [7, 14, 0], [7, 15, 0], [7, 16, 0], [7, 17, 0], [7, 18, 0],
-  [8, 10, 0], [8, 11, 0], [8, 12, 0], [8, 13, 0], [8, 14, 0], [8, 15, 0], [8, 16, 0], [8, 17, 0], [8, 18, 0],
-  [9, 10, 0], [9, 11, 0], [9, 12, 0], [9, 13, 0], [9, 14, 0], [9, 15, 0], [9, 16, 0], [9, 17, 0],
-  [6, 10, 0], [6, 11, 0], [6, 12, 0], [6, 13, 0], [6, 14, 0], [6, 15, 0], [6, 16, 0], [6, 17, 0], [6, 18, 0],
-] as const;
-
 function clamp01(value: number): number {
   return value < 0 ? 0 : value > 1 ? 1 : value;
 }
@@ -90,15 +76,6 @@ function hash(n: number): number {
   h = Math.imul(h ^ (h >>> 15), 0x85ebca6b) >>> 0;
   h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
   return (h ^ (h >>> 16)) >>> 0;
-}
-
-function hashText(value: string): number {
-  let out = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    out ^= value.charCodeAt(index);
-    out = Math.imul(out, 16777619) >>> 0;
-  }
-  return out || 1;
 }
 
 // Local rainbow attract preview for cards that do not have generated assets yet.
@@ -371,110 +348,8 @@ const patrones: FloorAnim = (x, y, cols, rows, t) => {
   return [20 * pulse, 104 * pulse, 255 * pulse];
 };
 
-const parkour: FloorAnim = (x, y, cols, rows, t) => {
-  const route: Array<[number, number]> = [
-    [7, 29], [7, 28], [7, 27], [8, 26], [8, 25], [8, 24],
-    [7, 23], [6, 22], [6, 21], [7, 20], [8, 19], [8, 18],
-    [9, 17], [9, 16], [8, 15], [7, 14], [7, 13], [6, 12],
-    [6, 11], [7, 10], [8, 9], [9, 8], [9, 7], [8, 6],
-    [7, 5], [7, 4], [8, 3],
-  ];
-  const routeIndex = route.findIndex(([rx, ry]) => rx === x && ry === y);
-  const checkpoint = coinAt(x, y, [[7, 29], [9, 17], [8, 3]], t);
-  if (checkpoint) return checkpoint;
-  if (routeIndex >= 0) {
-    const runner = mod(t * 5.2, route.length);
-    const distance = Math.abs(routeIndex - runner);
-    const wrapDistance = Math.min(distance, route.length - distance);
-    const runnerGlow = Math.max(0, 1 - wrapDistance / 3);
-    const routePulse = 0.72 + 0.18 * Math.sin(t * 4.8 + routeIndex * 0.42);
-    return [
-      8 + 62 * runnerGlow,
-      160 + 95 * Math.max(routePulse, runnerGlow),
-      56 + 120 * runnerGlow,
-    ];
-  }
-
-  const sideWall = x === 0 || x === cols - 1 || y === 0 || y === rows - 1;
-  const lavaWave =
-    0.48 +
-    0.52 *
-      Math.sin((x * 0.32 + y * 0.18 + t * 1.25) * Math.PI) *
-      Math.cos((x * 0.18 - y * 0.22 - t * 0.82) * Math.PI);
-  const heat = clamp01(0.24 + lavaWave * 0.44 + (sideWall ? 0.18 : 0));
-  const ember = Math.floor(t * 8 + x * 3 + y * 5) % 31 === 0 ? 0.24 : 0;
-  return [
-    Math.min(255, 86 + 132 * heat + 40 * ember),
-    10 + 34 * heat + 20 * ember,
-    6 + 10 * heat,
-  ];
-};
-
-export function parkourLevelPreview(seedText: string): FloorAnim {
-  const seed = hashText(seedText);
-  const phase = (seed & 0xff) / 255;
-  const waveA = 1.2 + ((seed >>> 8) % 9) / 7;
-  const waveB = 0.55 + ((seed >>> 17) % 11) / 10;
-  const routeWidth = 1 + ((seed >>> 28) % 2);
-  const coinYs = Array.from({ length: 4 }, (_, index) => 5 + index * 7 + ((seed >>> (index * 5)) % 4));
-
-  return (x, y, cols, rows, t) => {
-    const progress = y / Math.max(1, rows - 1);
-    const center =
-      (cols - 1) / 2 +
-      Math.sin(progress * Math.PI * (1.4 + waveA) + phase * Math.PI * 2) * (2.1 + waveB) +
-      Math.sin(progress * Math.PI * (3.2 + waveB) + phase * Math.PI * 5) * 1.15;
-    const routeDistance = Math.abs(x - center);
-    const route = routeDistance <= routeWidth;
-    const checkpoint = coinAt(
-      x,
-      y,
-      coinYs.map((coinY, index) => [Math.round(center + (index % 2 === 0 ? -1 : 1)), coinY] as [number, number]),
-      t,
-    );
-    if (checkpoint) return checkpoint;
-    if (route) {
-      const runnerY = mod(t * 5 + phase * rows, rows);
-      const runnerDistance = Math.abs(y - runnerY);
-      const wrappedRunnerDistance = Math.min(runnerDistance, rows - runnerDistance);
-      const runnerGlow = Math.max(0, 1 - wrappedRunnerDistance / 3.2);
-      const routePulse = 0.7 + 0.18 * Math.sin(t * 4.5 + y * 0.34 + phase * 6);
-      return [
-        8 + 64 * runnerGlow,
-        150 + 105 * Math.max(routePulse, runnerGlow),
-        48 + 128 * runnerGlow,
-      ];
-    }
-
-    const wall = x === 0 || x === cols - 1 || y === 0 || y === rows - 1;
-    const heat =
-      0.36 +
-      0.42 *
-        Math.sin((x * (0.25 + phase * 0.12) + y * 0.19 + t * (0.7 + waveB * 0.2)) * Math.PI) *
-        Math.cos((x * 0.18 - y * (0.18 + phase * 0.05) - t * 0.62) * Math.PI) +
-      (wall ? 0.12 : 0);
-    const ember = hash((seed + x * 31 + y * 47 + Math.floor(t * 7)) >>> 0) % 37 === 0 ? 0.18 : 0;
-    const clamped = clamp01(heat);
-    return [
-      Math.min(255, 78 + 136 * clamped + 38 * ember),
-      8 + 34 * clamped + 18 * ember,
-      5 + 10 * clamped,
-    ];
-  };
-}
-
 function onRect(x: number, y: number, rx: number, ry: number, rw: number, rh: number): boolean {
   return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
-}
-
-function coinAt(x: number, y: number, points: Array<[number, number]>, t: number): RGB | undefined {
-	for (let i = 0; i < points.length; i++) {
-		const [cx, cy] = points[i];
-    if (x !== cx || y !== cy) continue;
-    const pulse = 0.62 + 0.38 * Math.sin(t * 5.4 + i * 0.7);
-    return [25 * pulse, 106 * pulse, 255 * pulse];
-  }
-	return undefined;
 }
 
 function purpleCoinAt(x: number, y: number, points: Array<[number, number]>, t: number): RGB | undefined {
@@ -493,32 +368,6 @@ function pingPong(step: number, max: number): number {
   return value > max ? period - value : value;
 }
 
-function temporada1Preview(level: number): FloorAnim {
-  return (x, y, _cols, _rows, t) => {
-    let cellType: 0 | 1 | 2 | 3 | null = null;
-    for (let index = temporada1Level1FrameCells.length - 1; index >= 0; index -= 1) {
-      const [cellX, cellY, type] = temporada1Level1FrameCells[index];
-      if (cellX === x && cellY === y) {
-        cellType = type;
-        break;
-      }
-    }
-    if (cellType === null) return [2, 7, 12];
-    if (cellType === 0) return safeZoneGreen;
-    const phase = t + level * 0.07;
-    if (cellType === 1) {
-      const pulse = 0.82 + 0.18 * Math.sin(phase * 5.4 + x * 0.31 + y * 0.17);
-      return [0, 0, 255 * pulse];
-    }
-    if (cellType === 3) {
-      const pulse = 0.82 + 0.18 * Math.sin(phase * 5.4 + x * 0.37 + y * 0.13);
-      return [245 * pulse, 38 * pulse, 255 * pulse];
-    }
-    const flicker = 0.9 + 0.1 * Math.sin(phase * 8.2 + x * 0.19);
-    return [255 * flicker, 0, 0];
-  };
-}
-
 export const floorAnimations: Record<string, FloorAnim> = {
   "whack-a-mole": whackAMole,
   "simon-dice": simonDice,
@@ -531,11 +380,4 @@ export const floorAnimations: Record<string, FloorAnim> = {
   duel,
   memory,
   patrones,
-  parkour,
-  "temporada1-level-1": temporada1Preview(1),
-  "temporada1-niveles": temporada1Preview(1),
 };
-
-for (let level = 2; level <= 24; level++) {
-  floorAnimations[`temporada1-level-${level}`] = temporada1Preview(level);
-}

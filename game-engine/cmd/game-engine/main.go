@@ -92,7 +92,7 @@ func main() {
 	flag.StringVar(&cfg.HTTPAddr, "http", "127.0.0.1:4102", "HTTP address for the game-engine API; empty disables")
 	flag.StringVar(&cfg.ControllerAddr, "controller", "127.0.0.1:4201", "floor-controller frame stream address")
 	flag.StringVar(&cfg.PressureAddr, "pressure-events", "127.0.0.1:4202", "floor-controller pressure event stream address")
-	flag.StringVar(&cfg.Game, "game", "salvapantallas", "game to run: salvapantallas, animations, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, parkour, niveles, temporada1-niveles, duel, memory, or patrones")
+	flag.StringVar(&cfg.Game, "game", "salvapantallas", "game to run: salvapantallas, animations, ambient-comet, ambient-pulse, ambient-spark, parkour, temporada1-niveles, authored-* games, animation-* games, or a platform level-game UUID")
 	flag.StringVar(&cfg.Difficulty, "difficulty", "easy", "difficulty for games that support it: easy, medium, hard, expert")
 	flag.StringVar(&cfg.Level, "level", "starter", "level for games that support level selection")
 	flag.IntVar(&cfg.PlayerCount, "players", 1, "number of players for focused games")
@@ -203,10 +203,10 @@ func (c *config) normalize() {
 	c.Difficulty = normalizeDifficulty(c.Difficulty)
 	if strings.HasPrefix(c.Game, "authored-") {
 		normalizeAuthoredGameConfig(c)
-	} else if isPlatformLevelGameID(c.Game) || c.Game == "niveles" || c.Game == "parkour" || c.Game == "temporada1-niveles" {
+	} else if isNivelesRuntimeGame(c.Game) {
 		c.Level = niveles.NormalizeLevel(c.Level)
-		if c.Game == "parkour" {
-			c.PlayerCount = 1
+		if entry, ok := levelCatalogEntry(c.Game); ok && !entry.Players {
+			c.PlayerCount = clampInt(entry.MinPlayers, 1, maxAuthoredPlayers)
 		}
 	} else {
 		c.Level = ""
@@ -516,32 +516,10 @@ func normalizeGame(value string) string {
 	if isPlatformLevelGameID(value) {
 		return strings.ToLower(value)
 	}
-	switch value {
-	case "whack-a-mole", "whackamole", "mole":
-		return "authored-whack-a-mole-go"
-	case "lava", "floor-is-lava", "el-suelo-es-lava":
-		return "authored-lava"
-	case "saltos", "jump", "salta", "salto":
-		return "authored-saltos"
-	case "parkour":
-		return "parkour"
-	case "niveles":
-		return "niveles"
-	case "temporada1-niveles":
-		return "temporada1-niveles"
-	case "duel", "duelo", "versus-duel":
-		return "authored-duel"
-	case "memory", "memory-challenge", "memoria", "reto-memoria":
-		return "authored-memory-challenge"
-	case "patrones", "patterns", "pattern", "reto-patrones":
-		return "authored-patrones"
-	case "salvapantallas", "screensaver", "screen-saver":
-		return "salvapantallas"
-	case "animations", "ambient-comet", "ambient-pulse", "ambient-spark":
+	if isBaseCatalogGameID(value) {
 		return value
-	default:
-		return "salvapantallas"
 	}
+	return "salvapantallas"
 }
 
 func normalizeAuthoredGameConfig(c *config) {
@@ -564,6 +542,12 @@ func normalizeAuthoredGameConfig(c *config) {
 const maxAuthoredPlayers = 8
 
 func maxConfigPlayers(game string) int {
+	if entry, ok := catalogEntry(game); ok {
+		if !entry.Players {
+			return clampInt(entry.MinPlayers, 1, maxAuthoredPlayers)
+		}
+		return max(clampInt(entry.MinPlayers, 1, maxAuthoredPlayers), clampInt(entry.MaxPlayers, 1, maxAuthoredPlayers))
+	}
 	if strings.HasPrefix(game, "authored-") {
 		return maxAuthoredPlayers
 	}

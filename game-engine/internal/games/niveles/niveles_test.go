@@ -13,7 +13,7 @@ import (
 
 func TestFetchesCloudLevelAndScoresCoin(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/level-games/niveles/levels" {
+		if r.URL.Path != "/api/level-games/level-game/levels" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
 		if r.URL.Query().Get("difficulty") != "medium" {
@@ -21,7 +21,7 @@ func TestFetchesCloudLevelAndScoresCoin(t *testing.T) {
 		}
 		w.Header().Set("content-type", "application/json")
 		_, _ = w.Write([]byte(`{
-			"gameId":"niveles",
+			"gameId":"level-game",
 			"levels":[{
 				"id":"cloud-1",
 				"slug":"level-1",
@@ -127,6 +127,45 @@ func TestSelectedDifficultySettingsOverrideSharedLevelDifficulty(t *testing.T) {
 	}
 	if got := frame.points[2][2].kind; got != 1 {
 		t.Fatalf("expert speed did not reach second frame, kind = %d", got)
+	}
+}
+
+func TestSelectedDifficultyDeduplicatesSharedRowsAndPrefersExactDifficulty(t *testing.T) {
+	levels, err := compileCloudLevelsForModeWithDifficulty([]cloudLevel{
+		{
+			Slug:        "level-1",
+			Label:       "Shared board hard row",
+			Difficulty:  string(DifficultyHard),
+			Life:        3,
+			FrameTickMS: 25,
+			Rules: levelRules{DifficultySettings: map[string]difficultySetting{
+				string(DifficultyExpert): {Life: 1, SpeedMultiplier: 4},
+			}},
+			Frames: []rawFrame{{Repeat: 8, Cells: []cellTuple{{X: 1, Y: 1, Kind: 0}}}},
+		},
+		{
+			Slug:        "level-1",
+			Label:       "Shared board expert row",
+			Difficulty:  string(DifficultyExpert),
+			Life:        1,
+			FrameTickMS: 25,
+			Rules: levelRules{DifficultySettings: map[string]difficultySetting{
+				string(DifficultyExpert): {Life: 1, SpeedMultiplier: 4},
+			}},
+			Frames: []rawFrame{{Repeat: 8, Cells: []cellTuple{{X: 2, Y: 2, Kind: 1, Uniq: "expert-coin"}}}},
+		},
+	}, "challenge", string(DifficultyExpert))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(levels) != 1 {
+		t.Fatalf("levels = %d, want one deduplicated level", len(levels))
+	}
+	if levels[0].label != "Shared board expert row" {
+		t.Fatalf("selected label = %q, want exact difficulty row", levels[0].label)
+	}
+	if levels[0].frames[0].points[2][2].kind != 1 {
+		t.Fatalf("selected frame did not come from exact expert row")
 	}
 }
 
@@ -299,6 +338,21 @@ func TestCountdownGreenLoadSideDefaultsLeftAndCanUseRight(t *testing.T) {
 	}
 }
 
+func TestUnavailableLevelFallbackIsVisibleDuringCountdownAndGameplay(t *testing.T) {
+	now := time.Unix(100, 0)
+	game := newTestGameWithLevels(fallbackCompiledLevels("level-1"), now)
+
+	countdownFrame := game.Render(now.Add(time.Second))
+	if got := countVisibleTiles(countdownFrame); got == 0 {
+		t.Fatalf("fallback countdown visible tiles = %d, want visible error marker", got)
+	}
+
+	playFrame := game.Render(game.startedAt.Add(tickDuration))
+	if got := countVisibleTiles(playFrame); got == 0 {
+		t.Fatalf("fallback gameplay visible tiles = %d, want visible error marker", got)
+	}
+}
+
 func TestSuccessAdvancesToNextLevelAfterResultAnimation(t *testing.T) {
 	levels, err := compileCloudLevels([]cloudLevel{
 		{
@@ -397,8 +451,8 @@ func TestDifficultySettingsOverrideRuntimeTimingAndChallengeClock(t *testing.T) 
 	if got := freeLevels[0].lives; got != 4 {
 		t.Fatalf("free mode lives = %d, want per-level difficulty lives", got)
 	}
-	if got := freeLevels[0].timeLimit; got != 30*time.Second {
-		t.Fatalf("free mode timeLimit = %s, want base 30s", got)
+	if got := freeLevels[0].timeLimit; got != 0 {
+		t.Fatalf("free mode timeLimit = %s, want unlimited", got)
 	}
 	noLimitChallengeLevels, err := compileCloudLevelsForMode([]cloudLevel{{
 		Slug:             "level-1",
@@ -423,15 +477,6 @@ func TestDifficultySettingsOverrideRuntimeTimingAndChallengeClock(t *testing.T) 
 	}
 	if got := noLimitChallengeLevels[0].lives; got != 3 {
 		t.Fatalf("challenge mode lives = %d, want difficulty lives when gameplay lives is 0", got)
-	}
-	legacyMirrored := append([]cloudLevel(nil), rawLevels...)
-	legacyMirrored[0].TimeLimitSeconds = 90
-	legacyFreeLevels, err := compileCloudLevelsForMode(legacyMirrored, "free")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := legacyFreeLevels[0].timeLimit; got != 0 {
-		t.Fatalf("legacy mirrored free mode timeLimit = %s, want unlimited", got)
 	}
 }
 
@@ -931,6 +976,16 @@ func countVisibleGreen(frame []RGB) int {
 	count := 0
 	for _, color := range frame {
 		if color.G >= 198 && color.R == 0 && color.B == 0 {
+			count++
+		}
+	}
+	return count
+}
+
+func countVisibleTiles(frame []RGB) int {
+	count := 0
+	for _, color := range frame {
+		if color != (RGB{}) {
 			count++
 		}
 	}

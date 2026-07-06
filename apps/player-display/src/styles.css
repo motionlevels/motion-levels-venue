@@ -561,7 +561,7 @@ body {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
-.display.arcade-display.parkour-display.no-player-info,
+.display.arcade-display.level-display.no-player-info,
 .display.arcade-display.memory-display.no-player-info {
   grid-template-rows: auto minmax(0, 1fr);
   gap: 16px;
@@ -578,7 +578,7 @@ body {
   padding-bottom: 0.06em;
 }
 
-.level-points-display.parkour-display .arcade-top {
+.level-points-display.level-display .arcade-top {
   min-height: 150px;
   grid-template-columns: minmax(500px, 0.82fr) minmax(700px, 1.36fr) minmax(330px, 0.52fr);
 }
@@ -593,23 +593,23 @@ body {
   font-size: clamp(2.55rem, 3vw, 3.55rem);
 }
 
-.level-points-display.parkour-display .arcade-brand-panel {
+.level-points-display.level-display .arcade-brand-panel {
   min-height: 150px;
   padding: 10px 18px;
 }
 
-.level-points-display.parkour-display .arcade-brand {
+.level-points-display.level-display .arcade-brand {
   max-width: 500px;
   flex-basis: 500px;
   gap: 24px;
 }
 
-.level-points-display.parkour-display .arcade-brand-mark {
+.level-points-display.level-display .arcade-brand-mark {
   width: clamp(122px, 7vw, 148px);
   height: clamp(122px, 7vw, 148px);
 }
 
-.level-points-display.parkour-display .arcade-brand-name {
+.level-points-display.level-display .arcade-brand-name {
   font-size: clamp(2.05rem, 2.35vw, 2.75rem);
   line-height: 0.92;
 }
@@ -861,7 +861,7 @@ body {
   white-space: nowrap;
 }
 
-.parkour-display .arcade-top,
+.level-display .arcade-top,
 .memory-display .arcade-top {
   grid-template-columns: minmax(330px, 0.72fr) minmax(600px, 1.16fr) minmax(330px, 0.72fr);
   gap: 28px;
@@ -871,7 +871,7 @@ body {
   grid-template-columns: max-content minmax(0, 1fr) minmax(160px, 0.24fr);
 }
 
-.parkour-display .arcade-brand-panel,
+.level-display .arcade-brand-panel,
 .memory-display .arcade-brand-panel {
   min-height: 112px;
   justify-content: flex-start;
@@ -883,19 +883,19 @@ body {
   clip-path: none;
 }
 
-.parkour-display .arcade-brand,
+.level-display .arcade-brand,
 .memory-display .arcade-brand {
   flex: 0 0 auto;
   max-width: none;
 }
 
-.parkour-display .arcade-brand-mark,
+.level-display .arcade-brand-mark,
 .memory-display .arcade-brand-mark {
   width: 112px;
   height: 112px;
 }
 
-.parkour-display .arcade-brand-name,
+.level-display .arcade-brand-name,
 .memory-display .arcade-brand-name {
   display: grid;
   font-size: 2.02rem;
@@ -906,7 +906,7 @@ body {
     0 4px 18px rgba(0, 0, 0, 0.55);
 }
 
-.display.arcade-display.parkour-display.no-player-info .arcade-stage {
+.display.arcade-display.level-display.no-player-info .arcade-stage {
   grid-template-columns: minmax(0, 1.64fr) minmax(430px, 0.86fr);
   gap: 34px;
 }
@@ -1720,14 +1720,14 @@ body {
   line-height: 0.78;
 }
 
-.parkour-display .arcade-player-card.compact {
+.level-display .arcade-player-card.compact {
   min-height: 112px;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   align-content: center;
 }
 
-.parkour-display .arcade-player-card.compact > strong {
+.level-display .arcade-player-card.compact > strong {
   font-size: 3.2rem;
 }
 

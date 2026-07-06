@@ -3,7 +3,6 @@ package animations
 import (
 	"fmt"
 	"math"
-	"regexp"
 	"strings"
 	"unicode"
 )
@@ -77,8 +76,6 @@ var dslFunctionNames = map[string]struct{}{
 	"sqrt": {}, "pow": {}, "hypot": {}, "mod": {}, "clamp": {}, "clamp01": {}, "mix": {}, "step": {}, "smoothstep": {},
 	"rand": {}, "noise": {}, "hash": {}, "shr": {}, "rgb": {}, "hsv": {},
 }
-
-var legacyNormalizedAssignmentPattern = regexp.MustCompile(`(?im)^\s*(?:xn\s*=\s*x\s*/\s*width|yn\s*=\s*y\s*/\s*height)\s*(?:\r?\n|$)`)
 
 const (
 	minProcedureLoopSeconds = 0.1
@@ -401,7 +398,6 @@ func stripDSLComment(line string) string {
 }
 
 func canonicalizeDSLCode(code string) string {
-	code = legacyNormalizedAssignmentPattern.ReplaceAllString(code, "")
 	return replaceBareDSLIdentifier(
 		code,
 		"loop_t", "loop_time",

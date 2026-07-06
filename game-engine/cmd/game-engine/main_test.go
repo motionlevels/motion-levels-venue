@@ -16,7 +16,7 @@ import (
 
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
-	"github.com/lobis/motion-levels/game-engine/internal/games/memorychallenge"
+	"github.com/lobis/motion-levels/game-engine/internal/games/authored"
 	"github.com/lobis/motion-levels/game-engine/internal/games/niveles"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
@@ -26,7 +26,7 @@ import (
 )
 
 func TestMakeFrameProducesCompleteLogicalBoard(t *testing.T) {
-	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "lava"}, nil, nil)
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "authored-lava"}, nil, nil)
 	frame := makeFrame(7, time.Unix(0, 123), 1.25, runtime)
 	if frame.Sequence != 7 || frame.Width != 16 || frame.Height != 32 {
 		t.Fatalf("unexpected frame metadata: %+v", frame)
@@ -297,8 +297,8 @@ func TestConfigNormalizeClampsPlaybackSettings(t *testing.T) {
 	if cfg.CueVolume != 0 {
 		t.Fatalf("cue volume = %v, want 0", cfg.CueVolume)
 	}
-	if cfg.PlayerCount != 6 {
-		t.Fatalf("players = %d, want 6", cfg.PlayerCount)
+	if cfg.PlayerCount != 1 {
+		t.Fatalf("players = %d, want 1", cfg.PlayerCount)
 	}
 	if cfg.Difficulty != "easy" {
 		t.Fatalf("difficulty = %q, want easy", cfg.Difficulty)
@@ -316,7 +316,7 @@ func TestAudioPlayerDisabledByDefault(t *testing.T) {
 }
 
 func TestWhackAMoleUsesFocusedGameMusic(t *testing.T) {
-	cfg := config{Game: "mole", MusicRef: "Motion/canciones/Background01.mp3", MusicVolume: 0.5, PlayerCount: 1}
+	cfg := config{Game: "authored-whack-a-mole-go", MusicRef: "Motion/canciones/Background01.mp3", MusicVolume: 0.5, PlayerCount: 1}
 	cfg.normalize()
 
 	if cfg.Game != "authored-whack-a-mole-go" {
@@ -333,7 +333,7 @@ func TestWhackAMoleUsesFocusedGameMusic(t *testing.T) {
 func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 	base := config{Brightness: 80, PlayerCount: 1, MusicRef: "custom.mp3", MusicVolume: 0.5}
 
-	mole := configForSelection(base, "mole", 4)
+	mole := configForSelection(base, "authored-whack-a-mole-go", 4)
 	if mole.Game != "authored-whack-a-mole-go" || mole.PlayerCount != 4 {
 		t.Fatalf("mole selection = %+v", mole)
 	}
@@ -344,7 +344,7 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 		t.Fatalf("mole narration = %q, want atrapa-topos intro", mole.NarrationCueRef)
 	}
 
-	lava := configForSelection(base, "el-suelo-es-lava", 3)
+	lava := configForSelection(base, "authored-lava", 3)
 	if lava.Game != "authored-lava" || lava.PlayerCount != 3 {
 		t.Fatalf("lava selection = %+v", lava)
 	}
@@ -358,7 +358,7 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 		t.Fatalf("lava narration = %q, want lava intro", lava.NarrationCueRef)
 	}
 
-	saltos := configForSelection(base, "jump", 4)
+	saltos := configForSelection(base, "authored-saltos", 4)
 	if saltos.Game != "authored-saltos" || saltos.PlayerCount != 1 || saltos.Level != "starter" {
 		t.Fatalf("saltos selection = %+v", saltos)
 	}
@@ -382,28 +382,34 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 		t.Fatalf("temporada1-niveles music = %q %.2f, want %q %.2f", seasonLevels.MusicRef, seasonLevels.MusicVolume, niveles.DefaultMusicRef, niveles.DefaultMusicVolume)
 	}
 
-	duel := configForSelection(base, "duelo", 6)
+	duel := configForSelection(base, "authored-duel", 6)
 	if duel.Game != "authored-duel" || duel.PlayerCount != 6 {
 		t.Fatalf("duel selection = %+v", duel)
 	}
 	if duel.MusicRef != "Motion/canciones/Musica8.mp3" {
 		t.Fatalf("duel music = %q, want Musica8", duel.MusicRef)
 	}
-	duelFull := configForSelection(base, "duelo", 8)
+	duelFull := configForSelection(base, "authored-duel", 8)
 	if duelFull.PlayerCount != 8 {
 		t.Fatalf("duel eight-player selection = %+v, want PlayerCount 8", duelFull)
 	}
-	duelSolo := configForSelection(base, "duelo", 1)
+	duelSolo := configForSelection(base, "authored-duel", 1)
 	if duelSolo.PlayerCount != 2 {
 		t.Fatalf("duel solo selection = %+v, want PlayerCount clamped to 2", duelSolo)
 	}
 
-	memory := configForSelection(base, "memoria", 6)
+	memory := configForSelection(base, "authored-memory-challenge", 6)
 	if memory.Game != "authored-memory-challenge" || memory.PlayerCount != 4 {
 		t.Fatalf("memory selection = %+v", memory)
 	}
-	if memory.MusicRef != memorychallenge.DefaultMusicRef || memory.MusicVolume != memorychallenge.DefaultMusicVolume {
-		t.Fatalf("memory music = %q %.2f, want %q %.2f", memory.MusicRef, memory.MusicVolume, memorychallenge.DefaultMusicRef, memorychallenge.DefaultMusicVolume)
+	memoryCatalog, ok := authored.NativeCatalogEntry("authored-memory-challenge")
+	if !ok {
+		t.Fatal("missing authored-memory-challenge catalog entry")
+	}
+	expectedMemoryMusicRef := nonEmptyString(memoryCatalog.DefaultMusicRef, authored.DefaultMusicRef)
+	expectedMemoryMusicVolume := nonZeroFloat(memoryCatalog.DefaultMusicVolume, authored.DefaultMusicVolume)
+	if memory.MusicRef != expectedMemoryMusicRef || memory.MusicVolume != expectedMemoryMusicVolume {
+		t.Fatalf("memory music = %q %.2f, want %q %.2f", memory.MusicRef, memory.MusicVolume, expectedMemoryMusicRef, expectedMemoryMusicVolume)
 	}
 
 	screensaver := configForSelection(base, "salvapantallas", 6)
@@ -487,12 +493,12 @@ func TestNivelesRuntimeUsesCloudLevelAudioRefs(t *testing.T) {
 			_, _ = w.Write([]byte(`{"gameId":"animations","levels":[]}`))
 			return
 		}
-		if r.URL.Path != "/api/level-games/niveles/levels" {
+		if r.URL.Path != "/api/level-games/temporada1-niveles/levels" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
 		w.Header().Set("content-type", "application/json")
 		_, _ = w.Write([]byte(`{
-			"gameId":"niveles",
+			"gameId":"temporada1-niveles",
 			"levels":[{
 				"id":"cloud-1",
 				"slug":"level-1",
@@ -517,7 +523,7 @@ func TestNivelesRuntimeUsesCloudLevelAudioRefs(t *testing.T) {
 	defer server.Close()
 
 	runtime := newGameRuntime(config{
-		Game:               "niveles",
+		Game:               "temporada1-niveles",
 		Difficulty:         "medium",
 		Level:              "level-1",
 		PlayerCount:        1,
@@ -708,9 +714,6 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if len(status.Catalog) != 16 {
-		t.Fatalf("catalog = %d entries, want 16", len(status.Catalog))
-	}
 	if !catalogHasGame(status.Catalog, "salvapantallas") {
 		t.Fatal("catalog missing salvapantallas")
 	}
@@ -722,6 +725,11 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	}
 	if catalogHasGame(status.Catalog, "parkour2") {
 		t.Fatal("catalog should not expose parkour2")
+	}
+	for _, retired := range []string{"niveles", "whack-a-mole", "lava", "memory", "patrones", "saltos"} {
+		if catalogHasGame(status.Catalog, retired) {
+			t.Fatalf("catalog should not expose retired runtime id %q", retired)
+		}
 	}
 
 	menuStateBody := bytes.NewBufferString(`{"kioskId":"kiosk-test","snapshot":{"screenMode":"browse","message":"ready"}}`)
@@ -756,7 +764,7 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 		t.Fatalf("fetched menu state = %+v, want %+v", fetchedMenuState, menuState)
 	}
 
-	body := bytes.NewBufferString(`{"game":"lava","playerCount":3,"difficulty":"expert"}`)
+	body := bytes.NewBufferString(`{"game":"authored-lava","playerCount":3,"difficulty":"expert"}`)
 	response, err = http.Post(server.URL+"/api/select", "application/json", body)
 	if err != nil {
 		t.Fatal(err)
@@ -772,7 +780,7 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 		t.Fatalf("selected status = %+v", status)
 	}
 
-	body = bytes.NewBufferString(`{"game":"saltos","playerCount":3,"level":"classic"}`)
+	body = bytes.NewBufferString(`{"game":"authored-saltos","playerCount":3,"level":"classic"}`)
 	response, err = http.Post(server.URL+"/api/select", "application/json", body)
 	if err != nil {
 		t.Fatal(err)
@@ -816,7 +824,7 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 		t.Fatalf("restart challenge elapsed = %d attempts = %d, want 0 0", runtime.Status().ChallengeElapsedMillis, runtime.Status().ChallengeAttemptCount)
 	}
 
-	body = bytes.NewBufferString(`{"game":"patrones","playerCount":4,"difficulty":"hard","level":"level-3"}`)
+	body = bytes.NewBufferString(`{"game":"authored-patrones","playerCount":4,"difficulty":"hard","level":"level-3"}`)
 	response, err = http.Post(server.URL+"/api/select", "application/json", body)
 	if err != nil {
 		t.Fatal(err)
@@ -1006,7 +1014,7 @@ func catalogHasGame(catalog []gameCatalogEntry, game string) bool {
 }
 
 func TestAuthoredInitEventReachesDisplayAsReady(t *testing.T) {
-	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 2, Game: "duelo"}, nil, nil)
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 2, Game: "authored-duel"}, nil, nil)
 	now := time.Now()
 	if _, frame := runtime.Render(now); len(frame) != animation.GridWidth*animation.GridHeight {
 		t.Fatalf("duel frame len = %d", len(frame))
@@ -1025,7 +1033,7 @@ func TestGameAPIRejectsDuplicatePlayerNames(t *testing.T) {
 	server := httptest.NewServer(gameAPIHandler(runtime))
 	defer server.Close()
 
-	body := bytes.NewBufferString(`{"game":"lava","playerCount":2,"players":[{"index":0,"label":"Nora","color":{"r":10,"g":20,"b":30}},{"index":1,"label":" nora ","color":{"r":40,"g":50,"b":60}}]}`)
+	body := bytes.NewBufferString(`{"game":"authored-lava","playerCount":2,"players":[{"index":0,"label":"Nora","color":{"r":10,"g":20,"b":30}},{"index":1,"label":" nora ","color":{"r":40,"g":50,"b":60}}]}`)
 	response, err := http.Post(server.URL+"/api/select", "application/json", body)
 	if err != nil {
 		t.Fatal(err)
@@ -1034,7 +1042,7 @@ func TestGameAPIRejectsDuplicatePlayerNames(t *testing.T) {
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatalf("select response = %d, want %d", response.StatusCode, http.StatusBadRequest)
 	}
-	if runtime.Status().CurrentGame == "lava" {
+	if runtime.Status().CurrentGame == "authored-lava" {
 		t.Fatal("duplicate roster should not select lava")
 	}
 }
@@ -1044,7 +1052,7 @@ func TestGameAPIRejectsDuplicatePlayerColors(t *testing.T) {
 	server := httptest.NewServer(gameAPIHandler(runtime))
 	defer server.Close()
 
-	body := bytes.NewBufferString(`{"game":"lava","playerCount":2,"players":[{"index":0,"label":"Nora","color":{"r":10,"g":20,"b":30}},{"index":1,"label":"Leo","color":{"r":10,"g":20,"b":30}}]}`)
+	body := bytes.NewBufferString(`{"game":"authored-lava","playerCount":2,"players":[{"index":0,"label":"Nora","color":{"r":10,"g":20,"b":30}},{"index":1,"label":"Leo","color":{"r":10,"g":20,"b":30}}]}`)
 	response, err := http.Post(server.URL+"/api/select", "application/json", body)
 	if err != nil {
 		t.Fatal(err)
@@ -1053,7 +1061,7 @@ func TestGameAPIRejectsDuplicatePlayerColors(t *testing.T) {
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatalf("select response = %d, want %d", response.StatusCode, http.StatusBadRequest)
 	}
-	if runtime.Status().CurrentGame == "lava" {
+	if runtime.Status().CurrentGame == "authored-lava" {
 		t.Fatal("duplicate roster should not select lava")
 	}
 }
@@ -1339,7 +1347,7 @@ func TestPlatformSyncPostsSessionSnapshot(t *testing.T) {
 	}))
 	defer server.Close()
 
-	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 2, Game: "lava", Difficulty: "hard"}, nil, nil)
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 2, Game: "authored-lava", Difficulty: "hard"}, nil, nil)
 	syncer, err := newPlatformSyncer(runtime, config{
 		PlatformURL:          server.URL,
 		PlatformToken:        "test-token",
@@ -1482,7 +1490,7 @@ func TestGameAPIControlPauseRestartAndExit(t *testing.T) {
 	server := httptest.NewServer(gameAPIHandler(runtime))
 	defer server.Close()
 
-	response, err := http.Post(server.URL+"/api/select", "application/json", bytes.NewBufferString(`{"game":"lava","playerCount":2,"difficulty":"hard"}`))
+	response, err := http.Post(server.URL+"/api/select", "application/json", bytes.NewBufferString(`{"game":"authored-lava","playerCount":2,"difficulty":"hard"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1525,7 +1533,7 @@ func TestGameAPIControlPauseRestartAndExit(t *testing.T) {
 
 func TestRuntimeStopsNonAmbientGameAfterFiveMinutesWithoutPressure(t *testing.T) {
 	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
-	runtime.SelectGameWithDifficulty("lava", 1, "easy")
+	runtime.SelectGameWithDifficulty("authored-lava", 1, "easy")
 	runtime.mu.Lock()
 	runtime.lastPressure = time.Now().Add(-noPressureGameLimit - time.Second)
 	runtime.mu.Unlock()
@@ -1551,7 +1559,7 @@ func TestRuntimeDoesNotStopAmbientAfterFiveMinutesWithoutPressure(t *testing.T) 
 
 func TestRuntimePressureInputPreventsNoPressureTimeout(t *testing.T) {
 	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
-	runtime.SelectGameWithDifficulty("lava", 1, "easy")
+	runtime.SelectGameWithDifficulty("authored-lava", 1, "easy")
 	now := time.Now()
 	runtime.mu.Lock()
 	runtime.lastPressure = now.Add(-noPressureGameLimit - time.Second)
@@ -1567,7 +1575,7 @@ func TestRuntimePressureInputPreventsNoPressureTimeout(t *testing.T) {
 
 func TestRuntimeStatusExposesLastRealPressureInput(t *testing.T) {
 	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
-	runtime.SelectGameWithDifficulty("lava", 1, "easy")
+	runtime.SelectGameWithDifficulty("authored-lava", 1, "easy")
 
 	if got := runtime.Status().LastPressureUnix; got != 0 {
 		t.Fatalf("last pressure before input = %d, want 0", got)
@@ -1593,9 +1601,9 @@ func TestNarrationAutoPlaysOnceAndCanReplay(t *testing.T) {
 	player := audio.NewPlayer(dir, backend)
 	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "salvapantallas"}, player, nil)
 
-	runtime.SelectGameWithDifficulty("lava", 1, "easy")
+	runtime.SelectGameWithDifficulty("authored-lava", 1, "easy")
 	runtime.SelectGameWithDifficulty("salvapantallas", 1, "")
-	runtime.SelectGameWithDifficulty("lava", 1, "easy")
+	runtime.SelectGameWithDifficulty("authored-lava", 1, "easy")
 	narrationPath := filepath.Join(dir, "Motion/narraciones/lava-intro.mp3")
 	backend.waitForCount(t, narrationPath, 1)
 
@@ -1615,16 +1623,16 @@ func TestSelectGameCanSkipOrForceNarration(t *testing.T) {
 	cuePath := filepath.Join(dir, "cue.mp3")
 
 	skip := false
-	runtime.SelectGameWithOptions("lava", 1, "easy", &skip)
+	runtime.SelectGameWithOptions("authored-lava", 1, "easy", &skip)
 	time.Sleep(20 * time.Millisecond)
 	if got := backend.count(cuePath); got != 0 {
 		t.Fatalf("skip narration plays = %d, want 0", got)
 	}
 
 	force := true
-	runtime.SelectGameWithOptions("lava", 1, "easy", &force)
+	runtime.SelectGameWithOptions("authored-lava", 1, "easy", &force)
 	backend.waitForCount(t, cuePath, 1)
-	runtime.SelectGameWithOptions("lava", 1, "easy", &force)
+	runtime.SelectGameWithOptions("authored-lava", 1, "easy", &force)
 	backend.waitForCount(t, cuePath, 2)
 }
 
@@ -1680,7 +1688,7 @@ func TestFirstNarrationHoldsLavaCountdown(t *testing.T) {
 	runtime.base.CountdownCueRef = countdownRef
 	runtime.base.CountdownVolume = 0.9
 
-	runtime.SelectGameWithDifficulty("lava", 1, "easy")
+	runtime.SelectGameWithDifficulty("authored-lava", 1, "easy")
 	status := runtime.DisplayStatus(time.Now())
 	if status.Phase != "intro" {
 		t.Fatalf("phase = %q, want intro", status.Phase)
@@ -1697,7 +1705,7 @@ func TestFirstNarrationHoldsLavaCountdown(t *testing.T) {
 	backend.waitForCount(t, countdownPath, 1)
 
 	runtime.SelectGameWithDifficulty("salvapantallas", 1, "")
-	runtime.SelectGameWithDifficulty("lava", 1, "easy")
+	runtime.SelectGameWithDifficulty("authored-lava", 1, "easy")
 	status = runtime.DisplayStatus(time.Now())
 	if status.Phase == "intro" || status.IntroRemainingMillis != 0 {
 		t.Fatalf("second launch status = %+v, want no intro hold", status)
@@ -1725,7 +1733,7 @@ func TestPlatformLevelNarrationSuppressesLegacyCountdownCue(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/json")
 		_, _ = fmt.Fprintf(w, `{
-			"gameId":"niveles",
+			"gameId":"temporada1-niveles",
 			"levels":[{
 				"id":"cloud-1",
 				"slug":"level-1",
@@ -1760,7 +1768,7 @@ func TestPlatformLevelNarrationSuppressesLegacyCountdownCue(t *testing.T) {
 		CueVolume:       0.45,
 	}, player, nil)
 
-	runtime.SelectGameWithDifficulty("niveles", 1, "medium")
+	runtime.SelectGameWithDifficulty("temporada1-niveles", 1, "medium")
 	backend.waitForCount(t, narrationPath, 1)
 	time.Sleep(300 * time.Millisecond)
 	if got := backend.count(countdownPath); got != 0 {
@@ -1797,7 +1805,7 @@ func TestWhackAMoleCountdownPlaysAfterPlayersAreReady(t *testing.T) {
 	}, player, nil)
 
 	skip := false
-	runtime.SelectGameWithOptions("whack-a-mole", 1, "", &skip)
+	runtime.SelectGameWithOptions("authored-whack-a-mole-go", 1, "", &skip)
 	time.Sleep(20 * time.Millisecond)
 	if got := backend.count(countdownPath); got != 0 {
 		t.Fatalf("countdown before ready = %d, want 0", got)
@@ -1877,7 +1885,7 @@ func writeSilentWAV(path string, duration time.Duration) error {
 }
 
 func TestGameAPIDisplayStatus(t *testing.T) {
-	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 2, Game: "whack-a-mole"}, nil, nil)
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 2, Game: "authored-whack-a-mole-go"}, nil, nil)
 	server := httptest.NewServer(gameAPIHandler(runtime))
 	defer server.Close()
 
@@ -1921,12 +1929,12 @@ func TestDisplayStatusPlayerMappingPerGame(t *testing.T) {
 		name string
 		cfg  config
 	}{
-		{"whack-a-mole", config{Brightness: 80, PlayerCount: 2, Game: "whack-a-mole"}},
-		{"lava", config{Brightness: 80, PlayerCount: 2, Game: "lava", Difficulty: "normal"}},
-		{"duel", config{Brightness: 80, PlayerCount: 2, Game: "duel"}},
-		{"memory", config{Brightness: 80, PlayerCount: 2, Game: "memory"}},
-		{"patrones", config{Brightness: 80, PlayerCount: 2, Game: "patrones", Difficulty: "normal", Level: "level-1"}},
-		{"saltos", config{Brightness: 80, PlayerCount: 2, Game: "saltos", Level: "level-1"}},
+		{"authored-whack-a-mole-go", config{Brightness: 80, PlayerCount: 2, Game: "authored-whack-a-mole-go"}},
+		{"authored-lava", config{Brightness: 80, PlayerCount: 2, Game: "authored-lava", Difficulty: "normal"}},
+		{"authored-duel", config{Brightness: 80, PlayerCount: 2, Game: "authored-duel"}},
+		{"authored-memory-challenge", config{Brightness: 80, PlayerCount: 2, Game: "authored-memory-challenge"}},
+		{"authored-patrones", config{Brightness: 80, PlayerCount: 2, Game: "authored-patrones", Difficulty: "normal", Level: "level-1"}},
+		{"authored-saltos", config{Brightness: 80, PlayerCount: 2, Game: "authored-saltos", Level: "level-1"}},
 		{"temporada1-niveles", config{Brightness: 80, PlayerCount: 2, Game: "temporada1-niveles", Level: "level-1"}},
 	}
 
@@ -1997,7 +2005,7 @@ func TestRuntimeRecordsSessionAPIAndDisplayData(t *testing.T) {
 	defer server.Close()
 
 	const venueSessionID = "11111111-1111-4111-8111-111111111111"
-	response, err := http.Post(server.URL+"/api/select", "application/json", bytes.NewBufferString(`{"game":"whack-a-mole","playerCount":2,"venueSessionId":"`+venueSessionID+`"}`))
+	response, err := http.Post(server.URL+"/api/select", "application/json", bytes.NewBufferString(`{"game":"authored-whack-a-mole-go","playerCount":2,"venueSessionId":"`+venueSessionID+`"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2094,7 +2102,7 @@ func TestVenueSessionLifecycleAndMenuEvents(t *testing.T) {
 	if response := post("/api/menu-event", `{"venueSessionId":"`+venueSessionID+`","name":"player_added","properties":{"player_count":3}}`); response.StatusCode != http.StatusOK {
 		t.Fatalf("menu event response = %d", response.StatusCode)
 	}
-	if response := post("/api/select", `{"game":"whack-a-mole","playerCount":2,"venueSessionId":"`+venueSessionID+`"}`); response.StatusCode != http.StatusOK {
+	if response := post("/api/select", `{"game":"authored-whack-a-mole-go","playerCount":2,"venueSessionId":"`+venueSessionID+`"}`); response.StatusCode != http.StatusOK {
 		t.Fatalf("select response = %d", response.StatusCode)
 	}
 	if got := runtime.Status().VenueSessionID; got != venueSessionID {

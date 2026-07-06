@@ -24,7 +24,7 @@ import {
 import { ArrowLeftIcon, BackspaceIcon, BoltIcon, CheckIcon, CloseIcon, GamepadIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, QuestionIcon, RefreshIcon, RestartIcon, SparkIcon, StarIcon, TeamIcon, UserIcon, VersusIcon, VolumeIcon, VolumeMutedIcon } from "./icons";
 import { FloorPreview } from "./FloorPreview";
 import { LiveFloorView } from "./LiveFloorView";
-import { floorAnimations, parkourLevelPreview, type FloorAnim, type RGB } from "./floor";
+import { floorAnimations, type FloorAnim, type RGB } from "./floor";
 import { hexToColor, hexToRGB, randomUUID } from "./utils";
 import { avatarLabel, firstAvailableColor, gameRosterIssue, playerLabel, rosterSnapshot, statusPlayersForDisplay, type Player, type RosterIssue } from "./roster";
 import {
@@ -136,7 +136,7 @@ type RemoteSessionRequest = {
 
 const emptyPreviewSources: string[] = [];
 const storageKey = "ml-player-menu-state-v1";
-const platformCatalogStorageKey = "ml-player-menu-platform-catalog-v2";
+const platformCatalogStorageKey = "ml-player-menu-platform-catalog-v3";
 const platformCatalogRefreshMillis = 5000;
 const maxPlayers = 8;
 const maxTeamNameLength = 24;
@@ -272,20 +272,7 @@ function previewAnimationID(game: GameCard): string {
 function levelFallbackPreviewAnimationID(game: GameCard, level?: NonNullable<GameCard["levels"]>[number]): string {
   if (levelHasPreviewMedia(level)) return "";
   if (level?.previewAnimation) return level.previewAnimation;
-  if (level && isParkourPreviewGame(engineGameID(game))) return "";
   return previewAnimationID(game);
-}
-
-function levelFallbackPreviewAnim(game: GameCard, level?: NonNullable<GameCard["levels"]>[number]): FloorAnim | undefined {
-  if (!level || levelHasPreviewMedia(level) || !isParkourPreviewGame(engineGameID(game)) || level.previewAnimation) return undefined;
-  return parkourLevelPreview([
-    game.id,
-    engineGameID(game),
-    level.id,
-    level.label,
-    level.description,
-    level.previewRevisionHash || game.revisionHash || game.previewRevisionHash || "",
-  ].join(":"));
 }
 
 function isAmbientCard(game: GameCard): boolean {
@@ -323,7 +310,7 @@ function isScreensaverCard(game: Pick<GameCard, "engineGame" | "id">): boolean {
   return engineGameID(game) === "salvapantallas" || game.id === "salvapantallas";
 }
 
-function isLegacyAnimationsAggregate(value: Pick<GameCard, "engineGame" | "id"> | PlatformGameCatalogEntry): boolean {
+function isInternalAnimationsAggregate(value: Pick<GameCard, "engineGame" | "id"> | PlatformGameCatalogEntry): boolean {
   if ("engine_game" in value) {
     return value.id === "animations" || platformEntryEngineGame(value) === "animations";
   }
@@ -406,10 +393,6 @@ function isCategoryID(value: string): value is CategoryID {
 
 function platformEntryEngineGame(entry: PlatformGameCatalogEntry): string {
   return entry.engine_game || entry.id;
-}
-
-function isParkourPreviewGame(engineGame: string): boolean {
-  return engineGame === "parkour";
 }
 
 function isPlatformLevelSource(entry: PlatformGameCatalogEntry): boolean {
@@ -504,9 +487,8 @@ function catalogPreviewAnimation(
 
 function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, index: number): GameCard {
   const engineGame = platformEntryEngineGame(entry);
-  const forceParkourAnimation = isParkourPreviewGame(engineGame);
-  const preferFallbackAnimation = forceParkourAnimation || shouldPreferCatalogFallbackPreviewAnimation(entry, fallback);
-  const previewAnimation = forceParkourAnimation ? "parkour" : catalogPreviewAnimation(entry, fallback, engineGame, preferFallbackAnimation);
+  const preferFallbackAnimation = shouldPreferCatalogFallbackPreviewAnimation(entry, fallback);
+  const previewAnimation = catalogPreviewAnimation(entry, fallback, engineGame, preferFallbackAnimation);
   const thumbnailSrcs = preferFallbackAnimation ? [] : uniquePreviewSources([
     catalogDirectAssetSrc(entry.catalog_preview_url),
     catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
@@ -651,7 +633,7 @@ function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalo
   const baseOrder = new Map(baseGames.map((game, index) => [game.id, index]));
   const catalogOrderByID = new Map(catalog.map((entry) => [entry.id, entry.catalog_order]));
   const catalogOrderByEngine = new Map(catalog.map((entry) => [platformEntryEngineGame(entry), entry.catalog_order]));
-  const enabledCatalog = catalog.filter((entry) => entry.catalog_enabled !== false && !isLegacyAnimationsAggregate(entry));
+  const enabledCatalog = catalog.filter((entry) => entry.catalog_enabled !== false && !isInternalAnimationsAggregate(entry));
   const platformGames = enabledCatalog
     .map((entry, index) => platformEntryToGameCard(
       entry,
@@ -659,7 +641,7 @@ function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalo
       index,
     ));
   const remainingBaseGames = baseGames.filter((game) => (
-    !isLegacyAnimationsAggregate(game)
+    !isInternalAnimationsAggregate(game)
     && !catalog.some((entry) => platformEntryMatchesGame(entry, game) && entry.catalog_enabled === false)
     && !enabledCatalog.some((entry) => platformEntryMatchesGame(entry, game))
   ));
@@ -1125,9 +1107,7 @@ function loadCachedPlatformCatalog(): PlatformGameCatalogEntry[] | null {
   try {
     const payload = JSON.parse(localStorage.getItem(platformCatalogStorageKey) || "null") as { games?: unknown } | PlatformGameCatalogEntry[] | null;
     const games = Array.isArray(payload) ? payload : Array.isArray(payload?.games) ? payload.games : null;
-    const catalog = games ? games.filter(isPlatformGameCatalogEntry) : null;
-    if (!catalog || catalog.some(hasLegacyPreviewMediaURL)) return null;
-    return catalog;
+    return games ? games.filter(isPlatformGameCatalogEntry) : null;
   } catch {
     return null;
   }
@@ -1143,22 +1123,6 @@ function cachePlatformCatalog(catalog: PlatformGameCatalogEntry[]) {
 
 function isPlatformGameCatalogEntry(value: unknown): value is PlatformGameCatalogEntry {
   return Boolean(value && typeof value === "object" && !Array.isArray(value) && "id" in value && "label" in value);
-}
-
-function hasLegacyPreviewMediaURL(entry: PlatformGameCatalogEntry): boolean {
-  const stale = [entry.catalog_thumbnail_small_url, entry.catalog_thumbnail_url, entry.catalog_preview_url]
-    .some(isLegacyPreviewMediaURL);
-  if (stale) return true;
-  return entry.levels?.some((level) => (
-    isLegacyPreviewMediaURL(level.catalog_thumbnail_small_url)
-    || isLegacyPreviewMediaURL(level.catalog_thumbnail_url)
-    || isLegacyPreviewMediaURL(level.catalog_preview_url)
-  )) === true;
-}
-
-function isLegacyPreviewMediaURL(value: unknown): boolean {
-  const url = String(value || "");
-  return /\/api\/game-catalog\/thumbnails\//.test(url) || /[?&]v=\d+\b/.test(url);
 }
 
 // Players get a "Jugador N" placeholder until they are named.
@@ -2225,7 +2189,6 @@ function MenuApp() {
             richSrc={active ? levelPreviewSrc(game, level, previewDifficulty) : undefined}
             richSrcs={active ? levelPreviewSrcs(game, level, previewDifficulty) : emptyPreviewSources}
             animationID={levelFallbackPreviewAnimationID(game, level)}
-            fallbackAnim={levelFallbackPreviewAnim(game, level)}
             revisionHash={level.previewRevisionHash || game.previewRevisionHash}
             compact
             promoteAnimation={active && !levelHasPreviewMedia(level)}
@@ -2284,7 +2247,6 @@ function MenuApp() {
             richSrc={active ? levelPreviewSrc(game, level, previewDifficulty) : undefined}
             richSrcs={active ? levelPreviewSrcs(game, level, previewDifficulty) : emptyPreviewSources}
             animationID={levelFallbackPreviewAnimationID(game, level)}
-            fallbackAnim={levelFallbackPreviewAnim(game, level)}
             revisionHash={level.previewRevisionHash || game.previewRevisionHash}
             compact
             promoteAnimation={active && !levelHasPreviewMedia(level)}
@@ -2739,6 +2701,7 @@ function MenuApp() {
     return (
       <WelcomeScreen
         connectionState={connectionState}
+        previewGames={menuGames}
         readOnly={readOnlyMirror}
         remoteSessionRequest={remoteSessionRequest}
         onCancelRemoteStart={dismissRemoteSessionStart}
@@ -3091,7 +3054,6 @@ function MenuApp() {
                   <Preview
                     src={levelPreviewSrc(selectedGame, selectedLevel, effectiveDifficulty)}
                     animationID={levelFallbackPreviewAnimationID(selectedGame, selectedLevel)}
-                    fallbackAnim={levelFallbackPreviewAnim(selectedGame, selectedLevel)}
                     revisionHash={selectedLevel?.previewRevisionHash || selectedGame.previewRevisionHash}
                   />
                 )}
@@ -3449,6 +3411,7 @@ function FloorOnlyApp() {
 
 function WelcomeScreen({
   connectionState,
+  previewGames,
   readOnly,
   remoteSessionRequest,
   onCancelRemoteStart,
@@ -3457,6 +3420,7 @@ function WelcomeScreen({
   onFullscreen,
 }: {
   connectionState: string;
+  previewGames?: GameCard[];
   readOnly?: boolean;
   remoteSessionRequest: RemoteSessionRequest | null;
   onCancelRemoteStart: () => void;
@@ -3464,7 +3428,8 @@ function WelcomeScreen({
   onStart: () => void;
   onFullscreen: () => void;
 }) {
-  const welcomeGame = games.find((game) => game.id === "temporada1-niveles");
+  const availableGames = previewGames?.length ? previewGames : games;
+  const welcomeGame = availableGames.find((game) => game.levels?.length && game.featured) || availableGames.find((game) => game.levels?.length);
   const welcomeLevel = welcomeGame?.levels?.[0];
   const welcomePreviewSrc = welcomeGame ? levelPreviewSrc(welcomeGame, welcomeLevel, "easy") : undefined;
   return (
@@ -3477,7 +3442,7 @@ function WelcomeScreen({
         </div>
         <div className="welcome-visual" aria-hidden="true">
           <div className="welcome-floor" style={{ "--crgb": welcomeGame ? hexToRGB(welcomeGame.color) : "47, 216, 108" } as CSSProperties}>
-            <Preview src={welcomePreviewSrc} animationID="temporada1-niveles" />
+            <Preview src={welcomePreviewSrc} animationID={welcomeGame?.id || "levels"} />
           </div>
         </div>
         <button className="btn primary welcome-start" type="button" onClick={onStart} disabled={readOnly}>
@@ -4155,7 +4120,6 @@ function PartyPreview({ catalogGames, compact = false, difficulty, game, rich = 
               richSrc={richSrc}
               richSrcs={richSrcs}
               animationID={animationID}
-              fallbackAnim={miniGame && level ? levelFallbackPreviewAnim(miniGame, level) : undefined}
               revisionHash={level?.previewRevisionHash || miniGame?.previewRevisionHash}
               compact={compact}
               promoteAnimation={rich && !(level && levelHasPreviewMedia(level))}

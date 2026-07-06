@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./api";
 import { createCoalescer, isFeedStalled } from "./displayFeed";
-import { challengeMode, heartMeterSlotCount, levelAggregateElapsedMillis, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeLabel, levelDisplayTimeMillis } from "./displayMetrics";
+import { challengeMode, heartMeterSlotCount, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeLabel, levelDisplayTimeMillis } from "./displayMetrics";
 import { colorCSS, colorRGB, difficultyLabelES, eventMessageES, formatClock, gameTitleES, levelLabelES, phaseLabel, playerLabelES } from "./utils";
 
 // If no stream event arrives, keep the display fresh with a 250ms fallback
@@ -37,9 +37,9 @@ const emptyStatus: DisplayStatus = {
   lastEventMessage: "",
 };
 
-function isTeamScoreGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
+function isTeamScoreGame(status: Pick<DisplayStatus, "currentGame" | "label" | "level" | "levelNumber" | "levelMode">): boolean {
   const currentGame = compactDisplayText(status.currentGame);
-  return currentGame === "lava" || currentGame === "niveles" || isLevelPointsGame(status);
+  return currentGame === "lava" || isLevelGame(status);
 }
 
 export default function App() {
@@ -279,9 +279,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
   const teamRosterGame = isTeamScoreGame(status);
   const teamScoreboardGame = isTeamScoreboardGame(status);
   const duelGame = isDuelGame(status) && status.players.length >= 2;
-  const parkourGame = isParkourGame(status.currentGame);
-  const levelPointsGame = isLevelPointsGame(status);
-  const parkourStyleGame = parkourGame || levelPointsGame;
+  const levelGame = isLevelGame(status);
   const leader = useMemo(() => {
     if (teamRosterGame || duelGame || !status.players.length) return null;
     return [...status.players].sort((left, right) => right.score - left.score)[0];
@@ -296,10 +294,10 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
   const levelTimeDetails = arcadeLevelTimeDetails(status);
   const levelLabel = displayLevelLabel(status);
   const showPlayerInfo = shouldShowPlayerInfo(status);
-  const showFooterEvent = Boolean(eventMessage) && !levelPointsGame && !memoryGame;
+  const showFooterEvent = Boolean(eventMessage) && !levelGame && !memoryGame;
 
   return (
-    <main className={`display arcade-display ${duelGame ? "duel-game" : ""} ${memoryGame ? "memory-display" : ""} ${parkourStyleGame ? "parkour-display" : ""} ${levelPointsGame ? "level-points-display" : ""} ${!duelGame && !showPlayerInfo ? "no-player-info" : ""} ${showFooterEvent ? "has-event" : ""} ${status.phase} ${eventClass}`}>
+    <main className={`display arcade-display ${duelGame ? "duel-game" : ""} ${memoryGame ? "memory-display" : ""} ${levelGame ? "level-display level-points-display" : ""} ${!duelGame && !showPlayerInfo ? "no-player-info" : ""} ${showFooterEvent ? "has-event" : ""} ${status.phase} ${eventClass}`}>
       <header className="arcade-top">
         <div className="arcade-brand-panel">
           <span className="arcade-brand" aria-label="Motion Levels">
@@ -330,26 +328,11 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
         <DuelBoard status={status} clock={clock} />
       ) : memoryGame ? (
         <MemoryBoard status={status} clock={clock} />
-      ) : parkourStyleGame ? (
+      ) : levelGame ? (
         <section className="arcade-stage arcade-stage--level-hud">
           <div className="arcade-level-main" aria-label="Marcadores principales">
             <MetricPanel className="arcade-metric--lives" label="Vidas" value={<HeartMeter lives={levelDisplayLives(status)} showAllUpTo={20} />} tone="red" />
-            {levelPointsGame ? (
-              <LevelTimeStatsPanel details={levelTimeDetails} />
-            ) : (
-              <MetricPanel className="arcade-metric--time" label={mainMetric.caption === "Restante" ? "Tiempo restante" : "Tiempo transcurrido"} value={mainMetric.value} tone="amber">
-                {levelTimeDetails.length ? (
-                  <div className="arcade-time-details">
-                    {levelTimeDetails.map((detail) => (
-                      <span key={detail.label}>
-                        <small>{detail.label}</small>
-                        <b>{detail.value}</b>
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </MetricPanel>
-            )}
+            <LevelTimeStatsPanel details={levelTimeDetails} />
           </div>
           <div className="arcade-level-side" aria-label="Marcadores de ronda">
             {levelSideMetrics.map((metric) => (
@@ -391,7 +374,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
               </div>
             </article>
           ) : status.players.length ? (
-            status.players.map((player) => <ArcadePlayerCard key={player.index} player={player} leader={leader?.index === player.index} compact={parkourStyleGame} team={teamScoreboardGame} />)
+            status.players.map((player) => <ArcadePlayerCard key={player.index} player={player} leader={leader?.index === player.index} compact={levelGame} team={teamScoreboardGame} />)
           ) : (
             <article className="arcade-empty">Esperando datos del juego</article>
           )}
@@ -607,11 +590,6 @@ function displayClock(status: DisplayStatus): string {
   return formatClock(status.elapsedMillis);
 }
 
-function isParkourGame(currentGame: string): boolean {
-  const game = compactDisplayText(currentGame);
-  return game === "parkour";
-}
-
 function isMemoryGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
   const currentGame = compactDisplayText(status.currentGame);
   const label = normalizedDisplayText(status.label);
@@ -647,23 +625,6 @@ function compactDisplayText(value: string): string {
   return normalizedDisplayText(value).replace(/[^a-z0-9]+/g, "");
 }
 
-function isPlatformLevelGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(status.currentGame.trim());
-}
-
-function isTemporadaOneGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
-  const currentGame = compactDisplayText(status.currentGame);
-  const label = normalizedDisplayText(status.label);
-  const compactLabel = compactDisplayText(status.label);
-  return (
-    currentGame === "temporada1niveles"
-    || currentGame.includes("temporada1")
-    || label.includes("temporada 1")
-    || label.includes("temporada1")
-    || compactLabel.includes("temporada1")
-  );
-}
-
 function displayGameTitle(status: Pick<DisplayStatus, "currentGame" | "label">): string {
   return gameTitleES(status.currentGame, status.label);
 }
@@ -673,19 +634,13 @@ function isTeamScoreboardGame(status: Pick<DisplayStatus, "currentGame" | "label
   return text.includes("tira") || text.includes("afloja") || text.includes("baldosas") || text.includes("tug");
 }
 
-function isLevelPointsGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
-  return isTemporadaOneGame(status) || isPlatformLevelGame(status);
-}
-
-function isFixedSoloDisplayGame(currentGame: string): boolean {
-  const game = compactDisplayText(currentGame);
-  return game === "parkour" || game === "saltos" || game === "temporada1niveles";
+function isLevelGame(status: Pick<DisplayStatus, "level" | "levelNumber" | "levelMode">): boolean {
+  return Boolean(status.level || (status.levelNumber && status.levelNumber > 0) || status.levelMode);
 }
 
 function shouldShowPlayerInfo(status: DisplayStatus): boolean {
   if (isMemoryGame(status)) return false;
-  if (isLevelPointsGame(status)) return false;
-  if (isFixedSoloDisplayGame(status.currentGame)) return false;
+  if (isLevelGame(status)) return false;
   if (status.playerConfigurable === false) return false;
   return status.players.length > 0 || status.playerConfigurable === true;
 }
@@ -704,10 +659,7 @@ function primaryMetric(status: DisplayStatus): { label: string; value: string; c
   if (status.phase === "countdown") {
     return { label: "Countdown", value: displayClock(status), caption: "Preparados" };
   }
-  if (isParkourGame(status.currentGame)) {
-    return { label: "Tiempo", value: displayClock(status), caption: status.remainingMillis > 0 ? "Restante" : "Transcurrido" };
-  }
-  if (isLevelPointsGame(status)) {
+  if (isLevelGame(status)) {
     return {
       label: "Tiempo",
       value: formatClock(levelDisplayTimeMillis(status)),
@@ -724,14 +676,7 @@ function primaryMetric(status: DisplayStatus): { label: string; value: string; c
 }
 
 function arcadeSideMetrics(status: DisplayStatus): Array<{ label: string; value: string; tone: "magenta" | "cyan" | "amber"; stars?: number }> {
-  if (isParkourGame(status.currentGame)) {
-    return [
-      { label: "Intentos", value: String(Math.max(1, status.attemptCount || 0)), tone: "magenta" },
-      { label: "Mejor sesión", value: formatBestTime(status.sessionBestElapsedMillis), tone: "cyan" },
-      { label: "Mejor global", value: formatBestTime(status.bestElapsedMillis), tone: "amber" },
-    ];
-  }
-  if (isLevelPointsGame(status)) {
+  if (isLevelGame(status)) {
     return [
       { label: "Puntos", value: String(status.score), tone: "magenta" },
       { label: "Objetivos", value: String(Math.max(0, status.activeTargets || 0)), tone: "cyan" },
@@ -752,7 +697,7 @@ function arcadeSideMetrics(status: DisplayStatus): Array<{ label: string; value:
 }
 
 function arcadeLevelSideMetrics(status: DisplayStatus): Array<{ label: string; value: string; tone: "magenta" | "cyan" | "amber"; stars?: number }> {
-  if (isLevelPointsGame(status)) {
+  if (isLevelGame(status)) {
     return [
       { label: "Puntos", value: String(status.score), tone: "magenta" },
       { label: "Objetivos", value: String(Math.max(0, status.activeTargets || 0)), tone: "cyan" },
@@ -764,14 +709,9 @@ function arcadeLevelSideMetrics(status: DisplayStatus): Array<{ label: string; v
 
 function arcadeLevelTimeDetails(status: DisplayStatus): Array<{ label: string; value: string }> {
   const details: Array<{ label: string; value: string }> = [];
-  if (isLevelPointsGame(status)) {
+  if (isLevelGame(status)) {
     details.push({ label: levelDisplayTimeLabel(status), value: formatClock(levelDisplayTimeMillis(status)) });
     details.push({ label: "Intentos", value: String(levelDisplayAttemptCount(status)) });
-  } else if (isParkourGame(status.currentGame)) {
-    details.push({ label: challengeMode(status) ? "Tiempo reto" : "Tiempo total", value: formatClock(levelAggregateElapsedMillis(status)) });
-    details.push({ label: "Intentos", value: String(Math.max(1, status.attemptCount || 0)) });
-    details.push({ label: "Mejor sesión", value: formatBestTime(status.sessionBestElapsedMillis) });
-    details.push({ label: "Mejor global", value: formatBestTime(status.bestElapsedMillis) });
   }
   return details;
 }
@@ -870,8 +810,8 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
     case "countdown":
       return {
         ...base,
-        currentGame: "parkour",
-        label: "Parkour",
+        currentGame: options.demoGame || "countdown-demo",
+        label: options.demoLabel || "Cuenta atrás",
         phase: "countdown",
         score: 0,
         lives: 8,
@@ -885,27 +825,31 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         lastEventCue: "",
         lastEventMessage: "",
       };
-    case "parkour-level":
+    case "levels":
       return {
         ...base,
-        currentGame: options.demoGame || "parkour",
-        label: options.demoLabel || "Nivel 2",
+        currentGame: options.demoGame || "level-demo",
+        label: options.demoLabel || "Juego de niveles",
         phase: "running",
         difficulty: "medium",
+        levelMode: "challenge",
         playerConfigurable: false,
-        score: 0,
-        lives: 4,
-        livesStart: 5,
-        elapsedMillis: 171000,
-        sessionElapsedMillis: 171000,
-        remainingMillis: 0,
-        activeTargets: 6,
-        level: "level-1-2",
-        attemptCount: 2,
-        sessionBestElapsedMillis: 128000,
-        bestElapsedMillis: 121000,
-        lastEventCue: "",
-        lastEventMessage: "",
+        score: 12,
+        lives: options.demoLives ?? 7,
+        elapsedMillis: 48600,
+        sessionElapsedMillis: 432000,
+        challengeElapsedMillis: 174000,
+        challengeAttemptCount: 4,
+        remainingMillis: 551400,
+        activeTargets: 8,
+        level: "level-4",
+        levelNumber: 4,
+        attemptCount: 1,
+        failureCount: 1,
+        sessionBestElapsedMillis: 51200,
+        bestElapsedMillis: 46800,
+        lastEventCue: "coin",
+        lastEventMessage: `${options.demoLabel || "Juego de niveles"} punto 12`,
       };
     case "duel": {
       const duelRoster = [
@@ -968,54 +912,6 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         sessionElapsedMillis: 94000,
         lastEventCue: "hit",
         lastEventMessage: "Red +5",
-      };
-    case "temporada1":
-      return {
-        ...base,
-        currentGame: options.demoGame || "temporada1-niveles",
-        label: options.demoLabel || "Temporada 1",
-        difficulty: "medium",
-        levelMode: "challenge",
-        playerConfigurable: false,
-        score: 12,
-        lives: options.demoLives ?? 7,
-        elapsedMillis: 48600,
-        sessionElapsedMillis: 432000,
-        challengeElapsedMillis: 174000,
-        challengeAttemptCount: 4,
-        remainingMillis: 551400,
-        activeTargets: 8,
-        level: "level-4",
-        levelNumber: 4,
-        attemptCount: 1,
-        failureCount: 1,
-        sessionBestElapsedMillis: 51200,
-        bestElapsedMillis: 46800,
-        lastEventCue: "coin",
-        lastEventMessage: "Temporada 1 punto 12",
-      };
-    case "temporada1-20lives":
-      return {
-        ...base,
-        currentGame: options.demoGame || "temporada1-niveles",
-        label: options.demoLabel || "Temporada 1",
-        difficulty: "hard",
-        levelMode: "free",
-        playerConfigurable: false,
-        score: 12,
-        lives: options.demoLives ?? 20,
-        elapsedMillis: 48600,
-        sessionElapsedMillis: 432000,
-        remainingMillis: 0,
-        activeTargets: 8,
-        level: "level-4",
-        levelNumber: 4,
-        attemptCount: 3,
-        failureCount: 1,
-        sessionBestElapsedMillis: 51200,
-        bestElapsedMillis: 46800,
-        lastEventCue: "",
-        lastEventMessage: "",
       };
     case "memory":
       return {

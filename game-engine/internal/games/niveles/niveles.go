@@ -36,6 +36,7 @@ const (
 	DefaultCoinCueRef    = "Motion/sonidos/coin.wav"
 	DefaultDamageCueRef  = "Motion/sonidos/fallo.mp3"
 	DefaultWinCueRef     = "Motion/sonidos/victoria.mp3"
+	defaultGameID        = "level-game"
 )
 
 type RGB = animation.RGB
@@ -211,9 +212,7 @@ type cloudLevel struct {
 
 type levelRules struct {
 	VictoryCondition          string                       `json:"victory_condition"`
-	VictoryAnimation          string                       `json:"victory_animation"`
 	VictoryAnimations         []string                     `json:"victory_animations"`
-	DefeatAnimation           string                       `json:"defeat_animation"`
 	DefeatAnimations          []string                     `json:"defeat_animations"`
 	DifficultySettings        map[string]difficultySetting `json:"difficulty_settings"`
 	RedFloorAnimation         string                       `json:"red_floor_animation"`
@@ -306,7 +305,7 @@ func New(now time.Time, playerCount int, difficulty string, level string, platfo
 }
 
 func NewWithSeed(now time.Time, seed int64, playerCount int, difficulty string, level string, platformURL string) *Game {
-	return NewWithSeedForGame(now, seed, playerCount, difficulty, level, platformURL, "niveles")
+	return NewWithSeedForGame(now, seed, playerCount, difficulty, level, platformURL, defaultGameID)
 }
 
 func NewWithSeedForGame(now time.Time, seed int64, playerCount int, difficulty string, level string, platformURL string, gameID string) *Game {
@@ -1042,15 +1041,11 @@ func fetchLevels(platformURL string, diff Difficulty, gameID string, levelMode s
 	}
 	cleanGameID := strings.Trim(strings.TrimSpace(gameID), "/")
 	if cleanGameID == "" {
-		cleanGameID = "niveles"
+		return nil, fmt.Errorf("game id is empty")
 	}
 	levels, err := fetchLevelsForDifficulty(base, cleanGameID, string(diff), levelMode)
 	if err == nil {
 		return levels, nil
-	}
-	withoutDifficulty, fallbackErr := fetchLevelsForDifficulty(base, cleanGameID, "", levelMode)
-	if fallbackErr == nil {
-		return withoutDifficulty, nil
 	}
 	return nil, err
 }
@@ -1092,6 +1087,7 @@ func compileCloudLevelsForMode(raw []cloudLevel, levelMode string) ([]compiledLe
 func compileCloudLevelsForModeWithDifficulty(raw []cloudLevel, levelMode string, selectedDifficulty string) ([]compiledLevel, error) {
 	challengeMode := strings.EqualFold(strings.TrimSpace(levelMode), "challenge")
 	selectedDifficulty = strings.ToLower(strings.TrimSpace(selectedDifficulty))
+	raw = dedupeCloudLevelsForDifficulty(raw, selectedDifficulty)
 	levels := make([]compiledLevel, 0, len(raw))
 	for index, level := range raw {
 		id := level.Slug
@@ -1102,25 +1098,26 @@ func compileCloudLevelsForModeWithDifficulty(raw []cloudLevel, levelMode string,
 		if frameTick <= 0 {
 			frameTick = tickDuration
 		}
-		lives := level.Life
-		timeLimit := time.Duration(level.TimeLimitSeconds) * time.Second
-		if challengeMode {
-			timeLimit = 0
-		}
 		settingsDifficulty := strings.ToLower(strings.TrimSpace(level.Difficulty))
 		if selectedDifficulty != "" {
 			settingsDifficulty = selectedDifficulty
 		}
-		if settings, ok := level.Rules.DifficultySettings[settingsDifficulty]; ok {
+		settings, hasDifficultySettings := level.Rules.DifficultySettings[settingsDifficulty]
+		hasAnyDifficultySettings := len(level.Rules.DifficultySettings) > 0
+		lives := 0
+		if !hasAnyDifficultySettings {
+			lives = level.Life
+		}
+		timeLimit := time.Duration(0)
+		if challengeMode && !hasAnyDifficultySettings {
+			timeLimit = time.Duration(level.TimeLimitSeconds) * time.Second
+		}
+		if hasDifficultySettings {
 			if settings.Life > 0 {
 				lives = settings.Life
 			}
-			if settings.GameplayTimeLimitSeconds > 0 {
-				if challengeMode {
-					timeLimit = time.Duration(settings.GameplayTimeLimitSeconds) * time.Second
-				} else if level.TimeLimitSeconds == settings.GameplayTimeLimitSeconds {
-					timeLimit = 0
-				}
+			if challengeMode && settings.GameplayTimeLimitSeconds > 0 {
+				timeLimit = time.Duration(settings.GameplayTimeLimitSeconds) * time.Second
 			}
 			if settings.SpeedMultiplier > 0 {
 				frameTick = time.Duration(float64(frameTick) / settings.SpeedMultiplier)
@@ -1144,8 +1141,8 @@ func compileCloudLevelsForModeWithDifficulty(raw []cloudLevel, levelMode string,
 			frameTick:         frameTick,
 			winCondition:      winCondition,
 			redAnimation:      normalizeRedFloorAnimation(level.Rules.RedFloorAnimation),
-			victoryAnimations: normalizeResultAnimationList(level.Rules.VictoryAnimations, level.Rules.VictoryAnimation, "victory-pulse"),
-			defeatAnimations:  normalizeResultAnimationList(level.Rules.DefeatAnimations, level.Rules.DefeatAnimation, "defeat-pulse"),
+			victoryAnimations: normalizeResultAnimationList(level.Rules.VictoryAnimations, "victory-pulse"),
+			defeatAnimations:  normalizeResultAnimationList(level.Rules.DefeatAnimations, "defeat-pulse"),
 			greenFade:         level.Rules.GreenPlatformDisappear,
 			greenImpact:       level.Rules.GreenPlatformImpactRipple,
 			greenLoad:         boolDefaultTrue(level.Rules.GreenPlatformLoad),
@@ -1228,6 +1225,53 @@ func normalizeAudioRefs(level cloudLevel) AudioRefs {
 	return audio
 }
 
+func dedupeCloudLevelsForDifficulty(raw []cloudLevel, selectedDifficulty string) []cloudLevel {
+	if strings.TrimSpace(selectedDifficulty) == "" || len(raw) < 2 {
+		return raw
+	}
+	type selectedLevel struct {
+		level cloudLevel
+		rank  int
+		order int
+	}
+	byKey := map[string]selectedLevel{}
+	order := make([]string, 0, len(raw))
+	for index, level := range raw {
+		key := NormalizeLevel(level.Slug)
+		if key == "" {
+			key = "level-" + strconv.Itoa(index+1)
+		}
+		rank := difficultyLevelRank(level, selectedDifficulty)
+		current, exists := byKey[key]
+		if !exists {
+			byKey[key] = selectedLevel{level: level, rank: rank, order: len(order)}
+			order = append(order, key)
+			continue
+		}
+		if rank > current.rank {
+			byKey[key] = selectedLevel{level: level, rank: rank, order: current.order}
+		}
+	}
+	if len(byKey) == len(raw) {
+		return raw
+	}
+	deduped := make([]cloudLevel, 0, len(order))
+	for _, key := range order {
+		deduped = append(deduped, byKey[key].level)
+	}
+	return deduped
+}
+
+func difficultyLevelRank(level cloudLevel, selectedDifficulty string) int {
+	if strings.EqualFold(strings.TrimSpace(level.Difficulty), selectedDifficulty) {
+		return 3
+	}
+	if _, ok := level.Rules.DifficultySettings[selectedDifficulty]; ok {
+		return 2
+	}
+	return 1
+}
+
 func selectLevel(levels []compiledLevel, id string) compiledLevel {
 	for _, candidate := range levels {
 		if candidate.id == id {
@@ -1249,7 +1293,24 @@ func fallbackCompiledLevels(levelID string) []compiledLevel {
 		Life:        5,
 		PassScore:   0,
 		FrameTickMS: 25,
-		Frames:      []rawFrame{{Repeat: 20, Cells: []cellTuple{}}},
+		Frames: []rawFrame{{Repeat: 20, Cells: []cellTuple{
+			{X: 6, Y: 14, Kind: 2},
+			{X: 7, Y: 14, Kind: 2},
+			{X: 8, Y: 14, Kind: 2},
+			{X: 9, Y: 14, Kind: 2},
+			{X: 6, Y: 15, Kind: 2},
+			{X: 9, Y: 15, Kind: 2},
+			{X: 6, Y: 16, Kind: 2},
+			{X: 9, Y: 16, Kind: 2},
+			{X: 6, Y: 17, Kind: 2},
+			{X: 7, Y: 17, Kind: 2},
+			{X: 8, Y: 17, Kind: 2},
+			{X: 9, Y: 17, Kind: 2},
+			{X: 7, Y: 15, Kind: 0},
+			{X: 8, Y: 15, Kind: 0},
+			{X: 7, Y: 16, Kind: 0},
+			{X: 8, Y: 16, Kind: 0},
+		}}},
 	}})
 	return levels
 }
@@ -1453,7 +1514,7 @@ func normalizeResultAnimation(value string, fallback string) string {
 	}
 }
 
-func normalizeResultAnimationList(values []string, legacy string, fallback string) []string {
+func normalizeResultAnimationList(values []string, fallback string) []string {
 	unique := map[string]struct{}{}
 	result := []string{}
 	for _, value := range values {
@@ -1466,12 +1527,6 @@ func normalizeResultAnimationList(values []string, legacy string, fallback strin
 		}
 		unique[normalized] = struct{}{}
 		result = append(result, normalized)
-	}
-	legacyNormalized := normalizeResultAnimation(legacy, "")
-	if legacyNormalized != "" {
-		if _, ok := unique[legacyNormalized]; !ok {
-			result = append(result, legacyNormalized)
-		}
 	}
 	if len(result) == 0 {
 		return []string{fallback}

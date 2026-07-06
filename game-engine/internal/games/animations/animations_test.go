@@ -3,7 +3,6 @@ package animations
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -111,29 +110,15 @@ func TestProceduralDSLClampsLoopSeconds(t *testing.T) {
 	}
 }
 
-func TestProceduralDSLMigratesLegacyNormalizedAssignments(t *testing.T) {
-	source, err := compileProcedureSource(animationProcedureSource{
-		Type:     "procedure",
-		Language: "motion-dsl-v1",
-		Code: strings.Join([]string{
-			"xn = x / width",
-			"yn = y / height",
-			"hue = mod(xn * hue_x + yn * hue_y + loop_time * speed, 1)",
-			"pulse = base + depth * sin((loop_time * pulse_speed + xn * pulse_x - yn * pulse_y) * pi)",
-			"color = hsv(hue, saturation, clamp01(pulse))",
-		}, "\n"),
-		Params: map[string]any{
-			"hue_x": 0.55, "hue_y": 0.35, "speed": 0.1,
-			"base": 0.7, "depth": 0.3, "pulse_speed": 2.0,
-			"pulse_x": 4.0, "pulse_y": 2.5, "saturation": 0.85,
-		},
+func TestProceduralDSLRejectsLegacyNormalizedAssignments(t *testing.T) {
+	_, err := compileProcedureSource(animationProcedureSource{
+		Type:        "procedure",
+		Language:    "motion-dsl-v1",
+		Code:        "xn = x / width\ncolor = rgb(xn * 255, yn * 255, 0)",
 		LoopSeconds: 10,
 	})
-	if err != nil {
-		t.Fatalf("compileProcedureSource returned error: %v", err)
-	}
-	if _, err := source.colorAt(3, 7, 0.25, 0); err != nil {
-		t.Fatalf("legacy migrated source failed render: %v", err)
+	if err == nil {
+		t.Fatal("compileProcedureSource accepted legacy xn assignment")
 	}
 }
 
