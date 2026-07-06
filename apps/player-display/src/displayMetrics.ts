@@ -18,7 +18,21 @@ export function levelDisplayTimeMillis(status: LevelTimingStatus): number {
   if (status.sessionRemainingMillis !== undefined) {
     return nonNegativeMillis(status.sessionRemainingMillis);
   }
+  if (nonNegativeMillis(status.remainingMillis) <= 0) {
+    return levelAggregateElapsedMillis(status);
+  }
   return nonNegativeMillis(status.remainingMillis);
+}
+
+export function levelDisplayTimeLabel(status: LevelTimingStatus): string {
+  return levelDisplayTimeIsCountdown(status) ? "Tiempo restante" : "Tiempo transcurrido";
+}
+
+export function levelDisplayTimeIsCountdown(status: LevelTimingStatus): boolean {
+  if (!challengeMode(status)) {
+    return false;
+  }
+  return status.sessionRemainingMillis !== undefined || nonNegativeMillis(status.remainingMillis) > 0;
 }
 
 export function levelDisplayAttemptCount(status: Pick<DisplayStatus, "levelMode" | "challengeAttemptCount" | "attemptCount">): number {

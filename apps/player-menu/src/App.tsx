@@ -2544,7 +2544,7 @@ function MenuApp() {
         difficulty: launchDifficulty,
         level: selectedLevelID || undefined,
         levelMode: launchLevelMode,
-        durationSeconds: launchGame.estimatedDurationSeconds || undefined,
+        durationSeconds: launchGame.levels?.length ? undefined : launchGame.estimatedDurationSeconds || undefined,
         challengeElapsedMillis: launchChallengeRun?.totalElapsedMillis || launchFreeRun?.totalElapsedMillis || 0,
         challengeAttemptCount: launchChallengeRun?.attemptCount || 0,
         narrationEnabled: supportsNarration(launchGame) ? playNarration : false,
@@ -3786,7 +3786,7 @@ function GameControlScreen({
   const visibleLevel = launchingLevel || currentLevel;
   const visibleLevelIndex = launchingLevel ? launchingLevelIndex : currentLevelIndex;
   const launchingLevelLabel = launchingLevel ? playerLevelLabel(launchingLevel, launchingLevelIndex) : "";
-  const totalMillis = Math.max(0, Math.round((game.estimatedDurationSeconds || 0) * 1000));
+  const totalMillis = hasLevels ? 0 : Math.max(0, Math.round((game.estimatedDurationSeconds || 0) * 1000));
   const elapsedMillis = Math.max(0, Math.round(status?.elapsedMillis || 0));
   const activeLevelElapsedMillis = activeLevelAttempt(status, currentLevelID) ? elapsedMillis : 0;
   const freeElapsedMillis = Math.max(0, Math.round(freeRun?.totalElapsedMillis || 0)) + activeLevelElapsedMillis;

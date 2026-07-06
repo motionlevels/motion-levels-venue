@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./api";
 import { createCoalescer, isFeedStalled } from "./displayFeed";
-import { challengeMode, heartMeterSlotCount, levelAggregateElapsedMillis, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeMillis } from "./displayMetrics";
+import { challengeMode, heartMeterSlotCount, levelAggregateElapsedMillis, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeLabel, levelDisplayTimeMillis } from "./displayMetrics";
 import { colorCSS, colorRGB, difficultyLabelES, eventMessageES, formatClock, gameTitleES, levelLabelES, phaseLabel, playerLabelES } from "./utils";
 
 // If no stream event arrives, keep the display fresh with a 250ms fallback
@@ -767,10 +767,7 @@ function arcadeLevelSideMetrics(status: DisplayStatus): Array<{ label: string; v
 function arcadeLevelTimeDetails(status: DisplayStatus): Array<{ label: string; value: string }> {
   const details: Array<{ label: string; value: string }> = [];
   if (isLevelPointsGame(status)) {
-    details.push({
-      label: challengeMode(status) ? "Tiempo restante" : "Tiempo transcurrido",
-      value: formatClock(levelDisplayTimeMillis(status)),
-    });
+    details.push({ label: levelDisplayTimeLabel(status), value: formatClock(levelDisplayTimeMillis(status)) });
     details.push({ label: "Intentos", value: String(levelDisplayAttemptCount(status)) });
   } else if (isParkourGame(status.currentGame)) {
     details.push({ label: challengeMode(status) ? "Tiempo reto" : "Tiempo total", value: formatClock(levelAggregateElapsedMillis(status)) });

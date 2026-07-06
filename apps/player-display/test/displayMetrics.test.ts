@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { heartMeterSlotCount, levelDisplayLives, levelDisplayTimeMillis } from "../src/displayMetrics.ts";
+import { heartMeterSlotCount, levelDisplayLives, levelDisplayTimeLabel, levelDisplayTimeMillis } from "../src/displayMetrics.ts";
 
 describe("levelDisplayTimeMillis", () => {
   it("uses whole-challenge remaining time for challenge-mode level games", () => {
@@ -23,6 +23,18 @@ describe("levelDisplayTimeMillis", () => {
       sessionElapsedMillis: 48600,
     }), 12000);
   });
+
+  it("shows elapsed time when challenge mode has no configured time limit", () => {
+    const status = {
+      levelMode: "challenge",
+      remainingMillis: 0,
+      challengeElapsedMillis: 174000,
+      elapsedMillis: 48600,
+      sessionElapsedMillis: 48600,
+    };
+    assert.equal(levelDisplayTimeMillis(status), 222600);
+    assert.equal(levelDisplayTimeLabel(status), "Tiempo transcurrido");
+  });
 });
 
 describe("levelDisplayLives", () => {
@@ -38,6 +50,7 @@ describe("levelDisplayLives", () => {
 describe("heartMeterSlotCount", () => {
   it("uses the real finite life count instead of padding to five hearts", () => {
     assert.equal(heartMeterSlotCount(1), 1);
+    assert.equal(heartMeterSlotCount(3), 3);
     assert.equal(heartMeterSlotCount(5), 5);
   });
 });

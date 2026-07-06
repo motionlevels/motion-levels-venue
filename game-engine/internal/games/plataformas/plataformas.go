@@ -1098,6 +1098,9 @@ func compileCloudLevelsForMode(raw []cloudLevel, levelMode string) ([]compiledLe
 		}
 		lives := level.Life
 		timeLimit := time.Duration(level.TimeLimitSeconds) * time.Second
+		if challengeMode {
+			timeLimit = 0
+		}
 		if settings, ok := level.Rules.DifficultySettings[strings.ToLower(strings.TrimSpace(level.Difficulty))]; ok {
 			if settings.Life > 0 {
 				lives = settings.Life

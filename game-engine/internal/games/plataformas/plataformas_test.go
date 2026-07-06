@@ -349,6 +349,30 @@ func TestDifficultySettingsOverrideRuntimeTimingAndLimits(t *testing.T) {
 	if got := freeLevels[0].timeLimit; got != 30*time.Second {
 		t.Fatalf("free mode timeLimit = %s, want base 30s", got)
 	}
+	noLimitChallengeLevels, err := compileCloudLevelsForMode([]cloudLevel{{
+		Slug:             "level-1",
+		Label:            "No challenge limit",
+		Difficulty:       string(DifficultyHard),
+		Life:             5,
+		TimeLimitSeconds: 300,
+		FrameTickMS:      40,
+		Rules: levelRules{DifficultySettings: map[string]difficultySetting{
+			string(DifficultyHard): {
+				Life:                     3,
+				GameplayTimeLimitSeconds: 0,
+			},
+		}},
+		Frames: []rawFrame{{Repeat: 2, Cells: []cellTuple{{X: 5, Y: 5, Kind: 0}}}},
+	}}, "challenge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := noLimitChallengeLevels[0].timeLimit; got != 0 {
+		t.Fatalf("challenge mode timeLimit = %s, want unlimited when difficulty setting is 0", got)
+	}
+	if got := noLimitChallengeLevels[0].lives; got != 3 {
+		t.Fatalf("challenge mode lives = %d, want difficulty lives when gameplay lives is 0", got)
+	}
 	legacyMirrored := append([]cloudLevel(nil), rawLevels...)
 	legacyMirrored[0].TimeLimitSeconds = 90
 	legacyFreeLevels, err := compileCloudLevelsForMode(legacyMirrored, "free")
