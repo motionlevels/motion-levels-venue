@@ -1,4 +1,6 @@
-// Code generated from platform/app/src/lib/seed; keep gameplay changes in sync with browser preview source.
+// Source of truth for this motion-go game. The platform seed
+// platform/app/src/lib/seed/duelMotionGo.ts is generated from this file;
+// run 'make motion-go-seeds' after editing.
 package duelgo
 
 import (
