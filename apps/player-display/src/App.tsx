@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./api";
 import { createCoalescer, isFeedStalled } from "./displayFeed";
+import { challengeMode, levelAggregateElapsedMillis, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeMillis } from "./displayMetrics";
 import { colorCSS, colorRGB, difficultyLabelES, eventMessageES, formatClock, gameTitleES, levelLabelES, phaseLabel, playerLabelES } from "./utils";
 
 // If no stream event arrives, keep the display fresh with a 250ms fallback
@@ -332,7 +333,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
       ) : parkourStyleGame ? (
         <section className="arcade-stage arcade-stage--level-hud">
           <div className="arcade-level-main" aria-label="Marcadores principales">
-            <MetricPanel className="arcade-metric--lives" label="Vidas" value={<HeartMeter lives={status.lives} showAllUpTo={20} />} tone="red" />
+            <MetricPanel className="arcade-metric--lives" label="Vidas" value={<HeartMeter lives={levelDisplayLives(status)} showAllUpTo={20} />} tone="red" />
             {levelPointsGame ? (
               <LevelTimeStatsPanel details={levelTimeDetails} />
             ) : (
@@ -778,43 +779,6 @@ function arcadeLevelTimeDetails(status: DisplayStatus): Array<{ label: string; v
     details.push({ label: "Mejor global", value: formatBestTime(status.bestElapsedMillis) });
   }
   return details;
-}
-
-function challengeMode(status: DisplayStatus): boolean {
-  return normalizedDisplayText(status.levelMode || "") === "challenge" || normalizedDisplayText(status.levelMode || "") === "reto";
-}
-
-function levelDisplayTimeMillis(status: DisplayStatus): number {
-  if (!challengeMode(status)) {
-    return levelAggregateElapsedMillis(status);
-  }
-  const previousElapsed = Math.max(0, status.challengeElapsedMillis ?? 0);
-  if (status.remainingMillis > 0) {
-    return Math.max(0, status.remainingMillis - previousElapsed);
-  }
-  return levelAggregateElapsedMillis(status);
-}
-
-function levelDisplayAttemptCount(status: DisplayStatus): number {
-  if (challengeMode(status)) {
-    return Math.max(1, Math.max(0, status.challengeAttemptCount ?? 0) + Math.max(0, status.attemptCount || 0));
-  }
-  return Math.max(1, status.attemptCount || 0);
-}
-
-function levelAggregateElapsedMillis(status: DisplayStatus): number {
-  if (challengeMode(status)) {
-    return Math.max(0, status.challengeElapsedMillis ?? 0) + Math.max(0, status.elapsedMillis ?? 0);
-  }
-  const previousElapsed = Math.max(0, status.challengeElapsedMillis ?? 0);
-  if (previousElapsed > 0) {
-    return previousElapsed + Math.max(0, status.elapsedMillis ?? 0);
-  }
-  return globalGameElapsedMillis(status);
-}
-
-function globalGameElapsedMillis(status: DisplayStatus): number {
-  return Math.max(0, status.sessionElapsedMillis ?? status.elapsedMillis ?? 0);
 }
 
 function formatBestTime(milliseconds?: number): string {

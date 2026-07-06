@@ -218,7 +218,9 @@ type displayStatus struct {
 	StartedUnix              int64           `json:"startedUnix"`
 	SessionStartedUnix       int64           `json:"sessionStartedUnix"`
 	EndsUnix                 int64           `json:"endsUnix"`
+	DurationSeconds          int             `json:"-"`
 	SessionElapsedMillis     int64           `json:"sessionElapsedMillis"`
+	SessionRemainingMillis   int64           `json:"sessionRemainingMillis,omitempty"`
 	ChallengeElapsedMillis   int64           `json:"challengeElapsedMillis,omitempty"`
 	ChallengeAttemptCount    int             `json:"challengeAttemptCount,omitempty"`
 	ElapsedMillis            int64           `json:"elapsedMillis"`
@@ -642,10 +644,29 @@ func mapDisplayPlayers[P any](players []P, convert func(P) displayPlayer) []disp
 // finalizeGameStatus applies the shared paused handling and attempt summary that
 // every per-game snapshot block performs before returning.
 func (r *gameRuntime) finalizeGameStatus(status displayStatus, started time.Time, paused bool) displayStatus {
+	status.SessionRemainingMillis = displaySessionRemainingMillis(status)
 	if paused && status.Phase != "finished" {
 		status.Phase = "paused"
 	}
 	return r.withDisplayAttemptSummary(status, started)
+}
+
+func displaySessionRemainingMillis(status displayStatus) int64 {
+	if status.DurationSeconds <= 0 {
+		return 0
+	}
+	elapsed := status.SessionElapsedMillis
+	if status.LevelMode == "challenge" {
+		elapsed = status.ChallengeElapsedMillis + status.ElapsedMillis
+	}
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	remaining := int64(status.DurationSeconds)*1000 - elapsed
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
 }
 
 func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
@@ -687,6 +708,7 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		Lives:                  -1,
 		StartedUnix:            started.Unix(),
 		SessionStartedUnix:     unixOrZero(started),
+		DurationSeconds:        cfg.DurationSeconds,
 		SessionElapsedMillis:   elapsedMillisSince(started, gameNow),
 		ChallengeElapsedMillis: cfg.ChallengeElapsedMillis,
 		ChallengeAttemptCount:  cfg.ChallengeAttemptCount,
