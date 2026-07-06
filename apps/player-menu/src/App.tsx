@@ -499,7 +499,7 @@ function catalogPreviewAnimation(
   if (configured) return configured;
   if (fallback?.previewAnimation) return fallback.previewAnimation;
   if (isPlatformLevelSource(entry)) return undefined;
-  return fallback?.previewAnimation || (entry.source_kind === "animations" || entry.catalog_category === "attract" ? engineGame : undefined);
+  return fallback?.previewAnimation || (entry.source_kind === "animation" || entry.catalog_category === "attract" ? engineGame : undefined);
 }
 
 function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, index: number): GameCard {
@@ -673,11 +673,11 @@ function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalo
 }
 
 function isPlatformLaunchableSource(game: Pick<GameCard, "sourceKind">): boolean {
-  return game.sourceKind === "code_editable" || game.sourceKind === "platform_levels" || game.sourceKind === "animations";
+  return game.sourceKind === "motion_go" || game.sourceKind === "platform_levels" || game.sourceKind === "animation";
 }
 
 function canLaunchWhileCatalogRefreshes(game: GameCard): boolean {
-  return isAmbientCard(game) || game.sourceKind === "animations" || engineGameID(game).startsWith("animation-");
+  return isAmbientCard(game) || game.sourceKind === "animation" || engineGameID(game).startsWith("animation-");
 }
 
 function isIndividualCard(game: GameCard): boolean {
@@ -1680,7 +1680,7 @@ function MenuApp() {
     const launchGame = partyLaunchGame(game, menuGames);
     if (isScreensaverCard(launchGame)) return true;
     if (availableGames.has(runtimeGameID(launchGame)) || availableGames.has(engineGameID(launchGame))) return true;
-    if (game.sourceKind === "animations" && engineGameID(game).startsWith("animation-")) return true;
+    if (game.sourceKind === "animation" && engineGameID(game).startsWith("animation-")) return true;
     return isPlatformLaunchableSource(game) && (
       platformEnabledGames.has(game.id) || platformEnabledGames.has(engineGameID(game))
     );
@@ -3464,7 +3464,7 @@ function WelcomeScreen({
   onStart: () => void;
   onFullscreen: () => void;
 }) {
-  const welcomeGame = games.find((game) => game.id === "temporada1");
+  const welcomeGame = games.find((game) => game.id === "temporada1-niveles");
   const welcomeLevel = welcomeGame?.levels?.[0];
   const welcomePreviewSrc = welcomeGame ? levelPreviewSrc(welcomeGame, welcomeLevel, "easy") : undefined;
   return (
@@ -3477,7 +3477,7 @@ function WelcomeScreen({
         </div>
         <div className="welcome-visual" aria-hidden="true">
           <div className="welcome-floor" style={{ "--crgb": welcomeGame ? hexToRGB(welcomeGame.color) : "47, 216, 108" } as CSSProperties}>
-            <Preview src={welcomePreviewSrc} animationID="temporada1" />
+            <Preview src={welcomePreviewSrc} animationID="temporada1-niveles" />
           </div>
         </div>
         <button className="btn primary welcome-start" type="button" onClick={onStart} disabled={readOnly}>

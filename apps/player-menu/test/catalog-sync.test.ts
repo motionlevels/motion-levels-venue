@@ -202,7 +202,7 @@ describe("catalog metadata sync", () => {
       catalogEntry({
         id: "animations",
         engine_game: "animations",
-        source_kind: "animations",
+        source_kind: "animation",
         catalog_enabled: false,
         default_music_ref: "Motion/canciones/Ambient.mp3",
         revision_hash: "game-rev",
@@ -248,7 +248,7 @@ describe("catalog metadata sync", () => {
       .slice(catalogSource.indexOf("export const games: GameCard[] = ["))
       .split("\n];")[0];
 
-    for (const id of ["memory-lights", "plataformas", "temporada1-niveles", "temporada2", "patrones"]) {
+    for (const id of ["memory-lights", "niveles", "temporada1-niveles", "temporada2", "patrones"]) {
       assert.equal(new RegExp(`id:\\s*"${id}"`).test(staticGamesSource), false);
     }
     assert.match(staticGamesSource, /id:\s*"featured-lava"/);
@@ -339,7 +339,7 @@ describe("catalog metadata sync", () => {
         catalogEntry({
           catalog_preview_url: "/api/game-catalog/previews/lava.webp",
           catalog_thumbnail_url: "/api/game-catalog/previews/lava/revision/thumbnail.webp",
-          source_kind: "engine_hardcoded",
+          source_kind: "native",
           supports_levels: false,
         }),
         lavaFallback,
@@ -359,7 +359,7 @@ describe("catalog metadata sync", () => {
     assert.equal(
       shouldPreferCatalogFallbackPreviewAnimation(
         catalogEntry({
-          source_kind: "engine_hardcoded",
+          source_kind: "native",
           supports_levels: false,
         }),
         { previewAnimation: "parkour", thumbnailSrc: "/previews/parkour.webp" },

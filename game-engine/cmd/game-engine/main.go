@@ -15,11 +15,9 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored"
+	"github.com/lobis/motion-levels/game-engine/internal/games/niveles"
 	"github.com/lobis/motion-levels/game-engine/internal/games/patrones"
-	"github.com/lobis/motion-levels/game-engine/internal/games/plataformas"
 	"github.com/lobis/motion-levels/game-engine/internal/games/saltos"
-	"github.com/lobis/motion-levels/game-engine/internal/games/temporada1"
-	"github.com/lobis/motion-levels/game-engine/internal/games/temporada2"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 	"github.com/lobis/motion-levels/game-engine/internal/replay"
 	"github.com/lobis/motion-levels/packages/contracts/inputpb"
@@ -94,7 +92,7 @@ func main() {
 	flag.StringVar(&cfg.HTTPAddr, "http", "127.0.0.1:4102", "HTTP address for the game-engine API; empty disables")
 	flag.StringVar(&cfg.ControllerAddr, "controller", "127.0.0.1:4201", "floor-controller frame stream address")
 	flag.StringVar(&cfg.PressureAddr, "pressure-events", "127.0.0.1:4202", "floor-controller pressure event stream address")
-	flag.StringVar(&cfg.Game, "game", "salvapantallas", "game to run: salvapantallas, animations, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, parkour, plataformas, temporada1-niveles, temporada1, temporada2, duel, memory, or patrones")
+	flag.StringVar(&cfg.Game, "game", "salvapantallas", "game to run: salvapantallas, animations, ambient-comet, ambient-pulse, ambient-spark, whack-a-mole, lava, saltos, parkour, niveles, temporada1-niveles, duel, memory, or patrones")
 	flag.StringVar(&cfg.Difficulty, "difficulty", "easy", "difficulty for games that support it: easy, medium, hard, expert")
 	flag.StringVar(&cfg.Level, "level", "starter", "level for games that support level selection")
 	flag.IntVar(&cfg.PlayerCount, "players", 1, "number of players for focused games")
@@ -205,16 +203,11 @@ func (c *config) normalize() {
 	c.Difficulty = normalizeDifficulty(c.Difficulty)
 	if strings.HasPrefix(c.Game, "authored-") {
 		normalizeAuthoredGameConfig(c)
-	} else if isPlatformLevelGameID(c.Game) || c.Game == "plataformas" || c.Game == "parkour" || c.Game == "temporada1-niveles" {
-		c.Level = plataformas.NormalizeLevel(c.Level)
+	} else if isPlatformLevelGameID(c.Game) || c.Game == "niveles" || c.Game == "parkour" || c.Game == "temporada1-niveles" {
+		c.Level = niveles.NormalizeLevel(c.Level)
 		if c.Game == "parkour" {
 			c.PlayerCount = 1
 		}
-	} else if c.Game == "temporada1" {
-		c.Level = temporada1.NormalizeLevel(c.Level)
-	} else if c.Game == "temporada2" {
-		c.Level = temporada2.NormalizeLevel(c.Level)
-		c.Difficulty = string(temporada2.NormalizeDifficulty(c.Difficulty))
 	} else {
 		c.Level = ""
 	}
@@ -530,16 +523,12 @@ func normalizeGame(value string) string {
 		return "authored-lava"
 	case "saltos", "jump", "salta", "salto":
 		return "authored-saltos"
-	case "parkour", "pk", "parkour2", "parkour-2", "parkour-2.0", "parkour2.0", "parkour-20":
+	case "parkour":
 		return "parkour"
-	case "plataformas", "platforms", "cloud-platforms":
-		return "plataformas"
-	case "temporada1-niveles", "temporada-1-niveles", "temporada1-levels", "season1-levels", "season-1-levels":
+	case "niveles":
+		return "niveles"
+	case "temporada1-niveles":
 		return "temporada1-niveles"
-	case "temporada1", "temporada-1", "season1", "season-1":
-		return "temporada1"
-	case "temporada2", "temporada-2", "season2", "season-2":
-		return "temporada2"
 	case "duel", "duelo", "versus-duel":
 		return "authored-duel"
 	case "memory", "memory-challenge", "memoria", "reto-memoria":

@@ -126,7 +126,7 @@ export const games: GameCard[] = [
     minPlayers: 1,
     maxPlayers: 6,
     difficulties: ["easy", "medium", "hard", "expert"],
-    mode: "Plataformas",
+    mode: "Niveles",
     audio: "Narración + música",
     description: "Evitad las baldosas rojas, descubrid plataformas seguras nuevas y cuidad las vidas del equipo.",
     rules: ["Pisa zonas seguras.", "Evita la lava.", "Sube la dificultad para reducir el margen."],

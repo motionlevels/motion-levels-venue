@@ -1,4 +1,4 @@
-package plataformas
+package niveles
 
 import (
 	"encoding/json"
@@ -252,7 +252,7 @@ func (c *cellTuple) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if len(values) < 3 {
-		return fmt.Errorf("plataformas cell has %d fields, want at least 3", len(values))
+		return fmt.Errorf("niveles cell has %d fields, want at least 3", len(values))
 	}
 	if err := json.Unmarshal(values[0], &c.X); err != nil {
 		return err
@@ -273,7 +273,7 @@ func Levels() []LevelInfo {
 	return []LevelInfo{{
 		ID:          "level-1",
 		Label:       "Nivel 1",
-		Description: "Nivel de plataformas creado en la nube",
+		Description: "Nivel creado en la plataforma",
 	}}
 }
 
@@ -306,7 +306,7 @@ func New(now time.Time, playerCount int, difficulty string, level string, platfo
 }
 
 func NewWithSeed(now time.Time, seed int64, playerCount int, difficulty string, level string, platformURL string) *Game {
-	return NewWithSeedForGame(now, seed, playerCount, difficulty, level, platformURL, "plataformas")
+	return NewWithSeedForGame(now, seed, playerCount, difficulty, level, platformURL, "niveles")
 }
 
 func NewWithSeedForGame(now time.Time, seed int64, playerCount int, difficulty string, level string, platformURL string, gameID string) *Game {
@@ -317,11 +317,12 @@ func NewWithSeedForGameMode(now time.Time, seed int64, playerCount int, difficul
 	_ = seed
 	diff := NormalizeDifficulty(difficulty)
 	levels, err := fetchLevels(platformURL, diff, gameID, levelMode)
+	levelID := NormalizeLevel(level)
 	if err != nil {
 		log.Printf("%s: platform level fetch failed: %v", gameID, err)
-		levels = fallbackCompiledLevels()
+		levels = fallbackCompiledLevels(levelID)
 	}
-	selected := selectLevel(levels, NormalizeLevel(level))
+	selected := selectLevel(levels, levelID)
 	playerCount = clampInt(playerCount, 1, 6)
 	lives := selected.lives
 	if lives < 1 {
@@ -470,9 +471,9 @@ func (g *Game) tickLocked(now time.Time) {
 		if g.pointAtLocked(pt, now).kind == 2 {
 			if g.damageLocked(pt, now) {
 				if g.ended && !g.success {
-					g.queueEventLocked(whackamole.CueDefeat, "Plataformas derrota")
+					g.queueEventLocked(whackamole.CueDefeat, "Niveles derrota")
 				} else {
-					g.queueEventLocked(whackamole.CueDamage, "Plataformas daño")
+					g.queueEventLocked(whackamole.CueDamage, "Niveles daño")
 				}
 			}
 			if g.ended {
@@ -503,19 +504,19 @@ func (g *Game) applyPointLocked(point tilePoint, pt Point, now time.Time) []whac
 	switch point.kind {
 	case 1:
 		if g.captureBluePlatformLocked(point, pt, now) > 0 {
-			return []whackamole.Event{{Cue: whackamole.CueCoin, Message: "Plataformas punto " + strconv.Itoa(g.score)}}
+			return []whackamole.Event{{Cue: whackamole.CueCoin, Message: "Niveles punto " + strconv.Itoa(g.score)}}
 		}
 	case 3:
 		if point.uniq != "" && !g.removed[point.uniq] && !g.purplePrimed[point.uniq] {
 			g.purpleHeld[point.uniq] = true
-			return []whackamole.Event{{Cue: whackamole.CueDoubleCoin, Message: "Plataformas doble toque"}}
+			return []whackamole.Event{{Cue: whackamole.CueDoubleCoin, Message: "Niveles doble toque"}}
 		}
 	case 2:
 		if g.damageLocked(pt, now) {
 			if g.ended && !g.success {
-				return []whackamole.Event{{Cue: whackamole.CueDefeat, Message: "Plataformas derrota"}}
+				return []whackamole.Event{{Cue: whackamole.CueDefeat, Message: "Niveles derrota"}}
 			}
-			return []whackamole.Event{{Cue: whackamole.CueDamage, Message: "Plataformas daño"}}
+			return []whackamole.Event{{Cue: whackamole.CueDamage, Message: "Niveles daño"}}
 		}
 	}
 	return nil
@@ -1041,7 +1042,7 @@ func fetchLevels(platformURL string, diff Difficulty, gameID string, levelMode s
 	}
 	cleanGameID := strings.Trim(strings.TrimSpace(gameID), "/")
 	if cleanGameID == "" {
-		cleanGameID = "plataformas"
+		cleanGameID = "niveles"
 	}
 	levels, err := fetchLevelsForDifficulty(base, cleanGameID, string(diff), levelMode)
 	if err == nil {
@@ -1077,7 +1078,7 @@ func fetchLevelsForDifficulty(base string, gameID string, difficulty string, lev
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 		return nil, err
 	}
-	return compileCloudLevelsForMode(payload.Levels, levelMode)
+	return compileCloudLevelsForModeWithDifficulty(payload.Levels, levelMode, difficulty)
 }
 
 func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
@@ -1085,7 +1086,12 @@ func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
 }
 
 func compileCloudLevelsForMode(raw []cloudLevel, levelMode string) ([]compiledLevel, error) {
+	return compileCloudLevelsForModeWithDifficulty(raw, levelMode, "")
+}
+
+func compileCloudLevelsForModeWithDifficulty(raw []cloudLevel, levelMode string, selectedDifficulty string) ([]compiledLevel, error) {
 	challengeMode := strings.EqualFold(strings.TrimSpace(levelMode), "challenge")
+	selectedDifficulty = strings.ToLower(strings.TrimSpace(selectedDifficulty))
 	levels := make([]compiledLevel, 0, len(raw))
 	for index, level := range raw {
 		id := level.Slug
@@ -1101,7 +1107,11 @@ func compileCloudLevelsForMode(raw []cloudLevel, levelMode string) ([]compiledLe
 		if challengeMode {
 			timeLimit = 0
 		}
-		if settings, ok := level.Rules.DifficultySettings[strings.ToLower(strings.TrimSpace(level.Difficulty))]; ok {
+		settingsDifficulty := strings.ToLower(strings.TrimSpace(level.Difficulty))
+		if selectedDifficulty != "" {
+			settingsDifficulty = selectedDifficulty
+		}
+		if settings, ok := level.Rules.DifficultySettings[settingsDifficulty]; ok {
 			if settings.Life > 0 {
 				lives = settings.Life
 			}
@@ -1227,27 +1237,19 @@ func selectLevel(levels []compiledLevel, id string) compiledLevel {
 	return levels[0]
 }
 
-func fallbackCompiledLevels() []compiledLevel {
-	frame := rawFrame{Repeat: 20, Cells: []cellTuple{
-		{X: 7, Y: 14, Kind: 0},
-		{X: 8, Y: 14, Kind: 0},
-		{X: 7, Y: 15, Kind: 0},
-		{X: 8, Y: 15, Kind: 0},
-		{X: 3, Y: 5, Kind: 1, Uniq: "fallback-coin-1"},
-		{X: 12, Y: 25, Kind: 1, Uniq: "fallback-coin-2"},
-		{X: 0, Y: 10, Kind: 2},
-		{X: 15, Y: 20, Kind: 2},
-		{X: 5, Y: 22, Kind: 3, Uniq: "fallback-purple-1"},
-	}}
+func fallbackCompiledLevels(levelID string) []compiledLevel {
+	if strings.TrimSpace(levelID) == "" {
+		levelID = "level-1"
+	}
 	levels, _ := compileCloudLevels([]cloudLevel{{
-		Slug:        "level-1",
-		Label:       "Nivel de respaldo",
-		Description: "Respaldo local cuando la plataforma no está disponible.",
+		Slug:        levelID,
+		Label:       "Nivel no disponible",
+		Description: "La plataforma no devolvió niveles publicados para esta partida.",
 		Difficulty:  string(DifficultyMedium),
 		Life:        5,
-		PassScore:   2,
+		PassScore:   0,
 		FrameTickMS: 25,
-		Frames:      []rawFrame{frame},
+		Frames:      []rawFrame{{Repeat: 20, Cells: []cellTuple{}}},
 	}})
 	return levels
 }

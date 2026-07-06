@@ -1,4 +1,4 @@
-package plataformas
+package niveles
 
 import (
 	"math"
@@ -13,7 +13,7 @@ import (
 
 func TestFetchesCloudLevelAndScoresCoin(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/level-games/plataformas/levels" {
+		if r.URL.Path != "/api/level-games/niveles/levels" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
 		if r.URL.Query().Get("difficulty") != "medium" {
@@ -21,7 +21,7 @@ func TestFetchesCloudLevelAndScoresCoin(t *testing.T) {
 		}
 		w.Header().Set("content-type", "application/json")
 		_, _ = w.Write([]byte(`{
-			"gameId":"plataformas",
+			"gameId":"niveles",
 			"levels":[{
 				"id":"cloud-1",
 				"slug":"level-1",
@@ -76,6 +76,57 @@ func TestFetchesCloudLevelAndScoresCoin(t *testing.T) {
 	}
 	if snapshot := game.Snapshot(playAt); snapshot.Score != 1 || snapshot.ActiveTargets != 1 {
 		t.Fatalf("snapshot = %+v, want score 1 and one active target remaining", snapshot)
+	}
+}
+
+func TestSelectedDifficultySettingsOverrideSharedLevelDifficulty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/level-games/temporada1-niveles/levels" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("difficulty") != "expert" {
+			t.Fatalf("difficulty query = %q", r.URL.Query().Get("difficulty"))
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"gameId":"temporada1-niveles",
+			"levels":[{
+				"id":"cloud-1",
+				"slug":"level-1",
+				"label":"Shared board",
+				"description":"Same board, per-difficulty rules",
+				"difficulty":"medium",
+				"life":5,
+				"pass_score":2,
+				"time_limit_seconds":0,
+				"frame_tick_ms":40,
+				"rules":{"difficulty_settings":{
+					"medium":{"life":5,"gameplay_time_limit_seconds":60,"speed_multiplier":1},
+					"expert":{"life":1,"gameplay_time_limit_seconds":12,"speed_multiplier":4}
+				}},
+				"frames":[{"r":1,"c":[[1,1,1,"coin-a"]]},{"r":1,"c":[[2,2,1,"coin-b"]]}]
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	now := time.Unix(100, 0)
+	game := NewWithSeedForGameMode(now, 1, 2, "expert", "level-1", server.URL, "temporada1-niveles", "challenge")
+	if got := game.level.lives; got != 1 {
+		t.Fatalf("expert lives = %d, want 1", got)
+	}
+	if got := game.level.timeLimit; got != 12*time.Second {
+		t.Fatalf("expert time limit = %v, want 12s", got)
+	}
+	if got := game.level.frameTick; got != 10*time.Millisecond {
+		t.Fatalf("expert frame tick = %v, want 10ms", got)
+	}
+	frame := game.frameAtLocked(game.startedAt.Add(11 * time.Millisecond))
+	if frame == nil {
+		t.Fatal("frameAtLocked returned nil")
+	}
+	if got := frame.points[2][2].kind; got != 1 {
+		t.Fatalf("expert speed did not reach second frame, kind = %d", got)
 	}
 }
 

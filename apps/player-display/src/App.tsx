@@ -39,7 +39,7 @@ const emptyStatus: DisplayStatus = {
 
 function isTeamScoreGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
   const currentGame = compactDisplayText(status.currentGame);
-  return currentGame === "lava" || currentGame === "plataformas" || isLevelPointsGame(status);
+  return currentGame === "lava" || currentGame === "niveles" || isLevelPointsGame(status);
 }
 
 export default function App() {
@@ -576,15 +576,22 @@ function HeartMeter({ lives, compact = false, showAllUpTo = 8 }: { lives: number
   }
   if (lives > showAllUpTo) {
     return (
-      <div className={`heart-meter ${compact ? "compact" : ""} many`}>
+      <div
+        className={`heart-meter ${compact ? "compact" : ""} many`}
+        style={{ "--heart-count": compact ? 3 : 5 } as CSSProperties}
+      >
         {Array.from({ length: compact ? 3 : 5 }, (_, index) => <span className="heart filled" key={index} />)}
         <b>x{lives}</b>
       </div>
     );
   }
   const slots = heartMeterSlotCount(lives, compact);
+  const sizeClass = slots <= 1 ? "single" : slots <= 4 ? "few" : slots <= 8 ? "medium" : "full";
   return (
-    <div className={`heart-meter ${compact ? "compact" : ""}`}>
+    <div
+      className={`heart-meter ${compact ? "compact" : ""} ${sizeClass}`}
+      style={{ "--heart-count": Math.max(1, slots) } as CSSProperties}
+    >
       {Array.from({ length: slots }, (_, index) => (
         <span className={`heart ${index < lives ? "filled" : ""}`} key={index} />
       ))}
@@ -649,14 +656,11 @@ function isTemporadaOneGame(status: Pick<DisplayStatus, "currentGame" | "label">
   const label = normalizedDisplayText(status.label);
   const compactLabel = compactDisplayText(status.label);
   return (
-    currentGame === "temporada1"
-    || currentGame === "temporada1niveles"
+    currentGame === "temporada1niveles"
     || currentGame.includes("temporada1")
-    || currentGame.includes("season1")
     || label.includes("temporada 1")
     || label.includes("temporada1")
     || compactLabel.includes("temporada1")
-    || compactLabel.includes("season1")
   );
 }
 
@@ -666,7 +670,7 @@ function displayGameTitle(status: Pick<DisplayStatus, "currentGame" | "label">):
 
 function isTeamScoreboardGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
   const text = normalizedDisplayText(`${status.currentGame} ${status.label}`);
-  return compactDisplayText(status.currentGame) === "temporada2" || text.includes("tira") || text.includes("afloja") || text.includes("baldosas") || text.includes("tug");
+  return text.includes("tira") || text.includes("afloja") || text.includes("baldosas") || text.includes("tug");
 }
 
 function isLevelPointsGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
@@ -675,7 +679,7 @@ function isLevelPointsGame(status: Pick<DisplayStatus, "currentGame" | "label">)
 
 function isFixedSoloDisplayGame(currentGame: string): boolean {
   const game = compactDisplayText(currentGame);
-  return game === "parkour" || game === "saltos" || game === "temporada1" || game === "temporada1niveles";
+  return game === "parkour" || game === "saltos" || game === "temporada1niveles";
 }
 
 function shouldShowPlayerInfo(status: DisplayStatus): boolean {
@@ -710,7 +714,7 @@ function primaryMetric(status: DisplayStatus): { label: string; value: string; c
       caption: challengeMode(status) ? "Restante" : "Transcurrido",
     };
   }
-  if (status.currentGame === "whack-a-mole" || status.currentGame === "temporada2") {
+  if (status.currentGame === "whack-a-mole") {
     return { label: "Puntos", value: String(status.score), caption: "Marcador actual" };
   }
   if (status.activeTargets > 0 && isTeamScoreGame(status)) {
@@ -800,6 +804,7 @@ type DisplayOptions = {
   demoGame: string;
   demoLabel: string;
   demoPlayers?: number;
+  demoLives?: number;
   demoDifficultyConfigurable?: boolean;
 };
 
@@ -808,12 +813,15 @@ function displayOptions(): DisplayOptions {
   const params = new URLSearchParams(window.location.search);
   const difficultyParam = params.get("difficultyConfigurable");
   const playersParam = Number(params.get("demoPlayers") || "");
+  const rawLivesParam = params.get("demoLives");
+  const livesParam = Number(rawLivesParam || "");
   return {
     hud: params.get("hud") === "classic" ? "classic" : "arcade",
     demo: params.get("demo") || "",
     demoGame: params.get("demoGame") || "",
     demoLabel: params.get("demoLabel") || "",
     demoPlayers: Number.isFinite(playersParam) && playersParam > 0 ? Math.floor(playersParam) : undefined,
+    demoLives: rawLivesParam !== null && Number.isFinite(livesParam) && livesParam >= 0 ? Math.floor(livesParam) : undefined,
     demoDifficultyConfigurable: difficultyParam === null ? undefined : difficultyParam === "1" || difficultyParam === "true",
   };
 }
@@ -964,13 +972,13 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
     case "temporada1":
       return {
         ...base,
-        currentGame: options.demoGame || "temporada1",
+        currentGame: options.demoGame || "temporada1-niveles",
         label: options.demoLabel || "Temporada 1",
         difficulty: "medium",
         levelMode: "challenge",
         playerConfigurable: false,
         score: 12,
-        lives: 7,
+        lives: options.demoLives ?? 7,
         elapsedMillis: 48600,
         sessionElapsedMillis: 432000,
         challengeElapsedMillis: 174000,
@@ -989,13 +997,13 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
     case "temporada1-20lives":
       return {
         ...base,
-        currentGame: options.demoGame || "temporada1",
+        currentGame: options.demoGame || "temporada1-niveles",
         label: options.demoLabel || "Temporada 1",
         difficulty: "hard",
         levelMode: "free",
         playerConfigurable: false,
         score: 12,
-        lives: 20,
+        lives: options.demoLives ?? 20,
         elapsedMillis: 48600,
         sessionElapsedMillis: 432000,
         remainingMillis: 0,

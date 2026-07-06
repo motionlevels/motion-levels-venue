@@ -67,7 +67,7 @@ export function shouldPreferCatalogFallbackPreviewAnimation(
     && !fallback.previewSrc
     && !fallback.previewSrcs?.length
     && entry.source_kind !== "platform_levels"
-    && entry.source_kind !== "animations",
+    && entry.source_kind !== "animation",
   );
 }
 
@@ -123,7 +123,7 @@ export function platformLevelSupportedDifficulties(
 export function platformDifficultyLabel(
   entry: Pick<PlatformGameCatalogEntry, "catalog_category" | "difficulties" | "source_kind">,
 ): string {
-  if (entry.catalog_category === "attract" || entry.source_kind === "animations") return "Ambiente";
+  if (entry.catalog_category === "attract" || entry.source_kind === "animation") return "Ambiente";
   const supported = platformSupportedDifficulties(entry);
   if (supported?.length === catalogDifficultyIDs.length) return "Fácil-Experto";
   if (supported && supported.length > 1) {

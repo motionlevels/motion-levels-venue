@@ -17,9 +17,7 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
 	"github.com/lobis/motion-levels/game-engine/internal/games/memorychallenge"
-	"github.com/lobis/motion-levels/game-engine/internal/games/plataformas"
-	"github.com/lobis/motion-levels/game-engine/internal/games/temporada1"
-	"github.com/lobis/motion-levels/game-engine/internal/games/temporada2"
+	"github.com/lobis/motion-levels/game-engine/internal/games/niveles"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
 	"github.com/lobis/motion-levels/packages/contracts/gamepb"
@@ -115,13 +113,13 @@ func TestReplayCatchUpFramesSkipSessionChanges(t *testing.T) {
 }
 
 func TestCountdownFloorOverlayIsOptIn(t *testing.T) {
-	disabled := newGameRuntime(config{Brightness: 100, PlayerCount: 2, Game: "temporada1", Difficulty: "medium", Level: "level-1"}, nil, nil)
+	disabled := newGameRuntime(config{Brightness: 100, PlayerCount: 2, Game: "temporada1-niveles", Difficulty: "medium", Level: "level-1"}, nil, nil)
 	disabledFrame := makeFrame(1, disabled.started.Add(500*time.Millisecond), 0, disabled)
 	if got := countCountdownYellowTiles(disabledFrame); got != 0 {
 		t.Fatalf("disabled countdown overlay yellow tiles = %d, want 0", got)
 	}
 
-	enabled := newGameRuntime(config{Brightness: 100, PlayerCount: 2, Game: "temporada1", Difficulty: "medium", Level: "level-1", CountdownFloorOverlay: true}, nil, nil)
+	enabled := newGameRuntime(config{Brightness: 100, PlayerCount: 2, Game: "temporada1-niveles", Difficulty: "medium", Level: "level-1", CountdownFloorOverlay: true}, nil, nil)
 	enabledFrame := makeFrame(2, enabled.started.Add(500*time.Millisecond), 0, enabled)
 	if got := countCountdownYellowTiles(enabledFrame); got == 0 {
 		t.Fatal("enabled countdown overlay did not draw yellow digit tiles")
@@ -376,28 +374,12 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 		t.Fatalf("parkour music = %q, want Background07", parkour.MusicRef)
 	}
 
-	season := configForSelection(base, "temporada-1", 4)
-	if season.Game != "temporada1" || season.PlayerCount != 4 || season.Level != "level-1" {
-		t.Fatalf("temporada1 selection = %+v", season)
-	}
-	if season.MusicRef != "Motion/canciones/Background07.mp3" {
-		t.Fatalf("temporada1 music = %q, want Background07", season.MusicRef)
-	}
-
-	seasonLevels := configForSelection(base, "season1-levels", 4)
+	seasonLevels := configForSelection(base, "temporada1-niveles", 4)
 	if seasonLevels.Game != "temporada1-niveles" || seasonLevels.PlayerCount != 4 || seasonLevels.Level != "level-1" {
 		t.Fatalf("temporada1-niveles selection = %+v", seasonLevels)
 	}
-	if seasonLevels.MusicRef != plataformas.DefaultMusicRef || seasonLevels.MusicVolume != plataformas.DefaultMusicVolume {
-		t.Fatalf("temporada1-niveles music = %q %.2f, want %q %.2f", seasonLevels.MusicRef, seasonLevels.MusicVolume, plataformas.DefaultMusicRef, plataformas.DefaultMusicVolume)
-	}
-
-	season2 := configForSelection(base, "temporada-2", 4)
-	if season2.Game != "temporada2" || season2.PlayerCount != 4 || season2.Level != "level-1" || season2.Difficulty != "easy" {
-		t.Fatalf("temporada2 selection = %+v", season2)
-	}
-	if season2.MusicRef != temporada2.DefaultMusicRef || season2.MusicVolume != temporada2.DefaultMusicVolume {
-		t.Fatalf("temporada2 music = %q %.2f, want %q %.2f", season2.MusicRef, season2.MusicVolume, temporada2.DefaultMusicRef, temporada2.DefaultMusicVolume)
+	if seasonLevels.MusicRef != niveles.DefaultMusicRef || seasonLevels.MusicVolume != niveles.DefaultMusicVolume {
+		t.Fatalf("temporada1-niveles music = %q %.2f, want %q %.2f", seasonLevels.MusicRef, seasonLevels.MusicVolume, niveles.DefaultMusicRef, niveles.DefaultMusicVolume)
 	}
 
 	duel := configForSelection(base, "duelo", 6)
@@ -441,10 +423,10 @@ func TestConfigForSelectionUsesGameDefaults(t *testing.T) {
 }
 
 func TestNormalizeProvidesFocusedGameMusicAndCueFallbacks(t *testing.T) {
-	cfg := config{Game: "temporada1", MusicRef: "", CoinCueRef: "coin.wav"}
+	cfg := config{Game: "temporada1-niveles", MusicRef: "", CoinCueRef: "coin.wav"}
 	cfg.normalize()
-	if cfg.MusicRef != temporada1.DefaultMusicRef || cfg.MusicVolume != temporada1.DefaultMusicVolume {
-		t.Fatalf("temporada1 music = %q %.2f, want %q %.2f", cfg.MusicRef, cfg.MusicVolume, temporada1.DefaultMusicRef, temporada1.DefaultMusicVolume)
+	if cfg.MusicRef != niveles.DefaultMusicRef || cfg.MusicVolume != niveles.DefaultMusicVolume {
+		t.Fatalf("temporada1-niveles music = %q %.2f, want %q %.2f", cfg.MusicRef, cfg.MusicVolume, niveles.DefaultMusicRef, niveles.DefaultMusicVolume)
 	}
 	if cfg.DoubleCoinCueRef != "coin.wav" {
 		t.Fatalf("double coin fallback = %q, want coin.wav", cfg.DoubleCoinCueRef)
@@ -493,7 +475,7 @@ func TestReusableTileCueRefsAndDoubleCoinBurst(t *testing.T) {
 	backend.waitForCount(t, coinPath, 6)
 }
 
-func TestPlataformasRuntimeUsesCloudLevelAudioRefs(t *testing.T) {
+func TestNivelesRuntimeUsesCloudLevelAudioRefs(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/game-runtime" {
 			w.Header().Set("content-type", "application/json")
@@ -505,12 +487,12 @@ func TestPlataformasRuntimeUsesCloudLevelAudioRefs(t *testing.T) {
 			_, _ = w.Write([]byte(`{"gameId":"animations","levels":[]}`))
 			return
 		}
-		if r.URL.Path != "/api/level-games/plataformas/levels" {
+		if r.URL.Path != "/api/level-games/niveles/levels" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
 		w.Header().Set("content-type", "application/json")
 		_, _ = w.Write([]byte(`{
-			"gameId":"plataformas",
+			"gameId":"niveles",
 			"levels":[{
 				"id":"cloud-1",
 				"slug":"level-1",
@@ -535,7 +517,7 @@ func TestPlataformasRuntimeUsesCloudLevelAudioRefs(t *testing.T) {
 	defer server.Close()
 
 	runtime := newGameRuntime(config{
-		Game:               "plataformas",
+		Game:               "niveles",
 		Difficulty:         "medium",
 		Level:              "level-1",
 		PlayerCount:        1,
@@ -563,7 +545,7 @@ func TestPlataformasRuntimeUsesCloudLevelAudioRefs(t *testing.T) {
 	if refs.DefeatCueRef != "Motion/sonidos/derrota.mp3" {
 		t.Fatalf("runtime defeat cue = %q, want cloud cue", refs.DefeatCueRef)
 	}
-	if got := plataformas.DefaultMusicRef; got == status.Music {
+	if got := niveles.DefaultMusicRef; got == status.Music {
 		t.Fatalf("status music = default %q, want cloud override", got)
 	}
 }
@@ -806,24 +788,24 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 		t.Fatalf("selected saltos status = %+v", status)
 	}
 
-	body = bytes.NewBufferString(`{"game":"temporada1","playerCount":4,"difficulty":"medium","level":"level-2","levelMode":"challenge","challengeElapsedMillis":123000,"challengeAttemptCount":5}`)
+	body = bytes.NewBufferString(`{"game":"temporada1-niveles","playerCount":4,"difficulty":"medium","level":"level-2","levelMode":"challenge","challengeElapsedMillis":123000,"challengeAttemptCount":5}`)
 	response, err = http.Post(server.URL+"/api/select", "application/json", body)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		t.Fatalf("temporada1 select response = %d", response.StatusCode)
+		t.Fatalf("temporada1-niveles select response = %d", response.StatusCode)
 	}
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if status.CurrentGame != "temporada1" || status.PlayerCount != 4 || status.Difficulty != "medium" || status.Level != "level-2" || status.LevelMode != "challenge" || status.ChallengeElapsedMillis != 123000 || status.ChallengeAttemptCount != 5 {
-		t.Fatalf("selected temporada1 status = %+v", status)
+	if status.CurrentGame != "temporada1-niveles" || status.PlayerCount != 4 || status.Difficulty != "medium" || status.Level != "level-2" || status.LevelMode != "challenge" || status.ChallengeElapsedMillis != 123000 || status.ChallengeAttemptCount != 5 {
+		t.Fatalf("selected temporada1-niveles status = %+v", status)
 	}
 	display := runtime.DisplayStatus(time.Now())
 	if display.LevelMode != "challenge" || display.ChallengeElapsedMillis != 123000 || display.ChallengeAttemptCount != 5 {
-		t.Fatalf("display temporada1 mode = %q challengeElapsed=%d challengeAttempts=%d, want challenge 123000 5", display.LevelMode, display.ChallengeElapsedMillis, display.ChallengeAttemptCount)
+		t.Fatalf("display temporada1-niveles mode = %q challengeElapsed=%d challengeAttempts=%d, want challenge 123000 5", display.LevelMode, display.ChallengeElapsedMillis, display.ChallengeAttemptCount)
 	}
 	response, err = http.Post(server.URL+"/api/control", "application/json", bytes.NewBufferString(`{"action":"restart"}`))
 	if err != nil {
@@ -832,22 +814,6 @@ func TestGameAPIStatusAndSelect(t *testing.T) {
 	_ = response.Body.Close()
 	if runtime.Status().ChallengeElapsedMillis != 0 || runtime.Status().ChallengeAttemptCount != 0 {
 		t.Fatalf("restart challenge elapsed = %d attempts = %d, want 0 0", runtime.Status().ChallengeElapsedMillis, runtime.Status().ChallengeAttemptCount)
-	}
-
-	body = bytes.NewBufferString(`{"game":"temporada2","playerCount":4,"difficulty":"expert","level":"level-2"}`)
-	response, err = http.Post(server.URL+"/api/select", "application/json", body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("temporada2 select response = %d", response.StatusCode)
-	}
-	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
-		t.Fatal(err)
-	}
-	if status.CurrentGame != "temporada2" || status.PlayerCount != 4 || status.Difficulty != "easy" || status.Level != "level-2" {
-		t.Fatalf("selected temporada2 status = %+v", status)
 	}
 
 	body = bytes.NewBufferString(`{"game":"patrones","playerCount":4,"difficulty":"hard","level":"level-3"}`)
@@ -1098,13 +1064,13 @@ func TestSessionRecordingWritesLevelAttemptRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 2, Game: "temporada1", Difficulty: "medium", Level: "level-1"}, nil, recorder)
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 2, Game: "temporada1-niveles", Difficulty: "medium", Level: "level-1"}, nil, recorder)
 	started := time.Date(2026, 6, 4, 8, 1, 0, 0, time.UTC)
 	gameplayStarted := started.Add(3 * time.Second)
 	ended := gameplayStarted.Add(42 * time.Second)
 
 	runtime.RecordDisplaySnapshot(displayStatus{
-		CurrentGame:              "temporada1",
+		CurrentGame:              "temporada1-niveles",
 		Label:                    "Temporada 1",
 		Phase:                    "countdown",
 		Difficulty:               "medium",
@@ -1119,7 +1085,7 @@ func TestSessionRecordingWritesLevelAttemptRecords(t *testing.T) {
 		GameplayStartedUnixNanos: gameplayStarted.UnixNano(),
 	}, started)
 	runtime.RecordDisplaySnapshot(displayStatus{
-		CurrentGame:              "temporada1",
+		CurrentGame:              "temporada1-niveles",
 		Label:                    "Temporada 1",
 		Phase:                    "finished",
 		Difficulty:               "medium",
@@ -1172,7 +1138,7 @@ func TestLevelAttemptDoesNotControlCameraRecording(t *testing.T) {
 	runtime := newGameRuntime(config{
 		Brightness:            80,
 		PlayerCount:           2,
-		Game:                  "temporada1",
+		Game:                  "temporada1-niveles",
 		Difficulty:            "medium",
 		Level:                 "level-1",
 		TeamName:              "Equipo Azul",
@@ -1190,7 +1156,7 @@ func TestLevelAttemptDoesNotControlCameraRecording(t *testing.T) {
 	ended := gameplayStarted.Add(42 * time.Second)
 
 	runtime.RecordDisplaySnapshot(displayStatus{
-		CurrentGame:              "temporada1",
+		CurrentGame:              "temporada1-niveles",
 		Label:                    "Temporada 1",
 		Phase:                    "countdown",
 		Difficulty:               "medium",
@@ -1205,7 +1171,7 @@ func TestLevelAttemptDoesNotControlCameraRecording(t *testing.T) {
 		GameplayStartedUnixNanos: gameplayStarted.UnixNano(),
 	}, started)
 	runtime.RecordDisplaySnapshot(displayStatus{
-		CurrentGame:              "temporada1",
+		CurrentGame:              "temporada1-niveles",
 		Label:                    "Temporada 1",
 		Phase:                    "finished",
 		Difficulty:               "medium",
@@ -1759,7 +1725,7 @@ func TestPlatformLevelNarrationSuppressesLegacyCountdownCue(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/json")
 		_, _ = fmt.Fprintf(w, `{
-			"gameId":"plataformas",
+			"gameId":"niveles",
 			"levels":[{
 				"id":"cloud-1",
 				"slug":"level-1",
@@ -1794,7 +1760,7 @@ func TestPlatformLevelNarrationSuppressesLegacyCountdownCue(t *testing.T) {
 		CueVolume:       0.45,
 	}, player, nil)
 
-	runtime.SelectGameWithDifficulty("plataformas", 1, "medium")
+	runtime.SelectGameWithDifficulty("niveles", 1, "medium")
 	backend.waitForCount(t, narrationPath, 1)
 	time.Sleep(300 * time.Millisecond)
 	if got := backend.count(countdownPath); got != 0 {
@@ -1961,8 +1927,7 @@ func TestDisplayStatusPlayerMappingPerGame(t *testing.T) {
 		{"memory", config{Brightness: 80, PlayerCount: 2, Game: "memory"}},
 		{"patrones", config{Brightness: 80, PlayerCount: 2, Game: "patrones", Difficulty: "normal", Level: "level-1"}},
 		{"saltos", config{Brightness: 80, PlayerCount: 2, Game: "saltos", Level: "level-1"}},
-		{"temporada1", config{Brightness: 80, PlayerCount: 2, Game: "temporada1", Level: "level-1"}},
-		{"temporada2", config{Brightness: 80, PlayerCount: 2, Game: "temporada2", Level: "level-1"}},
+		{"temporada1-niveles", config{Brightness: 80, PlayerCount: 2, Game: "temporada1-niveles", Level: "level-1"}},
 	}
 
 	for _, tc := range cases {
@@ -1987,7 +1952,7 @@ func TestDisplayStatusPlayerMappingPerGame(t *testing.T) {
 }
 
 func TestDisplayStatusIncludesSessionElapsedMillis(t *testing.T) {
-	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "temporada1", Level: "level-1"}, nil, nil)
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "temporada1-niveles", Level: "level-1"}, nil, nil)
 	runtime.mu.RLock()
 	attemptStarted := runtime.started
 	runtime.mu.RUnlock()

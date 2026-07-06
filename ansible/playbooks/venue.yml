@@ -330,7 +330,7 @@
 
     - name: Run focused remote Go tests
       ansible.builtin.command:
-        cmd: "{{ motion_levels_go_bin }} test ./game-engine/cmd/game-engine ./floor-controller/cmd/floor-controller ./game-engine/internal/games/saltos ./game-engine/internal/games/temporada1"
+        cmd: "{{ motion_levels_go_bin }} test ./game-engine/cmd/game-engine ./floor-controller/cmd/floor-controller ./game-engine/internal/games/saltos ./game-engine/internal/games/niveles"
         chdir: "{{ motion_levels_remote_src }}"
       changed_when: false
       when: motion_levels_deploy_mode in motion_levels_runtime_modes

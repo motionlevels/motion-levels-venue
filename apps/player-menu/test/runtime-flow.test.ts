@@ -7,10 +7,10 @@ describe("runtime screen flow", () => {
   it("keeps the game screen after a level was stopped", () => {
     assert.deepEqual(
       idleLoopSyncDecision({
-        launchedGameID: "temporada-1",
+        launchedGameID: "temporada1-niveles",
         launchingGameID: null,
         screenMode: "game",
-        stoppedLevelGameID: "temporada-1",
+        stoppedLevelGameID: "temporada1-niveles",
       }),
       { action: "hold-stopped", message: "Nivel detenido" },
     );
@@ -19,8 +19,8 @@ describe("runtime screen flow", () => {
   it("keeps the game screen while a replacement level launch is in flight", () => {
     assert.deepEqual(
       idleLoopSyncDecision({
-        launchedGameID: "temporada-1",
-        launchingGameID: "temporada-1",
+        launchedGameID: "temporada1-niveles",
+        launchingGameID: "temporada1-niveles",
         screenMode: "game",
         stoppedLevelGameID: null,
       }),
@@ -31,7 +31,7 @@ describe("runtime screen flow", () => {
   it("returns to browse only for an idle loop with no stopped or launching level", () => {
     assert.deepEqual(
       idleLoopSyncDecision({
-        launchedGameID: "temporada-1",
+        launchedGameID: "temporada1-niveles",
         launchingGameID: null,
         screenMode: "game",
         stoppedLevelGameID: null,
@@ -43,10 +43,10 @@ describe("runtime screen flow", () => {
   it("ignores idle sync outside the game screen", () => {
     assert.deepEqual(
       idleLoopSyncDecision({
-        launchedGameID: "temporada-1",
+        launchedGameID: "temporada1-niveles",
         launchingGameID: null,
         screenMode: "browse",
-        stoppedLevelGameID: "temporada-1",
+        stoppedLevelGameID: "temporada1-niveles",
       }),
       { action: "ignore" },
     );
@@ -55,19 +55,19 @@ describe("runtime screen flow", () => {
   it("shows active level launch progress on the current game screen", () => {
     assert.deepEqual(
       visibleActiveLevelLaunch({
-        gameID: "temporada-1",
-        launch: { gameID: "temporada-1", levelID: "temporada1-level-20", phase: "loading" },
+        gameID: "temporada1-niveles",
+        launch: { gameID: "temporada1-niveles", levelID: "temporada1-level-20", phase: "loading" },
         screenMode: "game",
       }),
-      { gameID: "temporada-1", levelID: "temporada1-level-20", phase: "loading" },
+      { gameID: "temporada1-niveles", levelID: "temporada1-level-20", phase: "loading" },
     );
   });
 
   it("does not show active level launch progress in browse or for another game", () => {
     assert.equal(
       visibleActiveLevelLaunch({
-        gameID: "temporada-1",
-        launch: { gameID: "temporada-1", levelID: "temporada1-level-20", phase: "stopping" },
+        gameID: "temporada1-niveles",
+        launch: { gameID: "temporada1-niveles", levelID: "temporada1-level-20", phase: "stopping" },
         screenMode: "browse",
       }),
       null,
@@ -75,7 +75,7 @@ describe("runtime screen flow", () => {
     assert.equal(
       visibleActiveLevelLaunch({
         gameID: "reto-memoria",
-        launch: { gameID: "temporada-1", levelID: "temporada1-level-20", phase: "loading" },
+        launch: { gameID: "temporada1-niveles", levelID: "temporada1-level-20", phase: "loading" },
         screenMode: "game",
       }),
       null,

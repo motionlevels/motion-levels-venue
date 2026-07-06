@@ -37,7 +37,7 @@ func TestRecorderWritesCompressedDeltaReplay(t *testing.T) {
 		Sequence:  1,
 		UnixNanos: started.UnixNano(),
 		Payload: &gamepb.GameSessionRecord_SessionStarted{SessionStarted: &gamepb.SessionStarted{
-			Game:             "temporada1",
+			Game:             "temporada1-niveles",
 			Label:            "Temporada 1",
 			StartedUnixNanos: started.UnixNano(),
 		}},
@@ -208,7 +208,7 @@ func TestRecorderRemovesLocalReplayAfterSuccessfulUpload(t *testing.T) {
 		Sequence:  1,
 		UnixNanos: started.UnixNano(),
 		Payload: &gamepb.GameSessionRecord_SessionStarted{SessionStarted: &gamepb.SessionStarted{
-			Game:             "temporada1",
+			Game:             "temporada1-niveles",
 			Label:            "Temporada 1",
 			StartedUnixNanos: started.UnixNano(),
 		}},

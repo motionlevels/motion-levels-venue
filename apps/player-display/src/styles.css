@@ -1120,15 +1120,18 @@ body {
 }
 
 .arcade-metric--lives {
+  container-type: size;
   min-height: 0;
   padding: clamp(32px, 3vw, 54px) clamp(42px, 4vw, 78px);
-  align-content: center;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
+  align-items: stretch;
   gap: clamp(20px, 2vw, 36px);
 }
 
 .level-points-display .arcade-metric--lives {
   padding: clamp(58px, 5.2vw, 92px) clamp(72px, 6.4vw, 118px);
-  align-content: center;
+  align-content: stretch;
   gap: clamp(34px, 3.4vw, 58px);
 }
 
@@ -1227,40 +1230,83 @@ body {
 }
 
 .arcade-metric--lives strong {
+  min-height: 0;
+  display: flex;
+  align-items: center;
   overflow: visible;
   white-space: normal;
 }
 
 .arcade-metric--lives .heart-meter {
+  --heart-count: 5;
+  --heart-size: min(12cqw, 30cqh, 145px);
+  --heart-gap: min(2.35cqw, calc(var(--heart-size) * 0.24));
+  width: 100%;
+  height: 100%;
   display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--heart-count), minmax(0, var(--heart-size)));
   align-items: center;
-  gap: clamp(14px, 1.65vw, 34px);
+  align-content: center;
+  justify-content: start;
+  gap: var(--heart-gap);
   max-width: 100%;
 }
 
+.arcade-metric--lives .heart-meter.single {
+  --heart-size: min(34cqw, 52cqh, 280px);
+  --heart-gap: 0px;
+}
+
+.arcade-metric--lives .heart-meter.few {
+  --heart-size: min(20cqw, 44cqh, 215px);
+}
+
+.arcade-metric--lives .heart-meter.medium {
+  --heart-size: min(12.5cqw, 32cqh, 150px);
+}
+
+.arcade-metric--lives .heart-meter.full {
+  --heart-size: min(7cqw, 18cqh, 86px);
+  --heart-gap: min(1.2cqw, calc(var(--heart-size) * 0.16));
+  grid-template-columns: repeat(10, minmax(0, var(--heart-size)));
+}
+
 .level-points-display .arcade-metric--lives .heart-meter {
-  grid-template-columns: repeat(5, minmax(86px, 118px));
-  justify-content: start;
-  gap: clamp(34px, 3.15vw, 58px);
+  --heart-size: min(13cqw, 34cqh, 165px);
+  --heart-gap: min(2.6cqw, calc(var(--heart-size) * 0.28));
+}
+
+.level-points-display .arcade-metric--lives .heart-meter.single {
+  --heart-size: min(36cqw, 54cqh, 310px);
+}
+
+.level-points-display .arcade-metric--lives .heart-meter.few {
+  --heart-size: min(21cqw, 46cqh, 235px);
+}
+
+.level-points-display .arcade-metric--lives .heart-meter.full {
+  --heart-size: min(7cqw, 18cqh, 86px);
+  --heart-gap: min(1.2cqw, calc(var(--heart-size) * 0.16));
+}
+
+.arcade-metric--lives .heart-meter.many {
+  --heart-size: min(10.5cqw, 27cqh, 128px);
+  grid-template-columns: repeat(var(--heart-count), minmax(0, var(--heart-size))) auto;
+  align-items: center;
 }
 
 .arcade-metric--lives .heart {
-  width: clamp(50px, 5vw, 94px);
-  height: clamp(50px, 5vw, 94px);
-}
-
-.level-points-display .arcade-metric--lives .heart {
-  width: clamp(86px, 6.2vw, 122px);
-  height: clamp(86px, 6.2vw, 122px);
+  width: var(--heart-size);
+  height: var(--heart-size);
 }
 
 .arcade-metric--lives .heart::before {
-  font-size: clamp(64px, 6vw, 112px);
+  font-size: calc(var(--heart-size) * 1.18);
 }
 
-.level-points-display .arcade-metric--lives .heart::before {
-  font-size: clamp(104px, 7.4vw, 148px);
+.arcade-metric--lives .heart-meter b {
+  align-self: center;
+  font-size: min(8cqw, 20cqh, 5.8rem);
 }
 
 .arcade-metric--time > strong {
