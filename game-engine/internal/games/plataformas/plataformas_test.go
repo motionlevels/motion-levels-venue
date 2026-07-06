@@ -307,7 +307,7 @@ func TestSuccessAdvancesToNextLevelAfterResultAnimation(t *testing.T) {
 	}
 }
 
-func TestDifficultySettingsOverrideRuntimeTimingAndLimits(t *testing.T) {
+func TestDifficultySettingsOverrideRuntimeTimingAndChallengeClock(t *testing.T) {
 	rawLevels := []cloudLevel{{
 		Slug:             "level-1",
 		Label:            "Tuned difficulty",
@@ -330,8 +330,8 @@ func TestDifficultySettingsOverrideRuntimeTimingAndLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := levels[0].lives; got != 8 {
-		t.Fatalf("lives = %d, want gameplay override", got)
+	if got := levels[0].lives; got != 4 {
+		t.Fatalf("lives = %d, want per-level difficulty lives", got)
 	}
 	if got := levels[0].timeLimit; got != 90*time.Second {
 		t.Fatalf("timeLimit = %s, want 90s", got)
