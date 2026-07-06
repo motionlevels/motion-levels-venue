@@ -1121,8 +1121,8 @@ func compileCloudLevelsForModeWithDifficulty(raw []cloudLevel, levelMode string,
 			}
 			if settings.SpeedMultiplier > 0 {
 				frameTick = time.Duration(float64(frameTick) / settings.SpeedMultiplier)
-				if frameTick < 10*time.Millisecond {
-					frameTick = 10 * time.Millisecond
+				if frameTick <= 0 {
+					frameTick = time.Millisecond
 				}
 			}
 		}

@@ -130,6 +130,58 @@ func TestSelectedDifficultySettingsOverrideSharedLevelDifficulty(t *testing.T) {
 	}
 }
 
+func TestExpertSpeedMultiplierAppliesBelowAuthoredMinimumDelay(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/level-games/temporada1-niveles/levels" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("difficulty") != "expert" {
+			t.Fatalf("difficulty query = %q", r.URL.Query().Get("difficulty"))
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"gameId":"temporada1-niveles",
+			"levels":[{
+				"id":"cloud-1",
+				"slug":"level-1",
+				"label":"Temporada 1 live timing shape",
+				"difficulty":"expert",
+				"life":1,
+				"time_limit_seconds":0,
+				"frame_tick_ms":10,
+				"rules":{"difficulty_settings":{
+					"expert":{"life":1,"speed_multiplier":4}
+				}},
+				"frames":[{"r":50,"c":[[1,1,1,"coin-a"]]},{"r":50,"c":[[2,2,1,"coin-b"]]}]
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	now := time.Unix(100, 0)
+	game := NewWithSeedForGameMode(now, 1, 2, "expert", "level-1", server.URL, "temporada1-niveles", "challenge")
+	if got := game.level.frameTick; got != 2500*time.Microsecond {
+		t.Fatalf("expert frame tick = %v, want 2.5ms from 10ms / 4x", got)
+	}
+	if got := game.level.frames[0].duration; got != 125*time.Millisecond {
+		t.Fatalf("first frame duration = %v, want 125ms from 500ms / 4x", got)
+	}
+	firstFrame := game.frameAtLocked(game.startedAt.Add(124 * time.Millisecond))
+	if firstFrame == nil {
+		t.Fatal("first frameAtLocked returned nil")
+	}
+	if got := firstFrame.points[1][1].kind; got != 1 {
+		t.Fatalf("expert 4x speed left first frame too early, kind = %d", got)
+	}
+	secondFrame := game.frameAtLocked(game.startedAt.Add(126 * time.Millisecond))
+	if secondFrame == nil {
+		t.Fatal("second frameAtLocked returned nil")
+	}
+	if got := secondFrame.points[2][2].kind; got != 1 {
+		t.Fatalf("expert 4x speed did not reach second frame, kind = %d", got)
+	}
+}
+
 func TestSelectedDifficultyDeduplicatesSharedRowsAndPrefersExactDifficulty(t *testing.T) {
 	levels, err := compileCloudLevelsForModeWithDifficulty([]cloudLevel{
 		{
