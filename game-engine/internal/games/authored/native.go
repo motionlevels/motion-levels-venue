@@ -89,7 +89,7 @@ var nativeCatalogEntries = map[string]CatalogEntry{
 		EngineGame:         "authored-patrones",
 		Label:              "Patrones",
 		Description:        "Reconstruid patrones azules en el canvas central sin errores.",
-		DefaultMusicRef:    "Motion/canciones/Background09.mp3",
+		DefaultMusicRef:    "Motion/canciones/Background07.mp3",
 		DefaultMusicVolume: 0.18,
 		MinPlayers:         1,
 		MaxPlayers:         6,

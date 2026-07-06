@@ -18,7 +18,7 @@ const (
 
 	countdownDuration  = 3 * time.Second
 	failureDuration    = 2200 * time.Millisecond
-	DefaultMusicRef    = "Motion/canciones/Background09.mp3"
+	DefaultMusicRef    = "Motion/canciones/Background07.mp3"
 	DefaultMusicVolume = 0.18
 )
 

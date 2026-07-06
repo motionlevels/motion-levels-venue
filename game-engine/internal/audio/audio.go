@@ -98,10 +98,12 @@ func (p *Player) Preload(refs ...string) error {
 		}
 		path, err := p.Resolve(ref)
 		if err != nil {
-			return err
+			log.Printf("audio preload %s: %v", ref, err)
+			continue
 		}
 		if err := preloader.Preload(path); err != nil {
-			return err
+			log.Printf("audio preload %s: %v", ref, err)
+			continue
 		}
 	}
 	return nil
