@@ -277,7 +277,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
   const memoryGame = isMemoryGame(status);
   const teamRosterGame = isTeamScoreGame(status);
   const teamScoreboardGame = isTeamScoreboardGame(status);
-  const duelGame = status.currentGame === "duel" && status.players.length >= 2;
+  const duelGame = isDuelGame(status) && status.players.length >= 2;
   const parkourGame = isParkourGame(status.currentGame);
   const levelPointsGame = isLevelPointsGame(status);
   const parkourStyleGame = parkourGame || levelPointsGame;
@@ -441,17 +441,28 @@ function MemoryPlayerScore({ player }: { player: DisplayStatus["players"][number
 }
 
 function DuelBoard({ status, clock }: { status: DisplayStatus; clock: string }) {
-  const left = status.players[0];
-  const right = status.players[1];
+  const left = status.players.filter((_, index) => index % 2 === 0);
+  const right = status.players.filter((_, index) => index % 2 === 1);
+  const clockCaption = status.phase === "countdown"
+    ? "Cuenta atrás"
+    : status.phase === "finished"
+      ? "Final"
+      : status.phase === "ready"
+        ? "A sus puestos"
+        : "Tiempo";
   return (
-    <section className="duel-board" aria-label="Marcador de duelo">
-      <DuelSide player={left} side="left" />
+    <section className={`duel-board count-${Math.min(status.players.length, 8)}`} aria-label="Marcador de duelo">
+      <div className="duel-column">
+        {left.map((player) => <DuelSide key={player.index} player={player} side="left" />)}
+      </div>
       <div className="duel-center">
-        <span>Countdown</span>
+        <span>{clockCaption}</span>
         <strong>{clock}</strong>
         <b>VS</b>
       </div>
-      <DuelSide player={right} side="right" />
+      <div className="duel-column">
+        {right.map((player) => <DuelSide key={player.index} player={player} side="right" />)}
+      </div>
     </section>
   );
 }
@@ -604,6 +615,11 @@ function isMemoryGame(status: Pick<DisplayStatus, "currentGame" | "label">): boo
     || label.includes("reto de memoria")
     || label === "memoria"
   );
+}
+
+function isDuelGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
+  const currentGame = compactDisplayText(status.currentGame);
+  return currentGame === "duel" || currentGame === "authoredduel" || normalizedDisplayText(status.label) === "duelo";
 }
 
 function isScreensaverDisplay(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
@@ -828,6 +844,7 @@ type DisplayOptions = {
   demo: string;
   demoGame: string;
   demoLabel: string;
+  demoPlayers?: number;
   demoDifficultyConfigurable?: boolean;
 };
 
@@ -835,11 +852,13 @@ function displayOptions(): DisplayOptions {
   if (typeof window === "undefined") return { hud: "arcade", demo: "", demoGame: "", demoLabel: "" };
   const params = new URLSearchParams(window.location.search);
   const difficultyParam = params.get("difficultyConfigurable");
+  const playersParam = Number(params.get("demoPlayers") || "");
   return {
     hud: params.get("hud") === "classic" ? "classic" : "arcade",
     demo: params.get("demo") || "",
     demoGame: params.get("demoGame") || "",
     demoLabel: params.get("demoLabel") || "",
+    demoPlayers: Number.isFinite(playersParam) && playersParam > 0 ? Math.floor(playersParam) : undefined,
     demoDifficultyConfigurable: difficultyParam === null ? undefined : difficultyParam === "1" || difficultyParam === "true",
   };
 }
@@ -925,14 +944,26 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         lastEventCue: "",
         lastEventMessage: "",
       };
-    case "duel":
+    case "duel": {
+      const duelRoster = [
+        { index: 0, label: "Red", color: { r: 255, g: 41, b: 56 } },
+        { index: 1, label: "Cyan", color: { r: 30, g: 213, b: 255 } },
+        { index: 2, label: "Green", color: { r: 47, g: 216, b: 108 } },
+        { index: 3, label: "Pink", color: { r: 247, g: 61, b: 255 } },
+        { index: 4, label: "Blue", color: { r: 10, g: 90, b: 248 } },
+        { index: 5, label: "Yellow", color: { r: 255, g: 209, b: 102 } },
+        { index: 6, label: "Violet", color: { r: 167, g: 139, b: 250 } },
+        { index: 7, label: "Orange", color: { r: 251, g: 146, b: 60 } },
+      ];
+      const duelCount = Math.min(Math.max(options.demoPlayers || 2, 2), duelRoster.length);
+      const players = duelRoster.slice(0, duelCount).map((player, index) => ({ ...player, score: 14 - index * 2, lives: -1 }));
       return {
         ...base,
-        currentGame: "duel",
-        label: "Duelo",
-        playerCount: 2,
-        players: base.players.slice(0, 2).map((player, index) => ({ ...player, score: index === 0 ? 12 : 9, lives: index === 0 ? 3 : 4 })),
-        score: 21,
+        currentGame: options.demoGame || "authored-duel",
+        label: options.demoLabel || "Duelo",
+        playerCount: duelCount,
+        players,
+        score: players.reduce((total, player) => total + player.score, 0),
         lives: -1,
         sessionElapsedMillis: 94000,
         remainingMillis: 156000,
@@ -940,6 +971,7 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         lastEventCue: "hit",
         lastEventMessage: "Cyan +1",
       };
+    }
     case "team":
       return {
         ...base,
