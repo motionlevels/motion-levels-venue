@@ -743,7 +743,7 @@ func TestCompileCloudLevelUsesConfiguredResultAnimations(t *testing.T) {
 		Difficulty:  string(DifficultyMedium),
 		Life:        5,
 		FrameTickMS: 25,
-		Rules: levelRules{
+		ResultAnimations: resultAnimationsConfig{
 			VictoryAnimations: []string{"victory-wave"},
 			DefeatAnimations:  []string{"defeat-spark"},
 		},
@@ -776,8 +776,8 @@ func TestCustomVictoryAnimationUsesLatestSelectedCatalogAnimation(t *testing.T) 
 				"life":5,
 				"pass_score":0,
 				"frame_tick_ms":25,
-				"rules":{
-					"victory_animations":["victory-pulse","game-pass"]
+				"result_animations":{
+					"victory_animations":["game-pass"]
 				},
 				"frames":[{"r":20,"c":[[5,5,1,"coin-a"]]}]
 			}]}`))
@@ -809,8 +809,20 @@ func TestCustomVictoryAnimationUsesLatestSelectedCatalogAnimation(t *testing.T) 
 	if got != (RGB{R: 0x12, G: 0x34, B: 0x56}) {
 		t.Fatalf("result animation color = %+v, want catalog Game Pass color", got)
 	}
-	if selected := chosenResultAnimation([]string{"victory-pulse", "game-pass"}, "victory-pulse", now); selected != "game-pass" {
-		t.Fatalf("chosen result animation = %q, want latest selected game-pass", selected)
+	configured := []string{"victory-pulse", "game-pass"}
+	stable := chosenResultAnimation(configured, "victory-pulse", now)
+	if again := chosenResultAnimation(configured, "victory-pulse", now); again != stable {
+		t.Fatalf("chosen result animation not stable for a fixed end time: %q then %q", stable, again)
+	}
+	if stable != "victory-pulse" && stable != "game-pass" {
+		t.Fatalf("chosen result animation = %q, want one of the configured animations", stable)
+	}
+	seen := map[string]bool{}
+	for offset := 0; offset < 200; offset++ {
+		seen[chosenResultAnimation(configured, "victory-pulse", now.Add(time.Duration(offset)*time.Millisecond))] = true
+	}
+	if len(seen) < 2 {
+		t.Fatalf("chosen result animation never varied across end times: %v", seen)
 	}
 }
 

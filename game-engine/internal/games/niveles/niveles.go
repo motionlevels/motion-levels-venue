@@ -107,10 +107,10 @@ type Point struct {
 type Game struct {
 	mu sync.Mutex
 
-	level       compiledLevel
-	levels      []compiledLevel
-	difficulty  Difficulty
-	playerCount int
+	level            compiledLevel
+	levels           []compiledLevel
+	difficulty       Difficulty
+	playerCount      int
 	resultAnimations map[string]resultanimations.CompiledLevel
 
 	createdAt time.Time
@@ -189,33 +189,40 @@ type cloudResponse struct {
 }
 
 type cloudLevel struct {
-	ID               string     `json:"id"`
-	Slug             string     `json:"slug"`
-	SettingsHash     string     `json:"settings_hash"`
-	Label            string     `json:"label"`
-	Description      string     `json:"description"`
-	Difficulty       string     `json:"difficulty"`
-	Life             int        `json:"life"`
-	PassScore        int        `json:"pass_score"`
-	TimeLimitSeconds int        `json:"time_limit_seconds"`
-	FrameTickMS      int        `json:"frame_tick_ms"`
-	Rules            levelRules `json:"rules"`
-	MusicRef         string     `json:"music_ref"`
-	MusicVolume      *float64   `json:"music_volume"`
-	NarrationCueRef  string     `json:"narration_cue_ref"`
-	StartCueRef      string     `json:"start_cue_ref"`
-	CoinCueRef       string     `json:"coin_cue_ref"`
-	DoubleCoinCueRef string     `json:"double_coin_cue_ref"`
-	DamageCueRef     string     `json:"damage_cue_ref"`
-	WinCueRef        string     `json:"win_cue_ref"`
-	DefeatCueRef     string     `json:"defeat_cue_ref"`
-	Frames           []rawFrame `json:"frames"`
+	ID               string                 `json:"id"`
+	Slug             string                 `json:"slug"`
+	SettingsHash     string                 `json:"settings_hash"`
+	Label            string                 `json:"label"`
+	Description      string                 `json:"description"`
+	Difficulty       string                 `json:"difficulty"`
+	Life             int                    `json:"life"`
+	PassScore        int                    `json:"pass_score"`
+	TimeLimitSeconds int                    `json:"time_limit_seconds"`
+	FrameTickMS      int                    `json:"frame_tick_ms"`
+	Rules            levelRules             `json:"rules"`
+	ResultAnimations resultAnimationsConfig `json:"result_animations"`
+	MusicRef         string                 `json:"music_ref"`
+	MusicVolume      *float64               `json:"music_volume"`
+	NarrationCueRef  string                 `json:"narration_cue_ref"`
+	StartCueRef      string                 `json:"start_cue_ref"`
+	CoinCueRef       string                 `json:"coin_cue_ref"`
+	DoubleCoinCueRef string                 `json:"double_coin_cue_ref"`
+	DamageCueRef     string                 `json:"damage_cue_ref"`
+	WinCueRef        string                 `json:"win_cue_ref"`
+	DefeatCueRef     string                 `json:"defeat_cue_ref"`
+	Frames           []rawFrame             `json:"frames"`
+}
+
+// resultAnimationsConfig carries the game-level victory/defeat animations. They
+// are a per-game setting (level_games.game_source.result_animations on the
+// platform) served alongside each level — never authored per level.
+type resultAnimationsConfig struct {
+	VictoryAnimations []string `json:"victory_animations"`
+	DefeatAnimations  []string `json:"defeat_animations"`
 }
 
 type levelRules struct {
 	VictoryCondition          string                       `json:"victory_condition"`
-	VictoryAnimations         []string                     `json:"victory_animations"`
-	DefeatAnimations          []string                     `json:"defeat_animations"`
 	DifficultySettings        map[string]difficultySetting `json:"difficulty_settings"`
 	RedFloorAnimation         string                       `json:"red_floor_animation"`
 	RedDamageGracePeriod      *bool                        `json:"red_damage_grace_period"`
@@ -331,22 +338,22 @@ func NewWithSeedForGameMode(now time.Time, seed int64, playerCount int, difficul
 		lives = 5
 	}
 	return &Game{
-		level:        selected,
-		levels:       append([]compiledLevel(nil), levels...),
-		difficulty:   diff,
-		playerCount:  playerCount,
+		level:            selected,
+		levels:           append([]compiledLevel(nil), levels...),
+		difficulty:       diff,
+		playerCount:      playerCount,
 		resultAnimations: resultAnimations,
-		createdAt:    now,
-		startedAt:    now.Add(countdownDuration),
-		lives:        lives,
-		removed:      map[string]bool{},
-		purpleHeld:   map[string]bool{},
-		purplePrimed: map[string]bool{},
-		pressed:      map[Point]bool{},
-		greenImpacts: map[string]bool{},
-		capturedAt:   map[string]time.Time{},
-		lastDamageBy: map[Point]time.Time{},
-		hitFlash:     map[Point]time.Time{},
+		createdAt:        now,
+		startedAt:        now.Add(countdownDuration),
+		lives:            lives,
+		removed:          map[string]bool{},
+		purpleHeld:       map[string]bool{},
+		purplePrimed:     map[string]bool{},
+		pressed:          map[Point]bool{},
+		greenImpacts:     map[string]bool{},
+		capturedAt:       map[string]time.Time{},
+		lastDamageBy:     map[Point]time.Time{},
+		hitFlash:         map[Point]time.Time{},
 	}
 }
 
@@ -1207,8 +1214,8 @@ func compileCloudLevelsForModeWithDifficulty(raw []cloudLevel, levelMode string,
 			frameTick:         frameTick,
 			winCondition:      winCondition,
 			redAnimation:      normalizeRedFloorAnimation(level.Rules.RedFloorAnimation),
-			victoryAnimations: normalizeResultAnimationList(level.Rules.VictoryAnimations, "victory-pulse"),
-			defeatAnimations:  normalizeResultAnimationList(level.Rules.DefeatAnimations, "defeat-pulse"),
+			victoryAnimations: normalizeResultAnimationList(level.ResultAnimations.VictoryAnimations, "victory-pulse"),
+			defeatAnimations:  normalizeResultAnimationList(level.ResultAnimations.DefeatAnimations, "defeat-pulse"),
 			greenFade:         level.Rules.GreenPlatformDisappear,
 			greenImpact:       level.Rules.GreenPlatformImpactRipple,
 			greenLoad:         boolDefaultTrue(level.Rules.GreenPlatformLoad),
@@ -1610,16 +1617,18 @@ func normalizeResultAnimationList(values []string, fallback string) []string {
 	return result
 }
 
-func chosenResultAnimation(values []string, fallback string, _ time.Time) string {
-	if len(values) == 0 {
-		return fallback
+// chosenResultAnimation picks one animation from the configured list. With more
+// than one configured the pick is randomized, but seeded from the instant the
+// game ended so it stays constant across the many per-cell/per-frame render
+// calls that share a single game-over screen — a fresh roll each frame would
+// flicker between animations. Different sessions end at different instants, so
+// they tend to surface different animations.
+func chosenResultAnimation(values []string, fallback string, endedAt time.Time) string {
+	normalized := normalizeResultAnimationList(values, fallback)
+	if len(normalized) == 1 {
+		return normalized[0]
 	}
-	for index := len(values) - 1; index >= 0; index-- {
-		if normalized := normalizeResultAnimation(values[index], ""); normalized != "" {
-			return normalized
-		}
-	}
-	return fallback
+	return normalized[hashInt(int(endedAt.UnixNano()))%len(normalized)]
 }
 
 func firstNonEmpty(values []string, fallback string) string {
