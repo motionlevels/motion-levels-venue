@@ -764,6 +764,56 @@ func TestCompileCloudLevelUsesConfiguredResultAnimations(t *testing.T) {
 	}
 }
 
+func TestCustomVictoryAnimationUsesLatestSelectedCatalogAnimation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		switch r.URL.Path {
+		case "/api/level-games/temporada1-niveles/levels":
+			_, _ = w.Write([]byte(`{"levels":[{
+				"slug":"level-1",
+				"label":"Game pass result",
+				"difficulty":"medium",
+				"life":5,
+				"pass_score":0,
+				"frame_tick_ms":25,
+				"rules":{
+					"victory_animations":["victory-pulse","game-pass"]
+				},
+				"frames":[{"r":20,"c":[[5,5,1,"coin-a"]]}]
+			}]}`))
+		case "/api/level-games/animations/levels":
+			if got := r.URL.Query().Get("summary"); got != "0" {
+				t.Fatalf("animation summary = %q, want 0", got)
+			}
+			_, _ = w.Write([]byte(`{"levels":[{
+				"slug":"game-pass",
+				"label":"Game Pass",
+				"difficulty":"medium",
+				"frame_tick_ms":50,
+				"tile_effects":{"1":{"label":"Gold","color":"#123456","press":"none"}},
+				"rules":{"catalog_featured":true},
+				"frames":[{"r":20,"c":[[5,5,1]]}]
+			}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	now := time.Unix(100, 0)
+	game := NewWithSeedForGameMode(now, 1, 1, "medium", "level-1", server.URL, "temporada1-niveles", "challenge")
+	playAt := now.Add(countdownDuration + tickDuration)
+	game.Press(whackamole.PressEvent{X: 5, Y: 5, Pressed: true}, playAt)
+
+	got := game.Render(playAt.Add(100 * time.Millisecond))[5*GridWidth+5]
+	if got != (RGB{R: 0x12, G: 0x34, B: 0x56}) {
+		t.Fatalf("result animation color = %+v, want catalog Game Pass color", got)
+	}
+	if selected := chosenResultAnimation([]string{"victory-pulse", "game-pass"}, "victory-pulse", now); selected != "game-pass" {
+		t.Fatalf("chosen result animation = %q, want latest selected game-pass", selected)
+	}
+}
+
 func TestFinalDamageEmitsDefeatCue(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/json")

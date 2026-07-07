@@ -79,6 +79,17 @@ func (cl CompiledLevel) Featured() bool       { return cl.featured }
 func (cl CompiledLevel) MusicRef() string     { return cl.audio.MusicRef }
 func (cl CompiledLevel) MusicVolume() float64 { return cl.audio.MusicVolume }
 
+func (cl CompiledLevel) ColorAtElapsed(x int, y int, elapsed time.Duration) RGB {
+	if !inBounds(x, y) {
+		return RGB{}
+	}
+	frameIndex := 0
+	if cl.frameTick > 0 {
+		frameIndex = int(elapsed / cl.frameTick)
+	}
+	return cl.previewColorAt(x, y, elapsed, frameIndex)
+}
+
 type PreviewFrame struct {
 	Pixels string `json:"pixels"`
 }

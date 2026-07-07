@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
+	resultanimations "github.com/lobis/motion-levels/game-engine/internal/games/animations"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 )
 
@@ -110,6 +111,7 @@ type Game struct {
 	levels      []compiledLevel
 	difficulty  Difficulty
 	playerCount int
+	resultAnimations map[string]resultanimations.CompiledLevel
 
 	createdAt time.Time
 	startedAt time.Time
@@ -321,6 +323,7 @@ func NewWithSeedForGameMode(now time.Time, seed int64, playerCount int, difficul
 		log.Printf("%s: platform level fetch failed: %v", gameID, err)
 		levels = fallbackCompiledLevels(levelID)
 	}
+	resultAnimations := fetchResultAnimations(platformURL, levels)
 	selected := selectLevel(levels, levelID)
 	playerCount = clampInt(playerCount, 1, 6)
 	lives := selected.lives
@@ -332,6 +335,7 @@ func NewWithSeedForGameMode(now time.Time, seed int64, playerCount int, difficul
 		levels:       append([]compiledLevel(nil), levels...),
 		difficulty:   diff,
 		playerCount:  playerCount,
+		resultAnimations: resultAnimations,
 		createdAt:    now,
 		startedAt:    now.Add(countdownDuration),
 		lives:        lives,
@@ -627,9 +631,17 @@ func (g *Game) resetLevelRunLocked(level compiledLevel, now time.Time) {
 func (g *Game) colorAtLocked(pt Point, now time.Time) RGB {
 	if g.ended {
 		if g.success {
-			return resultAnimationColor(chosenResultAnimation(g.level.victoryAnimations, "victory-pulse", g.endedAt), pt, now, g.endedAt)
+			animationName := chosenResultAnimation(g.level.victoryAnimations, "victory-pulse", g.endedAt)
+			if color, ok := g.catalogResultAnimationColor(animationName, pt, now); ok {
+				return color
+			}
+			return resultAnimationColor(animationName, pt, now, g.endedAt)
 		}
-		return resultAnimationColor(chosenResultAnimation(g.level.defeatAnimations, "defeat-pulse", g.endedAt), pt, now, g.endedAt)
+		animationName := chosenResultAnimation(g.level.defeatAnimations, "defeat-pulse", g.endedAt)
+		if color, ok := g.catalogResultAnimationColor(animationName, pt, now); ok {
+			return color
+		}
+		return resultAnimationColor(animationName, pt, now, g.endedAt)
 	}
 	if until, ok := g.hitFlash[pt]; ok && now.Before(until) {
 		return RGB{R: 255, G: 236, B: 82}
@@ -640,6 +652,21 @@ func (g *Game) colorAtLocked(pt Point, now time.Time) RGB {
 	point := g.pointAtLocked(pt, now)
 	color := g.colorForPointLocked(pt, point, now)
 	return g.greenImpactColorLocked(pt, point, color, now)
+}
+
+func (g *Game) catalogResultAnimationColor(name string, pt Point, now time.Time) (RGB, bool) {
+	if len(g.resultAnimations) == 0 {
+		return RGB{}, false
+	}
+	animationLevel, ok := g.resultAnimations[resultanimations.NormalizeLevel(name)]
+	if !ok {
+		return RGB{}, false
+	}
+	elapsed := now.Sub(g.endedAt)
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	return animationLevel.ColorAtElapsed(pt.X, pt.Y, elapsed), true
 }
 
 func (g *Game) colorForPointLocked(pt Point, point tilePoint, now time.Time) RGB {
@@ -1074,6 +1101,45 @@ func fetchLevelsForDifficulty(base string, gameID string, difficulty string, lev
 		return nil, err
 	}
 	return compileCloudLevelsForModeWithDifficulty(payload.Levels, levelMode, difficulty)
+}
+
+func fetchResultAnimations(platformURL string, levels []compiledLevel) map[string]resultanimations.CompiledLevel {
+	refs := resultAnimationRefs(levels)
+	if len(refs) == 0 {
+		return nil
+	}
+	animationLevels, err := resultanimations.GetOrFetchLevels(platformURL)
+	if err != nil {
+		log.Printf("niveles: result animation catalog fetch failed: %v", err)
+		return nil
+	}
+	byID := map[string]resultanimations.CompiledLevel{}
+	for _, level := range animationLevels {
+		byID[resultanimations.NormalizeLevel(level.ID())] = level
+	}
+	resolved := map[string]resultanimations.CompiledLevel{}
+	for ref := range refs {
+		animationLevel, ok := byID[ref]
+		if !ok {
+			continue
+		}
+		resolved[ref] = animationLevel
+	}
+	return resolved
+}
+
+func resultAnimationRefs(levels []compiledLevel) map[string]struct{} {
+	refs := map[string]struct{}{}
+	for _, level := range levels {
+		for _, value := range append(append([]string{}, level.victoryAnimations...), level.defeatAnimations...) {
+			normalized := normalizeResultAnimation(value, "")
+			if normalized == "" || isBuiltInResultAnimation(normalized) {
+				continue
+			}
+			refs[resultanimations.NormalizeLevel(normalized)] = struct{}{}
+		}
+	}
+	return refs
 }
 
 func compileCloudLevels(raw []cloudLevel) ([]compiledLevel, error) {
@@ -1514,6 +1580,16 @@ func normalizeResultAnimation(value string, fallback string) string {
 	}
 }
 
+func isBuiltInResultAnimation(value string) bool {
+	switch normalizeResultAnimation(value, "") {
+	case "victory-pulse", "victory-confetti", "victory-wave", "victory-spark",
+		"defeat-pulse", "defeat-static", "defeat-sweep":
+		return true
+	default:
+		return false
+	}
+}
+
 func normalizeResultAnimationList(values []string, fallback string) []string {
 	unique := map[string]struct{}{}
 	result := []string{}
@@ -1534,15 +1610,16 @@ func normalizeResultAnimationList(values []string, fallback string) []string {
 	return result
 }
 
-func chosenResultAnimation(values []string, fallback string, endedAt time.Time) string {
+func chosenResultAnimation(values []string, fallback string, _ time.Time) string {
 	if len(values) == 0 {
 		return fallback
 	}
-	if len(values) == 1 {
-		return normalizeResultAnimation(values[0], fallback)
+	for index := len(values) - 1; index >= 0; index-- {
+		if normalized := normalizeResultAnimation(values[index], ""); normalized != "" {
+			return normalized
+		}
 	}
-	index := hashInt(int(endedAt.UnixNano())) % len(values)
-	return normalizeResultAnimation(values[index], fallback)
+	return fallback
 }
 
 func firstNonEmpty(values []string, fallback string) string {
