@@ -32,18 +32,29 @@ describe("displayGameTitle wiring", () => {
 
   it("labels level-game displays as the selected game instead of a live round", () => {
     const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-    assert.match(source, /const titleEyebrow = levelGame \? "Juego seleccionado" : phaseLabel\(status\.phase\);/);
-    assert.match(source, /<span>\{titleEyebrow\}<\/span>/);
+    assert.match(source, /eyebrow:\s*levelGame \? "Juego seleccionado" : phaseLabel\(status\.phase\),/);
+    assert.match(source, /<span>\{model\.eyebrow\}<\/span>/);
   });
 });
 
 describe("arcade display reference styling", () => {
+  it("generates level and code displays through the same gold-standard shell", () => {
+    const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+    assert.match(source, /function createArcadeDisplayModel\(status: DisplayStatus, connected: boolean, error: string\): ArcadeDisplayModel/);
+    assert.match(source, /function ArcadeDisplayShell\(\{ model, children \}: \{ model: ArcadeDisplayModel; children: ReactNode \}\)/);
+    assert.match(source, /<ArcadeDisplayShell model=\{displayModel\}>/);
+    assert.match(source, /levelGame \? "level-display level-points-display" : ""/);
+    assert.match(source, /!levelGame && !memoryGame \? "reference-brand" : ""/);
+    assert.equal(source.match(/<header className="arcade-top">/g)?.length, 1);
+  });
+
   it("keeps code-style arcade games close to the level display brand reference", () => {
     const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
     const cssSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
-    assert.match(appSource, /const referenceBrand = !levelGame && !memoryGame;/);
-    assert.match(appSource, /\$\{referenceBrand \? "reference-brand" : ""\}/);
+    assert.match(appSource, /!levelGame && !memoryGame \? "reference-brand" : ""/);
+    assert.match(appSource, /rootClassName: rootClasses\.filter\(Boolean\)\.join\(" "\)/);
     assert.match(cssSource, /\.level-points-display\.level-display \.arcade-top\s*\{[^}]*grid-template-columns:\s*minmax\(440px, 0\.74fr\) minmax\(700px, 1\.36fr\) minmax\(440px, 0\.74fr\);/);
     assert.match(cssSource, /\.arcade-display\.reference-brand \.arcade-brand-panel/);
     assert.match(cssSource, /\.arcade-display\.reference-brand \.arcade-brand-mark\s*\{[^}]*width:\s*104px;/);

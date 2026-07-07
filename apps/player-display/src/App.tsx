@@ -275,57 +275,21 @@ function ClassicDisplay({ status, connected, error }: DisplayProps) {
 }
 
 function ArcadeDisplay({ status, connected, error }: DisplayProps) {
-  const memoryGame = isMemoryGame(status);
-  const teamRosterGame = isTeamScoreGame(status);
-  const teamScoreboardGame = isTeamScoreboardGame(status);
-  const duelGame = isDuelGame(status) && status.players.length >= 2;
-  const levelGame = isLevelGame(status);
+  const displayModel = createArcadeDisplayModel(status, connected, error);
+  const { duelGame, levelGame, memoryGame, showFooterEvent, showPlayerInfo, teamRosterGame, teamScoreboardGame } = displayModel;
   const leader = useMemo(() => {
     if (teamRosterGame || duelGame || !status.players.length) return null;
     return [...status.players].sort((left, right) => right.score - left.score)[0];
   }, [duelGame, status.players, teamRosterGame]);
-  const lifeLoss = status.lastEventCue === "miss" && status.currentGame === "lava";
-  const eventClass = status.lastEventCue ? `event-${status.lastEventCue}${lifeLoss ? " event-life-loss" : ""}` : "";
   const clock = displayClock(status);
   const eventMessage = eventMessageES(status.lastEventCue, status.lastEventMessage);
   const mainMetric = primaryMetric(status);
   const sideMetrics = arcadeSideMetrics(status);
   const levelSideMetrics = arcadeLevelSideMetrics(status);
   const levelTimeDetails = arcadeLevelTimeDetails(status);
-  const levelLabel = displayLevelLabel(status);
-  const showPlayerInfo = shouldShowPlayerInfo(status);
-  const showFooterEvent = Boolean(eventMessage) && !levelGame && !memoryGame;
-  const titleEyebrow = levelGame ? "Juego seleccionado" : phaseLabel(status.phase);
-  const referenceBrand = !levelGame && !memoryGame;
 
   return (
-    <main className={`display arcade-display ${referenceBrand ? "reference-brand" : ""} ${duelGame ? "duel-game" : ""} ${memoryGame ? "memory-display" : ""} ${levelGame ? "level-display level-points-display" : ""} ${!duelGame && !showPlayerInfo ? "no-player-info" : ""} ${showFooterEvent ? "has-event" : ""} ${status.phase} ${eventClass}`}>
-      <header className="arcade-top">
-        <div className="arcade-brand-panel">
-          <span className="arcade-brand" aria-label="Motion Levels">
-            <span className="arcade-brand-mark" aria-hidden="true" />
-            <span className="arcade-brand-name" aria-hidden="true">
-              <b>Motion</b>
-              <b>Levels</b>
-            </span>
-          </span>
-        </div>
-        <div className="arcade-title">
-          <span>{titleEyebrow}</span>
-          <h1>{displayGameTitle(status)}</h1>
-        </div>
-        {levelLabel ? (
-          <div className="arcade-level-badge">
-            <span>Nivel actual</span>
-            <strong>{levelLabel}</strong>
-          </div>
-        ) : error && !connected ? (
-          <div className="arcade-system"><strong>OFF</strong><small>{error}</small></div>
-        ) : (
-          <div className="arcade-top-spacer" aria-hidden="true" />
-        )}
-      </header>
-
+    <ArcadeDisplayShell model={displayModel}>
       {duelGame ? (
         <DuelBoard status={status} clock={clock} />
       ) : memoryGame ? (
@@ -388,7 +352,110 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
           <span>{eventMessage}</span>
         </div>
       </footer> : null}
+    </ArcadeDisplayShell>
+  );
+}
+
+type ArcadeDisplayModel = {
+  duelGame: boolean;
+  levelGame: boolean;
+  memoryGame: boolean;
+  rootClassName: string;
+  showFooterEvent: boolean;
+  showPlayerInfo: boolean;
+  teamRosterGame: boolean;
+  teamScoreboardGame: boolean;
+  header: ArcadeHeaderModel;
+};
+
+type ArcadeHeaderModel = {
+  connected: boolean;
+  error: string;
+  eyebrow: string;
+  levelLabel: string;
+  title: string;
+};
+
+function createArcadeDisplayModel(status: DisplayStatus, connected: boolean, error: string): ArcadeDisplayModel {
+  const memoryGame = isMemoryGame(status);
+  const teamRosterGame = isTeamScoreGame(status);
+  const teamScoreboardGame = isTeamScoreboardGame(status);
+  const duelGame = isDuelGame(status) && status.players.length >= 2;
+  const levelGame = isLevelGame(status);
+  const showPlayerInfo = shouldShowPlayerInfo(status);
+  const eventMessage = eventMessageES(status.lastEventCue, status.lastEventMessage);
+  const showFooterEvent = Boolean(eventMessage) && !levelGame && !memoryGame;
+  const lifeLoss = status.lastEventCue === "miss" && status.currentGame === "lava";
+  const eventClass = status.lastEventCue ? `event-${status.lastEventCue}${lifeLoss ? " event-life-loss" : ""}` : "";
+
+  const rootClasses = [
+    "display",
+    "arcade-display",
+    !levelGame && !memoryGame ? "reference-brand" : "",
+    duelGame ? "duel-game" : "",
+    memoryGame ? "memory-display" : "",
+    levelGame ? "level-display level-points-display" : "",
+    !duelGame && !showPlayerInfo ? "no-player-info" : "",
+    showFooterEvent ? "has-event" : "",
+    status.phase,
+    eventClass,
+  ];
+
+  return {
+    duelGame,
+    levelGame,
+    memoryGame,
+    rootClassName: rootClasses.filter(Boolean).join(" "),
+    showFooterEvent,
+    showPlayerInfo,
+    teamRosterGame,
+    teamScoreboardGame,
+    header: {
+      connected,
+      error,
+      eyebrow: levelGame ? "Juego seleccionado" : phaseLabel(status.phase),
+      levelLabel: displayLevelLabel(status),
+      title: displayGameTitle(status),
+    },
+  };
+}
+
+function ArcadeDisplayShell({ model, children }: { model: ArcadeDisplayModel; children: ReactNode }) {
+  return (
+    <main className={model.rootClassName}>
+      <ArcadeHeader model={model.header} />
+      {children}
     </main>
+  );
+}
+
+function ArcadeHeader({ model }: { model: ArcadeHeaderModel }) {
+  return (
+    <header className="arcade-top">
+      <div className="arcade-brand-panel">
+        <span className="arcade-brand" aria-label="Motion Levels">
+          <span className="arcade-brand-mark" aria-hidden="true" />
+          <span className="arcade-brand-name" aria-hidden="true">
+            <b>Motion</b>
+            <b>Levels</b>
+          </span>
+        </span>
+      </div>
+      <div className="arcade-title">
+        <span>{model.eyebrow}</span>
+        <h1>{model.title}</h1>
+      </div>
+      {model.levelLabel ? (
+        <div className="arcade-level-badge">
+          <span>Nivel actual</span>
+          <strong>{model.levelLabel}</strong>
+        </div>
+      ) : model.error && !model.connected ? (
+        <div className="arcade-system"><strong>OFF</strong><small>{model.error}</small></div>
+      ) : (
+        <div className="arcade-top-spacer" aria-hidden="true" />
+      )}
+    </header>
   );
 }
 
