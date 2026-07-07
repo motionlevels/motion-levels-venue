@@ -387,6 +387,12 @@ func Decode(ptr, length uint32, out any) error {
 	return json.Unmarshal(data, out)
 }
 
+// The native runner reuses the TinyGo WASM ABI in-process: exported functions
+// still pass uint32 pointers, but those pointers may refer to Go heap buffers.
+// requestBuffer and responseBuffer are package globals so the backing arrays
+// stay rooted while the host copies data across the ABI boundary. If a native
+// pointer does not fit in uint32, the code below returns a sentinel handle and
+// reads from these rooted buffers directly.
 var responseBuffer []byte
 var requestBuffer []byte
 
