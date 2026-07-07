@@ -53,16 +53,16 @@ ins_camera::VideoResolution env_video_resolution(const char* name, ins_camera::V
     if (value.empty()) return fallback;
     value.erase(std::remove(value.begin(), value.end(), '_'), value.end());
     value.erase(std::remove(value.begin(), value.end(), '-'), value.end());
-    if (value == "1080" || value == "1080p" || value == "1080p30" || value == "19201080p30") return ins_camera::VideoResolution::RES_1920_1080P30;
-    if (value == "1080p60" || value == "19201080p60") return ins_camera::VideoResolution::RES_1920_1080P60;
+    if (value == "1080" || value == "1080p" || value == "1080p30" || value == "19201080p30") return ins_camera::VideoResolution::RES_4KP30;
+    if (value == "1080p60" || value == "19201080p60") return ins_camera::VideoResolution::RES_4KP30;
     if (value == "4k30" || value == "4kp30" || value == "38401920p30") return ins_camera::VideoResolution::RES_4KP30;
-    if (value == "4k60" || value == "4kp60" || value == "38401920p60") return ins_camera::VideoResolution::RES_4KP60;
+    if (value == "4k60" || value == "4kp60" || value == "38401920p60") return ins_camera::VideoResolution::RES_4KP30;
     if (value == "4k25" || value == "4kp25" || value == "38401920p25") return ins_camera::VideoResolution::RES_4KP25;
     if (value == "4k24" || value == "4kp24" || value == "38401920p24") return ins_camera::VideoResolution::RES_4KP24;
-    if (value == "57k30" || value == "57kp30" || value == "5.7k30" || value == "5.7kp30") return ins_camera::VideoResolution::RES_57KP30;
-    if (value == "57k60" || value == "57kp60" || value == "5.7k60" || value == "5.7kp60") return ins_camera::VideoResolution::RES_57KP60;
+    if (value == "57k30" || value == "57kp30" || value == "57kplus30" || value == "57k+30" || value == "5.7k30" || value == "5.7kp30" || value == "5.7kplus30" || value == "5.7k+30") return ins_camera::VideoResolution::RES_57K_PLUSP30;
+    if (value == "57k60" || value == "57kp60" || value == "5.7k60" || value == "5.7kp60") return ins_camera::VideoResolution::RES_57K_PLUSP30;
     if (value == "57k25" || value == "57kp25" || value == "5.7k25" || value == "5.7kp25") return ins_camera::VideoResolution::RES_57KP25;
-    if (value == "57k24" || value == "57kp24" || value == "5.7k24" || value == "5.7kp24") return ins_camera::VideoResolution::RES_57KP24;
+    if (value == "57k24" || value == "57kp24" || value == "57kplus24" || value == "57k+24" || value == "5.7k24" || value == "5.7kp24" || value == "5.7kplus24" || value == "5.7k+24") return ins_camera::VideoResolution::RES_57K_PLUSP24;
     try {
         return static_cast<ins_camera::VideoResolution>(std::stoi(value));
     } catch (...) {
@@ -226,6 +226,10 @@ VideoSettingsResult apply_video_settings(const std::shared_ptr<ins_camera::Camer
     if (video_mode == "hdr") {
         sub_mode = ins_camera::SubVideoMode::VIDEO_HDR;
         function_mode = ins_camera::CameraFunctionMode::FUNCTION_MODE_HDR_VIDEO;
+    } else if (video_mode == "pure" || video_mode == "purevideo" || video_mode == "pure-video" || video_mode == "night") {
+        video_mode = "purevideo";
+        sub_mode = ins_camera::SubVideoMode::VIDEO_PURE;
+        function_mode = ins_camera::CameraFunctionMode::FUNCTION_MODE_PURE_VIDEO;
     } else if (video_mode == "selfie") {
         sub_mode = ins_camera::SubVideoMode::VIDEO_SELFIE;
         function_mode = ins_camera::CameraFunctionMode::FUNCTION_MODE_SELFIE_VIDEO;
@@ -239,7 +243,7 @@ VideoSettingsResult apply_video_settings(const std::shared_ptr<ins_camera::Camer
         std::cerr << "warning: failed to set " << video_mode << " video submode; continuing with current camera mode" << std::endl;
     }
     ins_camera::RecordParams params;
-    params.resolution = env_video_resolution("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", ins_camera::VideoResolution::RES_1920_1080P30);
+    params.resolution = env_video_resolution("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", ins_camera::VideoResolution::RES_4KP30);
     params.bitrate = env_int("MOTION_LEVELS_INSTA360_VIDEO_BITRATE", 0);
     if (!camera->SetVideoCaptureParams(params, function_mode)) {
         if (env_bool("MOTION_LEVELS_INSTA360_REQUIRE_CAPTURE_PARAMS", false)) {

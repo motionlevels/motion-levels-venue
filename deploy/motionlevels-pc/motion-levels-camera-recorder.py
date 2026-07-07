@@ -77,7 +77,7 @@ DELETE_LOCAL_AFTER_UPLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_LOCAL_AF
 DEFAULT_HDR_ENABLED = os.environ.get("MOTION_LEVELS_CAMERA_HDR_DEFAULT", "1").strip().lower() not in FALSE_VALUES
 DEFAULT_VIDEO_PROJECTION = os.environ.get("MOTION_LEVELS_CAMERA_VIDEO_PROJECTION_DEFAULT", "regular").strip().lower()
 DEFAULT_VIDEO_LENS = os.environ.get("MOTION_LEVELS_CAMERA_VIDEO_LENS_DEFAULT", "front").strip().lower() or "front"
-DEFAULT_VIDEO_RESOLUTION = os.environ.get("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", "1080p30").strip().lower() or "1080p30"
+DEFAULT_VIDEO_RESOLUTION = os.environ.get("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", "4k30").strip().lower() or "4k30"
 DEFAULT_VIDEO_FRAME_RATE = os.environ.get("MOTION_LEVELS_INSTA360_VIDEO_FRAME_RATE", "30").strip() or "30"
 FFMPEG_COMMAND = os.environ.get("MOTION_LEVELS_CAMERA_FFMPEG_COMMAND", "ffmpeg").strip() or "ffmpeg"
 POSTPROCESS_TIMEOUT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_POSTPROCESS_TIMEOUT_SECONDS", "1800"))
@@ -153,34 +153,53 @@ def normalized_video_lens(value: Any, fallback: str = DEFAULT_VIDEO_LENS) -> str
 
 
 def normalized_video_resolution(value: Any, fallback: str = DEFAULT_VIDEO_RESOLUTION) -> str:
-    text = str(value or fallback or "1080p30").strip().lower()
+    text = str(value or fallback or "4k30").strip().lower()
     text = text.replace("_", "").replace("-", "").replace(" ", "")
     aliases = {
-        "1080": "1080p30",
-        "1080p": "1080p30",
-        "1080p30": "1080p30",
-        "1080p60": "1080p60",
-        "19201080": "1080p30",
-        "19201080p30": "1080p30",
-        "19201080p60": "1080p60",
+        "1080": "4k30",
+        "1080p": "4k30",
+        "1080p30": "4k30",
+        "1080p60": "4k30",
+        "19201080": "4k30",
+        "19201080p30": "4k30",
+        "19201080p60": "4k30",
         "4k": "4k30",
+        "4k24": "4k24",
         "4k30": "4k30",
-        "4k60": "4k60",
+        "4k60": "4k30",
+        "4kp24": "4k24",
         "4kp30": "4k30",
-        "4kp60": "4k60",
+        "4kp60": "4k30",
         "38401920": "4k30",
+        "38401920p24": "4k24",
         "38401920p30": "4k30",
-        "38401920p60": "4k60",
-        "57k": "5.7k30",
-        "57k30": "5.7k30",
-        "57k60": "5.7k60",
-        "57kp30": "5.7k30",
-        "57kp60": "5.7k60",
-        "5.7k": "5.7k30",
-        "5.7k30": "5.7k30",
-        "5.7k60": "5.7k60",
-        "5.7kp30": "5.7k30",
-        "5.7kp60": "5.7k60",
+        "38401920p60": "4k30",
+        "57k": "5.7kplus30",
+        "57k+": "5.7kplus30",
+        "57kplus": "5.7kplus30",
+        "57k24": "5.7kplus24",
+        "57k30": "5.7kplus30",
+        "57k60": "5.7kplus30",
+        "57kp24": "5.7kplus24",
+        "57kp30": "5.7kplus30",
+        "57kp60": "5.7kplus30",
+        "57k+24": "5.7kplus24",
+        "57k+30": "5.7kplus30",
+        "57kplus24": "5.7kplus24",
+        "57kplus30": "5.7kplus30",
+        "5.7k": "5.7kplus30",
+        "5.7k+": "5.7kplus30",
+        "5.7kplus": "5.7kplus30",
+        "5.7k24": "5.7kplus24",
+        "5.7k30": "5.7kplus30",
+        "5.7k60": "5.7kplus30",
+        "5.7kp24": "5.7kplus24",
+        "5.7kp30": "5.7kplus30",
+        "5.7kp60": "5.7kplus30",
+        "5.7k+24": "5.7kplus24",
+        "5.7k+30": "5.7kplus30",
+        "5.7kplus24": "5.7kplus24",
+        "5.7kplus30": "5.7kplus30",
     }
     return aliases.get(text, text)
 
@@ -192,23 +211,21 @@ def normalized_video_frame_rate(value: Any, fallback: Any = DEFAULT_VIDEO_FRAME_
         number = int(float(text))
     except (TypeError, ValueError):
         number = 30
-    return 60 if number == 60 else 30
+    return 24 if number == 24 else 30
 
 
 def video_resolution_frame_rate(value: Any) -> int:
     text = str(value or "").strip().lower()
-    match = re.search(r"(?:p|fps)?(30|60)$", text.replace("_", "").replace("-", "").replace(" ", ""))
+    match = re.search(r"(?:p|fps)?(24|30)$", text.replace("_", "").replace("-", "").replace(" ", ""))
     return int(match.group(1)) if match else normalized_video_frame_rate(None)
 
 
 def with_video_frame_rate(resolution: str, frame_rate: int) -> str:
     base = normalized_video_resolution(resolution)
-    if base.startswith("1080"):
-        return f"1080p{frame_rate}"
     if base.startswith("4k"):
         return f"4k{frame_rate}"
     if base.startswith("5.7k"):
-        return f"5.7k{frame_rate}"
+        return f"5.7kplus{frame_rate}"
     return base
 
 
@@ -241,6 +258,9 @@ def video_capture_options(payload: dict[str, Any], recording: dict[str, Any] | N
         hdr_enabled = True
     elif explicit_video_mode == "normal":
         video_mode = "normal"
+        hdr_enabled = False
+    elif explicit_video_mode in {"pure", "purevideo", "pure-video", "night"}:
+        video_mode = "purevideo"
         hdr_enabled = False
     elif explicit_video_mode == "selfie":
         video_mode = explicit_video_mode

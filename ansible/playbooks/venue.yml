@@ -463,7 +463,7 @@
         - key: MOTION_LEVELS_CAMERA_VIDEO_LENS_DEFAULT
           value: front
         - key: MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION
-          value: 1080p30
+          value: 4k30
         - key: MOTION_LEVELS_INSTA360_VIDEO_FRAME_RATE
           value: "30"
         - key: MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS
