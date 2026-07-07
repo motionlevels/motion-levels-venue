@@ -457,13 +457,13 @@
         - key: MOTION_LEVELS_CAMERA_DELETE_LOCAL_AFTER_UPLOAD
           value: "1"
         - key: MOTION_LEVELS_CAMERA_HDR_DEFAULT
-          value: "1"
+          value: "0"
         - key: MOTION_LEVELS_CAMERA_VIDEO_PROJECTION_DEFAULT
-          value: regular
+          value: "360"
         - key: MOTION_LEVELS_CAMERA_VIDEO_LENS_DEFAULT
-          value: front
+          value: all
         - key: MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION
-          value: 4k30
+          value: 5.7kplus30
         - key: MOTION_LEVELS_INSTA360_VIDEO_FRAME_RATE
           value: "30"
         - key: MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS
