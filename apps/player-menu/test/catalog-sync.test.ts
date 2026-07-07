@@ -463,6 +463,14 @@ describe("catalog metadata sync", () => {
     assert.match(appSource, /<GameConfigDialog/);
   });
 
+  it("does not preserve unknown retired menu state keys from localStorage", () => {
+    const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
+
+    assert.doesNotMatch(appSource, /\.\.\.saved,/);
+    assert.match(appSource, /const savedDifficulty = difficulties\.some/);
+    assert.match(appSource, /gameConfig: normalizeGameConfigState\(saved\.gameConfig\),/);
+  });
+
   it("keeps platform level game launch identity separate from legacy engine aliases", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
 

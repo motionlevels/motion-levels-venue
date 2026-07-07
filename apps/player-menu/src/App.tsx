@@ -1108,21 +1108,23 @@ function loadMenuState(): MenuState {
       const requestedGameID = String(saved.selectedGame || "featured-lava");
       const savedGame = games.find((game) => game.id === requestedGameID);
       const savedCategory: CategoryID = categories.some((category) => category.id === saved.category) ? (saved.category as CategoryID) : "featured";
+      const savedDifficulty = difficulties.some((candidate) => candidate.id === saved.difficulty)
+        ? (saved.difficulty as DifficultyID)
+        : "easy";
       return {
-        difficulty: "easy",
-        ...saved,
-        teamName: cleanNameWhitespace(String(saved.teamName || ""), maxTeamNameLength),
         sessionActive: Boolean(saved.sessionActive),
         sessionId: isUUID(saved.sessionId) ? saved.sessionId.toLowerCase() : "",
         sessionStartedUnix: Number(saved.sessionStartedUnix) || 0,
+        teamName: cleanNameWhitespace(String(saved.teamName || ""), maxTeamNameLength),
+        players: cleanedPlayers.length ? cleanedPlayers : defaultPlayers,
         category: savedGame?.category || savedCategory,
         selectedGame: savedGame?.id || "featured-lava",
+        difficulty: savedDifficulty,
         selectedLevels,
         levelModes,
         levelProgress,
         challengeRuns,
         freeRuns,
-        players: cleanedPlayers.length ? cleanedPlayers : defaultPlayers,
         nextPlayerId: saved.nextPlayerId || cleanedPlayers.length || 1,
         narrationArmed,
         operatorUnlockLevels: envUnlockLevels || Boolean(saved.operatorUnlockLevels),
