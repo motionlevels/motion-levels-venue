@@ -2,6 +2,7 @@ package main
 
 import (
 	crand "crypto/rand"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -334,10 +335,10 @@ func (r *gameRuntime) SelectGameWithDifficulty(game string, players int, difficu
 }
 
 func (r *gameRuntime) SelectGameWithOptions(game string, players int, difficulty string, narrationEnabled *bool) {
-	r.SelectGameWithMetadata(game, "", players, difficulty, "", "", 0, 0, 0, narrationEnabled, false, "", "", "", nil)
+	r.SelectGameWithMetadata(game, "", players, difficulty, "", "", 0, 0, 0, narrationEnabled, false, "", "", "", nil, nil)
 }
 
-func (r *gameRuntime) SelectGameWithMetadata(game string, gameLabel string, players int, difficulty string, level string, levelMode string, durationSeconds int, challengeElapsedMillis int64, challengeAttemptCount int, narrationEnabled *bool, countdownFloorOverlay bool, teamName string, venueSessionID string, platformURL string, roster []playerConfig) {
+func (r *gameRuntime) SelectGameWithMetadata(game string, gameLabel string, players int, difficulty string, level string, levelMode string, durationSeconds int, challengeElapsedMillis int64, challengeAttemptCount int, narrationEnabled *bool, countdownFloorOverlay bool, teamName string, venueSessionID string, platformURL string, roster []playerConfig, gameConfig map[string]json.RawMessage) {
 	if r == nil {
 		return
 	}
@@ -366,6 +367,7 @@ func (r *gameRuntime) SelectGameWithMetadata(game string, gameLabel string, play
 	cfg.TeamName = strings.TrimSpace(teamName)
 	cfg.VenueSessionID = strings.TrimSpace(venueSessionID)
 	cfg.Players = normalizePlayerRoster(roster, cfg.PlayerCount)
+	cfg.GameConfig = normalizeGameConfigOverrides(gameConfig)
 	mode := narrationAuto
 	if narrationEnabled != nil {
 		if *narrationEnabled {
@@ -1809,7 +1811,7 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 	}
 	if strings.HasPrefix(cfg.Game, "authored-") {
 		log.Printf("game: authored id=%s players=%d difficulty=%s level=%s runtime=%s", cfg.Game, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.AuthoredRuntime)
-		game, err := authored.NewWithSeedRuntime(now, seed, cfg.Game, cfg.PlayerCount, whackPlayersFromConfig(cfg), cfg.PlatformURL, cfg.Difficulty, cfg.Level, cfg.AuthoredRuntime)
+		game, err := authored.NewWithSeedRuntimeConfig(now, seed, cfg.Game, cfg.PlayerCount, whackPlayersFromConfig(cfg), cfg.PlatformURL, cfg.Difficulty, cfg.Level, cfg.AuthoredRuntime, cfg.GameConfig)
 		if err != nil {
 			log.Printf("authored game: %v", err)
 			return nil
@@ -2379,6 +2381,32 @@ func defaultDisplayPlayers(cfg config) []displayPlayer {
 		})
 	}
 	return players
+}
+
+// normalizeGameConfigOverrides bounds the launch config payload; per-variable
+// validation (types, clamping, enum options) happens in authored.ResolveConfig
+// against the game's declared variables.
+func normalizeGameConfigOverrides(overrides map[string]json.RawMessage) map[string]json.RawMessage {
+	const maxConfigVars = 32
+	const maxConfigValueBytes = 256
+	if len(overrides) == 0 {
+		return nil
+	}
+	normalized := make(map[string]json.RawMessage, len(overrides))
+	for key, value := range overrides {
+		key = strings.TrimSpace(key)
+		if key == "" || len(key) > 60 || len(value) == 0 || len(value) > maxConfigValueBytes || !json.Valid(value) {
+			continue
+		}
+		normalized[key] = append(json.RawMessage(nil), value...)
+		if len(normalized) >= maxConfigVars {
+			break
+		}
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
 }
 
 func normalizePlayerRoster(players []playerConfig, playerCount int) []playerConfig {

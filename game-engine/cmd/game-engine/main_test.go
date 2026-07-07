@@ -625,6 +625,30 @@ func TestSelectPlatformLevelGameByUUIDUsesLaunchPlatformURL(t *testing.T) {
 	}
 }
 
+func TestSelectGamePassesConfigOverridesToMotionGoInit(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 2}, nil, nil)
+	api := httptest.NewServer(gameAPIHandler(runtime))
+	defer api.Close()
+
+	// No platform URL, so ping pong resolves through the embedded native
+	// catalog entry, whose config spec declares points_to_win.
+	body := bytes.NewBufferString(`{"game":"authored-ping-pong-motion","playerCount":2,"config":{"points_to_win":3,"unknown_var":99}}`)
+	response, err := http.Post(api.URL+"/api/select", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("select response = %d", response.StatusCode)
+	}
+	display := runtime.DisplayStatus(time.Now())
+	// Ping pong reports Lives as points_to_win minus the rival score per team,
+	// so a fresh match with points_to_win=3 totals 6.
+	if display.Lives != 6 {
+		t.Fatalf("lives = %d, want 6 (points_to_win=3 for both teams)", display.Lives)
+	}
+}
+
 func TestSelectPlatformLevelGameByUUIDIgnoresLoopbackLaunchPlatformURLWhenConfigured(t *testing.T) {
 	gameID := "8b20d467-b2d1-4d62-9ef3-8455adb61393"
 	var fetchedPath string

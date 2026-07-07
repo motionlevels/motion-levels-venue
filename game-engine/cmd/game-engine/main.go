@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"flag"
 	"log"
 	"math"
@@ -41,6 +42,7 @@ type config struct {
 	PlayerCount            int
 	TeamName               string
 	Players                []playerConfig
+	GameConfig             map[string]json.RawMessage
 	FPS                    int
 	Brightness             int
 	AudioEnabled           bool

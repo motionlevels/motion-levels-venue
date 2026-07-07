@@ -4,15 +4,17 @@ package pingpongmotion
 import "github.com/lobis/motion-levels/packages/motiongo"
 
 const (
-	gameDurationNS = int64(120000000000)
-	topPaddleY     = 2
-	bottomPaddleY  = 29
-	paddleW        = 5
-	winningScore   = 7
-	startInterval  = int64(220000000)
-	minInterval    = int64(65000000)
+	defaultDurationNS   = int64(120000000000)
+	topPaddleY          = 2
+	bottomPaddleY       = 29
+	paddleW             = 5
+	defaultWinningScore = 7
+	startInterval       = int64(220000000)
+	minInterval         = int64(65000000)
 )
 
+var gameDurationNS int64
+var winningScore int
 var players []motiongo.Player
 var teamScore [2]int
 var startedNS int64
@@ -53,6 +55,8 @@ func gameInit(ptr uint32, length uint32) uint64 {
 	if rng == 0 {
 		rng = 99
 	}
+	winningScore = clamp(req.Config.Int("points_to_win", defaultWinningScore), 1, 21)
+	gameDurationNS = req.Config.DurationNS("duration_seconds", defaultDurationNS)
 	startedNS = req.NowUnixNS
 	endsNS = startedNS + gameDurationNS
 	resetMatch()
@@ -90,9 +94,19 @@ func gameTick(ptr uint32, length uint32) uint64 {
 	}
 	if req.NowUnixNS >= endsNS {
 		finished = true
+		started = false
 		success = teamScore[1] >= teamScore[0]
-		lastMessage = "Tiempo agotado."
-		return motiongo.Respond([]motiongo.Event{{Cue: "defeat", Message: lastMessage}})
+		cue := "defeat"
+		if teamScore[0] > teamScore[1] {
+			lastMessage = "Tiempo agotado. Gana " + labelForTeam(0) + "."
+			cue = "victory"
+		} else if teamScore[1] > teamScore[0] {
+			lastMessage = "Tiempo agotado. Gana " + labelForTeam(1) + "."
+			cue = "victory"
+		} else {
+			lastMessage = "Tiempo agotado. Empate."
+		}
+		return motiongo.Respond([]motiongo.Event{{Cue: cue, Message: lastMessage}})
 	}
 
 	events := []motiongo.Event{}

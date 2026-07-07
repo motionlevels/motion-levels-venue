@@ -105,7 +105,7 @@ var nativeCatalogEntries = map[string]CatalogEntry{
 		DefaultMusicVolume: DefaultMusicVolume,
 		MinPlayers:         2,
 		MaxPlayers:         8,
-		GameSource:         nativeMotionGoSpec(),
+		GameSource:         nativeMotionGoSpecWithConfig(PingPongConfigSpec()),
 	},
 	"authored-saltos": {
 		ID:                 "saltos",
@@ -147,6 +147,44 @@ func nativeMotionGoSpec() Spec {
 	return Spec{Schema: "motion-go-v1", Kind: "wasm", Language: "go", Version: 1}
 }
 
+func nativeMotionGoSpecWithConfig(config *ConfigSpec) Spec {
+	spec := nativeMotionGoSpec()
+	spec.Config = config
+	return spec
+}
+
+// PingPongConfigSpec mirrors the variables the deployed
+// authored-ping-pong-motion catalog entry declares, so the embedded fallback
+// honours menu overrides when the platform is unreachable.
+func PingPongConfigSpec() *ConfigSpec {
+	return &ConfigSpec{Vars: []ConfigVar{
+		{
+			Key:          "points_to_win",
+			Label:        "Puntos para ganar",
+			Description:  "Puntos que necesita un equipo para llevarse la partida.",
+			Type:         "int",
+			Default:      json.RawMessage("7"),
+			Min:          floatPtr(1),
+			Max:          floatPtr(21),
+			PlayerFacing: true,
+		},
+		{
+			Key:          "duration_seconds",
+			Label:        "Duración (segundos)",
+			Description:  "Tiempo máximo de partida antes de decidir por puntos.",
+			Type:         "int",
+			Default:      json.RawMessage("120"),
+			Min:          floatPtr(30),
+			Max:          floatPtr(600),
+			PlayerFacing: true,
+		},
+	}}
+}
+
+func floatPtr(value float64) *float64 {
+	return &value
+}
+
 func HasNative(engineGame string) bool {
 	_, ok := nativeFactories[engineGame]
 	return ok
@@ -185,6 +223,10 @@ func NativeGameIDs() []string {
 }
 
 func NewNativeWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount int, players []whackamole.PlayerConfig, difficulty string, level string) (*NativeGame, error) {
+	return NewNativeWithSeedConfig(now, seed, entry, playerCount, players, difficulty, level, nil)
+}
+
+func NewNativeWithSeedConfig(now time.Time, seed int64, entry CatalogEntry, playerCount int, players []whackamole.PlayerConfig, difficulty string, level string, configOverrides map[string]json.RawMessage) (*NativeGame, error) {
 	factory, ok := nativeFactories[entry.EngineGame]
 	if !ok {
 		return nil, fmt.Errorf("motion-go-v1 game %q has no native runner", entry.EngineGame)
@@ -209,6 +251,7 @@ func NewNativeWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCoun
 		Height:     GridHeight,
 		Players:    initPlayers,
 		Spec:       entry.GameSource,
+		Config:     ResolveConfig(entry.GameSource, configOverrides),
 	})
 	if err != nil {
 		return nil, err

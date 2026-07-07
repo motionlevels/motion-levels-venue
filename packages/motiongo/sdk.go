@@ -71,6 +71,71 @@ type InitRequest struct {
 	Height     int             `json:"height"`
 	Players    []Player        `json:"players"`
 	Spec       json.RawMessage `json:"spec"`
+	Config     ConfigValues    `json:"config,omitempty"`
+}
+
+// ConfigValues holds the resolved game configuration the host sends with init:
+// editor-defined defaults merged with any player-facing overrides chosen in the
+// menu. Games read values with the typed getters and always pass a fallback, so
+// they keep working when a variable is missing or the host predates config.
+type ConfigValues map[string]json.RawMessage
+
+func (c ConfigValues) Int(key string, fallback int) int {
+	value := c.Float(key, float64(fallback))
+	if value >= 0 {
+		return int(value + 0.5)
+	}
+	return int(value - 0.5)
+}
+
+func (c ConfigValues) Float(key string, fallback float64) float64 {
+	raw, ok := c[key]
+	if !ok {
+		return fallback
+	}
+	var value float64
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return fallback
+	}
+	return value
+}
+
+func (c ConfigValues) Bool(key string, fallback bool) bool {
+	raw, ok := c[key]
+	if !ok {
+		return fallback
+	}
+	var value bool
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return fallback
+	}
+	return value
+}
+
+func (c ConfigValues) String(key string, fallback string) string {
+	raw, ok := c[key]
+	if !ok {
+		return fallback
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return fallback
+	}
+	return value
+}
+
+// DurationNS reads a variable expressed in seconds and returns nanoseconds,
+// matching how motion-go games keep time.
+func (c ConfigValues) DurationNS(key string, fallbackNS int64) int64 {
+	raw, ok := c[key]
+	if !ok {
+		return fallbackNS
+	}
+	var seconds float64
+	if err := json.Unmarshal(raw, &seconds); err != nil || seconds <= 0 {
+		return fallbackNS
+	}
+	return int64(seconds * 1000000000)
 }
 
 type TimeRequest struct {

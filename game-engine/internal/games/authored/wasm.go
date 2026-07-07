@@ -31,16 +31,17 @@ type WASMGame struct {
 }
 
 type wasmInitRequest struct {
-	EngineGame string       `json:"engine_game"`
-	Label      string       `json:"label"`
-	Seed       int64        `json:"seed"`
-	Difficulty string       `json:"difficulty"`
-	Level      string       `json:"level"`
-	NowUnixNS  int64        `json:"now_unix_ns"`
-	Width      int          `json:"width"`
-	Height     int          `json:"height"`
-	Players    []wasmPlayer `json:"players"`
-	Spec       Spec         `json:"spec"`
+	EngineGame string                     `json:"engine_game"`
+	Label      string                     `json:"label"`
+	Seed       int64                      `json:"seed"`
+	Difficulty string                     `json:"difficulty"`
+	Level      string                     `json:"level"`
+	NowUnixNS  int64                      `json:"now_unix_ns"`
+	Width      int                        `json:"width"`
+	Height     int                        `json:"height"`
+	Players    []wasmPlayer               `json:"players"`
+	Spec       Spec                       `json:"spec"`
+	Config     map[string]json.RawMessage `json:"config,omitempty"`
 }
 
 type wasmPlayer struct {
@@ -92,6 +93,10 @@ type wasmPlayerSnapshot struct {
 }
 
 func NewWASMWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount int, players []whackamole.PlayerConfig, difficulty string, level string) (*WASMGame, error) {
+	return NewWASMWithSeedConfig(now, seed, entry, playerCount, players, difficulty, level, nil)
+}
+
+func NewWASMWithSeedConfig(now time.Time, seed int64, entry CatalogEntry, playerCount int, players []whackamole.PlayerConfig, difficulty string, level string, configOverrides map[string]json.RawMessage) (*WASMGame, error) {
 	if entry.GameSource.WASMBase64 == "" {
 		return nil, fmt.Errorf("motion-go-v1 game %q has no wasm_base64 artifact", entry.EngineGame)
 	}
@@ -132,6 +137,7 @@ func NewWASMWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount 
 		Height:     GridHeight,
 		Players:    initPlayers,
 		Spec:       entry.GameSource,
+		Config:     ResolveConfig(entry.GameSource, configOverrides),
 	})
 	if err != nil {
 		_ = runtime.Close(ctx)

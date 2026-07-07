@@ -49,6 +49,9 @@ type Spec struct {
 	HitColor         string   `json:"hit_color"`
 	MissColor        string   `json:"miss_color"`
 	TargetPalette    []string `json:"target_palette"`
+	// Config declares the editor-defined variables motion-go games can read
+	// from the init request; see ResolveConfig.
+	Config *ConfigSpec `json:"config,omitempty"`
 }
 
 type CatalogEntry struct {
@@ -282,6 +285,10 @@ func NewWithSeed(now time.Time, seed int64, engineGame string, playerCount int, 
 }
 
 func NewWithSeedRuntime(now time.Time, seed int64, engineGame string, playerCount int, players []whackamole.PlayerConfig, platformURL string, difficulty string, level string, runtimeKind string) (RuntimeGame, error) {
+	return NewWithSeedRuntimeConfig(now, seed, engineGame, playerCount, players, platformURL, difficulty, level, runtimeKind, nil)
+}
+
+func NewWithSeedRuntimeConfig(now time.Time, seed int64, engineGame string, playerCount int, players []whackamole.PlayerConfig, platformURL string, difficulty string, level string, runtimeKind string, configOverrides map[string]json.RawMessage) (RuntimeGame, error) {
 	entry, err := FetchGame(platformURL, engineGame)
 	if err != nil {
 		if runtimeKind == "wasm" {
@@ -296,13 +303,13 @@ func NewWithSeedRuntime(now time.Time, seed int64, engineGame string, playerCoun
 	}
 	if entry.GameSource.Schema == "motion-go-v1" {
 		if runtimeKind != "wasm" && HasNative(entry.EngineGame) {
-			game, err := NewNativeWithSeed(now, seed, entry, playerCount, players, difficulty, level)
+			game, err := NewNativeWithSeedConfig(now, seed, entry, playerCount, players, difficulty, level, configOverrides)
 			if err == nil || runtimeKind == "native" {
 				return game, err
 			}
 			log.Printf("motion-go native game %q failed; falling back to wasm: %v", entry.EngineGame, err)
 		}
-		return NewWASMWithSeed(now, seed, entry, playerCount, players, difficulty, level)
+		return NewWASMWithSeedConfig(now, seed, entry, playerCount, players, difficulty, level, configOverrides)
 	}
 	return NewFromSpec(now, seed, entry.EngineGame, entry.Label, entry.GameSource, playerCount, players), nil
 }
