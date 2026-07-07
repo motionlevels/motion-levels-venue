@@ -23,6 +23,9 @@ const (
 
 	DefaultMusicRef    = "Motion/canciones/Musica8.mp3"
 	DefaultMusicVolume = 0.12
+
+	catalogFetchTimeout = 5 * time.Second
+	gameFetchTimeout    = 1500 * time.Millisecond
 )
 
 type RGB = animation.RGB
@@ -248,7 +251,7 @@ func FetchGame(platformURL, engineGame string) (CatalogEntry, error) {
 		return CatalogEntry{}, err
 	}
 	var payload gameResponse
-	if err := getJSON(endpoint, &payload); err != nil {
+	if err := getJSONWithTimeout(endpoint, &payload, gameFetchTimeout); err != nil {
 		return CatalogEntry{}, err
 	}
 	payload.Game.GameSource = NormalizeSpec(payload.Game.GameSource)
@@ -672,7 +675,11 @@ func runtimeEndpoint(platformURL, engineGame string) (string, error) {
 }
 
 func getJSON(endpoint string, out any) error {
-	client := http.Client{Timeout: 5 * time.Second}
+	return getJSONWithTimeout(endpoint, out, catalogFetchTimeout)
+}
+
+func getJSONWithTimeout(endpoint string, out any, timeout time.Duration) error {
+	client := http.Client{Timeout: timeout}
 	response, err := client.Get(endpoint)
 	if err != nil {
 		return err
