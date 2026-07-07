@@ -100,4 +100,18 @@ describe("runtime screen flow", () => {
     const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
     assert.match(source, /gameLabel: launchGame\.label/);
   });
+
+  it("keeps challenge mode focused on current run state", () => {
+    const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const cssSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+    assert.doesNotMatch(appSource, /level-browser-difficulty/);
+    assert.doesNotMatch(cssSource, /level-browser-difficulty/);
+    assert.match(appSource, /const bestDifficulty = challengeMode \? undefined : progress\.bestByLevel\[level\.id\]/);
+    assert.match(appSource, /challengeCompleted \? \(\s*<span className="level-state challenge-state challenge-done">Hecho<\/span>/);
+    assert.match(appSource, /challengeMode \? \(\s*<span className="level-state challenge-state challenge-pending">Pendiente<\/span>/);
+    assert.match(appSource, /void launch\(selectedGame\.id, \{ resetChallengeRun: selectedLevelMode === "challenge" \}\)/);
+    assert.match(appSource, /const stopLevelOnly = action === "exit" && activeMode === "free" && isLevelRuntimeActive\(status, launchedGame\)/);
+    assert.match(appSource, /exitLabel=\{launchedLevelActive && launchedLevelMode === "free" \? "Terminar nivel" : "Salir del juego"\}/);
+  });
 });

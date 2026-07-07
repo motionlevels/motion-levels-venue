@@ -2230,14 +2230,18 @@ function MenuApp() {
     const levelIndex = game.levels?.findIndex((candidate) => candidate.id === level.id) ?? -1;
     const levelLabel = playerLevelLabel(level, levelIndex);
     const progress = progressFor(game, menu);
-    const bestDifficulty = progress.bestByLevel[level.id];
+    const challengeMode = levelModeFor(game, menu) === "challenge";
+    const challengeRun = challengeRunFor(game, menu);
+    const challengeCompleted = challengeMode && challengeRun?.completedLevels[level.id] !== undefined;
+    const challengeCurrent = challengeMode && challengeNextLevel(game, menu)?.id === level.id;
+    const bestDifficulty = challengeMode ? undefined : progress.bestByLevel[level.id];
     const locked = !isLevelUnlocked(game, level.id, menu);
-    const previewDifficulty = closestSupportedDifficulty(menu.difficulty, supportedDifficultiesFor(game, level));
+    const previewDifficulty = closestSupportedDifficulty(activeDifficultyForGame(game, menu), supportedDifficultiesFor(game, level));
     const revealPreview = challengeLevelPreviewRevealed(game, level.id, menu, active);
     return (
       <button
         key={level.id}
-        className={`level-option ${active ? "active" : ""} ${locked ? "locked" : ""} ${bestDifficulty ? "passed" : ""}`}
+        className={`level-option ${active ? "active" : ""} ${locked ? "locked" : ""} ${bestDifficulty || challengeCompleted ? "passed" : ""}`}
         style={{ "--level-color": difficultyColor(bestDifficulty), "--level-rgb": hexToRGB(difficultyColor(bestDifficulty)), "--c": game.color, "--crgb": hexToRGB(game.color) } as CSSProperties}
         type="button"
         role="radio"
@@ -2265,6 +2269,12 @@ function MenuApp() {
           <strong>{levelLabel}</strong>
           {locked ? (
             <span className="level-state locked-label">{levelModeFor(game, menu) === "challenge" ? "Reto" : "Bloqueado"}</span>
+          ) : challengeCompleted ? (
+            <span className="level-state challenge-state challenge-done">Hecho</span>
+          ) : challengeCurrent ? (
+            <span className="level-state challenge-state">Actual</span>
+          ) : challengeMode ? (
+            <span className="level-state challenge-state challenge-pending">Pendiente</span>
           ) : (
             <span className={`level-state ${bestDifficulty ? "rated" : "unrated"}`}>
               <StarRating difficulty={bestDifficulty} label="Mejor dificultad" muted={!bestDifficulty} />
@@ -2288,14 +2298,18 @@ function MenuApp() {
     const levelIndex = game.levels?.findIndex((candidate) => candidate.id === level.id) ?? -1;
     const levelLabel = playerLevelLabel(level, levelIndex);
     const progress = progressFor(game, menu);
-    const bestDifficulty = progress.bestByLevel[level.id];
-    const previewDifficulty = closestSupportedDifficulty(menu.difficulty, supportedDifficultiesFor(game, level));
+    const challengeMode = options.levelMode === "challenge";
+    const challengeRun = challengeRunFor(game, menu);
+    const challengeCompleted = challengeMode && challengeRun?.completedLevels[level.id] !== undefined;
+    const challengeCurrent = challengeMode && challengeNextLevel(game, menu)?.id === level.id;
+    const bestDifficulty = challengeMode ? undefined : progress.bestByLevel[level.id];
+    const previewDifficulty = closestSupportedDifficulty(activeDifficultyForGame(game, menu), supportedDifficultiesFor(game, level));
     const selectable = options.selectable && !options.launchingLevelID;
     const revealPreview = challengeLevelPreviewRevealed(game, level.id, menu, active, options.levelMode);
     return (
       <button
         key={level.id}
-        className={`level-option active-game-level ${active ? "active" : ""} ${launching ? "loading" : ""} ${bestDifficulty ? "passed" : ""} ${selectable ? "" : "readonly"}`}
+        className={`level-option active-game-level ${active ? "active" : ""} ${launching ? "loading" : ""} ${bestDifficulty || challengeCompleted ? "passed" : ""} ${selectable ? "" : "readonly"}`}
         style={{ "--level-color": difficultyColor(bestDifficulty), "--level-rgb": hexToRGB(difficultyColor(bestDifficulty)), "--c": game.color, "--crgb": hexToRGB(game.color) } as CSSProperties}
         type="button"
         role="radio"
@@ -2328,6 +2342,12 @@ function MenuApp() {
             </span>
           ) : active ? (
             <span className="level-state rated">Actual</span>
+          ) : challengeCompleted ? (
+            <span className="level-state challenge-state challenge-done">Hecho</span>
+          ) : challengeCurrent ? (
+            <span className="level-state challenge-state">Actual</span>
+          ) : challengeMode ? (
+            <span className="level-state challenge-state challenge-pending">Pendiente</span>
           ) : (
             <span className={`level-state ${bestDifficulty ? "rated" : "unrated"}`}>
               <StarRating difficulty={bestDifficulty} label="Mejor dificultad" muted={!bestDifficulty} />
@@ -2715,7 +2735,8 @@ function MenuApp() {
 
   async function sendGameControl(action: "pause" | "resume" | "restart" | "exit" | "narration" | "mute" | "unmute" | "toggle_mute") {
     setError("");
-    const stopLevelOnly = action === "exit" && isLevelRuntimeActive(status, launchedGame);
+    const activeMode = activeLevelModeFor(launchedGame, menu, status);
+    const stopLevelOnly = action === "exit" && activeMode === "free" && isLevelRuntimeActive(status, launchedGame);
     if (stopLevelOnly) {
       stoppedLevelGameIDRef.current = launchedGame.id;
       setStoppedLevelGameID(launchedGame.id);
@@ -2954,7 +2975,7 @@ function MenuApp() {
           narrationSupported={supportsNarration(launchedGame)}
           narrationArmed={narrationArmedFor(launchedGame)}
           onNarrationToggle={() => setNarrationArmed(launchedGame, !narrationArmedFor(launchedGame))}
-          exitLabel={launchedLevelActive ? "Terminar nivel" : "Salir del juego"}
+          exitLabel={launchedLevelActive && launchedLevelMode === "free" ? "Terminar nivel" : "Salir del juego"}
           onExit={() => sendGameControl("exit")}
         />
       ) : (
@@ -3066,38 +3087,6 @@ function MenuApp() {
                 {browsingLevels ? (
                   <div className="level-browser-actions">
                     {levelsUnlocked ? <span className="dev-unlock-pill">Dev: niveles abiertos</span> : null}
-                    {levelBrowserGame && usesDifficulty(levelBrowserGame) ? (
-                      <div className="level-browser-difficulty" role="group" aria-label="Dificultad">
-                        {difficulties.map((difficulty) => {
-                          const supported = selectableDifficultiesForGame(levelBrowserGame).includes(difficulty.id);
-                          return (
-                            <button
-                              key={difficulty.id}
-                              className={`level-browser-difficulty-button ${levelBrowserDifficulty === difficulty.id ? "active" : ""}`}
-                              style={{ "--difficulty-color": difficulty.color, "--difficulty-rgb": hexToRGB(difficulty.color) } as CSSProperties}
-                              type="button"
-                              disabled={!supported}
-                              aria-pressed={levelBrowserDifficulty === difficulty.id}
-                              title={supported ? undefined : "Sin niveles en esta dificultad"}
-                              onClick={() => {
-                                if (!supported || levelBrowserDifficulty === difficulty.id) return;
-                                captureMenuEvent("difficulty_changed", {
-                                  difficulty: difficulty.id,
-                                  engine_game: engineGameID(levelBrowserGame),
-                                  game: levelBrowserGame.id,
-                                  level: selectedLevelFor(levelBrowserGame) || undefined,
-                                  source: "level_browser",
-                                });
-                                setMenu((current) => ({ ...current, difficulty: difficulty.id }));
-                              }}
-                            >
-                              <span className="difficulty-label">{difficulty.label}</span>
-                              <StarRating difficulty={difficulty.id} label={difficulty.label} />
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
                     <button className="btn compact back-to-games" type="button" onClick={() => setLevelBrowserGameID(null)}>
                       <ArrowLeftIcon />
                       Juegos
@@ -3223,8 +3212,8 @@ function MenuApp() {
                         <strong>{selectedGamePlayerRangeLabel}</strong>
                       </div>
                       <div>
-                        <span>Mejor</span>
-                        <strong>{selectedLevelBestLabel}</strong>
+                        <span>{selectedLevelMode === "challenge" ? "Reto" : "Mejor"}</span>
+                        <strong>{selectedLevelMode === "challenge" ? selectedChallengeProgressLabel : selectedLevelBestLabel}</strong>
                       </div>
                     </section>
                   </>
@@ -3371,7 +3360,7 @@ function MenuApp() {
                   setTeamOpen(true);
                   return;
                 }
-                void launch();
+                void launch(selectedGame.id, { resetChallengeRun: selectedLevelMode === "challenge" });
               };
               return (
                 <div className="launch-actions">
@@ -4167,7 +4156,7 @@ function GameControlScreen({
               </button>
             </div>
           ) : null}
-          {!ambient ? <div className="control-roster">
+          {!ambient ? <div className="control-roster" data-count={Math.min(players.length, 8)}>
             {players.slice(0, 8).map((player) => (
               <span key={player.id} className="player-pill" style={{ "--pc": player.color } as CSSProperties}>
                 <span />

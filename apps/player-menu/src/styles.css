@@ -1284,75 +1284,6 @@ button.capsule:disabled,
   gap: 10px;
 }
 
-.level-browser-difficulty {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.level-browser-difficulty-button {
-  min-height: 44px;
-  padding: 0 13px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
-    rgba(9, 15, 24, 0.74);
-  color: var(--soft);
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    border-color 160ms var(--ease),
-    background 160ms var(--ease),
-    color 160ms var(--ease);
-}
-
-.level-browser-difficulty-button .difficulty-label {
-  font-size: 14px;
-}
-
-.level-browser-difficulty-button .star-rating {
-  font-size: 12px;
-}
-
-.level-browser-difficulty-button .star-rating .filled {
-  color: var(--difficulty-color, var(--accent));
-  text-shadow: 0 0 10px rgba(var(--difficulty-rgb, var(--accent-rgb)), 0.45);
-}
-
-.level-browser-difficulty-button:hover:not(:disabled) {
-  border-color: var(--line-strong);
-}
-
-.level-browser-difficulty-button:disabled {
-  color: rgba(206, 215, 230, 0.42);
-  cursor: not-allowed;
-  filter: grayscale(0.9);
-  opacity: 0.46;
-}
-
-.level-browser-difficulty-button:disabled .star-rating .filled {
-  color: rgba(206, 215, 230, 0.36);
-  text-shadow: none;
-}
-
-.level-browser-difficulty-button.active {
-  color: #f7fbff;
-  border-color: rgba(var(--difficulty-rgb, var(--accent-rgb)), 0.6);
-  background:
-    linear-gradient(180deg, rgba(var(--difficulty-rgb, var(--accent-rgb)), 0.2), rgba(var(--difficulty-rgb, var(--accent-rgb)), 0.08)),
-    rgba(9, 15, 24, 0.9);
-}
-
-.level-browser-difficulty-button.active .star-rating,
-.level-browser-difficulty-button.active .star-rating .filled {
-  color: #f7fbff;
-  text-shadow: none;
-}
-
 .dev-unlock-pill {
   min-height: 34px;
   padding: 0 13px;
@@ -2193,6 +2124,24 @@ button.capsule:disabled,
   background: rgba(var(--level-rgb), 0.08);
 }
 
+.level-option .level-state.challenge-state {
+  color: rgba(235, 243, 255, 0.82);
+  border-color: rgba(var(--accent-rgb), 0.22);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.level-option .level-state.challenge-done {
+  color: #baf6c8;
+  border-color: rgba(88, 255, 132, 0.3);
+  background: rgba(88, 255, 132, 0.1);
+}
+
+.level-option .level-state.challenge-pending {
+  color: rgba(173, 184, 204, 0.62);
+  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.024);
+}
+
 .level-option .level-state.unrated {
   border-color: rgba(255, 255, 255, 0.07);
   background: rgba(255, 255, 255, 0.025);
@@ -2836,6 +2785,17 @@ button.capsule:disabled,
   text-overflow: ellipsis;
 }
 
+.game-control-screen.with-levels .player-pill {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 54px;
+  padding: 0 12px;
+  justify-content: flex-start;
+  border-radius: 18px;
+  font-size: 15px;
+}
+
 .message {
   min-width: 0;
   color: var(--muted);
@@ -3071,6 +3031,7 @@ button.capsule:disabled,
 
 .game-control-screen.with-levels .game-control-copy {
   padding: 18px;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   align-content: start;
   gap: 11px;
 }
@@ -3114,6 +3075,31 @@ button.capsule:disabled,
   gap: 10px;
 }
 
+.game-control-screen.with-levels .control-roster {
+  min-height: 0;
+  padding-top: 2px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(54px, max-content);
+  align-content: start;
+  gap: 9px;
+}
+
+.game-control-screen.with-levels .control-roster[data-count="1"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.game-control-screen.with-levels .control-roster[data-count="1"] .player-pill {
+  min-height: 84px;
+  padding-inline: 20px;
+  font-size: 24px;
+}
+
+.game-control-screen.with-levels .control-roster[data-count="1"] .player-pill span:first-child {
+  width: 18px;
+  height: 18px;
+}
+
 .active-game-stats {
   min-width: 0;
   display: grid;
@@ -3122,7 +3108,12 @@ button.capsule:disabled,
 }
 
 .game-control-screen.with-levels .active-game-stats {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.game-control-screen.with-levels .active-life-stat {
+  grid-column: 1 / -1;
 }
 
 .active-game-stats div {
@@ -3139,6 +3130,11 @@ button.capsule:disabled,
     rgba(8, 14, 23, 0.62);
 }
 
+.game-control-screen.with-levels .active-game-stats div {
+  min-height: 64px;
+  padding: 10px 12px;
+}
+
 .active-game-stats span {
   overflow: hidden;
   color: var(--muted);
@@ -3151,6 +3147,11 @@ button.capsule:disabled,
   white-space: nowrap;
 }
 
+.game-control-screen.with-levels .active-game-stats span {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
 .active-game-stats strong {
   overflow: hidden;
   color: var(--text);
@@ -3159,6 +3160,18 @@ button.capsule:disabled,
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.game-control-screen.with-levels .active-game-stats strong {
+  font-size: 25px;
+}
+
+.game-control-screen.with-levels .active-life-stat strong {
+  max-width: 100%;
+}
+
+.game-control-screen.with-levels .active-life-meter {
+  max-width: 240px;
 }
 
 .active-game-stats small {
