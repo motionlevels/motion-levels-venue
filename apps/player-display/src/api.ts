@@ -1,54 +1,6 @@
-export type DisplayColor = {
-  r: number;
-  g: number;
-  b: number;
-};
+import type { DisplayPlayer, DisplayStatus } from "@motion-levels/core";
 
-export type DisplayPlayer = {
-  index: number;
-  label: string;
-  color: DisplayColor;
-  score: number;
-  lives: number;
-};
-
-export type DisplayStatus = {
-  currentGame: string;
-  label: string;
-  phase: string;
-  difficulty: string;
-  difficultyConfigurable?: boolean;
-  levelMode?: string;
-  playerCount: number;
-  playerConfigurable?: boolean;
-  players: DisplayPlayer[];
-  score: number;
-  lives: number;
-  livesStart?: number;
-  startedUnix: number;
-  sessionStartedUnix?: number;
-  endsUnix: number;
-  sessionElapsedMillis?: number;
-  sessionRemainingMillis?: number;
-  challengeElapsedMillis?: number;
-  challengeAttemptCount?: number;
-  elapsedMillis: number;
-  remainingMillis: number;
-  introRemainingMillis: number;
-  countdownRemainingMillis: number;
-  activeTargets: number;
-  audioEnabled: boolean;
-  audioMuted: boolean;
-  lastEventUnixNanos: number;
-  lastEventCue: string;
-  lastEventMessage: string;
-  level?: string;
-  levelNumber?: number;
-  attemptCount?: number;
-  failureCount?: number;
-  bestElapsedMillis?: number;
-  sessionBestElapsedMillis?: number;
-};
+export type { DisplayPlayer, DisplayStatus };
 
 const enginePort = "4102";
 const localEngineURL = `http://127.0.0.1:${enginePort}`;
