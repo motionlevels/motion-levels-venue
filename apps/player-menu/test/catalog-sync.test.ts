@@ -397,4 +397,13 @@ describe("catalog metadata sync", () => {
     assert.doesNotMatch(coreIndexSource, /floorPreview/);
     assert.doesNotMatch(floorSource, /parkour2: parkour/);
   });
+
+  it("keeps platform level game launch identity separate from legacy engine aliases", () => {
+    const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
+
+    assert.match(appSource, /function runtimeGameID\(game: Pick<GameCard, "engineGame" \| "id" \| "sourceKind">\): string/);
+    assert.match(appSource, /game\.sourceKind === "platform_levels" && isUUID\(game\.id\) \? game\.id : engineGameID\(game\)/);
+    assert.match(appSource, /game: runtimeGameID\(launchGame\)/);
+    assert.doesNotMatch(appSource, /runtimeGameID\([^)]*\)[\s\S]{0,120}\|\|\s*"parkour"/);
+  });
 });
