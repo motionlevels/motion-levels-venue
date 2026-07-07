@@ -4494,6 +4494,7 @@ function Preview({
   const sourceCandidates = useMemo(() => uniquePreviewSources([...posterCandidates, ...richCandidates]), [posterCandidates, richCandidates]);
   const posterSrc = posterCandidates.find((candidate) => !failedSrcs.includes(candidate));
   const richCandidate = richCandidates.find((candidate) => !failedSrcs.includes(candidate));
+  const mediaWasConfigured = sourceCandidates.length > 0;
   const posterReady = Boolean(posterSrc && loadedPosterSrc === posterSrc);
 
   useEffect(() => {
@@ -4550,9 +4551,10 @@ function Preview({
   const promotedToAnimation = Boolean(promoteAnimation && posterReady && !richCandidate && anim);
   const mediaSrc = promotedToAnimation ? undefined : promotedSrc || posterSrc;
   const logoMedia = isMotionLevelsLogoSrc(mediaSrc);
-  const showAnimation = Boolean((promotedToAnimation || !mediaSrc) && anim);
+  const mediaFailed = mediaWasConfigured && !mediaSrc;
+  const showAnimation = Boolean(!mediaFailed && (promotedToAnimation || !mediaSrc) && anim);
   return (
-    <div className={`preview ${compact ? "compact-preview" : ""} ${logoMedia ? "logo-preview" : ""}`}>
+    <div className={`preview ${compact ? "compact-preview" : ""} ${logoMedia || mediaFailed ? "logo-preview" : ""}`}>
       {mediaSrc ? (
         <img
           className={`preview-media ${logoMedia ? "logo-preview-media" : ""}`}

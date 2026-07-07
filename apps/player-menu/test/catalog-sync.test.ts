@@ -338,7 +338,10 @@ describe("catalog metadata sync", () => {
     assert.match(helperSource, /if \(configured\) return configured;/);
     assert.match(helperSource, /if \(fallback\?\.previewAnimation\) return fallback\.previewAnimation;/);
     assert.doesNotMatch(helperSource, /hasPlatformMedia/);
-    assert.match(appSource, /const showAnimation = Boolean\(\(promotedToAnimation \|\| !mediaSrc\) && anim\);/);
+    assert.match(appSource, /const mediaWasConfigured = sourceCandidates\.length > 0;/);
+    assert.match(appSource, /const mediaFailed = mediaWasConfigured && !mediaSrc;/);
+    assert.match(appSource, /const showAnimation = Boolean\(!mediaFailed && \(promotedToAnimation \|\| !mediaSrc\) && anim\);/);
+    assert.match(appSource, /logoMedia \|\| mediaFailed \? "logo-preview" : ""/);
     assert.match(appSource, /showAnimation \? \(\s*<FloorPreview anim=\{anim\} orientation="landscape" \/>/);
     assert.match(appSource, /<div className="preview-logo-fallback" aria-hidden="true">[\s\S]*?<img src="\/motion-levels-icon\.webp" alt="" \/>/);
     assert.match(styleSource, /\.game-body\s*\{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) minmax\(54px, max-content\);[\s\S]*?align-items: center;/);
