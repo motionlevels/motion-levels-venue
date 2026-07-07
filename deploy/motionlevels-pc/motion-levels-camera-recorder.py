@@ -1614,7 +1614,7 @@ def quick_video_duration(payload: dict[str, Any]) -> int:
         value = float(payload.get("durationSeconds") or payload.get("duration") or 10)
     except (TypeError, ValueError):
         value = 10
-    return max(1, min(30, round(value)))
+    return max(1, min(60, round(value)))
 
 
 class Handler(BaseHTTPRequestHandler):

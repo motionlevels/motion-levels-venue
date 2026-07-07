@@ -448,8 +448,12 @@ write_files:
       # MOTION_LEVELS_CAMERA_START_COMMAND=/usr/local/bin/motion-levels-insta360 start
       # MOTION_LEVELS_CAMERA_STOP_COMMAND=/usr/local/bin/motion-levels-insta360 stop
       # MOTION_LEVELS_CAMERA_PHOTO_COMMAND=/usr/local/bin/motion-levels-insta360 photo
-      # MOTION_LEVELS_CAMERA_RCLONE_DEST=motionlevels-drive:Partidas
+      # Object-storage uploads use an rclone S3 remote configured outside this
+      # file. The current Motion Levels target is:
+      # MOTION_LEVELS_CAMERA_RCLONE_DEST=motionlevels-objects:motionlevels-recordings
+      # MOTION_LEVELS_CAMERA_RCLONE_PATH_PREFIX=x5-camera
       MOTION_LEVELS_CAMERA_RCLONE_DEST=
+      MOTION_LEVELS_CAMERA_RCLONE_PATH_PREFIX=
 
       MOTION_LEVELS_PLAYER_URL=http://127.0.0.1/display/
       MOTION_LEVELS_PLAYER_PROFILE=/var/lib/motion-levels/rebuild-player-chromium
