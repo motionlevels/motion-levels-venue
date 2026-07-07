@@ -638,17 +638,23 @@ func (g *Game) resetLevelRunLocked(level compiledLevel, now time.Time) {
 func (g *Game) colorAtLocked(pt Point, now time.Time) RGB {
 	if g.ended {
 		if g.success {
-			animationName := chosenResultAnimation(g.level.victoryAnimations, "victory-pulse", g.endedAt)
+			animationName := chosenResultAnimation(g.level.victoryAnimations, g.endedAt)
+			if animationName == "" {
+				return RGB{}
+			}
 			if color, ok := g.catalogResultAnimationColor(animationName, pt, now); ok {
 				return color
 			}
-			return resultAnimationColor(animationName, pt, now, g.endedAt)
+			return RGB{}
 		}
-		animationName := chosenResultAnimation(g.level.defeatAnimations, "defeat-pulse", g.endedAt)
+		animationName := chosenResultAnimation(g.level.defeatAnimations, g.endedAt)
+		if animationName == "" {
+			return RGB{}
+		}
 		if color, ok := g.catalogResultAnimationColor(animationName, pt, now); ok {
 			return color
 		}
-		return resultAnimationColor(animationName, pt, now, g.endedAt)
+		return RGB{}
 	}
 	if until, ok := g.hitFlash[pt]; ok && now.Before(until) {
 		return RGB{R: 255, G: 236, B: 82}
@@ -1123,6 +1129,11 @@ func fetchResultAnimations(platformURL string, levels []compiledLevel) map[strin
 	byID := map[string]resultanimations.CompiledLevel{}
 	for _, level := range animationLevels {
 		byID[resultanimations.NormalizeLevel(level.ID())] = level
+		for _, ref := range level.CatalogRefs() {
+			if normalized := resultanimations.NormalizeLevel(ref); normalized != "" {
+				byID[normalized] = level
+			}
+		}
 	}
 	resolved := map[string]resultanimations.CompiledLevel{}
 	for ref := range refs {
@@ -1140,7 +1151,7 @@ func resultAnimationRefs(levels []compiledLevel) map[string]struct{} {
 	for _, level := range levels {
 		for _, value := range append(append([]string{}, level.victoryAnimations...), level.defeatAnimations...) {
 			normalized := normalizeResultAnimation(value, "")
-			if normalized == "" || isBuiltInResultAnimation(normalized) {
+			if normalized == "" {
 				continue
 			}
 			refs[resultanimations.NormalizeLevel(normalized)] = struct{}{}
@@ -1214,8 +1225,8 @@ func compileCloudLevelsForModeWithDifficulty(raw []cloudLevel, levelMode string,
 			frameTick:         frameTick,
 			winCondition:      winCondition,
 			redAnimation:      normalizeRedFloorAnimation(level.Rules.RedFloorAnimation),
-			victoryAnimations: normalizeResultAnimationList(level.ResultAnimations.VictoryAnimations, "victory-pulse"),
-			defeatAnimations:  normalizeResultAnimationList(level.ResultAnimations.DefeatAnimations, "defeat-pulse"),
+			victoryAnimations: normalizeResultAnimationList(level.ResultAnimations.VictoryAnimations),
+			defeatAnimations:  normalizeResultAnimationList(level.ResultAnimations.DefeatAnimations),
 			greenFade:         level.Rules.GreenPlatformDisappear,
 			greenImpact:       level.Rules.GreenPlatformImpactRipple,
 			greenLoad:         boolDefaultTrue(level.Rules.GreenPlatformLoad),
@@ -1497,107 +1508,15 @@ func easeInOut(t float64) float64 {
 	return t * t * (3 - 2*t)
 }
 
-func resultAnimationColor(name string, pt Point, now time.Time, started time.Time) RGB {
-	elapsed := now.Sub(started)
-	progress := math.Mod(math.Max(0, elapsed.Seconds())/1.25, 1)
-	cx := float64(GridWidth-1) / 2
-	cy := float64(GridHeight-1) / 2
-	dist := math.Hypot((float64(pt.X)-cx)/cx, (float64(pt.Y)-cy)/cy)
-	switch normalizeResultAnimation(name, "victory-pulse") {
-	case "victory-confetti":
-		return victoryConfettiColor(pt, progress)
-	case "victory-wave":
-		wave := 0.5 + 0.5*math.Sin((float64(pt.X)/float64(GridWidth-1)+float64(pt.Y)/float64(GridHeight-1)-progress*2.6)*math.Pi*2)
-		return hsvColor(0.48+wave*0.08, 0.82, 0.12+wave*0.82)
-	case "victory-spark":
-		seed := hashInt(pt.X*13 + pt.Y*29 + int(progress*18)*71)
-		if seed%100 > 86 {
-			return RGB{R: 248, G: 250, B: 252}
-		}
-		return hsvColor(0.11, 0.88, 0.08+0.42*math.Max(0, math.Sin((progress+float64(seed%100)/100)*math.Pi)))
-	case "defeat-sweep":
-		head := progress * float64(GridHeight+8)
-		distance := math.Abs(float64(pt.Y) - head)
-		if distance < 2.4 {
-			return RGB{R: 255, G: 32, B: 56}
-		}
-		return scaleRGB(RGB{R: 255, G: 22, B: 34}, math.Max(0, 0.22-distance*0.018))
-	case "defeat-static":
-		seed := hashInt(pt.X*23 + pt.Y*41 + int(progress*20)*97)
-		if seed%100 > 70 {
-			return RGB{R: 255, G: byte(16 + seed%40), B: byte(24 + seed%24)}
-		}
-		return RGB{}
-	case "defeat-pulse":
-		if int(elapsed/(120*time.Millisecond))%2 == 0 {
-			return RGB{R: 255, G: 22, B: 34}
-		}
-		return RGB{}
-	default:
-		ring := math.Max(0, 1-math.Abs(dist-progress*1.45)*4.2)
-		pulse := 0.16 + math.Pow(ring, 1.6)*0.84
-		return RGB{R: byte(20 * pulse), G: byte(255 * pulse), B: byte(80 * pulse)}
-	}
-}
-
-func victoryConfettiColor(pt Point, progress float64) RGB {
-	centerX := float64(GridWidth-1) / 2
-	centerY := float64(GridHeight-1) / 2
-	dist := math.Hypot((float64(pt.X)-centerX)/centerX, (float64(pt.Y)-centerY)/centerY)
-	glow := 0.12 + 0.14*math.Max(0, 1-dist) + 0.04*math.Sin(progress*math.Pi*2)
-	base := hsvColor(0.38, 0.78, glow)
-	lane := pt.X/3 + pt.Y/2
-	seed := hashInt(pt.X*37 + pt.Y*73 + lane*101)
-	fall := math.Mod(float64(pt.Y)+progress*float64(GridHeight+10)+float64(seed%13)/3, 10)
-	if fall > 2.1 {
-		return base
-	}
-	stagger := math.Mod(float64(pt.X)+float64(seed%9)+progress*7, 6)
-	if stagger > 2.8 {
-		return base
-	}
-	colors := []RGB{
-		{R: 255, G: 214, B: 64},
-		{R: 80, G: 220, B: 255},
-		{R: 255, G: 86, B: 184},
-		{R: 98, G: 255, B: 126},
-		{R: 255, G: 126, B: 55},
-	}
-	color := colors[seed%len(colors)]
-	flash := 0.9 + 0.1*math.Sin(progress*math.Pi*2+float64(seed%360))
-	return scaleRGB(color, flash)
-}
-
 func normalizeResultAnimation(value string, fallback string) string {
 	clean := strings.TrimSpace(value)
 	if clean == "" {
 		return fallback
 	}
-	switch clean {
-	case "pulse":
-		return "victory-pulse"
-	case "confetti":
-		return "victory-confetti"
-	case "wave":
-		return "victory-wave"
-	case "spark":
-		return "victory-spark"
-	default:
-		return clean
-	}
+	return clean
 }
 
-func isBuiltInResultAnimation(value string) bool {
-	switch normalizeResultAnimation(value, "") {
-	case "victory-pulse", "victory-confetti", "victory-wave", "victory-spark",
-		"defeat-pulse", "defeat-static", "defeat-sweep":
-		return true
-	default:
-		return false
-	}
-}
-
-func normalizeResultAnimationList(values []string, fallback string) []string {
+func normalizeResultAnimationList(values []string) []string {
 	unique := map[string]struct{}{}
 	result := []string{}
 	for _, value := range values {
@@ -1611,9 +1530,6 @@ func normalizeResultAnimationList(values []string, fallback string) []string {
 		unique[normalized] = struct{}{}
 		result = append(result, normalized)
 	}
-	if len(result) == 0 {
-		return []string{fallback}
-	}
 	return result
 }
 
@@ -1623,8 +1539,11 @@ func normalizeResultAnimationList(values []string, fallback string) []string {
 // calls that share a single game-over screen — a fresh roll each frame would
 // flicker between animations. Different sessions end at different instants, so
 // they tend to surface different animations.
-func chosenResultAnimation(values []string, fallback string, endedAt time.Time) string {
-	normalized := normalizeResultAnimationList(values, fallback)
+func chosenResultAnimation(values []string, endedAt time.Time) string {
+	normalized := normalizeResultAnimationList(values)
+	if len(normalized) == 0 {
+		return ""
+	}
 	if len(normalized) == 1 {
 		return normalized[0]
 	}

@@ -765,6 +765,7 @@ func TestCompileCloudLevelUsesConfiguredResultAnimations(t *testing.T) {
 }
 
 func TestCustomVictoryAnimationUsesLatestSelectedCatalogAnimation(t *testing.T) {
+	const gamePassID = "d8db3406-f815-4a69-840d-1cea1a43facc"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/json")
 		switch r.URL.Path {
@@ -777,7 +778,7 @@ func TestCustomVictoryAnimationUsesLatestSelectedCatalogAnimation(t *testing.T) 
 				"pass_score":0,
 				"frame_tick_ms":25,
 				"result_animations":{
-					"victory_animations":["game-pass"]
+					"victory_animations":["` + gamePassID + `"]
 				},
 				"frames":[{"r":20,"c":[[5,5,1,"coin-a"]]}]
 			}]}`))
@@ -786,6 +787,7 @@ func TestCustomVictoryAnimationUsesLatestSelectedCatalogAnimation(t *testing.T) 
 				t.Fatalf("animation summary = %q, want 0", got)
 			}
 			_, _ = w.Write([]byte(`{"levels":[{
+				"id":"` + gamePassID + `",
 				"slug":"game-pass",
 				"label":"Game Pass",
 				"difficulty":"medium",
@@ -809,20 +811,50 @@ func TestCustomVictoryAnimationUsesLatestSelectedCatalogAnimation(t *testing.T) 
 	if got != (RGB{R: 0x12, G: 0x34, B: 0x56}) {
 		t.Fatalf("result animation color = %+v, want catalog Game Pass color", got)
 	}
-	configured := []string{"victory-pulse", "game-pass"}
-	stable := chosenResultAnimation(configured, "victory-pulse", now)
-	if again := chosenResultAnimation(configured, "victory-pulse", now); again != stable {
+	configured := []string{"victory-wave", gamePassID}
+	stable := chosenResultAnimation(configured, now)
+	if again := chosenResultAnimation(configured, now); again != stable {
 		t.Fatalf("chosen result animation not stable for a fixed end time: %q then %q", stable, again)
 	}
-	if stable != "victory-pulse" && stable != "game-pass" {
+	if stable != "victory-wave" && stable != gamePassID {
 		t.Fatalf("chosen result animation = %q, want one of the configured animations", stable)
 	}
 	seen := map[string]bool{}
 	for offset := 0; offset < 200; offset++ {
-		seen[chosenResultAnimation(configured, "victory-pulse", now.Add(time.Duration(offset)*time.Millisecond))] = true
+		seen[chosenResultAnimation(configured, now.Add(time.Duration(offset)*time.Millisecond))] = true
 	}
 	if len(seen) < 2 {
 		t.Fatalf("chosen result animation never varied across end times: %v", seen)
+	}
+}
+
+func TestEmptyResultAnimationListsDoNotFallBack(t *testing.T) {
+	levels, err := compileCloudLevels([]cloudLevel{{
+		Slug:        "level-1",
+		Label:       "No result animation",
+		Difficulty:  string(DifficultyMedium),
+		Life:        5,
+		FrameTickMS: 25,
+		ResultAnimations: resultAnimationsConfig{
+			VictoryAnimations: []string{},
+			DefeatAnimations:  []string{},
+		},
+		Frames: []rawFrame{{
+			Repeat: 8,
+			Cells:  []cellTuple{{X: 4, Y: 4, Kind: 1, Uniq: "coin-a"}},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := levels[0].victoryAnimations; len(got) != 0 {
+		t.Fatalf("victoryAnimations = %#v, want empty", got)
+	}
+	if got := levels[0].defeatAnimations; len(got) != 0 {
+		t.Fatalf("defeatAnimations = %#v, want empty", got)
+	}
+	if got := chosenResultAnimation(nil, time.Now()); got != "" {
+		t.Fatalf("chosen result animation for empty list = %q, want empty", got)
 	}
 }
 

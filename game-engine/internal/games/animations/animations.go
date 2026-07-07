@@ -59,6 +59,7 @@ type tilePoint struct {
 
 type CompiledLevel struct {
 	id             string
+	catalogRefs    []string
 	settingsHash   string
 	label          string
 	description    string
@@ -72,12 +73,13 @@ type CompiledLevel struct {
 	audio          AudioRefs
 }
 
-func (cl CompiledLevel) ID() string           { return cl.id }
-func (cl CompiledLevel) Label() string        { return cl.label }
-func (cl CompiledLevel) Description() string  { return cl.description }
-func (cl CompiledLevel) Featured() bool       { return cl.featured }
-func (cl CompiledLevel) MusicRef() string     { return cl.audio.MusicRef }
-func (cl CompiledLevel) MusicVolume() float64 { return cl.audio.MusicVolume }
+func (cl CompiledLevel) ID() string            { return cl.id }
+func (cl CompiledLevel) CatalogRefs() []string { return append([]string{}, cl.catalogRefs...) }
+func (cl CompiledLevel) Label() string         { return cl.label }
+func (cl CompiledLevel) Description() string   { return cl.description }
+func (cl CompiledLevel) Featured() bool        { return cl.featured }
+func (cl CompiledLevel) MusicRef() string      { return cl.audio.MusicRef }
+func (cl CompiledLevel) MusicVolume() float64  { return cl.audio.MusicVolume }
 
 func (cl CompiledLevel) ColorAtElapsed(x int, y int, elapsed time.Duration) RGB {
 	if !inBounds(x, y) {
@@ -733,12 +735,17 @@ func compileCloudLevels(raw []cloudLevel) ([]CompiledLevel, error) {
 		if strings.TrimSpace(id) == "" {
 			id = "level-" + strconv.Itoa(index+1)
 		}
+		catalogRefs := []string{NormalizeLevel(id)}
+		if normalizedID := NormalizeLevel(level.ID); normalizedID != "" && normalizedID != catalogRefs[0] {
+			catalogRefs = append(catalogRefs, normalizedID)
+		}
 		frameTick := time.Duration(level.FrameTickMS) * time.Millisecond
 		if frameTick <= 0 {
 			frameTick = tickDuration
 		}
 		compiled := CompiledLevel{
 			id:           NormalizeLevel(id),
+			catalogRefs:  catalogRefs,
 			settingsHash: strings.TrimSpace(level.SettingsHash),
 			label:        level.Label,
 			description:  level.Description,
