@@ -95,7 +95,7 @@ func compileSeedWithTinyGo(t *testing.T, tinygo string, repoRoot string, code st
 		t.Fatal(err)
 	}
 	runSeedCommand(t, dir, "go", "mod", "tidy")
-	runSeedCommand(t, dir, tinygo, "build", "-target=wasi", "-scheduler=none", "-no-debug", "-o", filepath.Join(dir, "game.wasm"), filepath.Join(dir, "game.go"))
+	runSeedCommand(t, dir, tinygo, "build", "-target=wasip1", "-scheduler=none", "-no-debug", "-o", filepath.Join(dir, "game.wasm"), filepath.Join(dir, "game.go"))
 	info, err := os.Stat(filepath.Join(dir, "game.wasm"))
 	if err != nil || info.Size() == 0 {
 		t.Fatalf("tinygo produced no game.wasm: %v", err)

@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/lobis/motion-levels/packages/contracts/gamepb"
 	"github.com/lobis/motion-levels/packages/contracts/pbstream"
 )
@@ -384,6 +386,7 @@ func (w *countingWriter) Write(p []byte) (int, error) {
 }
 
 func cloneRecord(record *gamepb.GameSessionRecord) *gamepb.GameSessionRecord {
-	copied := *record
-	return &copied
+	// Deep copy: a shallow copy would share the Payload pointer with the
+	// caller, racing with the async writer goroutine.
+	return proto.Clone(record).(*gamepb.GameSessionRecord)
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/lobis/motion-levels/packages/contracts/inputpb"
 	"github.com/lobis/motion-levels/packages/contracts/pbstream"
 	"github.com/lobis/motion-levels/packages/contracts/recordingpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type config struct {
@@ -675,14 +676,5 @@ func cloneFrameRecord(frame *recordingpb.FrameRecord) *recordingpb.FrameRecord {
 	if frame == nil {
 		return nil
 	}
-	clone := *frame
-	clone.Tiles = make([]*recordingpb.TileState, len(frame.GetTiles()))
-	for i, tile := range frame.GetTiles() {
-		if tile == nil {
-			continue
-		}
-		tileClone := *tile
-		clone.Tiles[i] = &tileClone
-	}
-	return &clone
+	return proto.Clone(frame).(*recordingpb.FrameRecord)
 }

@@ -142,6 +142,12 @@ type RemoteSessionRequest = {
 const emptyPreviewSources: string[] = [];
 const storageKey = "ml-player-menu-state-v1";
 const platformCatalogStorageKey = "ml-player-menu-platform-catalog-v3";
+// Cache keys older menu builds wrote; purged at boot so long-lived kiosks do
+// not carry multi-megabyte orphaned catalog payloads forever.
+const retiredStorageKeys = [
+  "ml-player-menu-platform-catalog-v1",
+  "ml-player-menu-platform-catalog-v2",
+];
 const platformCatalogRefreshMillis = 5000;
 const maxPlayers = 8;
 const maxTeamNameLength = 24;
@@ -1149,6 +1155,11 @@ function loadMenuState(): MenuState {
 
 function loadCachedPlatformCatalog(): PlatformGameCatalogEntry[] | null {
   if (typeof localStorage === "undefined") return null;
+  try {
+    for (const key of retiredStorageKeys) localStorage.removeItem(key);
+  } catch {
+    // Storage cleanup is best-effort.
+  }
   try {
     const payload = JSON.parse(localStorage.getItem(platformCatalogStorageKey) || "null") as { games?: unknown } | PlatformGameCatalogEntry[] | null;
     const games = Array.isArray(payload) ? payload : Array.isArray(payload?.games) ? payload.games : null;

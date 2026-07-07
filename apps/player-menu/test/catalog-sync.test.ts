@@ -445,6 +445,14 @@ describe("catalog metadata sync", () => {
     assert.equal(platformPlayerConfigVars(catalogEntry({ game_source: { schema: "motion-go-v1", kind: "wasm" } })), undefined);
   });
 
+  it("purges retired platform catalog cache keys at boot", () => {
+    const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
+
+    assert.match(appSource, /const retiredStorageKeys = \[/);
+    assert.match(appSource, /"ml-player-menu-platform-catalog-v1",/);
+    assert.match(appSource, /for \(const key of retiredStorageKeys\) localStorage\.removeItem\(key\);/);
+  });
+
   it("sends player config overrides with the launch request", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
 
