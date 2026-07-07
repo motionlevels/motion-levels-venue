@@ -4561,6 +4561,7 @@ function Preview({
   const promotedToAnimation = Boolean(promoteAnimation && posterReady && !richCandidate && anim);
   const mediaSrc = promotedToAnimation ? undefined : promotedSrc || posterSrc;
   const logoMedia = isMotionLevelsLogoSrc(mediaSrc);
+  const showAnimation = Boolean(promotedToAnimation && anim);
   return (
     <div className={`preview ${compact ? "compact-preview" : ""} ${logoMedia ? "logo-preview" : ""}`}>
       {mediaSrc ? (
@@ -4577,7 +4578,7 @@ function Preview({
             if (mediaSrc === posterSrc) setLoadedPosterSrc(posterSrc);
           }}
         />
-      ) : anim ? (
+      ) : showAnimation ? (
         <FloorPreview anim={anim} orientation="landscape" />
       ) : (
         <div className="preview-logo-fallback" aria-hidden="true">

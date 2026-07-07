@@ -758,7 +758,7 @@ body {
 .arcade-system strong,
 .duel-center span {
   color: var(--cyan);
-  font-size: 1rem;
+  font-size: 1.28rem;
   font-weight: 950;
   line-height: 1;
   letter-spacing: 0.14em;
@@ -1013,10 +1013,10 @@ body {
 .arcade-metric {
   min-width: 0;
   min-height: 96px;
-  padding: 18px 24px;
+  padding: 24px 32px;
   display: grid;
   align-content: center;
-  gap: 10px;
+  gap: 14px;
   clip-path: polygon(3% 0, 100% 0, 100% 100%, 0 100%, 0 16%);
 }
 
@@ -1065,7 +1065,7 @@ body {
 
 .arcade-metric strong {
   overflow: hidden;
-  font-size: 3rem;
+  font-size: 5rem;
   line-height: 0.92;
   font-weight: 950;
   letter-spacing: 0;
@@ -1396,12 +1396,12 @@ body {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 14px;
 }
 
 .memory-player-score__name i {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   border-radius: 5px;
   background: var(--player);
   box-shadow: 0 0 18px rgba(var(--player-rgb), 0.65);
@@ -1410,7 +1410,7 @@ body {
 .memory-player-score__name span {
   overflow: hidden;
   color: #fff;
-  font-size: clamp(0.92rem, 1vw, 1.56rem);
+  font-size: 1.72rem;
   line-height: 1;
   font-weight: 950;
   letter-spacing: 0;
@@ -1421,7 +1421,7 @@ body {
 .memory-player-score > strong {
   overflow: hidden;
   color: var(--player);
-  font-size: clamp(5.5rem, 6.8vw, 9.5rem);
+  font-size: 8.6rem;
   line-height: 0.82;
   font-weight: 950;
   letter-spacing: 0;
@@ -1574,7 +1574,7 @@ body {
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
+  gap: 20px;
 }
 
 .arcade-players.count-1 {
@@ -1598,11 +1598,11 @@ body {
 
 .arcade-player-card {
   min-width: 0;
-  min-height: 132px;
-  padding: 18px 22px;
+  min-height: 156px;
+  padding: 22px 28px 24px;
   display: grid;
   align-content: space-between;
-  gap: 12px;
+  gap: 16px;
   border-color: rgba(var(--player-rgb), 0.5);
   background:
     linear-gradient(90deg, rgba(var(--player-rgb), 0.28), transparent 44%),
@@ -1623,15 +1623,15 @@ body {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
 .arcade-player-name i,
 .arcade-player-chip i,
 .duel-side i {
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
   background: var(--player);
   box-shadow: 0 0 18px rgba(var(--player-rgb), 0.65);
 }
@@ -1639,7 +1639,7 @@ body {
 .arcade-player-name span {
   overflow: hidden;
   color: #fff;
-  font-size: clamp(1.55rem, 1.55vw, 2.25rem);
+  font-size: 2.4rem;
   line-height: 1;
   font-weight: 950;
   letter-spacing: 0;
@@ -1648,10 +1648,10 @@ body {
 }
 
 .arcade-player-name b {
-  padding: 6px 10px;
+  padding: 8px 12px;
   color: #06140d;
   background: var(--player);
-  font-size: 0.78rem;
+  font-size: 1rem;
   font-weight: 950;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1659,7 +1659,7 @@ body {
 
 .arcade-player-card > strong {
   color: var(--player);
-  font-size: clamp(4.4rem, 4.9vw, 6.8rem);
+  font-size: 7.25rem;
   line-height: 0.82;
   font-weight: 950;
   letter-spacing: 0;

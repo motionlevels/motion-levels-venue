@@ -1772,8 +1772,9 @@ button.capsule:disabled,
   position: relative;
   padding: 16px;
   display: grid;
-  align-content: space-between;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(54px, max-content);
+  align-items: center;
+  gap: 12px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.042), rgba(255, 255, 255, 0.01)),
     rgba(10, 17, 29, 0.66);
@@ -1805,8 +1806,8 @@ button.capsule:disabled,
   margin: 0;
   color: var(--text);
   font-size: 24px;
-  line-height: 1;
-  letter-spacing: -0.015em;
+  line-height: 1.05;
+  letter-spacing: 0;
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -1816,6 +1817,8 @@ button.capsule:disabled,
 
 .game-card-meta {
   min-width: 0;
+  justify-self: end;
+  align-self: center;
   width: fit-content;
   max-width: 100%;
   min-height: 26px;
@@ -4540,11 +4543,14 @@ button.capsule:disabled,
   }
 
   .game-body {
-    padding: 40px;
+    grid-template-columns: minmax(0, 1fr) minmax(76px, max-content);
+    padding: 26px 34px;
+    column-gap: 18px;
   }
 
   .game-body h3 {
-    font-size: 46px;
+    font-size: 38px;
+    line-height: 1.03;
   }
 
   .launch-bar {

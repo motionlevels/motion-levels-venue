@@ -70,6 +70,18 @@ describe("arcade display reference styling", () => {
   });
 });
 
+describe("arcade display readability", () => {
+  it("keeps player and metric typography large enough for venue displays", () => {
+    const cssSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+    assert.match(cssSource, /\.arcade-metric span,[\s\S]*?font-size:\s*1\.28rem;/);
+    assert.match(cssSource, /\.arcade-metric strong\s*\{[^}]*font-size:\s*5rem;/);
+    assert.match(cssSource, /\.arcade-player-name span\s*\{[^}]*font-size:\s*2\.4rem;/);
+    assert.match(cssSource, /\.arcade-player-card > strong\s*\{[^}]*font-size:\s*7\.25rem;/);
+    assert.match(cssSource, /\.memory-player-score__name span\s*\{[^}]*font-size:\s*1\.72rem;/);
+  });
+});
+
 describe("kiosk preview viewport", () => {
   it("can lock the display app to the fixed TV design viewport for scaled embeds", () => {
     const source = readFileSync(new URL("../src/main.tsx", import.meta.url), "utf8");
