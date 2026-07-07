@@ -7,6 +7,11 @@ type LevelTimingStatus = Pick<
 
 type LevelLivesStatus = Pick<DisplayStatus, "phase" | "lives" | "livesStart">;
 
+export type HeartMeterModel = {
+  lives: number;
+  slots: number;
+};
+
 export function challengeMode(status: Pick<DisplayStatus, "levelMode">): boolean {
   return normalizedDisplayText(status.levelMode || "") === "challenge" || normalizedDisplayText(status.levelMode || "") === "reto";
 }
@@ -68,6 +73,18 @@ export function heartMeterSlotCount(lives: number, compact = false): number {
     return Math.min(5, lives);
   }
   return lives;
+}
+
+export function levelHeartMeterModel(status: LevelLivesStatus, compact = false): HeartMeterModel {
+  const displayLives = levelDisplayLives(status);
+  if (displayLives < 0) return { lives: -1, slots: 0 };
+  const lives = Math.max(0, Math.floor(displayLives));
+  const startLives = Math.max(0, Math.floor(Number(status.livesStart) || 0));
+  const slotSource = status.phase === "finished" ? lives : Math.max(lives, startLives);
+  return {
+    lives,
+    slots: heartMeterSlotCount(slotSource, compact),
+  };
 }
 
 function globalGameElapsedMillis(status: Pick<DisplayStatus, "sessionElapsedMillis" | "elapsedMillis">): number {

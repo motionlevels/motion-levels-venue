@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./api";
 import { createCoalescer, isFeedStalled } from "./displayFeed";
-import { challengeMode, heartMeterSlotCount, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeLabel, levelDisplayTimeMillis } from "./displayMetrics";
+import { challengeMode, heartMeterSlotCount, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeLabel, levelDisplayTimeMillis, levelHeartMeterModel } from "./displayMetrics";
 import { colorCSS, colorRGB, difficultyLabelES, formatClock, gameTitleES, levelLabelES, phaseLabel, playerLabelES } from "./utils";
 
 // If no stream event arrives, keep the display fresh with a 250ms fallback
@@ -293,7 +293,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
       ) : levelGame ? (
         <section className="arcade-stage arcade-stage--level-hud">
           <div className="arcade-level-main" aria-label="Marcadores principales">
-            <MetricPanel className="arcade-metric--lives" label="Vidas" value={<HeartMeter lives={levelDisplayLives(status)} showAllUpTo={20} />} tone="red" />
+            <MetricPanel className="arcade-metric--lives" label="Vidas" value={<HeartMeter model={levelHeartMeterModel(status)} showAllUpTo={20} />} tone="red" />
             <LevelTimeStatsPanel details={levelTimeDetails} />
           </div>
           <div className="arcade-level-side" aria-label="Marcadores de ronda">
@@ -607,22 +607,23 @@ function DifficultyStars({ count }: { count: number }) {
   );
 }
 
-function HeartMeter({ lives, compact = false, showAllUpTo = 8 }: { lives: number; compact?: boolean; showAllUpTo?: number }) {
-  if (lives < 0) {
+function HeartMeter({ compact = false, lives, model, showAllUpTo = 8 }: { lives?: number; model?: { lives: number; slots: number }; compact?: boolean; showAllUpTo?: number }) {
+  const currentLives = typeof model?.lives === "number" ? model.lives : typeof lives === "number" ? lives : -1;
+  if (currentLives < 0) {
     return <div className={`heart-meter ${compact ? "compact" : ""} infinite`}><b>∞</b></div>;
   }
-  if (lives > showAllUpTo) {
+  const slots = model?.slots ?? heartMeterSlotCount(currentLives, compact);
+  if (slots > showAllUpTo) {
     return (
       <div
         className={`heart-meter ${compact ? "compact" : ""} many`}
         style={{ "--heart-count": compact ? 3 : 5 } as CSSProperties}
       >
         {Array.from({ length: compact ? 3 : 5 }, (_, index) => <span className="heart filled" key={index} />)}
-        <b>x{lives}</b>
+        <b>x{currentLives}</b>
       </div>
     );
   }
-  const slots = heartMeterSlotCount(lives, compact);
   const sizeClass = slots <= 1 ? "single" : slots <= 4 ? "few" : slots <= 8 ? "medium" : "full";
   return (
     <div
@@ -630,7 +631,7 @@ function HeartMeter({ lives, compact = false, showAllUpTo = 8 }: { lives: number
       style={{ "--heart-count": Math.max(1, slots) } as CSSProperties}
     >
       {Array.from({ length: slots }, (_, index) => (
-        <span className={`heart ${index < lives ? "filled" : ""}`} key={index} />
+        <span className={`heart ${index < currentLives ? "filled" : "empty"}`} key={index} />
       ))}
     </div>
   );

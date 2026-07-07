@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { heartMeterSlotCount, levelDisplayLives, levelDisplayTimeLabel, levelDisplayTimeMillis } from "../src/displayMetrics.ts";
+import { heartMeterSlotCount, levelDisplayLives, levelDisplayTimeLabel, levelDisplayTimeMillis, levelHeartMeterModel } from "../src/displayMetrics.ts";
 
 describe("levelDisplayTimeMillis", () => {
   it("uses whole-challenge remaining time for challenge-mode level games", () => {
@@ -52,5 +52,19 @@ describe("heartMeterSlotCount", () => {
     assert.equal(heartMeterSlotCount(1), 1);
     assert.equal(heartMeterSlotCount(3), 3);
     assert.equal(heartMeterSlotCount(5), 5);
+  });
+});
+
+describe("levelHeartMeterModel", () => {
+  it("keeps starting life slots visible when lives are lost", () => {
+    assert.deepEqual(levelHeartMeterModel({ phase: "running", lives: 2, livesStart: 3 }), { lives: 2, slots: 3 });
+  });
+
+  it("uses current lives when no starting life count is available", () => {
+    assert.deepEqual(levelHeartMeterModel({ phase: "running", lives: 2, livesStart: undefined }), { lives: 2, slots: 2 });
+  });
+
+  it("preserves unlimited lives", () => {
+    assert.deepEqual(levelHeartMeterModel({ phase: "running", lives: -1, livesStart: undefined }), { lives: -1, slots: 0 });
   });
 });
