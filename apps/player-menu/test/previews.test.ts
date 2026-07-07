@@ -123,8 +123,8 @@ describe("catalog asset sources", () => {
     const fallback = gameCard({ thumbnailSrc: "https://cdn.test/fallback-thumb.webp", previewSrc: "https://cdn.test/fallback-prev.webp" });
     const thumbs = catalogThumbnailMediaSrcs(entry, fallback);
     assert.deepEqual(thumbs, [
-      "https://cdn.test/preview.webp",
       "https://cdn.test/thumb.webp",
+      "https://cdn.test/preview.webp",
       "https://cdn.test/fallback-thumb.webp",
       "https://cdn.test/fallback-prev.webp",
     ]);

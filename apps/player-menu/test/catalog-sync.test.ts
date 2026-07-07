@@ -286,12 +286,12 @@ describe("catalog metadata sync", () => {
     assert.match(appSource, /catalogDirectAssetSrc\(lvl\.catalog_thumbnail_url\)/);
     assert.match(appSource, /catalogDirectAssetSrc\(lvl\.catalog_preview_url\)/);
     assert.ok(
-      cardThumbnailSources.indexOf("entry.catalog_preview_url") < cardThumbnailSources.indexOf("entry.catalog_thumbnail_small_url"),
-      "game cards should prefer the generated preview over the small thumbnail",
+      cardThumbnailSources.indexOf("entry.catalog_thumbnail_small_url") < cardThumbnailSources.indexOf("entry.catalog_preview_url"),
+      "game cards should prefer the generated still thumbnail over the animated preview",
     );
     assert.ok(
-      levelThumbnailSources.indexOf("lvl.catalog_preview_url") < levelThumbnailSources.indexOf("lvl.catalog_thumbnail_small_url"),
-      "level cards should prefer the generated preview over the small thumbnail",
+      levelThumbnailSources.indexOf("lvl.catalog_thumbnail_small_url") < levelThumbnailSources.indexOf("lvl.catalog_preview_url"),
+      "level cards should prefer the generated still thumbnail over the animated preview",
     );
     assert.match(appSource, /ml-player-menu-platform-catalog-v3/);
     assert.doesNotMatch(appSource, /hasLegacyPreviewMediaURL/);
