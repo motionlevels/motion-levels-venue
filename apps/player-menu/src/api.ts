@@ -151,6 +151,8 @@ export type SelectGameRequest = {
 
 const enginePort = "4102";
 const localEngineURL = `http://127.0.0.1:${enginePort}`;
+const publicPlatformHost = "platform.motionlevels.obis.dev";
+export const publicPlatformURL = `https://${publicPlatformHost}`;
 
 function inferEngineURL(): string {
   if (typeof window === "undefined" || !window.location.hostname || window.location.protocol === "file:") {
@@ -170,8 +172,6 @@ export function engineBaseURL(): string {
   return import.meta.env.VITE_GAME_ENGINE_URL || inferEngineURL();
 }
 
-const publicPlatformURL = "https://platform.motionlevels.obis.dev";
-
 export function inferPlatformURL(location: Pick<Location, "hostname" | "origin" | "pathname" | "protocol"> = window.location): string {
   if (!location.origin || location.protocol === "file:") {
     return "";
@@ -181,7 +181,7 @@ export function inferPlatformURL(location: Pick<Location, "hostname" | "origin" 
   }
   const hostname = location.hostname.toLowerCase();
   const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  const isPlatformHost = hostname === "platform.motionlevels.obis.dev";
+  const isPlatformHost = hostname === publicPlatformHost;
   if (isLocalHost || isPlatformHost) {
     return location.origin;
   }
