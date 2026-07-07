@@ -3029,7 +3029,7 @@ button.capsule:disabled,
 }
 
 .game-control-screen.with-levels .active-game-stats {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .active-game-stats div {
@@ -3076,6 +3076,80 @@ button.capsule:disabled,
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.active-life-stat strong {
+  overflow: visible;
+}
+
+.active-life-meter {
+  --life-slots: 1;
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(var(--life-slots), minmax(0, 1fr));
+  align-items: center;
+  gap: 2px;
+}
+
+.active-life-meter--infinite {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.active-life-meter--infinite b {
+  color: #ffdce1;
+  font-size: 28px;
+  line-height: 0.9;
+}
+
+.active-life-heart {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.22);
+  filter: grayscale(0.85);
+  font-size: clamp(13px, 1.5vw, 22px);
+  line-height: 1;
+  transform-origin: center;
+  transition: color 180ms var(--ease), filter 180ms var(--ease), opacity 180ms var(--ease), transform 180ms var(--ease);
+}
+
+.active-life-heart.filled {
+  color: #ff4d6a;
+  filter: drop-shadow(0 0 8px rgba(255, 77, 106, 0.42));
+}
+
+.active-life-heart.empty {
+  opacity: 0.45;
+  animation: activeLifeLost 720ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.active-life-heart.lost {
+  animation: activeLifeLost 720ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes activeLifeLost {
+  0% {
+    color: #ff4d6a;
+    opacity: 1;
+    filter: drop-shadow(0 0 12px rgba(255, 77, 106, 0.55));
+    transform: scale(1);
+  }
+  38% {
+    color: #ff889b;
+    opacity: 0.92;
+    filter: drop-shadow(0 0 18px rgba(255, 77, 106, 0.72));
+    transform: translateY(-1px) scale(1.18);
+  }
+  100% {
+    color: rgba(255, 255, 255, 0.22);
+    opacity: 0.45;
+    filter: grayscale(0.85);
+    transform: translateY(0) scale(1);
+  }
 }
 
 .active-free-controls {

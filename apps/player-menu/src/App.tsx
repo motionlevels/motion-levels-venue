@@ -56,6 +56,7 @@ import {
   normalizedDifficultyForGame,
   selectableDifficultiesForGame,
 } from "./levelSelection";
+import { lifeMeterModel, teamLivesFromPlayers, type LifeMeterModel } from "./lifeMeter";
 
 type MenuState = {
   sessionActive: boolean;
@@ -4026,6 +4027,20 @@ function GameControlScreen({
     : totalMillis > 0 ? formatRuntimeTime(Math.max(0, totalMillis - elapsedMillis)) : formatRuntimeTime(elapsedMillis);
   const timeCaption = hasLevels ? (levelModeFree ? "Tiempo transcurrido" : totalMillis > 0 ? "Tiempo restante" : "Tiempo transcurrido") : totalMillis > 0 ? "Restante" : "Tiempo";
   const score = scoreFromStatus(status);
+  const currentLives = teamLivesFromPlayers(status?.players);
+  const lifeMeterKey = `${status?.sessionId || ""}:${status?.currentGame || game.id}:${status?.level || ""}:${difficulty}`;
+  const previousLifeMeterRef = useRef<{ key: string; lives: number | null; slots: number }>({ key: "", lives: null, slots: 0 });
+  const previousLifeMeter = previousLifeMeterRef.current.key === lifeMeterKey
+    ? previousLifeMeterRef.current
+    : { key: lifeMeterKey, lives: null, slots: 0 };
+  const lifeMeter = lifeMeterModel(currentLives, previousLifeMeter.lives, previousLifeMeter.slots);
+  useEffect(() => {
+    previousLifeMeterRef.current = {
+      key: lifeMeterKey,
+      lives: lifeMeter.visible && !lifeMeter.unlimited ? lifeMeter.lives : null,
+      slots: lifeMeter.visible && !lifeMeter.unlimited ? lifeMeter.slots : 0,
+    };
+  }, [lifeMeter.lives, lifeMeter.slots, lifeMeter.unlimited, lifeMeter.visible, lifeMeterKey]);
   const completedCount = levels.filter((level) => challengeRun?.completedLevels[level.id] !== undefined).length;
   const progressLabel = hasLevels ? `${completedCount}/${levels.length}` : "0/0";
   const stopped = isStoppedRuntimePhase(status);
@@ -4078,6 +4093,12 @@ function GameControlScreen({
                     <span>Intentos</span>
                     <strong>{attemptCount}</strong>
                   </div>
+                  {lifeMeter.visible ? (
+                    <div className="active-life-stat" aria-label={lifeMeterAriaLabel(lifeMeter)}>
+                      <span>Vidas</span>
+                      <strong><LifeMeter model={lifeMeter} /></strong>
+                    </div>
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -4089,6 +4110,12 @@ function GameControlScreen({
                     <span>Puntos</span>
                     <strong>{score}</strong>
                   </div>
+                  {lifeMeter.visible ? (
+                    <div className="active-life-stat" aria-label={lifeMeterAriaLabel(lifeMeter)}>
+                      <span>Vidas</span>
+                      <strong><LifeMeter model={lifeMeter} /></strong>
+                    </div>
+                  ) : null}
                 </>
               )}
             </div>
@@ -4184,6 +4211,36 @@ function GameControlScreen({
       </div>
     </section>
   );
+}
+
+function LifeMeter({ model }: { model: LifeMeterModel }) {
+  if (model.unlimited) {
+    return <span className="active-life-meter active-life-meter--infinite"><b>∞</b></span>;
+  }
+  const lostIndexes = new Set(model.lostIndexes);
+  return (
+    <span className="active-life-meter" style={{ "--life-slots": Math.max(1, model.slots) } as CSSProperties}>
+      {Array.from({ length: model.slots }, (_, index) => {
+        const filled = index < model.lives;
+        const lost = lostIndexes.has(index);
+        return (
+          <span
+            key={index}
+            className={`active-life-heart ${filled ? "filled" : "empty"} ${lost ? "lost" : ""}`}
+            data-state={filled ? "filled" : "empty"}
+            aria-hidden="true"
+          >
+            ♥
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+function lifeMeterAriaLabel(model: LifeMeterModel) {
+  if (model.unlimited) return "Vidas ilimitadas";
+  return `${model.lives} ${model.lives === 1 ? "vida restante" : "vidas restantes"} de ${model.slots}`;
 }
 
 function TouchKeyboard({
