@@ -1,3 +1,7 @@
+import { allDifficultyIDs, type DifficultyID } from "@motion-levels/core";
+
+export type { DifficultyID } from "@motion-levels/core";
+
 export const colors = {
   cyan: "#36d9ff",
   green: "#8dff6e",
@@ -41,8 +45,6 @@ export const categories: Category[] = [
   { id: "arcade", label: "Arcade", title: "Arcade", color: colors.blue, icon: "arcade" },
   { id: "attract", label: "Ambiente", title: "Modos ambiente", color: colors.blue, icon: "ambient" },
 ];
-
-export type DifficultyID = "easy" | "medium" | "hard" | "expert";
 
 export type Difficulty = {
   id: DifficultyID;
@@ -143,7 +145,7 @@ export const games: GameCard[] = [
     estimatedDurationSeconds: 180,
     minPlayers: 1,
     maxPlayers: 6,
-    difficulties: ["easy", "medium", "hard", "expert"],
+    difficulties: [...allDifficultyIDs],
     mode: "Niveles",
     audio: "Narración + música",
     description: "Evitad las baldosas rojas, descubrid plataformas seguras nuevas y cuidad las vidas del equipo.",

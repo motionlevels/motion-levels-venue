@@ -1,14 +1,8 @@
+import { allDifficultyIDs, difficultyLabels } from "@motion-levels/core";
 import type { PlatformGameCatalogEntry } from "./api";
 import type { DifficultyID, GameCard, GameConfigVar, GameConfigVarType, GameLevel } from "./catalog";
 
-export const catalogDifficultyIDs = ["easy", "medium", "hard", "expert"] as const satisfies readonly DifficultyID[];
-
-const difficultyLabels: Record<DifficultyID, string> = {
-  easy: "Fácil",
-  medium: "Media",
-  hard: "Difícil",
-  expert: "Experto",
-};
+export const catalogDifficultyIDs = allDifficultyIDs;
 
 export type PlayerBounds = {
   maxPlayers: number;
