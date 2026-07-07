@@ -845,6 +845,24 @@ def cached_camera_status() -> dict[str, Any]:
     }
 
 
+def camera_status_detected(status: dict[str, Any] | None) -> bool:
+    return bool(status and status.get("ok") is True and not status.get("pending") and not status.get("skipped"))
+
+
+def effective_camera_detected(camera: dict[str, Any], status: dict[str, Any] | None = None) -> bool:
+    return camera.get("detected") is True or camera_status_detected(status)
+
+
+def effective_camera_probe(camera: dict[str, Any], status: dict[str, Any] | None = None) -> dict[str, Any]:
+    detected = effective_camera_detected(camera, status)
+    return {
+        **camera,
+        "detected": detected,
+        "sysfsDetected": camera.get("detected") is True,
+        "detectedBy": "sysfs" if camera.get("detected") is True else "sdk-status" if camera_status_detected(status) else None,
+    }
+
+
 def settings_paths() -> tuple[Path, Path]:
     settings_dir = ROOT / "settings"
     return settings_dir / "camera-settings.json", settings_dir / "camera-settings-command.json"
@@ -959,6 +977,8 @@ def fetch_json(url: str, timeout: float = 2.0) -> tuple[dict[str, Any] | None, s
 def hardware_health() -> dict[str, Any]:
     ready, ready_error = backend_ready()
     camera = camera_probe()
+    camera_status = cached_camera_status()
+    camera_detected = effective_camera_detected(camera, camera_status)
     tv, tv_error = fetch_json(TV_STATUS_URL)
     display, display_error = fetch_json(DISPLAY_STATUS_URL)
     hdmi_ok = bool(tv and tv.get("hdmiConnected") is True)
@@ -976,10 +996,10 @@ def hardware_health() -> dict[str, Any]:
         sound_message = "audio ready" if sound_ok else "audio disabled or muted"
     return {
         "camera": {
-            "ok": ready and camera.get("detected") is True,
+            "ok": ready and camera_detected,
             "label": "camera",
-            "message": ready_error if not ready else ("USB camera not detected" if not camera.get("detected") else "ready"),
-            "details": camera,
+            "message": ready_error if not ready else ("USB camera not detected" if not camera_detected else "ready"),
+            "details": {**effective_camera_probe(camera, camera_status), "cameraStatus": camera_status},
         },
         "hdmi": {
             "ok": hdmi_ok,
@@ -1653,11 +1673,13 @@ class Handler(BaseHTTPRequestHandler):
             uploads = list(upload_events)
         ready, ready_error = backend_ready()
         photo_ready, photo_error = backend_ready("photo")
-        camera = camera_probe()
+        raw_camera = camera_probe()
         camera_status = cached_camera_status()
-        ready_to_record = ready and camera.get("detected") is True and bool(RCLONE_DEST)
+        camera = effective_camera_probe(raw_camera, camera_status)
+        camera_detected = camera.get("detected") is True
+        ready_to_record = ready and camera_detected and bool(RCLONE_DEST)
         ready_to_record_error = None
-        if not camera.get("detected"):
+        if not camera_detected:
             ready_to_record_error = "Insta360 camera is not connected by USB"
         elif not ready:
             ready_to_record_error = ready_error
@@ -1744,7 +1766,8 @@ class Handler(BaseHTTPRequestHandler):
         alert_event = notify_session_start(payload, video_folder_share_url, health)
         ready, ready_error = backend_ready()
         camera = camera_probe()
-        can_record = ready and camera.get("detected") is True
+        camera_status = cached_camera_status()
+        can_record = ready and effective_camera_detected(camera, camera_status)
         known_session = remember_session(payload, video_folder_share_url, health, can_record)
         if not can_record:
             self.write_json(
