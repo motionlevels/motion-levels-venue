@@ -580,7 +580,7 @@ body {
 
 .level-points-display.level-display .arcade-top {
   min-height: 150px;
-  grid-template-columns: minmax(500px, 0.82fr) minmax(700px, 1.36fr) minmax(330px, 0.52fr);
+  grid-template-columns: minmax(440px, 0.74fr) minmax(700px, 1.36fr) minmax(440px, 0.74fr);
 }
 
 .level-points-display .arcade-title span,
@@ -867,12 +867,18 @@ body {
   gap: 28px;
 }
 
+.arcade-display.reference-brand .arcade-top {
+  min-height: 112px;
+  grid-template-columns: minmax(330px, 0.76fr) minmax(560px, 1.14fr) minmax(330px, 0.76fr);
+}
+
 .memory-display .arcade-top {
   grid-template-columns: max-content minmax(0, 1fr) minmax(160px, 0.24fr);
 }
 
 .level-display .arcade-brand-panel,
-.memory-display .arcade-brand-panel {
+.memory-display .arcade-brand-panel,
+.arcade-display.reference-brand .arcade-brand-panel {
   min-height: 112px;
   justify-content: flex-start;
   gap: 18px;
@@ -884,7 +890,8 @@ body {
 }
 
 .level-display .arcade-brand,
-.memory-display .arcade-brand {
+.memory-display .arcade-brand,
+.arcade-display.reference-brand .arcade-brand {
   flex: 0 0 auto;
   max-width: none;
 }
@@ -895,8 +902,14 @@ body {
   height: 112px;
 }
 
+.arcade-display.reference-brand .arcade-brand-mark {
+  width: 104px;
+  height: 104px;
+}
+
 .level-display .arcade-brand-name,
-.memory-display .arcade-brand-name {
+.memory-display .arcade-brand-name,
+.arcade-display.reference-brand .arcade-brand-name {
   display: grid;
   font-size: 2.02rem;
   line-height: 0.86;
@@ -904,6 +917,10 @@ body {
   text-shadow:
     0 0 28px rgba(54, 217, 255, 0.34),
     0 4px 18px rgba(0, 0, 0, 0.55);
+}
+
+.arcade-display.reference-brand .arcade-brand-name {
+  font-size: 1.86rem;
 }
 
 .display.arcade-display.level-display.no-player-info .arcade-stage {

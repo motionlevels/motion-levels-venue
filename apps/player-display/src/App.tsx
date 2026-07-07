@@ -295,9 +295,11 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
   const levelLabel = displayLevelLabel(status);
   const showPlayerInfo = shouldShowPlayerInfo(status);
   const showFooterEvent = Boolean(eventMessage) && !levelGame && !memoryGame;
+  const titleEyebrow = levelGame ? "Juego seleccionado" : phaseLabel(status.phase);
+  const referenceBrand = !levelGame && !memoryGame;
 
   return (
-    <main className={`display arcade-display ${duelGame ? "duel-game" : ""} ${memoryGame ? "memory-display" : ""} ${levelGame ? "level-display level-points-display" : ""} ${!duelGame && !showPlayerInfo ? "no-player-info" : ""} ${showFooterEvent ? "has-event" : ""} ${status.phase} ${eventClass}`}>
+    <main className={`display arcade-display ${referenceBrand ? "reference-brand" : ""} ${duelGame ? "duel-game" : ""} ${memoryGame ? "memory-display" : ""} ${levelGame ? "level-display level-points-display" : ""} ${!duelGame && !showPlayerInfo ? "no-player-info" : ""} ${showFooterEvent ? "has-event" : ""} ${status.phase} ${eventClass}`}>
       <header className="arcade-top">
         <div className="arcade-brand-panel">
           <span className="arcade-brand" aria-label="Motion Levels">
@@ -309,7 +311,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
           </span>
         </div>
         <div className="arcade-title">
-          <span>{phaseLabel(status.phase)}</span>
+          <span>{titleEyebrow}</span>
           <h1>{displayGameTitle(status)}</h1>
         </div>
         {levelLabel ? (

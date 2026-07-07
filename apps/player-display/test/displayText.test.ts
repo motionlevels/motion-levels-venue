@@ -29,6 +29,25 @@ describe("displayGameTitle wiring", () => {
     const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
     assert.doesNotMatch(source, /return "Temporada 1";/);
   });
+
+  it("labels level-game displays as the selected game instead of a live round", () => {
+    const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    assert.match(source, /const titleEyebrow = levelGame \? "Juego seleccionado" : phaseLabel\(status\.phase\);/);
+    assert.match(source, /<span>\{titleEyebrow\}<\/span>/);
+  });
+});
+
+describe("arcade display reference styling", () => {
+  it("keeps code-style arcade games close to the level display brand reference", () => {
+    const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const cssSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+    assert.match(appSource, /const referenceBrand = !levelGame && !memoryGame;/);
+    assert.match(appSource, /\$\{referenceBrand \? "reference-brand" : ""\}/);
+    assert.match(cssSource, /\.level-points-display\.level-display \.arcade-top\s*\{[^}]*grid-template-columns:\s*minmax\(440px, 0\.74fr\) minmax\(700px, 1\.36fr\) minmax\(440px, 0\.74fr\);/);
+    assert.match(cssSource, /\.arcade-display\.reference-brand \.arcade-brand-panel/);
+    assert.match(cssSource, /\.arcade-display\.reference-brand \.arcade-brand-mark\s*\{[^}]*width:\s*104px;/);
+  });
 });
 
 describe("kiosk preview viewport", () => {
