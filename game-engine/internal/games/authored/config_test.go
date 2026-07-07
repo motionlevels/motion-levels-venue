@@ -2,6 +2,9 @@ package authored
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 )
@@ -73,6 +76,55 @@ func TestResolveConfigIntRounding(t *testing.T) {
 func TestResolveConfigWithoutSpec(t *testing.T) {
 	if values := ResolveConfig(Spec{}, map[string]json.RawMessage{"points_to_win": json.RawMessage("3")}); values != nil {
 		t.Fatalf("values = %v, want nil without declared vars", values)
+	}
+}
+
+// nativeGamePackages maps each embedded catalog entry to its game.go source so
+// the test below can keep config declarations and code references in sync —
+// the same rule the platform enforces at compile time for authored games.
+var nativeGamePackages = map[string]string{
+	"authored-duel":             "duelgo",
+	"authored-lava":             "lavago",
+	"authored-memory-challenge": "memorychallengego",
+	"authored-patrones":         "patronesgo",
+	"authored-ping-pong-motion": "pingpongmotion",
+	"authored-saltos":           "saltosgo",
+	"authored-tetris":           "tetris",
+	"authored-whack-a-mole-go":  "whackamolego",
+}
+
+var configGetterPattern = regexp.MustCompile(`\.Config\.(?:Int|Float|Bool|String|DurationNS)\(\s*"([a-z0-9_]+)"`)
+
+func TestNativeGameConfigRefsMatchDeclaredSpecs(t *testing.T) {
+	for engineGame, pkg := range nativeGamePackages {
+		source, err := os.ReadFile(filepath.Join("nativegames", pkg, "game.go"))
+		if err != nil {
+			t.Fatalf("%s: %v", engineGame, err)
+		}
+		referenced := map[string]bool{}
+		for _, match := range configGetterPattern.FindAllStringSubmatch(string(source), -1) {
+			referenced[match[1]] = true
+		}
+		entry, ok := NativeCatalogEntry(engineGame)
+		if !ok {
+			t.Fatalf("missing native catalog entry for %s", engineGame)
+		}
+		declared := map[string]bool{}
+		if entry.GameSource.Config != nil {
+			for _, item := range entry.GameSource.Config.Vars {
+				declared[item.Key] = true
+			}
+		}
+		for key := range referenced {
+			if !declared[key] {
+				t.Errorf("%s reads config %q but its native catalog entry does not declare it", engineGame, key)
+			}
+		}
+		for key := range declared {
+			if !referenced[key] {
+				t.Errorf("%s declares config %q but game.go never reads it", engineGame, key)
+			}
+		}
 	}
 }
 
