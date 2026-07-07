@@ -133,8 +133,7 @@ body {
 .player-card,
 .team-card,
 .empty-player,
-.mini-stat,
-.event-strip {
+.mini-stat {
   border: 1px solid var(--line);
   border-radius: var(--r-xl);
   background:
@@ -155,8 +154,7 @@ body {
 
 .brand,
 .connection,
-.mini-stat,
-.event-strip {
+.mini-stat {
   min-width: 0;
   min-height: clamp(56px, 4vw, 96px);
   padding: 0 clamp(18px, 1.6vw, 34px);
@@ -500,36 +498,12 @@ body {
 /* ---------- Bottom bar ---------- */
 
 .display-bottom {
-  grid-template-columns: minmax(200px, 0.55fr) minmax(420px, 1.6fr) minmax(220px, 0.55fr);
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
 }
 
 .mini-stat {
   justify-content: space-between;
   gap: 12px;
-}
-
-.event-strip {
-  justify-content: center;
-  color: var(--soft);
-  font-size: clamp(22px, 2vw, 52px);
-  font-weight: 900;
-  letter-spacing: 0.04em;
-  text-align: center;
-  text-transform: uppercase;
-  transition: color 200ms var(--ease), border-color 200ms var(--ease), background 200ms var(--ease);
-}
-
-.event-strip span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.event-strip.active {
-  color: var(--text);
-  border-color: rgba(var(--accent-rgb), 0.45);
-  background: rgba(var(--accent-rgb), 0.12);
 }
 
 /* ---------- Arcade HUD ---------- */
@@ -550,15 +524,6 @@ body {
 
 .display.arcade-display.no-player-info {
   grid-template-rows: auto minmax(0, 1fr);
-}
-
-.display.arcade-display.has-event {
-  grid-template-rows: auto minmax(260px, 1fr) minmax(118px, 0.42fr) auto;
-}
-
-.display.arcade-display.no-player-info.has-event,
-.display.arcade-display.duel-game.has-event {
-  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .display.arcade-display.level-display.no-player-info,
@@ -633,8 +598,7 @@ body {
 .arcade-player-card,
 .arcade-empty,
 .duel-side,
-.duel-center,
-.arcade-event {
+.duel-center {
   border: 1px solid rgba(54, 217, 255, 0.26);
   background:
     linear-gradient(180deg, rgba(20, 219, 255, 0.075), rgba(15, 20, 34, 0.18)),
@@ -803,14 +767,14 @@ body {
 
 .arcade-title h1 {
   margin: 10px 0 0;
-  overflow: hidden;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   color: #fff;
-  font-size: 4.05rem;
-  line-height: 0.92;
+  font-size: clamp(3.15rem, 3.75vw, 4.35rem);
+  line-height: 0.94;
   font-weight: 950;
   letter-spacing: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-wrap: balance;
   text-shadow: 0 0 30px rgba(54, 217, 255, 0.25);
 }
 
@@ -1803,40 +1767,6 @@ body {
   font-weight: 900;
 }
 
-.arcade-bottom {
-  min-height: 54px;
-  display: grid;
-}
-
-.arcade-event {
-  min-width: 0;
-  padding: 0 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--soft);
-  font-size: 1.65rem;
-  line-height: 1;
-  font-weight: 950;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  clip-path: polygon(3% 0, 97% 0, 100% 50%, 97% 100%, 3% 100%, 0 50%);
-}
-
-.arcade-event span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.arcade-event.active {
-  color: #fff;
-  border-color: rgba(249, 39, 255, 0.58);
-  background:
-    linear-gradient(90deg, rgba(249, 39, 255, 0.18), rgba(54, 217, 255, 0.12)),
-    rgba(8, 20, 34, 0.86);
-}
-
 .duel-board {
   min-height: 0;
   display: grid;
@@ -1991,15 +1921,8 @@ body {
   box-shadow: var(--shadow-card), 0 0 60px -10px rgba(255, 82, 104, 0.4), inset 0 0 0 3px rgba(255, 82, 104, 0.24);
 }
 
-.display.event-life-loss .event-strip {
-  color: #fff;
-  border-color: rgba(255, 82, 104, 0.8);
-  background: rgba(255, 82, 104, 0.22);
-}
-
 .arcade-display.event-life-loss .arcade-brand-panel,
-.arcade-display.event-life-loss .arcade-metric--lives,
-.arcade-display.event-life-loss .arcade-event {
+.arcade-display.event-life-loss .arcade-metric--lives {
   border-color: rgba(255, 82, 104, 0.82);
   box-shadow:
     0 24px 66px -34px rgba(0, 0, 0, 0.86),

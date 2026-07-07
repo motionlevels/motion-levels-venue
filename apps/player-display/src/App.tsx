@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./api";
 import { createCoalescer, isFeedStalled } from "./displayFeed";
 import { challengeMode, heartMeterSlotCount, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeLabel, levelDisplayTimeMillis } from "./displayMetrics";
-import { colorCSS, colorRGB, difficultyLabelES, eventMessageES, formatClock, gameTitleES, levelLabelES, phaseLabel, playerLabelES } from "./utils";
+import { colorCSS, colorRGB, difficultyLabelES, formatClock, gameTitleES, levelLabelES, phaseLabel, playerLabelES } from "./utils";
 
 // If no stream event arrives, keep the display fresh with a 250ms fallback
 // poll. Some kiosk/browser combinations can silently lose EventSource delivery;
@@ -262,9 +262,6 @@ function ClassicDisplay({ status, connected, error }: DisplayProps) {
           <span>Objetivos</span>
           <strong>{status.activeTargets}</strong>
         </div>
-        <div className={`event-strip ${status.lastEventCue ? "active" : ""}`}>
-          <span>{eventMessageES(status.lastEventCue, status.lastEventMessage)}</span>
-        </div>
         <div className="mini-stat">
           <span>Dificultad</span>
           <strong>{difficultyLabelES(status.difficulty)}</strong>
@@ -276,13 +273,12 @@ function ClassicDisplay({ status, connected, error }: DisplayProps) {
 
 function ArcadeDisplay({ status, connected, error }: DisplayProps) {
   const displayModel = createArcadeDisplayModel(status, connected, error);
-  const { duelGame, levelGame, memoryGame, showFooterEvent, showPlayerInfo, teamRosterGame, teamScoreboardGame } = displayModel;
+  const { duelGame, levelGame, memoryGame, showPlayerInfo, teamRosterGame, teamScoreboardGame } = displayModel;
   const leader = useMemo(() => {
     if (teamRosterGame || duelGame || !status.players.length) return null;
     return [...status.players].sort((left, right) => right.score - left.score)[0];
   }, [duelGame, status.players, teamRosterGame]);
   const clock = displayClock(status);
-  const eventMessage = eventMessageES(status.lastEventCue, status.lastEventMessage);
   const mainMetric = primaryMetric(status);
   const sideMetrics = arcadeSideMetrics(status);
   const levelSideMetrics = arcadeLevelSideMetrics(status);
@@ -346,12 +342,6 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
           )}
         </section>
       ) : null}
-
-      {showFooterEvent ? <footer className="arcade-bottom">
-        <div className={`arcade-event ${status.lastEventCue ? "active" : ""}`}>
-          <span>{eventMessage}</span>
-        </div>
-      </footer> : null}
     </ArcadeDisplayShell>
   );
 }
@@ -361,7 +351,6 @@ type ArcadeDisplayModel = {
   levelGame: boolean;
   memoryGame: boolean;
   rootClassName: string;
-  showFooterEvent: boolean;
   showPlayerInfo: boolean;
   teamRosterGame: boolean;
   teamScoreboardGame: boolean;
@@ -383,8 +372,6 @@ function createArcadeDisplayModel(status: DisplayStatus, connected: boolean, err
   const duelGame = isDuelGame(status) && status.players.length >= 2;
   const levelGame = isLevelGame(status);
   const showPlayerInfo = shouldShowPlayerInfo(status);
-  const eventMessage = eventMessageES(status.lastEventCue, status.lastEventMessage);
-  const showFooterEvent = Boolean(eventMessage) && !levelGame && !memoryGame;
   const lifeLoss = status.lastEventCue === "miss" && status.currentGame === "lava";
   const eventClass = status.lastEventCue ? `event-${status.lastEventCue}${lifeLoss ? " event-life-loss" : ""}` : "";
 
@@ -396,7 +383,6 @@ function createArcadeDisplayModel(status: DisplayStatus, connected: boolean, err
     memoryGame ? "memory-display" : "",
     levelGame ? "level-display level-points-display" : "",
     !duelGame && !showPlayerInfo ? "no-player-info" : "",
-    showFooterEvent ? "has-event" : "",
     status.phase,
     eventClass,
   ];
@@ -406,14 +392,13 @@ function createArcadeDisplayModel(status: DisplayStatus, connected: boolean, err
     levelGame,
     memoryGame,
     rootClassName: rootClasses.filter(Boolean).join(" "),
-    showFooterEvent,
     showPlayerInfo,
     teamRosterGame,
     teamScoreboardGame,
     header: {
       connected,
       error,
-      eyebrow: levelGame ? "Juego seleccionado" : phaseLabel(status.phase),
+      eyebrow: "Juego seleccionado",
       levelLabel: displayLevelLabel(status),
       title: displayGameTitle(status),
     },

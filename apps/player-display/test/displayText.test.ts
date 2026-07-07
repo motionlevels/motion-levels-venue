@@ -30,10 +30,19 @@ describe("displayGameTitle wiring", () => {
     assert.doesNotMatch(source, /return "Temporada 1";/);
   });
 
-  it("labels level-game displays as the selected game instead of a live round", () => {
+  it("labels selected game displays instead of claiming a live round", () => {
     const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-    assert.match(source, /eyebrow:\s*levelGame \? "Juego seleccionado" : phaseLabel\(status\.phase\),/);
+    assert.match(source, /eyebrow:\s*"Juego seleccionado",/);
+    assert.doesNotMatch(source, /eyebrow:\s*levelGame \?/);
     assert.match(source, /<span>\{model\.eyebrow\}<\/span>/);
+  });
+
+  it("does not render event message footer bars", () => {
+    const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const cssSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+    assert.doesNotMatch(appSource, /arcade-bottom|arcade-event|event-strip|showFooterEvent/);
+    assert.doesNotMatch(cssSource, /\.arcade-bottom|\.arcade-event|\.event-strip|has-event/);
   });
 });
 
