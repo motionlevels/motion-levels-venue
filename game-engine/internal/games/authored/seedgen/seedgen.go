@@ -33,6 +33,7 @@ var Seeds = []Seed{
 	{Pkg: "duelgo", SeedFile: "duelMotionGo.ts", ExportName: "duelMotionGoSource"},
 	{Pkg: "lavago", SeedFile: "lavaMotionGo.ts", ExportName: "lavaMotionGoSource"},
 	{Pkg: "memorychallengego", SeedFile: "memoryChallengeMotionGo.ts", ExportName: "memoryChallengeMotionGoSource"},
+	{Pkg: "pingpongmotion", SeedFile: "pingPongMotionGo.ts", ExportName: "pingPongMotionGoSource"},
 	{Pkg: "tetris", SeedFile: "tetrisMotionGo.ts", ExportName: "tetrisMotionGoSource"},
 	{Pkg: "whackamolego", SeedFile: "whackAMoleMotionGo.ts", ExportName: "whackAMoleMotionGoSource"},
 }

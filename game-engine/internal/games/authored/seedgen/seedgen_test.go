@@ -90,11 +90,13 @@ func compileSeedWithTinyGo(t *testing.T, tinygo string, repoRoot string, code st
 	if err := os.WriteFile(filepath.Join(dir, "game.go"), []byte(code), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	goMod := fmt.Sprintf("module game\n\ngo 1.23\n\nrequire github.com/lobis/motion-levels v0.0.0\n\nreplace github.com/lobis/motion-levels => %s\n", repoRoot)
+	goMod := fmt.Sprintf("module game\n\ngo 1.24.0\n\nrequire github.com/lobis/motion-levels v0.0.0\n\nreplace github.com/lobis/motion-levels => %s\n", repoRoot)
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	runSeedCommand(t, dir, "go", "mod", "tidy")
+	if err := os.WriteFile(filepath.Join(dir, "go.sum"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	runSeedCommand(t, dir, tinygo, "build", "-target=wasip1", "-scheduler=none", "-no-debug", "-o", filepath.Join(dir, "game.wasm"), filepath.Join(dir, "game.go"))
 	info, err := os.Stat(filepath.Join(dir, "game.wasm"))
 	if err != nil || info.Size() == 0 {
