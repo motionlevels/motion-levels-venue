@@ -10,6 +10,7 @@ import {
   estimatedDurationLabel,
   platformDurationLabel,
   platformPlayerBounds,
+  platformPlayerConfigVars,
   platformPlayerRangeLabel,
   platformSupportedDifficulties,
   platformSupportsLevels,
@@ -403,6 +404,55 @@ describe("catalog metadata sync", () => {
     assert.doesNotMatch(floorSource, /const temporada1Level1FrameCells/);
     assert.doesNotMatch(coreIndexSource, /floorPreview/);
     assert.doesNotMatch(floorSource, /parkour2: parkour/);
+  });
+
+  it("extracts player-facing config vars from motion-go game sources", () => {
+    const entry = catalogEntry({
+      game_source: {
+        schema: "motion-go-v1",
+        kind: "wasm",
+        config: {
+          vars: [
+            { key: "points_to_win", label: "Puntos para ganar", type: "int", default: 7, min: 1, max: 21, player_facing: true },
+            { key: "internal_speed", type: "float", default: 1.2 },
+            { key: "mode", type: "enum", default: "classic", options: [{ value: "classic", label: "Clásico" }, { value: "turbo" }], player_facing: true },
+            { key: "broken_enum", type: "enum", player_facing: true },
+            { key: "", type: "int", player_facing: true },
+          ],
+        },
+      },
+    });
+
+    const vars = platformPlayerConfigVars(entry);
+    assert.equal(vars?.length, 2);
+    assert.deepEqual(vars?.[0], {
+      key: "points_to_win",
+      label: "Puntos para ganar",
+      type: "int",
+      default: 7,
+      min: 1,
+      max: 21,
+    });
+    assert.deepEqual(vars?.[1], {
+      key: "mode",
+      label: "mode",
+      type: "enum",
+      default: "classic",
+      options: [{ value: "classic", label: "Clásico" }, { value: "turbo" }],
+    });
+
+    assert.equal(platformPlayerConfigVars(catalogEntry()), undefined);
+    assert.equal(platformPlayerConfigVars(catalogEntry({ game_source: { schema: "motion-go-v1", kind: "wasm" } })), undefined);
+  });
+
+  it("sends player config overrides with the launch request", () => {
+    const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
+
+    assert.match(appSource, /const launchConfig = menuConfigOverridesFor\(launchGame, nextMenu\);/);
+    assert.match(appSource, /config: launchConfig,/);
+    assert.match(appSource, /configVars: platformPlayerConfigVars\(entry\),/);
+    assert.match(appSource, /gameConfig: normalizeGameConfigState\(saved\.gameConfig\),/);
+    assert.match(appSource, /<GameConfigDialog/);
   });
 
   it("keeps platform level game launch identity separate from legacy engine aliases", () => {

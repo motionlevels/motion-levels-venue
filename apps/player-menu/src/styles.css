@@ -3947,6 +3947,140 @@ button.capsule:disabled,
   }
 }
 
+.game-config-modal {
+  width: min(660px, 94vw);
+}
+
+.game-config-list {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.game-config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 78px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02)),
+    rgba(9, 15, 24, 0.74);
+}
+
+.game-config-row.changed {
+  border-color: rgba(var(--accent-rgb), 0.55);
+}
+
+.game-config-copy {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.game-config-copy strong {
+  font-size: 19px;
+  font-weight: 950;
+}
+
+.game-config-copy small {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.game-config-stepper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.game-config-stepper button {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.game-config-stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.game-config-stepper strong {
+  min-width: 64px;
+  text-align: center;
+  font-size: 25px;
+  font-weight: 950;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-config-toggle {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: var(--soft);
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.game-config-toggle.active {
+  color: var(--text);
+}
+
+.game-config-toggle.active .switch-track {
+  border-color: rgba(var(--accent-rgb), 0.75);
+  background: rgba(var(--accent-rgb), 0.28);
+}
+
+.game-config-toggle.active .switch-track span {
+  transform: translateX(34px);
+  background: #f7fbff;
+}
+
+.game-config-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+  max-width: 60%;
+}
+
+.game-config-option {
+  min-height: 54px;
+  padding: 10px 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--soft);
+  font-size: 17px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.game-config-option.active {
+  border-color: rgba(var(--accent-rgb), 0.7);
+  background: rgba(var(--accent-rgb), 0.22);
+  color: var(--text);
+}
+
 .settings-toggle {
   min-height: 86px;
   padding: 18px 20px;

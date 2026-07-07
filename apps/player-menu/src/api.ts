@@ -141,6 +141,7 @@ export type SelectGameRequest = {
   narrationEnabled?: boolean;
   countdownFloorOverlay?: boolean;
   teamName?: string;
+  config?: Record<string, number | boolean | string>;
   players?: Array<{
     index: number;
     label: string;

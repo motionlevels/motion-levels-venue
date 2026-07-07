@@ -57,6 +57,23 @@ export const difficulties: Difficulty[] = [
   { id: "expert", label: "Experto", color: colors.red },
 ];
 
+export type GameConfigVarType = "int" | "float" | "bool" | "enum";
+
+// Player-facing game variable declared by the platform games editor
+// (game_source.config.vars with player_facing). Values chosen in the menu's
+// settings dialog travel with /api/select and reach the game code via init.
+export type GameConfigVar = {
+  key: string;
+  label: string;
+  description?: string;
+  type: GameConfigVarType;
+  default?: number | boolean | string;
+  min?: number;
+  max?: number;
+  step?: number;
+  options?: Array<{ value: string; label?: string }>;
+};
+
 export type GameCard = {
   id: string;
   label: string;
@@ -89,6 +106,7 @@ export type GameCard = {
   countdownFloorOverlay?: boolean;
   revisionHash?: string;
   disabled?: boolean;
+  configVars?: GameConfigVar[];
 };
 
 export type PartyMiniGame = {

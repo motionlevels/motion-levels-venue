@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { controlGame, fetchAnimationPreview, fetchEngineStatus, fetchGameCatalog, fetchMenuState, platformBaseURL, postMenuEvent, postMenuState, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus, type MenuStateEnvelope, type PlatformGameCatalogEntry } from "./api";
-import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard, type PartyMiniGame } from "./catalog";
+import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard, type GameConfigVar, type PartyMiniGame } from "./catalog";
 import {
   catalogDifficultyIDs,
   closestSupportedDifficulty,
@@ -12,6 +12,7 @@ import {
   platformDifficultyLabel,
   platformLevelSupportedDifficulties,
   platformPlayerBounds,
+  platformPlayerConfigVars,
   platformPlayerRangeLabel,
   platformSupportedDifficulties,
   platformSupportsLevels,
@@ -73,7 +74,10 @@ type MenuState = {
   nextPlayerId: number;
   narrationArmed: Record<string, boolean>;
   operatorUnlockLevels: boolean;
+  gameConfig: Record<string, GameConfigValues>;
 };
+
+type GameConfigValues = Record<string, number | boolean | string>;
 
 type LevelMode = "challenge" | "free";
 
@@ -587,6 +591,7 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
     countdownFloorOverlay: entry.countdown_floor_overlay === true,
     revisionHash: entry.revision_hash || fallback?.revisionHash,
     disabled: false,
+    configVars: platformPlayerConfigVars(entry),
   };
 }
 
@@ -1039,6 +1044,43 @@ function normalizeFreeRuns(value: unknown): Record<string, FreeRun> {
   return runs;
 }
 
+function normalizeGameConfigState(value: unknown): Record<string, GameConfigValues> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const state: Record<string, GameConfigValues> = {};
+  for (const [gameID, overrides] of Object.entries(value as Record<string, unknown>)) {
+    if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) continue;
+    const clean: GameConfigValues = {};
+    for (const [key, raw] of Object.entries(overrides as Record<string, unknown>)) {
+      if (!key.trim()) continue;
+      if (typeof raw === "boolean" || typeof raw === "string") clean[key] = raw;
+      else if (typeof raw === "number" && Number.isFinite(raw)) clean[key] = raw;
+    }
+    if (Object.keys(clean).length) state[gameID] = clean;
+  }
+  return state;
+}
+
+// Overrides the players chose for a game's player-facing variables; only keys
+// the current catalog still declares are sent with the launch request.
+function menuConfigOverridesFor(game: Pick<GameCard, "id" | "configVars">, menu: MenuState): GameConfigValues | undefined {
+  const vars = game.configVars;
+  const stored = menu.gameConfig[game.id];
+  if (!vars?.length || !stored) return undefined;
+  const overrides: GameConfigValues = {};
+  for (const item of vars) {
+    const value = stored[item.key];
+    if (value === undefined || value === item.default) continue;
+    overrides[item.key] = value;
+  }
+  return Object.keys(overrides).length ? overrides : undefined;
+}
+
+function configVarValue(item: GameConfigVar, overrides: GameConfigValues | undefined): number | boolean | string | undefined {
+  const stored = overrides?.[item.key];
+  if (stored !== undefined) return stored;
+  return item.default;
+}
+
 function loadMenuState(): MenuState {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || "null") as Partial<MenuState> | null;
@@ -1077,6 +1119,7 @@ function loadMenuState(): MenuState {
         nextPlayerId: saved.nextPlayerId || cleanedPlayers.length || 1,
         narrationArmed,
         operatorUnlockLevels: envUnlockLevels || Boolean(saved.operatorUnlockLevels),
+        gameConfig: normalizeGameConfigState(saved.gameConfig),
       };
     }
   } catch {
@@ -1099,6 +1142,7 @@ function loadMenuState(): MenuState {
     nextPlayerId: 1,
     narrationArmed: {},
     operatorUnlockLevels: envUnlockLevels,
+    gameConfig: {},
   };
 }
 
@@ -1152,6 +1196,7 @@ function MenuApp() {
   const [confirmRemove, setConfirmRemove] = useState<number | null>(null);
   const [confirmResetSession, setConfirmResetSession] = useState(false);
   const [pendingLevelSwitch, setPendingLevelSwitch] = useState<{ gameID: string; levelID: string } | null>(null);
+  const [gameConfigOpen, setGameConfigOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsUnlocked, setSettingsUnlocked] = useState(false);
   const [settingsPin, setSettingsPin] = useState("");
@@ -1611,6 +1656,11 @@ function MenuApp() {
     void launch(party.id, { partyIndex: nextIndex, partyScore: cumulativeScore });
   }, [partyRun, status, menuGames]);
 
+  // Selecting another card dismisses the per-game settings dialog.
+  useEffect(() => {
+    setGameConfigOpen(false);
+  }, [menu.selectedGame]);
+
   // Esc closes the topmost overlay (keyboard first, then dialogs, then the team drawer).
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -1625,12 +1675,13 @@ function MenuApp() {
       else if (confirmRemove !== null) setConfirmRemove(null);
       else if (confirmResetSession) setConfirmResetSession(false);
       else if (pendingLevelSwitch) setPendingLevelSwitch(null);
+      else if (gameConfigOpen) setGameConfigOpen(false);
       else if (settingsOpen) setSettingsOpen(false);
       else if (teamOpen) setTeamOpen(false);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [keyboardTarget, colorPickerFor, confirmRemove, confirmResetSession, pendingLevelSwitch, settingsOpen, teamOpen]);
+  }, [keyboardTarget, colorPickerFor, confirmRemove, confirmResetSession, pendingLevelSwitch, gameConfigOpen, settingsOpen, teamOpen]);
 
   const availableGames = useMemo(() => new Set((status?.catalog || []).map((entry) => entry.game)), [status]);
   const platformEnabledGames = useMemo(() => (
@@ -2321,6 +2372,37 @@ function MenuApp() {
     setMessage((current) => (current.startsWith("Narración") ? "" : current));
   }
 
+  function setGameConfigValue(game: GameCard, key: string, value: number | boolean | string | undefined) {
+    setMenu((current) => {
+      const existing = { ...(current.gameConfig[game.id] || {}) };
+      if (value === undefined) {
+        delete existing[key];
+      } else {
+        existing[key] = value;
+      }
+      const gameConfig = { ...current.gameConfig };
+      if (Object.keys(existing).length) {
+        gameConfig[game.id] = existing;
+      } else {
+        delete gameConfig[game.id];
+      }
+      return { ...current, gameConfig };
+    });
+  }
+
+  function resetGameConfig(game: GameCard) {
+    captureMenuEvent("game_config_reset", {
+      engine_game: engineGameID(game),
+      game: game.id,
+    });
+    setMenu((current) => {
+      if (!current.gameConfig[game.id]) return current;
+      const gameConfig = { ...current.gameConfig };
+      delete gameConfig[game.id];
+      return { ...current, gameConfig };
+    });
+  }
+
   async function launch(gameID = selectedGame.id, options: { difficulty?: DifficultyID; levelID?: string; levelMode?: LevelMode; partyIndex?: number; partyScore?: number; resetChallengeRun?: boolean } = {}) {
     const game = menuGames.find((candidate) => candidate.id === gameID);
     if (!game || game.disabled || !isGameLaunchable(game)) {
@@ -2443,6 +2525,7 @@ function MenuApp() {
     }
     const launchChallengeRun = launchLevelMode === "challenge" ? challengeRunFor(launchGame, nextMenu) : null;
     const launchFreeRun = launchLevelMode === "free" ? freeRunFor(launchGame, nextMenu) || emptyFreeRun(nextMenu.sessionId) : null;
+    const launchConfig = menuConfigOverridesFor(launchGame, nextMenu);
     const launchDifficultyLevels = launchGame.levels?.length && launchDifficulty ? levelsForDifficulty(launchGame, launchDifficulty) : [];
     if (selectedLevelID && !isLevelUnlocked(launchGame, selectedLevelID, nextMenu)) {
       captureMenuEvent("start_blocked", {
@@ -2484,6 +2567,7 @@ function MenuApp() {
       countdown_floor_overlay: showCountdownOverlay,
       player_count: launchRoster.length,
       venue_session_id: nextMenu.sessionId,
+      ...(launchConfig ? { config_overrides: launchConfig } : {}),
     });
     if (startsChallengeRun) {
       captureMenuEvent("challenge_started", {
@@ -2513,6 +2597,7 @@ function MenuApp() {
         narrationEnabled: supportsNarration(launchGame) ? playNarration : false,
         countdownFloorOverlay: showCountdownOverlay,
         teamName: nextMenu.teamName.trim(),
+        config: launchConfig,
         players: launchRoster.map((player, index) => ({
           index,
           label: playerLabel(nextMenu.players, player),
@@ -3276,6 +3361,23 @@ function MenuApp() {
               };
               return (
                 <div className="launch-actions">
+                  {selectedGame.configVars?.length ? (
+                    <button
+                      className={`btn narration-toggle game-config-open ${menuConfigOverridesFor(selectedGame, menu) ? "active" : ""}`}
+                      type="button"
+                      aria-haspopup="dialog"
+                      onClick={() => {
+                        captureMenuEvent("game_config_opened", {
+                          engine_game: engineGameID(selectedGame),
+                          game: selectedGame.id,
+                        });
+                        setGameConfigOpen(true);
+                      }}
+                    >
+                      <GearIcon />
+                      Ajustes
+                    </button>
+                  ) : null}
                   {supportsNarration(selectedGame) ? (
                     <button
                       className={`btn narration-toggle ${narrationArmedFor(selectedGame) ? "active" : ""}`}
@@ -3360,6 +3462,24 @@ function MenuApp() {
           cancelLabel="Cancelar"
           onConfirm={() => void switchLaunchedLevel(pendingLevelSwitchGame, pendingLevelSwitchLevel.id, true, activeLevelModeFor(pendingLevelSwitchGame, menu, status))}
           onCancel={() => setPendingLevelSwitch(null)}
+        />
+      ) : null}
+
+      {gameConfigOpen && selectedGame.configVars?.length ? (
+        <GameConfigDialog
+          game={selectedGame}
+          overrides={menu.gameConfig[selectedGame.id]}
+          onChange={(key, value) => {
+            captureMenuEvent("game_config_changed", {
+              engine_game: engineGameID(selectedGame),
+              game: selectedGame.id,
+              key,
+              value,
+            });
+            setGameConfigValue(selectedGame, key, value);
+          }}
+          onReset={() => resetGameConfig(selectedGame)}
+          onClose={() => setGameConfigOpen(false)}
         />
       ) : null}
 
@@ -3530,6 +3650,147 @@ function ColorPicker({
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+function GameConfigDialog({
+  game,
+  overrides,
+  onChange,
+  onReset,
+  onClose,
+}: {
+  game: GameCard;
+  overrides: GameConfigValues | undefined;
+  onChange: (key: string, value: number | boolean | string) => void;
+  onReset: () => void;
+  onClose: () => void;
+}) {
+  const vars = game.configVars || [];
+  const hasOverrides = vars.some((item) => {
+    const stored = overrides?.[item.key];
+    return stored !== undefined && stored !== item.default;
+  });
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={`Ajustes de ${game.label}`} onClick={onClose}>
+      <div className="modal game-config-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <span className="micro">{game.label}</span>
+            <strong>Ajustes de partida</strong>
+          </div>
+          <button className="icon-button" type="button" aria-label="Cerrar ajustes de partida" onClick={onClose}>
+            <CloseIcon />
+          </button>
+        </div>
+        <div className="game-config-list">
+          {vars.map((item) => (
+            <GameConfigControl key={item.key} item={item} value={configVarValue(item, overrides)} onChange={(value) => onChange(item.key, value)} />
+          ))}
+        </div>
+        <div className="modal-actions">
+          <button className="btn" type="button" onClick={onReset} disabled={!hasOverrides}>
+            <RestartIcon />
+            Restablecer
+          </button>
+          <button className="btn primary" type="button" onClick={onClose}>
+            <CheckIcon />
+            Listo
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GameConfigControl({
+  item,
+  value,
+  onChange,
+}: {
+  item: GameConfigVar;
+  value: number | boolean | string | undefined;
+  onChange: (value: number | boolean | string) => void;
+}) {
+  const changed = value !== undefined && item.default !== undefined && value !== item.default;
+  return (
+    <div className={`game-config-row ${changed ? "changed" : ""}`}>
+      <div className="game-config-copy">
+        <strong>{item.label}</strong>
+        {item.description ? <small>{item.description}</small> : null}
+      </div>
+      {item.type === "bool" ? (
+        <button
+          className={`game-config-toggle ${value === true ? "active" : ""}`}
+          type="button"
+          role="switch"
+          aria-checked={value === true}
+          aria-label={item.label}
+          onClick={() => onChange(!(value === true))}
+        >
+          <span>{value === true ? "Sí" : "No"}</span>
+          <span className="switch-track" aria-hidden="true">
+            <span />
+          </span>
+        </button>
+      ) : item.type === "enum" ? (
+        <div className="game-config-options" role="group" aria-label={item.label}>
+          {(item.options || []).map((option) => (
+            <button
+              key={option.value}
+              className={`game-config-option ${value === option.value ? "active" : ""}`}
+              type="button"
+              aria-pressed={value === option.value}
+              onClick={() => onChange(option.value)}
+            >
+              {option.label || option.value}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <GameConfigStepper item={item} value={value} onChange={onChange} />
+      )}
+    </div>
+  );
+}
+
+function GameConfigStepper({
+  item,
+  value,
+  onChange,
+}: {
+  item: GameConfigVar;
+  value: number | boolean | string | undefined;
+  onChange: (value: number) => void;
+}) {
+  const step = item.step && item.step > 0 ? item.step : 1;
+  const fallback = typeof item.default === "number" ? item.default : item.min ?? 0;
+  const numeric = typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  function clampConfigNumber(next: number): number {
+    if (item.min !== undefined) next = Math.max(item.min, next);
+    if (item.max !== undefined) next = Math.min(item.max, next);
+    return item.type === "int" ? Math.round(next) : Math.round(next * 100) / 100;
+  }
+  return (
+    <div className="game-config-stepper" aria-label={item.label}>
+      <button
+        type="button"
+        aria-label={`Bajar ${item.label}`}
+        disabled={item.min !== undefined && numeric <= item.min}
+        onClick={() => onChange(clampConfigNumber(numeric - step))}
+      >
+        −
+      </button>
+      <strong>{numeric}</strong>
+      <button
+        type="button"
+        aria-label={`Subir ${item.label}`}
+        disabled={item.max !== undefined && numeric >= item.max}
+        onClick={() => onChange(clampConfigNumber(numeric + step))}
+      >
+        +
+      </button>
     </div>
   );
 }

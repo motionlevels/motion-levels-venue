@@ -1,5 +1,5 @@
 import type { PlatformGameCatalogEntry } from "./api";
-import type { DifficultyID, GameCard, GameLevel } from "./catalog";
+import type { DifficultyID, GameCard, GameConfigVar, GameConfigVarType, GameLevel } from "./catalog";
 
 export const catalogDifficultyIDs = ["easy", "medium", "hard", "expert"] as const satisfies readonly DifficultyID[];
 
@@ -69,6 +69,67 @@ export function shouldPreferCatalogFallbackPreviewAnimation(
     && entry.source_kind !== "platform_levels"
     && entry.source_kind !== "animation",
   );
+}
+
+const gameConfigVarTypes = ["int", "float", "bool", "enum"] as const satisfies readonly GameConfigVarType[];
+
+/**
+ * Player-facing config vars declared in a motion-go game_source
+ * (config.vars[].player_facing). They power the game card's settings dialog.
+ */
+export function platformPlayerConfigVars(
+  entry: Pick<PlatformGameCatalogEntry, "game_source">,
+): GameConfigVar[] | undefined {
+  const source = entry.game_source;
+  if (!source || source.schema !== "motion-go-v1") return undefined;
+  const config = source.config;
+  if (!config || typeof config !== "object" || Array.isArray(config)) return undefined;
+  const rawVars = (config as { vars?: unknown }).vars;
+  if (!Array.isArray(rawVars)) return undefined;
+  const seen = new Set<string>();
+  const vars = rawVars.flatMap((item): GameConfigVar[] => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const record = item as Record<string, unknown>;
+    if (record.player_facing !== true) return [];
+    const key = String(record.key || "").trim();
+    if (!key || seen.has(key)) return [];
+    const type = gameConfigVarTypes.includes(record.type as GameConfigVarType) ? record.type as GameConfigVarType : "int";
+    const options = Array.isArray(record.options)
+      ? record.options.flatMap((option): NonNullable<GameConfigVar["options"]> => {
+          const value = String((option as Record<string, unknown>)?.value ?? "").trim();
+          if (!value) return [];
+          const label = String((option as Record<string, unknown>)?.label ?? "").trim();
+          return [{ value, ...(label ? { label } : {}) }];
+        })
+      : undefined;
+    if (type === "enum" && !options?.length) return [];
+    seen.add(key);
+    const min = finiteNumberOrUndefined(record.min);
+    const max = finiteNumberOrUndefined(record.max);
+    const step = finiteNumberOrUndefined(record.step);
+    const defaultValue = type === "bool"
+      ? record.default === true
+      : type === "enum"
+        ? (options?.some((option) => option.value === record.default) ? record.default as string : options?.[0]?.value)
+        : finiteNumberOrUndefined(record.default);
+    return [{
+      key,
+      label: String(record.label || "").trim() || key,
+      ...(record.description ? { description: String(record.description).trim() } : {}),
+      type,
+      ...(defaultValue !== undefined ? { default: defaultValue } : {}),
+      ...(min !== undefined ? { min } : {}),
+      ...(max !== undefined ? { max } : {}),
+      ...(step !== undefined && step > 0 ? { step } : {}),
+      ...(options?.length ? { options } : {}),
+    }];
+  }).slice(0, 24);
+  return vars.length ? vars : undefined;
+}
+
+function finiteNumberOrUndefined(value: unknown): number | undefined {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
 }
 
 export function normalizeDifficultyIDs(value: unknown): DifficultyID[] {
