@@ -2206,10 +2206,11 @@ func TestVenueSessionLifecycleAndMenuEvents(t *testing.T) {
 
 func TestVenueSessionControlsCameraRecorder(t *testing.T) {
 	runtime := newGameRuntime(config{
-		Brightness:         80,
-		PlayerCount:        1,
-		ControllerLabel:    "Sala Test",
-		ControllerHostname: "motionlevels-test",
+		Brightness:                   80,
+		PlayerCount:                  1,
+		ControllerLabel:              "Sala Test",
+		ControllerHostname:           "motionlevels-test",
+		CameraRecorderSegmentSeconds: 180,
 	}, nil, nil)
 	recorder := &cameraRecorderBackend{}
 	runtime.SetCameraRecorder(recorder)
@@ -2232,6 +2233,9 @@ func TestVenueSessionControlsCameraRecorder(t *testing.T) {
 	}
 	if start.StartedUnixNanos != started.UnixNano() || start.PlatformSessionPath != "/session/"+venueSessionID {
 		t.Fatalf("venue start timing/path = %+v", start)
+	}
+	if start.SegmentSeconds != 180 {
+		t.Fatalf("venue start segment seconds = %d, want 180", start.SegmentSeconds)
 	}
 	finish := recorder.venueFinishes[0]
 	if finish.VenueSessionID != venueSessionID || finish.Reason != "manual" || finish.EndedUnixNanos != ended.UnixNano() {

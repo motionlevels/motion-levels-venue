@@ -28,61 +28,62 @@ import (
 )
 
 type config struct {
-	HTTPAddr               string
-	ControllerAddr         string
-	PressureAddr           string
-	Game                   string
-	GameLabel              string
-	VenueSessionID         string
-	Difficulty             string
-	Level                  string
-	LevelMode              string
-	DurationSeconds        int
-	ChallengeElapsedMillis int64
-	ChallengeAttemptCount  int
-	PlayerCount            int
-	TeamName               string
-	Players                []playerConfig
-	GameConfig             map[string]json.RawMessage
-	FPS                    int
-	Brightness             int
-	AudioEnabled           bool
-	AudioAssetsDir         string
-	AudioPlayer            string
-	MusicRef               string
-	MusicVolume            float64
-	StartCueRef            string
-	CueVolume              float64
-	CoinCueRef             string
-	DoubleCoinCueRef       string
-	DamageCueRef           string
-	WinCueRef              string
-	DefeatCueRef           string
-	PressureCueRef         string
-	NarrationCueRef        string
-	NarrationVolume        float64
-	CountdownCueRef        string
-	CountdownVolume        float64
-	CountdownFloorOverlay  bool
-	TestAudio              bool
-	ReplayRecordingPath    string
-	ReplayKeyframeInterval time.Duration
-	ReplayZstdPath         string
-	ReplayMaxLocalBytes    int64
-	ReplayKeepLocal        bool
-	DisplaySnapshotFPS     int
-	CameraRecorderURL      string
-	CameraRecorderTimeout  time.Duration
-	AuthoredRuntime        string
-	PlatformURL            string
-	PlatformToken          string
-	PlatformAssetCacheDir  string
-	PlatformSyncInterval   time.Duration
-	VenueIdleTimeout       time.Duration
-	ControllerID           string
-	ControllerIDFile       string
-	ControllerLabel        string
-	ControllerHostname     string
+	HTTPAddr                     string
+	ControllerAddr               string
+	PressureAddr                 string
+	Game                         string
+	GameLabel                    string
+	VenueSessionID               string
+	Difficulty                   string
+	Level                        string
+	LevelMode                    string
+	DurationSeconds              int
+	ChallengeElapsedMillis       int64
+	ChallengeAttemptCount        int
+	PlayerCount                  int
+	TeamName                     string
+	Players                      []playerConfig
+	GameConfig                   map[string]json.RawMessage
+	FPS                          int
+	Brightness                   int
+	AudioEnabled                 bool
+	AudioAssetsDir               string
+	AudioPlayer                  string
+	MusicRef                     string
+	MusicVolume                  float64
+	StartCueRef                  string
+	CueVolume                    float64
+	CoinCueRef                   string
+	DoubleCoinCueRef             string
+	DamageCueRef                 string
+	WinCueRef                    string
+	DefeatCueRef                 string
+	PressureCueRef               string
+	NarrationCueRef              string
+	NarrationVolume              float64
+	CountdownCueRef              string
+	CountdownVolume              float64
+	CountdownFloorOverlay        bool
+	TestAudio                    bool
+	ReplayRecordingPath          string
+	ReplayKeyframeInterval       time.Duration
+	ReplayZstdPath               string
+	ReplayMaxLocalBytes          int64
+	ReplayKeepLocal              bool
+	DisplaySnapshotFPS           int
+	CameraRecorderURL            string
+	CameraRecorderTimeout        time.Duration
+	CameraRecorderSegmentSeconds int
+	AuthoredRuntime              string
+	PlatformURL                  string
+	PlatformToken                string
+	PlatformAssetCacheDir        string
+	PlatformSyncInterval         time.Duration
+	VenueIdleTimeout             time.Duration
+	ControllerID                 string
+	ControllerIDFile             string
+	ControllerLabel              string
+	ControllerHostname           string
 }
 
 type floorGame interface {
@@ -128,6 +129,7 @@ func main() {
 	flag.IntVar(&cfg.DisplaySnapshotFPS, "display-snapshot-fps", 4, "display snapshots per second to write into game session recordings")
 	flag.StringVar(&cfg.CameraRecorderURL, "camera-recorder-url", os.Getenv("MOTION_LEVELS_CAMERA_RECORDER_URL"), "local camera recorder API base URL; empty disables external video recording")
 	flag.DurationVar(&cfg.CameraRecorderTimeout, "camera-recorder-timeout", durationEnv("MOTION_LEVELS_CAMERA_RECORDER_TIMEOUT", 2*time.Second), "HTTP timeout for camera recorder API calls")
+	flag.IntVar(&cfg.CameraRecorderSegmentSeconds, "camera-recorder-segment-seconds", intEnv("MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS", 0), "video segment seconds to request from the camera recorder for stitched venue recordings; 0 uses recorder default")
 	flag.StringVar(&cfg.AuthoredRuntime, "authored-runtime", "auto", "runtime for motion-go-v1 games: auto, native, or wasm")
 	flag.StringVar(&cfg.PlatformURL, "platform-url", os.Getenv("MOTION_LEVELS_PLATFORM_URL"), "platform base URL for session ingest; empty disables")
 	flag.StringVar(&cfg.PlatformToken, "platform-token", os.Getenv("MOTION_LEVELS_PLATFORM_TOKEN"), "platform bearer token for session ingest; can also use MOTION_LEVELS_PLATFORM_TOKEN")
@@ -226,6 +228,9 @@ func (c *config) normalize() {
 	if c.DisplaySnapshotFPS < 1 {
 		c.DisplaySnapshotFPS = 1
 	}
+	if c.CameraRecorderSegmentSeconds < 0 {
+		c.CameraRecorderSegmentSeconds = 0
+	}
 	switch strings.ToLower(strings.TrimSpace(c.AuthoredRuntime)) {
 	case "native", "wasm":
 		c.AuthoredRuntime = strings.ToLower(strings.TrimSpace(c.AuthoredRuntime))
@@ -296,6 +301,18 @@ func int64Env(key string, fallback int64) int64 {
 		return fallback
 	}
 	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func intEnv(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
 	if err != nil {
 		return fallback
 	}

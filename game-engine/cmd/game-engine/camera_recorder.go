@@ -25,6 +25,7 @@ type cameraVenueSessionStart struct {
 	KioskID             string `json:"kioskId,omitempty"`
 	StartedUnixNanos    int64  `json:"startedUnixNanos"`
 	PlatformSessionPath string `json:"platformSessionPath,omitempty"`
+	SegmentSeconds      int    `json:"segmentSeconds,omitempty"`
 }
 
 type cameraVenueSessionFinish struct {

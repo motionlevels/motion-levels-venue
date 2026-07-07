@@ -173,6 +173,7 @@ func (r *gameRuntime) startVenueLocked(id, teamName, kioskID string, now time.Ti
 			KioskID:             kioskID,
 			StartedUnixNanos:    now.UnixNano(),
 			PlatformSessionPath: "/session/" + id,
+			SegmentSeconds:      r.base.CameraRecorderSegmentSeconds,
 		})
 	}
 	log.Printf("venue session started: id=%s implicit=%v", id, implicit)
