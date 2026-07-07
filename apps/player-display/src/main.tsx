@@ -8,10 +8,15 @@ const kioskDesignWidth = 1920;
 const kioskDesignHeight = 1080;
 
 function kioskScale() {
+  if (fixedKioskPreviewViewport()) return 1;
   const viewport = window.visualViewport;
   const width = viewport?.width || window.innerWidth || kioskDesignWidth;
   const height = viewport?.height || window.innerHeight || kioskDesignHeight;
   return Math.min(width / kioskDesignWidth, height / kioskDesignHeight);
+}
+
+function fixedKioskPreviewViewport() {
+  return new URLSearchParams(window.location.search).get("kioskViewport") === `${kioskDesignWidth}x${kioskDesignHeight}`;
 }
 
 function KioskViewport({ children }: { children: ReactNode }) {

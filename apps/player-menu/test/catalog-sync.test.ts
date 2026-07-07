@@ -270,6 +270,13 @@ describe("catalog metadata sync", () => {
     assert.match(styleSource, /\.party-preview-tile \.preview\s*\{\s*--preview-board-max-height: calc\(100% - 4px\);\s*--preview-board-max-width: calc\(100% - 4px\);/);
   });
 
+  it("can lock the menu app to the fixed TV design viewport for scaled embeds", () => {
+    const source = fs.readFileSync(path.resolve(__dirname, "../src/main.tsx"), "utf8");
+    assert.match(source, /function fixedKioskPreviewViewport\(\)/);
+    assert.match(source, /if \(fixedKioskPreviewViewport\(\)\) return 1;/);
+    assert.match(source, /get\("kioskViewport"\) === `\$\{kioskDesignWidth\}x\$\{kioskDesignHeight\}`/);
+  });
+
   it("uses revisioned platform preview media for level cards", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
     const previewsSource = fs.readFileSync(path.resolve(__dirname, "../src/previews.ts"), "utf8");

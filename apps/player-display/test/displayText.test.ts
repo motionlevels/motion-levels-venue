@@ -31,6 +31,15 @@ describe("displayGameTitle wiring", () => {
   });
 });
 
+describe("kiosk preview viewport", () => {
+  it("can lock the display app to the fixed TV design viewport for scaled embeds", () => {
+    const source = readFileSync(new URL("../src/main.tsx", import.meta.url), "utf8");
+    assert.match(source, /function fixedKioskPreviewViewport\(\)/);
+    assert.match(source, /if \(fixedKioskPreviewViewport\(\)\) return 1;/);
+    assert.match(source, /get\("kioskViewport"\) === `\$\{kioskDesignWidth\}x\$\{kioskDesignHeight\}`/);
+  });
+});
+
 describe("levelLabelES", () => {
   it("normalizes human and internal level labels", () => {
     assert.equal(levelLabelES("Nivel 2"), "Nivel 2");
