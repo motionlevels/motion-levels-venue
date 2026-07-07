@@ -4550,7 +4550,7 @@ function Preview({
   const promotedToAnimation = Boolean(promoteAnimation && posterReady && !richCandidate && anim);
   const mediaSrc = promotedToAnimation ? undefined : promotedSrc || posterSrc;
   const logoMedia = isMotionLevelsLogoSrc(mediaSrc);
-  const showAnimation = Boolean(promotedToAnimation && anim);
+  const showAnimation = Boolean((promotedToAnimation || !mediaSrc) && anim);
   return (
     <div className={`preview ${compact ? "compact-preview" : ""} ${logoMedia ? "logo-preview" : ""}`}>
       {mediaSrc ? (

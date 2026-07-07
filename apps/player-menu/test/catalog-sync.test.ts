@@ -327,7 +327,7 @@ describe("catalog metadata sync", () => {
     assert.match(appSource, /renderPartyPreview\(game, \{ compact: true, rich: selected \|\| active \}\)/);
   });
 
-  it("keeps preview animations configured but uses the logo while thumbnail media is missing", () => {
+  it("keeps preview animations configured and uses them when thumbnail media is missing", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
     const styleSource = fs.readFileSync(path.resolve(__dirname, "../src/styles.css"), "utf8");
     const helperSource = appSource.slice(
@@ -338,7 +338,7 @@ describe("catalog metadata sync", () => {
     assert.match(helperSource, /if \(configured\) return configured;/);
     assert.match(helperSource, /if \(fallback\?\.previewAnimation\) return fallback\.previewAnimation;/);
     assert.doesNotMatch(helperSource, /hasPlatformMedia/);
-    assert.match(appSource, /const showAnimation = Boolean\(promotedToAnimation && anim\);/);
+    assert.match(appSource, /const showAnimation = Boolean\(\(promotedToAnimation \|\| !mediaSrc\) && anim\);/);
     assert.match(appSource, /showAnimation \? \(\s*<FloorPreview anim=\{anim\} orientation="landscape" \/>/);
     assert.match(appSource, /<div className="preview-logo-fallback" aria-hidden="true">[\s\S]*?<img src="\/motion-levels-icon\.webp" alt="" \/>/);
     assert.match(styleSource, /\.game-body\s*\{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) minmax\(54px, max-content\);[\s\S]*?align-items: center;/);
