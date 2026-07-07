@@ -127,6 +127,7 @@ std::string json_array(const std::vector<std::string>& values) {
 struct VideoSettingsResult {
     std::string video_mode;
     std::string active_sensor;
+    bool adaptive_tone_enabled;
     bool stitching_enabled;
 };
 
@@ -251,7 +252,7 @@ VideoSettingsResult apply_video_settings(const std::shared_ptr<ins_camera::Camer
         }
         std::cerr << "warning: failed to set video capture params; continuing with current camera capture settings" << std::endl;
     }
-    return {video_mode, active_sensor_name(active_sensor), stitching_enabled};
+    return {video_mode, active_sensor_name(active_sensor), env_bool("MOTION_LEVELS_CAMERA_ADAPTIVE_TONE_ENABLED", false), stitching_enabled};
 }
 
 void print_video_settings_result(const VideoSettingsResult& result, bool recording) {
@@ -260,6 +261,7 @@ void print_video_settings_result(const VideoSettingsResult& result, bool recordi
         << ",\"recording\":" << (recording ? "true" : "false")
         << ",\"videoMode\":\"" << json_escape(result.video_mode) << "\""
         << ",\"activeSensor\":\"" << json_escape(result.active_sensor) << "\""
+        << ",\"adaptiveToneEnabled\":" << (result.adaptive_tone_enabled ? "true" : "false")
         << ",\"stitchingEnabled\":" << (result.stitching_enabled ? "true" : "false")
         << "}" << std::endl;
 }

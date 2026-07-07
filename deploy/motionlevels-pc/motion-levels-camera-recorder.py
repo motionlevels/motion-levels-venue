@@ -290,6 +290,7 @@ def video_capture_options(payload: dict[str, Any], recording: dict[str, Any] | N
         source_media_extension = SPHERICAL_MEDIA_EXTENSION
     return {
         "hdrEnabled": hdr_enabled,
+        "adaptiveToneEnabled": normalized_bool(base.get("adaptiveToneEnabled"), False),
         "videoMode": video_mode,
         "videoProjection": projection,
         "videoLens": lens,
@@ -307,6 +308,7 @@ def video_capture_options(payload: dict[str, Any], recording: dict[str, Any] | N
 def video_defaults_payload(options: dict[str, Any]) -> dict[str, Any]:
     return {
         "hdrEnabled": options["hdrEnabled"],
+        "adaptiveToneEnabled": options["adaptiveToneEnabled"],
         "videoMode": options["videoMode"],
         "videoProjection": options["videoProjection"],
         "videoLens": options["videoLens"],
@@ -599,6 +601,7 @@ def command_env(action: str, payload: dict[str, Any], recording: dict[str, Any],
             "MOTION_LEVELS_CAMERA_MEDIA_PATH": str(media_path),
             "MOTION_LEVELS_CAMERA_METADATA_PATH": str(metadata_path),
             "MOTION_LEVELS_CAMERA_HDR_ENABLED": "1" if options["hdrEnabled"] else "0",
+            "MOTION_LEVELS_CAMERA_ADAPTIVE_TONE_ENABLED": "1" if options["adaptiveToneEnabled"] else "0",
             "MOTION_LEVELS_CAMERA_VIDEO_PROJECTION": str(options["videoProjection"]),
             "MOTION_LEVELS_CAMERA_VIDEO_LENS": str(options["videoLens"]),
             "MOTION_LEVELS_INSTA360_ACTIVE_SENSOR": command_lens,
