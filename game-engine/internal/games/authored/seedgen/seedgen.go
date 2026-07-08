@@ -32,6 +32,7 @@ type Seed struct {
 var Seeds = []Seed{
 	{Pkg: "duelgo", SeedFile: "duelMotionGo.ts", ExportName: "duelMotionGoSource"},
 	{Pkg: "lavago", SeedFile: "lavaMotionGo.ts", ExportName: "lavaMotionGoSource"},
+	{Pkg: "memoriav2go", SeedFile: "memoriaV2MotionGo.ts", ExportName: "memoriaV2MotionGoSource"},
 	{Pkg: "memorychallengego", SeedFile: "memoryChallengeMotionGo.ts", ExportName: "memoryChallengeMotionGoSource"},
 	{Pkg: "pingpongmotion", SeedFile: "pingPongMotionGo.ts", ExportName: "pingPongMotionGoSource"},
 	{Pkg: "pingpongv2", SeedFile: "pingPongV2MotionGo.ts", ExportName: "pingPongV2MotionGoSource"},

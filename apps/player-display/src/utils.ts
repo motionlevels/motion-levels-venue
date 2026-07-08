@@ -19,8 +19,14 @@ export function phaseLabel(phase: string): string {
       return "Pisa para empezar";
     case "countdown":
       return "Preparados";
+    case "memorize":
+      return "Memoriza";
     case "running":
       return "Ronda en directo";
+    case "passed":
+      return "Nivel superado";
+    case "failed":
+      return "Nivel fallido";
     case "finished":
       return "Ronda completada";
     case "ambient":

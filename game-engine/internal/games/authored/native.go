@@ -11,6 +11,7 @@ import (
 
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/duelgo"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/lavago"
+	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/memoriav2go"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/memorychallengego"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/patronesgo"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/pingpongmotion"
@@ -43,6 +44,7 @@ type NativeGame struct {
 var nativeFactories = map[string]func() NativeABI{
 	"authored-duel":             func() NativeABI { return duelgo.NewABI() },
 	"authored-lava":             func() NativeABI { return lavago.NewABI() },
+	"authored-memoria-v2":       func() NativeABI { return memoriav2go.NewABI() },
 	"authored-memory-challenge": func() NativeABI { return memorychallengego.NewABI() },
 	"authored-patrones":         func() NativeABI { return patronesgo.NewABI() },
 	"authored-ping-pong-motion": func() NativeABI { return pingpongmotion.NewABI() },
@@ -84,6 +86,17 @@ var nativeCatalogEntries = map[string]CatalogEntry{
 		DefaultMusicVolume: 0.14,
 		MinPlayers:         1,
 		MaxPlayers:         4,
+		GameSource:         nativeMotionGoSpec(),
+	},
+	"authored-memoria-v2": {
+		ID:                 "memoria-v2",
+		EngineGame:         "authored-memoria-v2",
+		Label:              "Memoria v2",
+		Description:        "Memorizad la figura azul dentro del cuadro verde y reconstruidla antes de perder las tres vidas del nivel.",
+		DefaultMusicRef:    memoriav2go.DefaultMusicRef,
+		DefaultMusicVolume: 0.16,
+		MinPlayers:         1,
+		MaxPlayers:         8,
 		GameSource:         nativeMotionGoSpec(),
 	},
 	"authored-patrones": {

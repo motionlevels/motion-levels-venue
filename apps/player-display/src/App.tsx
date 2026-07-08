@@ -278,7 +278,7 @@ function ClassicDisplay({ status, connected, error }: DisplayProps) {
 
 function ArcadeDisplay({ status, connected, error }: DisplayProps) {
   const displayModel = createArcadeDisplayModel(status, connected, error);
-  const { duelGame, levelGame, memoryGame, pingPongV2Game, showPlayerInfo, teamRosterGame, teamScoreboardGame } = displayModel;
+  const { duelGame, levelGame, memoriaV2Game, memoryGame, pingPongV2Game, showPlayerInfo, teamRosterGame, teamScoreboardGame } = displayModel;
   const leader = useMemo(() => {
     if (teamRosterGame || duelGame || !status.players.length) return null;
     return [...status.players].sort((left, right) => right.score - left.score)[0];
@@ -295,6 +295,8 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
         <DuelBoard status={status} clock={clock} />
       ) : pingPongV2Game ? (
         <PingPongV2Board status={status} />
+      ) : memoriaV2Game ? (
+        <MemoriaV2Board status={status} clock={clock} />
       ) : memoryGame ? (
         <MemoryBoard status={status} clock={clock} />
       ) : levelGame ? (
@@ -356,6 +358,7 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
 type ArcadeDisplayModel = {
   duelGame: boolean;
   levelGame: boolean;
+  memoriaV2Game: boolean;
   memoryGame: boolean;
   pingPongV2Game: boolean;
   rootClassName: string;
@@ -374,6 +377,7 @@ type ArcadeHeaderModel = {
 };
 
 function createArcadeDisplayModel(status: DisplayStatus, connected: boolean, error: string): ArcadeDisplayModel {
+  const memoriaV2Game = isMemoriaV2Game(status);
   const memoryGame = isMemoryGame(status);
   const pingPongV2Game = isPingPongV2Game(status);
   const teamRosterGame = isTeamScoreGame(status);
@@ -390,6 +394,7 @@ function createArcadeDisplayModel(status: DisplayStatus, connected: boolean, err
     !levelGame && !memoryGame ? "reference-brand" : "",
     duelGame ? "duel-game" : "",
     memoryGame ? "memory-display" : "",
+    memoriaV2Game ? "memoria-v2-display" : "",
     pingPongV2Game ? "ping-pong-v2-display" : "",
     levelGame ? "level-display level-points-display" : "",
     !duelGame && !showPlayerInfo ? "no-player-info" : "",
@@ -400,6 +405,7 @@ function createArcadeDisplayModel(status: DisplayStatus, connected: boolean, err
   return {
     duelGame,
     levelGame,
+    memoriaV2Game,
     memoryGame,
     pingPongV2Game,
     rootClassName: rootClasses.filter(Boolean).join(" "),
@@ -519,6 +525,63 @@ function PingPongPlayerPanel({ player, target, side }: { player: DisplayStatus["
       </div>
     </article>
   );
+}
+
+function MemoriaV2Board({ status, clock }: { status: DisplayStatus; clock: string }) {
+  const level = Math.max(1, status.roundHits || 1);
+  const totalLevels = Math.max(level, status.matchTarget || 20);
+  const remainingTargets = Math.max(0, status.activeTargets || 0);
+  const phaseCopy = memoriaV2PhaseCopy(status.phase);
+  const levelProgress = Math.max(0, Math.min(1, level / totalLevels));
+
+  return (
+    <section className="arcade-stage memoria-v2-board" aria-label="Marcador de Memoria v2">
+      <article className={`memoria-v2-hero phase-${status.phase}`}>
+        <div className="memoria-v2-hero__copy">
+          <span>{phaseCopy}</span>
+          <strong>Nivel {level}</strong>
+          <small>{level} / {totalLevels}</small>
+        </div>
+        <div className="memoria-v2-progress" aria-hidden="true">
+          <i style={{ "--progress": levelProgress } as CSSProperties} />
+        </div>
+      </article>
+      <section className="memoria-v2-metrics" aria-label="Estado de la partida">
+        <MetricPanel className="memoria-v2-clock" label={status.phase === "memorize" ? "Memoriza" : "Tiempo"} value={clock} tone="amber" />
+        <MetricPanel className="memoria-v2-lives" label="Vidas" value={<MemoriaV2Hearts lives={status.lives} />} tone="red" />
+        <MetricPanel className="memoria-v2-targets" label="Objetivos" value={remainingTargets} tone="cyan" icon="targets" />
+        <MetricPanel className="memoria-v2-score" label="Puntos" value={status.score} tone="magenta" icon="points" />
+      </section>
+    </section>
+  );
+}
+
+function MemoriaV2Hearts({ lives }: { lives: number }) {
+  const safeLives = Math.max(0, Math.min(3, lives < 0 ? 3 : lives));
+  return (
+    <span className="memoria-v2-hearts" aria-label={`${safeLives} vidas`}>
+      {[0, 1, 2].map((slot) => (
+        <i className={slot < safeLives ? "full" : "empty"} key={slot} />
+      ))}
+    </span>
+  );
+}
+
+function memoriaV2PhaseCopy(phase: string): string {
+  switch (phase) {
+    case "memorize":
+      return "Memoriza la figura";
+    case "running":
+      return "Pisa las baldosas";
+    case "passed":
+      return "Nivel superado";
+    case "failed":
+      return "Nivel fallido";
+    case "finished":
+      return "Juego superado";
+    default:
+      return "En espera";
+  }
 }
 
 function MemoryBoard({ status, clock }: { status: DisplayStatus; clock: string }) {
@@ -726,13 +789,20 @@ function isMemoryGame(status: Pick<DisplayStatus, "currentGame" | "label">): boo
   const currentGame = compactDisplayText(status.currentGame);
   const label = normalizedDisplayText(status.label);
   return (
-    currentGame === "memory"
+    isMemoriaV2Game(status)
+    || currentGame === "memory"
     || currentGame === "memorychallenge"
     || currentGame === "authoredmemorychallenge"
     || currentGame === "memorylights"
     || label.includes("reto de memoria")
     || label === "memoria"
   );
+}
+
+function isMemoriaV2Game(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
+  const currentGame = compactDisplayText(status.currentGame);
+  const label = normalizedDisplayText(status.label);
+  return currentGame === "memoriav2" || currentGame === "authoredmemoriav2" || label.includes("memoria v2");
 }
 
 function isDuelGame(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
@@ -1098,6 +1168,32 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         activeTargets: 16,
         lastEventCue: "hit",
         lastEventMessage: "Jugador 1 18",
+      };
+    case "memoria-v2":
+      return {
+        ...base,
+        currentGame: options.demoGame || "authored-memoria-v2",
+        label: options.demoLabel || "Memoria v2",
+        phase: "memorize",
+        difficulty: "medium",
+        playerCount: 4,
+        players: [
+          { index: 0, label: "Jugador 1", color: { r: 255, g: 23, b: 48 }, score: 18, lives: 2 },
+          { index: 1, label: "Jugador 2", color: { r: 30, g: 213, b: 255 }, score: 18, lives: 2 },
+          { index: 2, label: "Jugador 3", color: { r: 47, g: 216, b: 108 }, score: 18, lives: 2 },
+          { index: 3, label: "Jugador 4", color: { r: 247, g: 61, b: 255 }, score: 18, lives: 2 },
+        ],
+        score: 18,
+        lives: 2,
+        elapsedMillis: 156000,
+        sessionElapsedMillis: 156000,
+        remainingMillis: 3200,
+        countdownRemainingMillis: 3200,
+        activeTargets: 14,
+        matchTarget: 20,
+        roundHits: 7,
+        lastEventCue: "coin",
+        lastEventMessage: "Correcto",
       };
     case "pingpong-v2":
       return {

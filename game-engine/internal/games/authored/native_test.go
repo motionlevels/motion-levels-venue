@@ -148,6 +148,69 @@ func TestNativeMemoryChallengeRunsWithoutWASMArtifact(t *testing.T) {
 	}
 }
 
+func TestNativeMemoriaV2ProgressiveLevelFlow(t *testing.T) {
+	start := time.Unix(1_700_000_000, 0)
+	entry, ok := NativeCatalogEntry("authored-memoria-v2")
+	if !ok {
+		t.Fatal("missing native memoria v2 entry")
+	}
+	game, err := NewNativeWithSeed(start, 11, entry, 4, nil, "medium", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !HasNative("authored-memoria-v2") {
+		t.Fatal("memoria v2 should be registered as a native authored game")
+	}
+	initial := game.Snapshot(start)
+	if initial.Phase != "memorize" || initial.Lives != 3 || initial.MatchTarget != 20 || initial.RoundHits != 1 || initial.ActiveTargets == 0 {
+		t.Fatalf("initial snapshot = %+v, want memorize level 1 with targets and 3 lives", initial)
+	}
+	if len(initial.Players) != 4 {
+		t.Fatalf("players = %d, want 4", len(initial.Players))
+	}
+
+	frame := game.Render(start.Add(2 * time.Second))
+	if len(frame) != GridWidth*GridHeight {
+		t.Fatalf("frame len = %d, want %d", len(frame), GridWidth*GridHeight)
+	}
+	blueTargets := 0
+	for _, pixel := range frame {
+		if pixel.B > 180 && pixel.R >= 35 && pixel.G >= 70 {
+			blueTargets++
+		}
+	}
+	if blueTargets == 0 {
+		t.Fatalf("visible target pixels = %d, want some during memorize", blueTargets)
+	}
+
+	runningAt := start.Add(6 * time.Second)
+	if snapshot := game.Snapshot(runningAt); snapshot.Phase != "running" || snapshot.Lives != 3 {
+		t.Fatalf("running snapshot = %+v, want running with 3 lives", snapshot)
+	}
+	damageEvents := 0
+	failedAt := time.Time{}
+	for y := 0; y < GridHeight && failedAt.IsZero(); y++ {
+		for x := 0; x < GridWidth && failedAt.IsZero(); x++ {
+			events := game.Press(pressEvent(x, y, true), runningAt)
+			for _, event := range events {
+				if event.Cue == "damage" {
+					damageEvents++
+				}
+			}
+			if snapshot := game.Snapshot(runningAt); snapshot.Phase == "failed" {
+				failedAt = runningAt
+			}
+		}
+	}
+	if damageEvents != 3 || failedAt.IsZero() {
+		t.Fatalf("damage events = %d failedAt = %v, want 3 damage events and failed phase", damageEvents, failedAt)
+	}
+	retry := game.Snapshot(runningAt.Add(3 * time.Second))
+	if retry.Phase != "memorize" || retry.Lives != 3 || retry.RoundHits != 1 {
+		t.Fatalf("retry snapshot = %+v, want level retry with restored lives", retry)
+	}
+}
+
 func TestNativeDuelDifficultyControlsFloorFill(t *testing.T) {
 	start := time.Unix(1_700_000_000, 0)
 	entry := CatalogEntry{

@@ -6,6 +6,7 @@ import { gameTitleES, levelLabelES } from "../src/displayText.ts";
 describe("gameTitleES", () => {
   it("uses native runtime ids instead of level labels", () => {
     assert.equal(gameTitleES("memory-lights", "Nivel 3"), "Reto de memoria");
+    assert.equal(gameTitleES("authored-memoria-v2", "Nivel 7"), "Memoria v2");
   });
 
   it("uses catalog labels for level games instead of local id exceptions", () => {
@@ -67,6 +68,18 @@ describe("arcade display reference styling", () => {
     assert.match(cssSource, /\.level-points-display\.level-display \.arcade-top\s*\{[^}]*grid-template-columns:\s*minmax\(440px, 0\.74fr\) minmax\(700px, 1\.36fr\) minmax\(440px, 0\.74fr\);/);
     assert.match(cssSource, /\.arcade-display\.reference-brand \.arcade-brand-panel/);
     assert.match(cssSource, /\.arcade-display\.reference-brand \.arcade-brand-mark\s*\{[^}]*width:\s*104px;/);
+  });
+
+  it("renders Memoria v2 with its own team-level HUD", () => {
+    const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const cssSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+    assert.match(appSource, /function MemoriaV2Board/);
+    assert.match(appSource, /function isMemoriaV2Game/);
+    assert.match(appSource, /memoriaV2Game \? "memoria-v2-display" : ""/);
+    assert.match(appSource, /case "memoria-v2":/);
+    assert.match(cssSource, /\.memoria-v2-board/);
+    assert.match(cssSource, /\.memoria-v2-hearts i\.empty/);
   });
 });
 
