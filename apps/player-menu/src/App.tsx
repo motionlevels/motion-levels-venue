@@ -29,8 +29,8 @@ import { floorAnimations, type FloorAnim, type RGB } from "./floor";
 import { hexToColor, hexToRGB, randomUUID } from "./utils";
 import { avatarLabel, firstAvailableColor, gameRosterIssue, playerLabel, rosterSnapshot, statusPlayersForDisplay, type Player, type RosterIssue } from "./roster";
 import {
-  catalogDirectAssetSrc,
-  catalogThumbnailSrc,
+  catalogPreviewMediaSrcs,
+  catalogThumbnailMediaSrcs,
   gamePreviewSrcs,
   gameThumbnailSrc,
   gameThumbnailSrcs,
@@ -41,9 +41,7 @@ import {
   levelThumbnailSrc,
   levelThumbnailSrcs,
   partyPreviewGridSize,
-  platformAssetURL,
   uniquePreviewSources,
-  webpPreviewRef,
 } from "./previews";
 import { captureMenuEvent, menuKioskID, setMenuEventForwarder } from "./analytics";
 import { platformAnimationCards } from "./animationCatalog";
@@ -501,23 +499,8 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
   const engineGame = platformEntryEngineGame(entry);
   const preferFallbackAnimation = shouldPreferCatalogFallbackPreviewAnimation(entry, fallback);
   const previewAnimation = catalogPreviewAnimation(entry, fallback, engineGame, preferFallbackAnimation);
-  const thumbnailSrcs = preferFallbackAnimation ? [] : uniquePreviewSources([
-    catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
-    catalogDirectAssetSrc(entry.catalog_thumbnail_url),
-    catalogDirectAssetSrc(entry.catalog_preview_url),
-    catalogThumbnailSrc(entry.catalog_thumbnail_ref),
-    ...(fallback?.thumbnailSrcs || []),
-    fallback?.thumbnailSrc,
-    fallback?.previewSrc,
-  ]);
-  const previewSrcs = preferFallbackAnimation ? [] : uniquePreviewSources([
-    catalogDirectAssetSrc(entry.catalog_preview_url),
-    catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
-    catalogDirectAssetSrc(entry.catalog_thumbnail_url),
-    ...thumbnailSrcs,
-    ...(fallback?.previewSrcs || []),
-    fallback?.previewSrc,
-  ]);
+  const thumbnailSrcs = catalogThumbnailMediaSrcs(entry);
+  const previewSrcs = catalogPreviewMediaSrcs(entry);
   const thumbnailSrc = thumbnailSrcs[0];
   const previewSrc = previewSrcs[0];
   const playerBounds = platformPlayerBounds(entry);
@@ -531,22 +514,8 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
 	        if (!levelID) return byID;
 	        const fallbackLevel = fallback?.levels?.find((level) => level.id === levelID || level.id === lvl.id);
 	        const levelDifficulties = platformLevelSupportedDifficulties(lvl);
-	        const platformThumbnailSrcs = uniquePreviewSources([
-	          catalogDirectAssetSrc(lvl.catalog_thumbnail_small_url),
-	          catalogDirectAssetSrc(lvl.catalog_thumbnail_url),
-	          catalogDirectAssetSrc(lvl.catalog_preview_url),
-	          fallbackLevel?.thumbnailSrc,
-	          ...(fallbackLevel?.thumbnailSrcs || []),
-	          fallbackLevel?.previewSrc,
-	        ]);
-	        const platformPreviewSrcs = uniquePreviewSources([
-	          catalogDirectAssetSrc(lvl.catalog_preview_url),
-	          catalogDirectAssetSrc(lvl.catalog_thumbnail_small_url),
-	          catalogDirectAssetSrc(lvl.catalog_thumbnail_url),
-	          ...platformThumbnailSrcs,
-	          fallbackLevel?.previewSrc,
-	          ...(fallbackLevel?.previewSrcs || []),
-	        ]);
+	        const platformThumbnailSrcs = catalogThumbnailMediaSrcs(lvl);
+	        const platformPreviewSrcs = catalogPreviewMediaSrcs(lvl);
 	        const hasLevelMedia = platformPreviewSrcs.length > 0 || platformThumbnailSrcs.length > 0;
 	        const existing = byID.get(levelID);
 	        byID.set(levelID, {
@@ -4592,10 +4561,11 @@ function Preview({
   const promotedToAnimation = Boolean(promoteAnimation && posterReady && !richCandidate && anim);
   const mediaSrc = promotedToAnimation ? undefined : promotedSrc || posterSrc;
   const logoMedia = isMotionLevelsLogoSrc(mediaSrc);
-  const mediaFailed = mediaWasConfigured && !mediaSrc;
-  const showAnimation = Boolean(!mediaFailed && (promotedToAnimation || !mediaSrc) && anim);
+  const mediaUnavailable = mediaWasConfigured && !mediaSrc;
+  const showAnimation = Boolean((promotedToAnimation || !mediaSrc) && anim);
+  const showLogoFallback = !mediaSrc && !showAnimation;
   return (
-    <div className={`preview ${compact ? "compact-preview" : ""} ${logoMedia || mediaFailed ? "logo-preview" : ""}`}>
+    <div className={`preview ${compact ? "compact-preview" : ""} ${logoMedia || showLogoFallback ? "logo-preview" : ""}`} data-media-unavailable={mediaUnavailable || undefined}>
       {mediaSrc ? (
         <img
           className={`preview-media ${logoMedia ? "logo-preview-media" : ""}`}

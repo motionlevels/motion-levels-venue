@@ -286,21 +286,14 @@ describe("catalog metadata sync", () => {
       previewsSource.indexOf("function catalogPreviewMediaSrcs("),
     );
     const levelThumbnailSources = appSource.slice(
-      appSource.indexOf("const platformThumbnailSrcs = uniquePreviewSources(["),
-      appSource.indexOf("const platformPreviewSrcs = uniquePreviewSources(["),
+      appSource.indexOf("const platformThumbnailSrcs = catalogThumbnailMediaSrcs(lvl);"),
+      appSource.indexOf("const hasLevelMedia = platformPreviewSrcs.length > 0 || platformThumbnailSrcs.length > 0;"),
     );
 
-    assert.match(appSource, /catalogDirectAssetSrc\(lvl\.catalog_thumbnail_small_url\)/);
-    assert.match(appSource, /catalogDirectAssetSrc\(lvl\.catalog_thumbnail_url\)/);
-    assert.match(appSource, /catalogDirectAssetSrc\(lvl\.catalog_preview_url\)/);
-    assert.ok(
-      cardThumbnailSources.indexOf("entry.catalog_thumbnail_small_url") < cardThumbnailSources.indexOf("entry.catalog_preview_url"),
-      "game cards should prefer the generated still thumbnail over the animated preview",
-    );
-    assert.ok(
-      levelThumbnailSources.indexOf("lvl.catalog_thumbnail_small_url") < levelThumbnailSources.indexOf("lvl.catalog_preview_url"),
-      "level cards should prefer the generated still thumbnail over the animated preview",
-    );
+    assert.match(appSource, /const platformThumbnailSrcs = catalogThumbnailMediaSrcs\(lvl\);/);
+    assert.match(appSource, /const platformPreviewSrcs = catalogPreviewMediaSrcs\(lvl\);/);
+    assert.match(cardThumbnailSources, /entry\.catalog_thumbnail_small_url \|\| entry\.catalog_thumbnail_url \|\| entry\.catalog_preview_url/);
+    assert.match(levelThumbnailSources, /catalogThumbnailMediaSrcs\(lvl\)/);
     assert.match(appSource, /ml-player-menu-platform-catalog-v3/);
     assert.doesNotMatch(appSource, /hasLegacyPreviewMediaURL/);
     assert.doesNotMatch(appSource, /isLegacyPreviewMediaURL/);
@@ -339,9 +332,10 @@ describe("catalog metadata sync", () => {
     assert.match(helperSource, /if \(fallback\?\.previewAnimation\) return fallback\.previewAnimation;/);
     assert.doesNotMatch(helperSource, /hasPlatformMedia/);
     assert.match(appSource, /const mediaWasConfigured = sourceCandidates\.length > 0;/);
-    assert.match(appSource, /const mediaFailed = mediaWasConfigured && !mediaSrc;/);
-    assert.match(appSource, /const showAnimation = Boolean\(!mediaFailed && \(promotedToAnimation \|\| !mediaSrc\) && anim\);/);
-    assert.match(appSource, /logoMedia \|\| mediaFailed \? "logo-preview" : ""/);
+    assert.match(appSource, /const mediaUnavailable = mediaWasConfigured && !mediaSrc;/);
+    assert.match(appSource, /const showAnimation = Boolean\(\(promotedToAnimation \|\| !mediaSrc\) && anim\);/);
+    assert.match(appSource, /const showLogoFallback = !mediaSrc && !showAnimation;/);
+    assert.match(appSource, /logoMedia \|\| showLogoFallback \? "logo-preview" : ""/);
     assert.match(appSource, /showAnimation \? \(\s*<FloorPreview anim=\{anim\} orientation="landscape" \/>/);
     assert.match(appSource, /<div className="preview-logo-fallback" aria-hidden="true">[\s\S]*?<img src="\/motion-levels-icon\.webp" alt="" \/>/);
     assert.match(styleSource, /\.game-body\s*\{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) minmax\(54px, max-content\);[\s\S]*?align-items: center;/);
@@ -401,6 +395,10 @@ describe("catalog metadata sync", () => {
     assert.doesNotMatch(floorSource, /temporada1-level-/);
     assert.doesNotMatch(appSource, /const platformThumbnailSrcs = preferFallbackAnimation \? \[\] : uniquePreviewSources/);
     assert.doesNotMatch(appSource, /const platformPreviewSrcs = preferFallbackAnimation \? \[\] : uniquePreviewSources/);
+    assert.match(appSource, /const thumbnailSrcs = catalogThumbnailMediaSrcs\(entry\);/);
+    assert.match(appSource, /const previewSrcs = catalogPreviewMediaSrcs\(entry\);/);
+    assert.match(appSource, /const platformThumbnailSrcs = catalogThumbnailMediaSrcs\(lvl\);/);
+    assert.match(appSource, /const platformPreviewSrcs = catalogPreviewMediaSrcs\(lvl\);/);
     assert.match(appSource, /const preferFallbackAnimation = shouldPreferCatalogFallbackPreviewAnimation\(entry, fallback\);/);
     assert.match(appSource, /const previewAnimation = catalogPreviewAnimation\(entry, fallback, engineGame, preferFallbackAnimation\);/);
     assert.match(appSource, /const hasLevelMedia = platformPreviewSrcs\.length > 0 \|\| platformThumbnailSrcs\.length > 0;/);

@@ -9,6 +9,7 @@ import {
   gamePreviewSrcs,
   gameThumbnailSrc,
   gameThumbnailSrcs,
+  isManualCatalogAssetRef,
   isMotionLevelsLogoSrc,
   levelHasPreviewMedia,
   levelPreviewSrc,
@@ -44,6 +45,10 @@ describe("preview source utilities", () => {
     assert.equal(webpPreviewRef("foo.gif?v=2"), "foo.webp?v=2");
     assert.equal(webpPreviewRef("foo.webp#x"), "foo.webp#x");
     assert.equal(webpPreviewRef("foo.jpg"), "foo.jpg");
+    assert.equal(webpPreviewRef("/api/game-catalog/manual-assets/demo/v1/thumbnail.png?v=2"), "/api/game-catalog/manual-assets/demo/v1/thumbnail.png?v=2");
+    assert.equal(webpPreviewRef("/api/game-catalog/manual-assets/demo/v1/preview.gif#x"), "/api/game-catalog/manual-assets/demo/v1/preview.gif#x");
+    assert.equal(isManualCatalogAssetRef("/api/game-catalog/manual-assets/demo/v1/thumbnail.png"), true);
+    assert.equal(isManualCatalogAssetRef("/api/game-catalog/manual-assets/demo/v1/preview.gif"), true);
   });
 
   it("dedupes and drops empty preview sources", () => {
@@ -115,7 +120,7 @@ describe("catalog asset sources", () => {
     assert.equal(catalogDirectAssetSrc("relative/no-slash.png"), undefined);
   });
 
-  it("builds catalog media lists from entry urls and fallback card", () => {
+  it("builds catalog media lists from the platform catalog source", () => {
     const entry = {
       catalog_preview_url: "https://cdn.test/preview.png",
       catalog_thumbnail_url: "https://cdn.test/thumb.png",
@@ -124,12 +129,8 @@ describe("catalog asset sources", () => {
     const thumbs = catalogThumbnailMediaSrcs(entry, fallback);
     assert.deepEqual(thumbs, [
       "https://cdn.test/thumb.webp",
-      "https://cdn.test/preview.webp",
-      "https://cdn.test/fallback-thumb.webp",
-      "https://cdn.test/fallback-prev.webp",
     ]);
     const previews = catalogPreviewMediaSrcs(entry, fallback, thumbs);
-    assert.equal(previews[0], "https://cdn.test/preview.webp");
-    assert.ok(previews.includes("https://cdn.test/fallback-prev.webp"));
+    assert.deepEqual(previews, ["https://cdn.test/preview.webp"]);
   });
 });

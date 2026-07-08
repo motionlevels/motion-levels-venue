@@ -1,6 +1,11 @@
 import { platformBaseURL, type PlatformGameCatalogEntry } from "./api.ts";
 import type { DifficultyID, GameCard } from "./catalog.ts";
 
+type CatalogPreviewMediaFields = Pick<
+  PlatformGameCatalogEntry,
+  "catalog_preview_url" | "catalog_thumbnail_small_url" | "catalog_thumbnail_url"
+>;
+
 export function levelHasPreviewMedia(level?: NonNullable<GameCard["levels"]>[number]): boolean {
   return Boolean(level?.previewByDifficulty || level?.previewSrc || level?.previewSrcs?.length || level?.thumbnailSrc || level?.thumbnailSrcs?.length);
 }
@@ -45,7 +50,12 @@ export function isMotionLevelsLogoSrc(src: string | undefined): boolean {
   return Boolean(src && /(?:^|\/)motion-levels-icon\.(?:webp|png)(?:$|[?#])/i.test(src));
 }
 
+export function isManualCatalogAssetRef(value: string): boolean {
+  return /\/api\/game-catalog\/manual-assets\/[^/?#]+\/[^/?#]+\/(?:thumbnail\.png|preview\.gif)(?=$|[?#])/i.test(value);
+}
+
 export function webpPreviewRef(value: string): string {
+  if (isManualCatalogAssetRef(value)) return value;
   return value.replace(/^preview:/, "").replace(/\.(?:gif|png|webp)(?=($|[?#]))/i, ".webp");
 }
 
@@ -73,25 +83,14 @@ export function uniquePreviewSources(values: Array<string | undefined>): string[
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }
 
-export function catalogThumbnailMediaSrcs(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined): string[] {
+export function catalogThumbnailMediaSrcs(entry: CatalogPreviewMediaFields, _fallback?: GameCard | undefined): string[] {
   return uniquePreviewSources([
-    catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
-    catalogDirectAssetSrc(entry.catalog_thumbnail_url),
-    catalogDirectAssetSrc(entry.catalog_preview_url),
-    catalogThumbnailSrc(entry.catalog_thumbnail_ref),
-    ...(fallback?.thumbnailSrcs || []),
-    fallback?.thumbnailSrc,
-    fallback?.previewSrc,
+    catalogDirectAssetSrc(entry.catalog_thumbnail_small_url || entry.catalog_thumbnail_url || entry.catalog_preview_url),
   ]);
 }
 
-export function catalogPreviewMediaSrcs(entry: PlatformGameCatalogEntry, fallback: GameCard | undefined, thumbnailSrcs: string[]): string[] {
+export function catalogPreviewMediaSrcs(entry: CatalogPreviewMediaFields, _fallback?: GameCard | undefined, _thumbnailSrcs: string[] = []): string[] {
   return uniquePreviewSources([
-    catalogDirectAssetSrc(entry.catalog_preview_url),
-    catalogDirectAssetSrc(entry.catalog_thumbnail_small_url),
-    catalogDirectAssetSrc(entry.catalog_thumbnail_url),
-    ...thumbnailSrcs,
-    ...(fallback?.previewSrcs || []),
-    fallback?.previewSrc,
+    catalogDirectAssetSrc(entry.catalog_preview_url || entry.catalog_thumbnail_url || entry.catalog_thumbnail_small_url),
   ]);
 }
