@@ -1445,6 +1445,46 @@ def create_session_folder_link(payload: dict[str, Any], health: dict[str, Any]) 
     return share_url, link_event
 
 
+def prepare_session_start_metadata(venue_id: str, payload: dict[str, Any], health: dict[str, Any]) -> None:
+    try:
+        share_url, link_event = create_session_folder_link(payload, health)
+        alert_event = notify_session_start(payload, share_url, health)
+        updated_at = datetime.now(timezone.utc).isoformat()
+        with active_lock:
+            for session in (known_sessions.get(venue_id), active_sessions.get(venue_id)):
+                if not session:
+                    continue
+                session["videoFolderShareUrl"] = share_url
+                session["folderLink"] = link_event
+                session["alert"] = alert_event
+                session["updatedAt"] = updated_at
+    except Exception as exc:
+        record_event(
+            {
+                "label": "session-start-metadata",
+                "venueSessionId": venue_id,
+                "ok": False,
+                "error": str(exc),
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
+
+def notify_session_finish_async(payload: dict[str, Any], session: dict[str, Any] | None, reason: str | None = None) -> None:
+    try:
+        notify_session_finish(payload, session, reason)
+    except Exception as exc:
+        record_event(
+            {
+                "label": "session-end-alert",
+                "venueSessionId": payload.get("venueSessionId") or (session or {}).get("venueSessionId"),
+                "ok": False,
+                "error": str(exc),
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
+
 def run_session_segment(session: dict[str, Any], segment_index: int, duration_seconds: int) -> bool:
     payload = dict(session["payload"])
     capture_options = video_capture_options(payload)
@@ -1736,13 +1776,12 @@ class Handler(BaseHTTPRequestHandler):
         max_ends_at = datetime.fromtimestamp(time.time() + max_seconds, timezone.utc).isoformat()
         video_folder_path = session_video_folder_path(payload)
         health = hardware_health()
-        video_folder_share_url, link_event = create_session_folder_link(payload, health)
-        alert_event = notify_session_start(payload, video_folder_share_url, health)
         ready, ready_error = backend_ready()
         camera = camera_probe()
         camera_status = cached_camera_status()
         can_record = ready and effective_camera_detected(camera, camera_status)
-        known_session = remember_session(payload, video_folder_share_url, health, can_record)
+        known_session = remember_session(payload, None, health, can_record)
+        threading.Thread(target=prepare_session_start_metadata, args=(venue_id, dict(payload), dict(health)), daemon=True).start()
         if not can_record:
             self.write_json(
                 HTTPStatus.OK,
@@ -1754,9 +1793,9 @@ class Handler(BaseHTTPRequestHandler):
                     "maxSeconds": max_seconds,
                     "maxEndsAt": max_ends_at,
                     "videoFolderPath": video_folder_path,
-                    "videoFolderShareUrl": video_folder_share_url,
+                    "videoFolderShareUrl": None,
                     "hardware": health,
-                    "alert": alert_event,
+                    "alert": {"pending": True},
                     "error": ready_error or "camera not detected",
                 },
             )
@@ -1789,7 +1828,7 @@ class Handler(BaseHTTPRequestHandler):
                 "maxEndsAt": max_ends_at,
                 "startedMonotonic": time.monotonic(),
                 "videoFolderPath": video_folder_path,
-                "videoFolderShareUrl": video_folder_share_url,
+                "videoFolderShareUrl": None,
                 "health": health,
                 "knownSession": known_session,
                 "stopEvent": stop_event,
@@ -1819,10 +1858,10 @@ class Handler(BaseHTTPRequestHandler):
                 "maxSeconds": max_seconds,
                 "maxEndsAt": max_ends_at,
                 "videoFolderPath": video_folder_path,
-                "videoFolderShareUrl": video_folder_share_url,
-                "folderLink": link_event,
+                "videoFolderShareUrl": None,
+                "folderLink": {"pending": True},
                 "hardware": health,
-                "alert": alert_event,
+                "alert": {"pending": True},
             },
         )
 
@@ -1838,17 +1877,14 @@ class Handler(BaseHTTPRequestHandler):
             session = active_sessions.get(venue_id)
             known_session = known_sessions.get(venue_id)
         if not session:
-            alert_event = notify_session_finish(payload, known_session, reason)
-            self.write_json(HTTPStatus.OK, {"ok": True, "recording": False, "venueSessionId": venue_id, "alert": alert_event})
+            threading.Thread(target=notify_session_finish_async, args=(payload, known_session, reason), daemon=True).start()
+            self.write_json(HTTPStatus.OK, {"ok": True, "recording": False, "venueSessionId": venue_id, "alert": {"pending": True}})
             return
         session["stopReason"] = reason
         stop_event: threading.Event = session["stopEvent"]
         stop_event.set()
         thread: threading.Thread | None = session.get("thread")
-        if thread:
-            thread.join(timeout=5)
-        alert_event = notify_session_finish(payload, session, reason)
-        self.write_json(HTTPStatus.OK, {"ok": True, "recording": False, "venueSessionId": venue_id, "stopping": thread.is_alive() if thread else False, "alert": alert_event})
+        self.write_json(HTTPStatus.OK, {"ok": True, "recording": False, "venueSessionId": venue_id, "stopping": thread.is_alive() if thread else False, "alert": {"pending": True}})
 
     def handle_start(self) -> None:
         payload = self.read_json()
