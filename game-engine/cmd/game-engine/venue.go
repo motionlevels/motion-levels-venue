@@ -54,7 +54,7 @@ type venueOutboxEvent struct {
 	Venue venueSnapshot
 }
 
-func (r *gameRuntime) StartVenueSession(id, teamName, kioskID string, now time.Time) {
+func (r *gameRuntime) StartVenueSession(id, teamName, kioskID string, cameraRecordingEnabled bool, now time.Time) {
 	if r == nil || strings.TrimSpace(id) == "" {
 		return
 	}
@@ -63,7 +63,7 @@ func (r *gameRuntime) StartVenueSession(id, teamName, kioskID string, now time.T
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.startVenueLocked(strings.TrimSpace(id), teamName, kioskID, now, false)
+	r.startVenueLocked(strings.TrimSpace(id), teamName, kioskID, now, false, cameraRecordingEnabled)
 }
 
 func (r *gameRuntime) EndVenueSession(id, reason string, now time.Time) {
@@ -101,7 +101,7 @@ func (r *gameRuntime) RecordMenuEvent(venueID, name, kioskID string, properties 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.venueID != venueID || r.venueStatus != "active" {
-		r.startVenueLocked(venueID, "", kioskID, now, true)
+		r.startVenueLocked(venueID, "", kioskID, now, true, menuEventRecordingEnabled(properties))
 	}
 	r.venueLastActivity = now
 	r.applyVenuePropertiesLocked(properties)
@@ -125,7 +125,7 @@ func (r *gameRuntime) RecordMenuEvent(venueID, name, kioskID string, properties 
 	return nil
 }
 
-func (r *gameRuntime) startVenueLocked(id, teamName, kioskID string, now time.Time, implicit bool) {
+func (r *gameRuntime) startVenueLocked(id, teamName, kioskID string, now time.Time, implicit bool, cameraRecordingEnabled bool) {
 	teamName = strings.TrimSpace(teamName)
 	kioskID = strings.TrimSpace(kioskID)
 	if r.venueID == id && r.venueStatus == "active" {
@@ -136,6 +136,7 @@ func (r *gameRuntime) startVenueLocked(id, teamName, kioskID string, now time.Ti
 			r.venueKioskID = kioskID
 		}
 		r.venueLastActivity = now
+		r.updateVenueCameraRecordingLocked(cameraRecordingEnabled, now)
 		return
 	}
 	if r.venueID != "" && r.venueStatus == "active" {
@@ -148,6 +149,7 @@ func (r *gameRuntime) startVenueLocked(id, teamName, kioskID string, now time.Ti
 	r.venueKioskID = kioskID
 	r.venueStatus = "active"
 	r.venueEndReason = ""
+	r.venueCameraRecordingEnabled = cameraRecordingEnabled
 	r.venueStartedAt = now
 	r.venueEndedAt = time.Time{}
 	r.venueSeq = 0
@@ -164,17 +166,8 @@ func (r *gameRuntime) startVenueLocked(id, teamName, kioskID string, now time.Ti
 		"kiosk_id":  kioskID,
 		"implicit":  implicit,
 	})
-	if r.cameraRecorder != nil {
-		r.cameraRecorder.StartVenueSession(cameraVenueSessionStart{
-			VenueSessionID:      id,
-			ControllerLabel:     r.base.ControllerLabel,
-			ControllerHostname:  r.base.ControllerHostname,
-			TeamName:            teamName,
-			KioskID:             kioskID,
-			StartedUnixNanos:    now.UnixNano(),
-			PlatformSessionPath: "/session/" + id,
-			SegmentSeconds:      r.base.CameraRecorderSegmentSeconds,
-		})
+	if r.cameraRecorder != nil && cameraRecordingEnabled {
+		r.startVenueCameraRecordingLocked(now)
 	}
 	log.Printf("venue session started: id=%s implicit=%v", id, implicit)
 }
@@ -200,17 +193,68 @@ func (r *gameRuntime) endVenueLocked(id, reason string, now time.Time) {
 		}}
 	})
 	r.enqueueVenueEventLocked(now, "venue_lifecycle", "venue_ended", map[string]any{"reason": reason})
-	if r.cameraRecorder != nil {
+	if r.cameraRecorder != nil && r.venueCameraRecordingEnabled {
 		r.cameraRecorder.FinishVenueSession(cameraVenueSessionFinish{
 			VenueSessionID: r.venueID,
 			Reason:         reason,
 			EndedUnixNanos: now.UnixNano(),
 		})
 	}
+	r.venueCameraRecordingEnabled = false
 	if r.current.VenueSessionID == r.venueID && !isAmbientActivityGame(r.current.Game) {
 		r.exitActiveGameLocked("venue session ended")
 	}
 	log.Printf("venue session ended: id=%s reason=%s", r.venueID, reason)
+}
+
+func (r *gameRuntime) updateVenueCameraRecordingLocked(enabled bool, now time.Time) {
+	if r.cameraRecorder == nil || r.venueID == "" || r.venueStatus != "active" || enabled == r.venueCameraRecordingEnabled {
+		r.venueCameraRecordingEnabled = enabled
+		return
+	}
+	if enabled {
+		r.venueCameraRecordingEnabled = true
+		r.startVenueCameraRecordingLocked(now)
+		return
+	}
+	r.cameraRecorder.FinishVenueSession(cameraVenueSessionFinish{
+		VenueSessionID: r.venueID,
+		Reason:         "recording_disabled",
+		EndedUnixNanos: now.UnixNano(),
+	})
+	r.venueCameraRecordingEnabled = false
+}
+
+func (r *gameRuntime) startVenueCameraRecordingLocked(now time.Time) {
+	if r.cameraRecorder == nil || r.venueID == "" {
+		return
+	}
+	r.cameraRecorder.StartVenueSession(cameraVenueSessionStart{
+		VenueSessionID:      r.venueID,
+		ControllerLabel:     r.base.ControllerLabel,
+		ControllerHostname:  r.base.ControllerHostname,
+		TeamName:            r.venueTeamName,
+		KioskID:             r.venueKioskID,
+		StartedUnixNanos:    r.venueStartedAt.UnixNano(),
+		PlatformSessionPath: "/session/" + r.venueID,
+		SegmentSeconds:      r.base.CameraRecorderSegmentSeconds,
+	})
+}
+
+func recordingEnabledValue(value *bool) bool {
+	return value == nil || *value
+}
+
+func menuEventRecordingEnabled(properties map[string]any) bool {
+	if value, ok := properties["recording_enabled"]; ok {
+		switch typed := value.(type) {
+		case bool:
+			return typed
+		case string:
+			return strings.TrimSpace(strings.ToLower(typed)) != "false"
+		}
+	}
+	return true
 }
 
 // recordVenueLocked mirrors recordLocked but is venue-scoped: records carry an

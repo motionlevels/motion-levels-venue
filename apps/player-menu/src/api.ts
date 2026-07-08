@@ -12,6 +12,7 @@ export type SelectGameRequest = {
   gameLabel?: string;
   platformUrl?: string;
   venueSessionId?: string;
+  recordingEnabled?: boolean;
   playerCount: number;
   difficulty?: string;
   level?: string;
@@ -132,6 +133,7 @@ export type VenueSessionRequest = {
   action: "start" | "end";
   venueSessionId: string;
   teamName?: string;
+  recordingEnabled?: boolean;
   kioskId?: string;
   reason?: string;
 };

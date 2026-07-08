@@ -62,6 +62,7 @@ type MenuState = {
   sessionActive: boolean;
   sessionId: string;
   sessionStartedUnix: number;
+  recordingEnabled: boolean;
   teamName: string;
   players: Player[];
   category: CategoryID;
@@ -1115,6 +1116,7 @@ function loadMenuState(): MenuState {
         sessionActive: Boolean(saved.sessionActive),
         sessionId: isUUID(saved.sessionId) ? saved.sessionId.toLowerCase() : "",
         sessionStartedUnix: Number(saved.sessionStartedUnix) || 0,
+        recordingEnabled: saved.recordingEnabled !== false,
         teamName: cleanNameWhitespace(String(saved.teamName || ""), maxTeamNameLength),
         players: cleanedPlayers.length ? cleanedPlayers : defaultPlayers,
         category: savedGame?.category || savedCategory,
@@ -1138,6 +1140,7 @@ function loadMenuState(): MenuState {
     sessionActive: false,
     sessionId: "",
     sessionStartedUnix: 0,
+    recordingEnabled: true,
     teamName: "",
     players: defaultPlayers,
     category: "featured",
@@ -1187,6 +1190,7 @@ function isPlatformGameCatalogEntry(value: unknown): value is PlatformGameCatalo
 function menuSnapshotProperties(menu: MenuState) {
   return {
     team_name: menu.teamName.trim(),
+    recording_enabled: menu.recordingEnabled,
     players: rosterSnapshot(menu.players),
     player_count: menu.players.filter((player) => player.active).length,
   };
@@ -1509,6 +1513,7 @@ function MenuApp() {
         sessionActive: true,
         sessionId: current.sessionId || status.venueSessionId || newVenueSessionID(),
         sessionStartedUnix: current.sessionStartedUnix || status.startedUnix || Math.floor(Date.now() / 1000),
+        recordingEnabled: current.recordingEnabled !== false,
         teamName: current.teamName || status.teamName || defaultTeamName(),
       }));
     }
@@ -1906,6 +1911,7 @@ function MenuApp() {
       action: "start",
       venueSessionId: nextSessionID,
       teamName: nextTeamName,
+      recordingEnabled: true,
       kioskId: menuKioskID(),
     });
     captureMenuEvent("session_started", {
@@ -1913,6 +1919,7 @@ function MenuApp() {
       remote_reservation: Boolean(remoteRequest),
       reservation_id: remoteRequest?.reservationId,
       reserved_player_count: remoteRequest?.playerCount,
+      recording_enabled: true,
       venue_session_id: nextSessionID,
     });
     setMenu((current) => ({
@@ -1920,6 +1927,7 @@ function MenuApp() {
       sessionActive: true,
       sessionId: nextSessionID,
       sessionStartedUnix: nowUnix,
+      recordingEnabled: true,
       teamName: nextTeamName,
       players: nextPlayers,
       category: menuCategoryForGame(defaultGame, "featured"),
@@ -1972,6 +1980,7 @@ function MenuApp() {
       sessionActive: false,
       sessionId: "",
       sessionStartedUnix: 0,
+      recordingEnabled: true,
       teamName: "",
       players: defaultPlayers,
       category: menuCategoryForGame(defaultGame, "featured"),
@@ -2012,6 +2021,24 @@ function MenuApp() {
   function dismissRemoteSessionStart() {
     setRemoteSessionRequest(null);
     clearRemoteSessionURL();
+  }
+
+  function setSessionRecordingEnabled(enabled: boolean) {
+    if (enabled === menu.recordingEnabled) return;
+    captureMenuEvent("session_recording_toggled", {
+      recording_enabled: enabled,
+      venue_session_id: menu.sessionId,
+    });
+    setMenu((current) => ({ ...current, recordingEnabled: enabled }));
+    if (menu.sessionId) {
+      postVenueSession({
+        action: "start",
+        venueSessionId: menu.sessionId,
+        teamName: menu.teamName,
+        recordingEnabled: enabled,
+        kioskId: menuKioskID(),
+      });
+    }
   }
 
   function openSettings() {
@@ -2600,6 +2627,7 @@ function MenuApp() {
       narration_enabled: supportsNarration(game) ? playNarration : false,
       countdown_floor_overlay: showCountdownOverlay,
       player_count: launchRoster.length,
+      recording_enabled: nextMenu.recordingEnabled,
       venue_session_id: nextMenu.sessionId,
       ...(launchConfig ? { config_overrides: launchConfig } : {}),
     });
@@ -2621,6 +2649,7 @@ function MenuApp() {
         gameLabel: launchGame.label,
         platformUrl: platformBaseURL() || undefined,
         venueSessionId: nextMenu.sessionId,
+        recordingEnabled: nextMenu.recordingEnabled,
         playerCount: Math.max(1, launchRoster.length),
         difficulty: launchDifficulty,
         level: selectedLevelID || undefined,
@@ -3069,6 +3098,18 @@ function MenuApp() {
               Cerrar sesión
             </button>
           </section>
+
+          <button
+            className={`recording-switch ${menu.recordingEnabled ? "on" : "off"}`}
+            type="button"
+            onClick={() => setSessionRecordingEnabled(!menu.recordingEnabled)}
+            aria-pressed={menu.recordingEnabled}
+            title={menu.recordingEnabled ? "Grabación de cámara activada" : "Grabación de cámara desactivada"}
+          >
+            <span aria-hidden="true" />
+            <b>REC</b>
+            <small>{menu.recordingEnabled ? "on" : "off"}</small>
+          </button>
 
           <button className="btn primary drawer-done" type="button" onClick={() => setTeamOpen(false)}>
             <CheckIcon />

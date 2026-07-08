@@ -474,6 +474,22 @@ describe("catalog metadata sync", () => {
     assert.match(appSource, /<GameConfigDialog/);
   });
 
+  it("keeps session camera recording enabled by default with a quiet drawer toggle", () => {
+    const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
+    const apiSource = fs.readFileSync(path.resolve(__dirname, "../src/api.ts"), "utf8");
+    const stylesSource = fs.readFileSync(path.resolve(__dirname, "../src/styles.css"), "utf8");
+
+    assert.match(apiSource, /recordingEnabled\?: boolean;/);
+    assert.match(appSource, /recordingEnabled: saved\.recordingEnabled !== false/);
+    assert.match(appSource, /recordingEnabled: true/);
+    assert.match(appSource, /function setSessionRecordingEnabled\(enabled: boolean\)/);
+    assert.match(appSource, /recording_enabled: menu\.recordingEnabled/);
+    assert.match(appSource, /recordingEnabled: nextMenu\.recordingEnabled/);
+    assert.match(appSource, /className=\{`recording-switch \$\{menu\.recordingEnabled \? "on" : "off"\}`\}/);
+    assert.match(stylesSource, /\.recording-switch\s*\{/);
+    assert.match(stylesSource, /\.recording-switch\.on/);
+  });
+
   it("does not preserve unknown retired menu state keys from localStorage", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
 

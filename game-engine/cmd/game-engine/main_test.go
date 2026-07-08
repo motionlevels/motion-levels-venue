@@ -1183,7 +1183,7 @@ func TestLevelAttemptDoesNotControlCameraRecording(t *testing.T) {
 	}, nil, nil)
 	recorder := &cameraRecorderBackend{}
 	runtime.SetCameraRecorder(recorder)
-	started := time.Date(2026, 6, 4, 8, 1, 0, 0, time.UTC)
+	started := time.Now().Add(-time.Minute).UTC()
 	gameplayStarted := started.Add(3 * time.Second)
 	ended := gameplayStarted.Add(42 * time.Second)
 
@@ -2129,8 +2129,12 @@ func TestVenueSessionLifecycleAndMenuEvents(t *testing.T) {
 	if response := post("/api/select", `{"game":"authored-whack-a-mole-go","playerCount":2,"venueSessionId":"`+venueSessionID+`"}`); response.StatusCode != http.StatusOK {
 		t.Fatalf("select response = %d", response.StatusCode)
 	}
-	if got := runtime.Status().VenueSessionID; got != venueSessionID {
-		t.Fatalf("status venue session id = %q, want %q", got, venueSessionID)
+	runtime.mu.RLock()
+	gotVenueID := runtime.venueID
+	gotVenueStatus := runtime.venueStatus
+	runtime.mu.RUnlock()
+	if gotVenueID != venueSessionID || gotVenueStatus != "active" {
+		t.Fatalf("venue state = id %q status %q, want active %q", gotVenueID, gotVenueStatus, venueSessionID)
 	}
 	if got := runtime.Status().CurrentGame; got != "authored-whack-a-mole-go" {
 		t.Fatalf("current game before venue end = %q, want authored-whack-a-mole-go", got)
@@ -2218,7 +2222,7 @@ func TestVenueSessionControlsCameraRecorder(t *testing.T) {
 	ended := started.Add(45 * time.Minute)
 
 	const venueSessionID = "44444444-4444-4444-8444-444444444444"
-	runtime.StartVenueSession(venueSessionID, "Equipo Test", "55555555-5555-4555-8555-555555555555", started)
+	runtime.StartVenueSession(venueSessionID, "Equipo Test", "55555555-5555-4555-8555-555555555555", true, started)
 	runtime.EndVenueSession(venueSessionID, "manual", ended)
 
 	if len(recorder.venueStarts) != 1 {
@@ -2240,5 +2244,47 @@ func TestVenueSessionControlsCameraRecorder(t *testing.T) {
 	finish := recorder.venueFinishes[0]
 	if finish.VenueSessionID != venueSessionID || finish.Reason != "manual" || finish.EndedUnixNanos != ended.UnixNano() {
 		t.Fatalf("venue finish = %+v", finish)
+	}
+}
+
+func TestVenueSessionCanDisableCameraRecorder(t *testing.T) {
+	runtime := newGameRuntime(config{
+		Brightness:                   80,
+		PlayerCount:                  1,
+		ControllerLabel:              "Sala Test",
+		ControllerHostname:           "motionlevels-test",
+		CameraRecorderSegmentSeconds: 1200,
+	}, nil, nil)
+	recorder := &cameraRecorderBackend{}
+	runtime.SetCameraRecorder(recorder)
+	started := time.Now().Add(-time.Minute).UTC()
+
+	const venueSessionID = "44444444-4444-4444-8444-444444444444"
+	runtime.StartVenueSession(venueSessionID, "Equipo Test", "55555555-5555-4555-8555-555555555555", false, started)
+	if len(recorder.venueStarts) != 0 {
+		t.Fatalf("venue starts = %d, want 0 while recording disabled", len(recorder.venueStarts))
+	}
+	runtime.mu.RLock()
+	gotVenueID := runtime.venueID
+	gotVenueStatus := runtime.venueStatus
+	runtime.mu.RUnlock()
+	if gotVenueID != venueSessionID || gotVenueStatus != "active" {
+		t.Fatalf("venue state = %q/%q, want %q/active", gotVenueID, gotVenueStatus, venueSessionID)
+	}
+
+	runtime.StartVenueSession(venueSessionID, "Equipo Test", "55555555-5555-4555-8555-555555555555", true, started.Add(time.Minute))
+	if len(recorder.venueStarts) != 1 {
+		t.Fatalf("venue starts after enabling = %d, want 1", len(recorder.venueStarts))
+	}
+	if recorder.venueStarts[0].SegmentSeconds != 1200 {
+		t.Fatalf("segment seconds = %d, want 1200", recorder.venueStarts[0].SegmentSeconds)
+	}
+
+	runtime.StartVenueSession(venueSessionID, "Equipo Test", "55555555-5555-4555-8555-555555555555", false, started.Add(2*time.Minute))
+	if len(recorder.venueFinishes) != 1 {
+		t.Fatalf("venue finishes after disabling = %d, want 1", len(recorder.venueFinishes))
+	}
+	if recorder.venueFinishes[0].Reason != "recording_disabled" {
+		t.Fatalf("venue finish reason = %q, want recording_disabled", recorder.venueFinishes[0].Reason)
 	}
 }

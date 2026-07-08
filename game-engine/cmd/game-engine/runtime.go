@@ -58,20 +58,21 @@ type gameRuntime struct {
 	bestAttemptMillis map[string]int64
 
 	// Venue session (client visit) state; see venue.go.
-	venueID           string
-	venueTeamName     string
-	venuePlayerLabels []string
-	venuePlayerRoster []venuePlayerSnapshot
-	venueKioskID      string
-	venueStatus       string // "" | active | ended
-	venueEndReason    string
-	venueStartedAt    time.Time
-	venueEndedAt      time.Time
-	venueSeq          uint64
-	venueLastActivity time.Time
-	venueIdleTimeout  time.Duration
-	venueOutbox       []venueOutboxEvent
-	venueDropped      uint64
+	venueID                     string
+	venueTeamName               string
+	venuePlayerLabels           []string
+	venuePlayerRoster           []venuePlayerSnapshot
+	venueKioskID                string
+	venueStatus                 string // "" | active | ended
+	venueEndReason              string
+	venueCameraRecordingEnabled bool
+	venueStartedAt              time.Time
+	venueEndedAt                time.Time
+	venueSeq                    uint64
+	venueLastActivity           time.Time
+	venueIdleTimeout            time.Duration
+	venueOutbox                 []venueOutboxEvent
+	venueDropped                uint64
 
 	menuStateSnapshot menuStateSnapshot
 	menuStateVersion  uint64
@@ -335,10 +336,10 @@ func (r *gameRuntime) SelectGameWithDifficulty(game string, players int, difficu
 }
 
 func (r *gameRuntime) SelectGameWithOptions(game string, players int, difficulty string, narrationEnabled *bool) {
-	r.SelectGameWithMetadata(game, "", players, difficulty, "", "", 0, 0, 0, narrationEnabled, false, "", "", "", nil, nil)
+	r.SelectGameWithMetadata(game, "", players, difficulty, "", "", 0, 0, 0, narrationEnabled, false, "", "", true, "", nil, nil)
 }
 
-func (r *gameRuntime) SelectGameWithMetadata(game string, gameLabel string, players int, difficulty string, level string, levelMode string, durationSeconds int, challengeElapsedMillis int64, challengeAttemptCount int, narrationEnabled *bool, countdownFloorOverlay bool, teamName string, venueSessionID string, platformURL string, roster []playerConfig, gameConfig map[string]json.RawMessage) {
+func (r *gameRuntime) SelectGameWithMetadata(game string, gameLabel string, players int, difficulty string, level string, levelMode string, durationSeconds int, challengeElapsedMillis int64, challengeAttemptCount int, narrationEnabled *bool, countdownFloorOverlay bool, teamName string, venueSessionID string, cameraRecordingEnabled bool, platformURL string, roster []playerConfig, gameConfig map[string]json.RawMessage) {
 	if r == nil {
 		return
 	}
@@ -382,7 +383,7 @@ func (r *gameRuntime) SelectGameWithMetadata(game string, gameLabel string, play
 	now := time.Now()
 	if cfg.VenueSessionID != "" {
 		// Adopt the menu's venue session if the engine restarted mid-visit.
-		r.startVenueLocked(cfg.VenueSessionID, cfg.TeamName, "", now, true)
+		r.startVenueLocked(cfg.VenueSessionID, cfg.TeamName, "", now, true, cameraRecordingEnabled)
 		r.venueLastActivity = now
 	}
 	r.applyLockedWithNarrationPrepared(cfg, true, mode, preparedIntroHold)

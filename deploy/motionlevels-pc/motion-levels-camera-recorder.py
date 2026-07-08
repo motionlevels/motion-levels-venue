@@ -1466,6 +1466,17 @@ def run_session_segment(session: dict[str, Any], segment_index: int, duration_se
         "level": f"segment-{segment_index:04d}",
     }
     started_at = now.isoformat()
+    expected_stop_at = datetime.fromtimestamp(now.timestamp() + duration_seconds, timezone.utc).isoformat()
+    with active_lock:
+        active = active_sessions.get(venue_id)
+        if active is session:
+            active["segmentIndex"] = segment_index
+            active["currentSegmentIndex"] = segment_index
+            active["currentSegmentSeconds"] = duration_seconds
+            active["currentSegmentStartedAt"] = started_at
+            active["currentSegmentExpectedStopAt"] = expected_stop_at
+            active["recordingState"] = "recording-segment"
+            active["updatedAt"] = started_at
     recording = {
         "attemptId": attempt_id,
         "captureId": attempt_id,
@@ -1549,6 +1560,20 @@ def run_session_segment(session: dict[str, Any], segment_index: int, duration_se
     metadata["stoppedAt"] = stopped_at
     metadata["mediaReady"] = media_ready
     write_json(paths["metadata"], metadata)
+    with active_lock:
+        active = active_sessions.get(venue_id)
+        if active is session:
+            active["lastSegmentIndex"] = segment_index
+            active["lastSegmentOk"] = media_ready and metadata["state"] == "finished"
+            active["lastSegmentState"] = metadata["state"]
+            active["lastSegmentBytes"] = metadata["byteSize"]
+            active["lastSegmentStoppedAt"] = stopped_at
+            active["currentSegmentIndex"] = None
+            active["currentSegmentSeconds"] = None
+            active["currentSegmentStartedAt"] = None
+            active["currentSegmentExpectedStopAt"] = None
+            active["recordingState"] = "uploading" if RCLONE_DEST and media_ready and metadata["state"] == "finished" else metadata["state"]
+            active["updatedAt"] = stopped_at
     if RCLONE_DEST and media_ready and metadata["state"] == "finished":
         threading.Thread(target=upload_recording, args=(recording, paths["media"], paths["metadata"]), daemon=True).start()
     return media_ready and metadata["state"] == "finished"
@@ -1769,7 +1794,16 @@ class Handler(BaseHTTPRequestHandler):
                 "knownSession": known_session,
                 "stopEvent": stop_event,
                 "segmentIndex": 0,
+                "recordingState": "starting",
                 "lastSegmentOk": None,
+                "lastSegmentState": None,
+                "lastSegmentBytes": None,
+                "lastSegmentStoppedAt": None,
+                "currentSegmentIndex": None,
+                "currentSegmentSeconds": None,
+                "currentSegmentStartedAt": None,
+                "currentSegmentExpectedStopAt": None,
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
             }
             thread = threading.Thread(target=run_session_loop, args=(venue_id,), daemon=True)
             session["thread"] = thread
