@@ -79,15 +79,21 @@ func TestNativePingPongV2ReadinessPlayfieldAndAutoReset(t *testing.T) {
 	}
 
 	bothHalvesTime := start.Add(200 * time.Millisecond)
-	events := game.Press(pressEvent(0, GridHeight-5, true), bothHalvesTime)
+	if events := game.Press(pressEvent(0, 4, false), bothHalvesTime); len(events) != 0 {
+		t.Fatalf("first half release events = %+v, want none", events)
+	}
+	events := game.Press(pressEvent(0, GridHeight-5, true), bothHalvesTime.Add(500*time.Millisecond))
 	if len(events) != 1 || events[0].Cue != "start" {
 		t.Fatalf("second half press events = %+v, want start cue", events)
 	}
-	if snapshot := game.Snapshot(bothHalvesTime.Add(time.Second)); snapshot.Phase != "starting" || snapshot.CountdownMillis == 0 {
+	if events := game.Press(pressEvent(0, GridHeight-5, false), bothHalvesTime.Add(600*time.Millisecond)); len(events) != 0 {
+		t.Fatalf("second half release events = %+v, want none after start animation begins", events)
+	}
+	if snapshot := game.Snapshot(bothHalvesTime.Add(1100 * time.Millisecond)); snapshot.Phase != "starting" || snapshot.CountdownMillis == 0 {
 		t.Fatalf("ready animation snapshot = %+v, want starting countdown", snapshot)
 	}
 
-	runningAt := bothHalvesTime.Add(2200 * time.Millisecond)
+	runningAt := bothHalvesTime.Add(2800 * time.Millisecond)
 	snapshot := game.Snapshot(runningAt)
 	if snapshot.Phase != "running" || snapshot.Players[0].Lives != 1 || snapshot.Players[1].Lives != 1 {
 		t.Fatalf("running snapshot = %+v, want one-point game running", snapshot)

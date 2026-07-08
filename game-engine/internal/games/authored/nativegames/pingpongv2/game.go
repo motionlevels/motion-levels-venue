@@ -10,6 +10,7 @@ const (
 	blueColor             = "#145cff"
 	defaultWinningScore   = 5
 	readyAnimationNS      = int64(2000000000)
+	startGraceNS          = int64(1000000000)
 	postPointPauseNS      = int64(900000000)
 	winAnimationNS        = int64(3000000000)
 	paddleYRed            = 2
@@ -25,6 +26,16 @@ const (
 	minIntervalHard       = int64(42000000)
 	speedStepNS           = int64(4500000)
 )
+
+type rgb struct {
+	r int
+	g int
+	b int
+}
+
+var redRGB = rgb{255, 28, 40}
+var blueRGB = rgb{20, 92, 255}
+var whiteRGB = rgb{255, 255, 255}
 
 var players []motiongo.Player
 var winningScore int
@@ -47,6 +58,7 @@ var ballDY int
 var teamScore [2]int
 var tileHeld [motiongo.Width * motiongo.Height]bool
 var halfHeld [2]int
+var halfGraceUntil [2]int64
 var rounds []motiongo.RoundSnapshot
 var lastRoundHits int
 var lastRoundWinner string
@@ -90,7 +102,7 @@ func gameInit(ptr uint32, length uint32) uint64 {
 func gamePress(ptr uint32, length uint32) uint64 {
 	var req motiongo.PressRequest
 	_ = motiongo.Decode(ptr, length, &req)
-	updateOccupancy(req.X, req.Y, req.Pressed)
+	updateOccupancy(req.X, req.Y, req.Pressed, req.NowUnixNS)
 	if req.Pressed {
 		movePaddle(req.X, req.Y)
 	}
@@ -189,7 +201,7 @@ func gameSnapshot(ptr uint32, length uint32) uint64 {
 		ElapsedMillis:   (req.NowUnixNS - startedNS) / 1000000,
 		RemainingMillis: remaining,
 		CountdownMillis: countdown,
-		ActiveTargets:   activeHalves(),
+		ActiveTargets:   activeHalves(req.NowUnixNS),
 		Success:         success,
 		MatchTarget:     winningScore,
 		RoundHits:       hitCount,
@@ -209,6 +221,8 @@ func resetGame(nowNS int64) {
 	}
 	halfHeld[0] = 0
 	halfHeld[1] = 0
+	halfGraceUntil[0] = 0
+	halfGraceUntil[1] = 0
 	teamScore[0] = 0
 	teamScore[1] = 0
 	rounds = nil
@@ -236,19 +250,13 @@ func updatePhase(nowNS int64) []motiongo.Event {
 		}
 		return events
 	}
-	if phase == "waiting" && halvesReady() {
+	if phase == "waiting" && halvesReady(nowNS) {
 		phase = "starting"
 		readyNS = nowNS + readyAnimationNS
 		lastMessage = "Rojo y azul listos."
 		return append(events, motiongo.Event{Cue: "start", Message: "Rojo y azul listos."})
 	}
 	if phase == "starting" {
-		if !halvesReady() {
-			phase = "waiting"
-			readyNS = 0
-			lastMessage = "Falta un jugador."
-			return append(events, motiongo.Event{Cue: "ready", Message: "Falta un jugador."})
-		}
 		if nowNS >= readyNS {
 			phase = "running"
 			startedNS = nowNS
@@ -260,7 +268,7 @@ func updatePhase(nowNS int64) []motiongo.Event {
 	return events
 }
 
-func updateOccupancy(x int, y int, pressed bool) {
+func updateOccupancy(x int, y int, pressed bool, nowNS int64) {
 	if x < 0 || x >= motiongo.Width || y < 0 || y >= motiongo.Height {
 		return
 	}
@@ -272,8 +280,12 @@ func updateOccupancy(x int, y int, pressed bool) {
 	half := halfForY(y)
 	if pressed {
 		halfHeld[half]++
+		halfGraceUntil[half] = nowNS + startGraceNS
 	} else if halfHeld[half] > 0 {
 		halfHeld[half]--
+		if halfHeld[half] == 0 {
+			halfGraceUntil[half] = nowNS + startGraceNS
+		}
 	}
 }
 
@@ -412,17 +424,17 @@ func accelerate() {
 
 func drawWaiting(frame *motiongo.Frame, nowNS int64) {
 	pulse := int((nowNS / 180000000) % 4)
-	redReady := halfHeld[0] > 0
-	blueReady := halfHeld[1] > 0
-	drawHalf(frame, 0, colorWhenReady(0, redReady, pulse))
-	drawHalf(frame, 1, colorWhenReady(1, blueReady, pulse))
+	redReady := halfReady(0, nowNS)
+	blueReady := halfReady(1, nowNS)
+	drawWaitingHalf(frame, 0, redReady, nowNS)
+	drawWaitingHalf(frame, 1, blueReady, nowNS)
 	if redReady {
-		frame.FillRect(4, 5, 8, 3, motiongo.Color(redColor))
+		drawSoftBar(frame, 3, 5, 10, redRGB, nowNS)
 	} else {
 		drawOutline(frame, 2+pulse, 4+pulse, motiongo.Width-4-pulse*2, 6, motiongo.Color(redColor))
 	}
 	if blueReady {
-		frame.FillRect(4, 24, 8, 3, motiongo.Color(blueColor))
+		drawSoftBar(frame, 3, 24, 10, blueRGB, nowNS)
 	} else {
 		drawOutline(frame, 2+pulse, 22-pulse, motiongo.Width-4-pulse*2, 6, motiongo.Color(blueColor))
 	}
@@ -440,32 +452,40 @@ func drawReady(frame *motiongo.Frame, nowNS int64) {
 	if radius > motiongo.Width/2 {
 		radius = motiongo.Width / 2
 	}
+	wave := int(elapsed / 90000000)
 	for y := 0; y < motiongo.Height; y++ {
 		for x := 0; x < motiongo.Width; x++ {
 			dx := abs(x - serveX)
 			dy := abs(y - serveY)
-			if dx+dy <= radius+1 {
-				if y < motiongo.Height/2 {
-					frame.Set(x, y, motiongo.Color(redColor))
-				} else {
-					frame.Set(x, y, motiongo.Color(blueColor))
-				}
+			dist := dx + dy
+			base := redRGB
+			if y >= motiongo.Height/2 {
+				base = blueRGB
+			}
+			if dist <= radius+1 {
+				level := 35 + (radius-dist+1)*18
+				frame.Set(x, y, rgbColor(addRGB(scaleRGB(base, level), scaleRGB(whiteRGB, maxInt(0, 22-dist*3)))))
+			} else if (dist+wave)%7 == 0 {
+				frame.Set(x, y, rgbColor(scaleRGB(base, 24)))
 			}
 		}
 	}
-	frame.FillRect(serveX, serveY, 1, 1, motiongo.White)
+	frame.Set(serveX, serveY, rgbColor(whiteRGB))
 }
 
 func drawScoreFlash(frame *motiongo.Frame, nowNS int64) {
-	color := motiongo.Color(redColor)
+	base := redRGB
 	if scorer == 1 {
-		color = motiongo.Color(blueColor)
+		base = blueRGB
 	}
 	wave := int(((pauseUntilNS - nowNS) / 90000000) % 5)
 	for y := 0; y < motiongo.Height; y++ {
 		for x := 0; x < motiongo.Width; x++ {
+			dist := abs(y - serveY)
 			if (x+y+wave)%5 == 0 {
-				frame.Set(x, y, color)
+				frame.Set(x, y, rgbColor(addRGB(scaleRGB(base, 38+dist*3), scaleRGB(whiteRGB, maxInt(0, 18-dist)))))
+			} else if dist < 4 {
+				frame.Set(x, y, rgbColor(scaleRGB(base, 14)))
 			}
 		}
 	}
@@ -473,19 +493,25 @@ func drawScoreFlash(frame *motiongo.Frame, nowNS int64) {
 }
 
 func drawWin(frame *motiongo.Frame, nowNS int64) {
-	color := motiongo.Color(redColor)
+	base := redRGB
 	if winner == 1 {
-		color = motiongo.Color(blueColor)
+		base = blueRGB
 	}
-	phaseStep := int((nowNS / 120000000) % 6)
+	phaseStep := int((nowNS / 90000000) % 16)
 	for y := 0; y < motiongo.Height; y++ {
 		for x := 0; x < motiongo.Width; x++ {
-			if (x+y+phaseStep)%6 < 3 {
-				frame.Set(x, y, color)
+			dist := abs(x-serveX) + abs(y-serveY)
+			band := (dist + phaseStep) % 12
+			if band < 5 {
+				level := 28 + (5-band)*16
+				frame.Set(x, y, rgbColor(addRGB(scaleRGB(base, level), scaleRGB(whiteRGB, maxInt(0, 26-band*4)))))
+			} else if (x+y+phaseStep)%9 == 0 {
+				frame.Set(x, y, rgbColor(scaleRGB(base, 34)))
 			}
 		}
 	}
-	frame.FillRect(serveX-1, serveY-1, 3, 3, motiongo.White)
+	frame.FillRect(serveX-1, serveY-1, 3, 3, rgbColor(scaleRGB(whiteRGB, 85)))
+	frame.Set(serveX, serveY, motiongo.White)
 }
 
 func drawScore(frame *motiongo.Frame) {
@@ -498,21 +524,53 @@ func drawScore(frame *motiongo.Frame) {
 }
 
 func drawPaddles(frame *motiongo.Frame) {
-	frame.FillRect(redPaddleX, paddleYRed, paddleWidth, 1, motiongo.Color(redColor))
-	frame.FillRect(bluePaddleX, paddleYBlue, paddleWidth, 1, motiongo.Color(blueColor))
+	drawPaddle(frame, redPaddleX, paddleYRed, redRGB)
+	drawPaddle(frame, bluePaddleX, paddleYBlue, blueRGB)
 }
 
-func drawHalf(frame *motiongo.Frame, half int, color motiongo.Color) {
+func drawWaitingHalf(frame *motiongo.Frame, half int, ready bool, nowNS int64) {
 	startY := 0
+	base := redRGB
 	if half == 1 {
 		startY = motiongo.Height / 2
+		base = blueRGB
 	}
+	pulse := int((nowNS / 120000000) % 10)
 	for y := startY; y < startY+motiongo.Height/2; y++ {
 		for x := 0; x < motiongo.Width; x++ {
-			if (x+y)%4 == 0 {
-				frame.Set(x, y, color)
+			level := 0
+			if ready {
+				level = 18 + ((x+y+pulse)%6)*6
+			} else if (x+y+pulse)%7 == 0 {
+				level = 22
+			}
+			if level > 0 {
+				frame.Set(x, y, rgbColor(scaleRGB(base, level)))
 			}
 		}
+	}
+}
+
+func drawSoftBar(frame *motiongo.Frame, x int, y int, width int, base rgb, nowNS int64) {
+	pulse := int((nowNS / 100000000) % 6)
+	for xx := 0; xx < width; xx++ {
+		level := 58 + xx*4
+		if xx == pulse || xx == width-1-pulse {
+			level = 112
+		}
+		frame.Set(x+xx, y, rgbColor(scaleRGB(base, level)))
+		frame.Set(x+xx, y+1, rgbColor(addRGB(scaleRGB(base, level-8), scaleRGB(whiteRGB, 10))))
+		frame.Set(x+xx, y+2, rgbColor(scaleRGB(base, maxInt(18, level-28))))
+	}
+}
+
+func drawPaddle(frame *motiongo.Frame, x int, y int, base rgb) {
+	for offset := 0; offset < paddleWidth; offset++ {
+		level := 74
+		if offset == paddleWidth/2 {
+			level = 118
+		}
+		frame.Set(x+offset, y, rgbColor(addRGB(scaleRGB(base, level), scaleRGB(whiteRGB, 18))))
 	}
 }
 
@@ -539,16 +597,20 @@ func colorWhenReady(team int, ready bool, pulse int) motiongo.Color {
 	return motiongo.Black
 }
 
-func halvesReady() bool {
-	return halfHeld[0] > 0 && halfHeld[1] > 0
+func halvesReady(nowNS int64) bool {
+	return halfReady(0, nowNS) && halfReady(1, nowNS)
 }
 
-func activeHalves() int {
+func halfReady(half int, nowNS int64) bool {
+	return halfHeld[half] > 0 || (halfGraceUntil[half] > 0 && nowNS <= halfGraceUntil[half])
+}
+
+func activeHalves(nowNS int64) int {
 	out := 0
-	if halfHeld[0] > 0 {
+	if halfReady(0, nowNS) {
 		out++
 	}
-	if halfHeld[1] > 0 {
+	if halfReady(1, nowNS) {
 		out++
 	}
 	return out
@@ -587,6 +649,39 @@ func abs(value int) int {
 		return -value
 	}
 	return value
+}
+
+func rgbColor(color rgb) motiongo.Color {
+	return motiongo.Color("#" + hexByte(color.r) + hexByte(color.g) + hexByte(color.b))
+}
+
+func scaleRGB(color rgb, percent int) rgb {
+	return rgb{
+		r: clamp(color.r*percent/100, 0, 255),
+		g: clamp(color.g*percent/100, 0, 255),
+		b: clamp(color.b*percent/100, 0, 255),
+	}
+}
+
+func addRGB(left rgb, right rgb) rgb {
+	return rgb{
+		r: clamp(left.r+right.r, 0, 255),
+		g: clamp(left.g+right.g, 0, 255),
+		b: clamp(left.b+right.b, 0, 255),
+	}
+}
+
+func hexByte(value int) string {
+	digits := "0123456789abcdef"
+	value = clamp(value, 0, 255)
+	return string([]byte{digits[value/16], digits[value%16]})
+}
+
+func maxInt(left int, right int) int {
+	if left > right {
+		return left
+	}
+	return right
 }
 
 func clamp(v int, lo int, hi int) int {
