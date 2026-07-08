@@ -445,7 +445,7 @@
         mode: "0644"
       loop:
         - key: MOTION_LEVELS_CAMERA_RECORDER_URL
-          value: http://127.0.0.1:8030
+          value: "{{ motion_levels_camera_recorder_url | default(lookup('env', 'MOTION_LEVELS_CAMERA_RECORDER_URL') | default('http://127.0.0.1:8030', true), true) }}"
         - key: MOTION_LEVELS_CAMERA_RECORDER_TIMEOUT
           value: 20s
         - key: MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS
