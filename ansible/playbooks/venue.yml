@@ -446,6 +446,8 @@
       loop:
         - key: MOTION_LEVELS_CAMERA_RECORDER_URL
           value: "{{ motion_levels_camera_recorder_url | default(lookup('env', 'MOTION_LEVELS_CAMERA_RECORDER_URL') | default('http://127.0.0.1:8030', true), true) }}"
+        - key: MOTION_LEVELS_CAMERA_RECORDER_PROXY_TARGET
+          value: "{{ (motion_levels_camera_recorder_url | default(lookup('env', 'MOTION_LEVELS_CAMERA_RECORDER_URL') | default('http://127.0.0.1:8030', true), true)) | regex_replace('^https?://', '') | regex_replace('/+$', '') }}"
         - key: MOTION_LEVELS_CAMERA_RECORDER_TIMEOUT
           value: 20s
         - key: MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS
@@ -549,6 +551,34 @@
         mode: "0644"
         remote_src: true
       notify: Restart caddy
+      when: motion_levels_deploy_mode in motion_levels_frontend_modes
+
+    - name: Ensure Caddy systemd override directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/caddy.service.d
+        state: directory
+        mode: "0755"
+      when: motion_levels_deploy_mode in motion_levels_frontend_modes
+
+    - name: Configure Caddy Motion Levels environment
+      ansible.builtin.copy:
+        dest: /etc/motion-levels/caddy.env
+        mode: "0644"
+        content: |
+          MOTION_LEVELS_CAMERA_RECORDER_PROXY_TARGET={{ (motion_levels_camera_recorder_url | default(lookup('env', 'MOTION_LEVELS_CAMERA_RECORDER_URL') | default('http://127.0.0.1:8030', true), true)) | regex_replace('^https?://', '') | regex_replace('/+$', '') }}
+      notify: Restart caddy
+      when: motion_levels_deploy_mode in motion_levels_frontend_modes
+
+    - name: Install Caddy Motion Levels systemd override
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/caddy.service.d/motion-levels-env.conf
+        mode: "0644"
+        content: |
+          [Service]
+          EnvironmentFile=-/etc/motion-levels/caddy.env
+      notify:
+        - Reload systemd
+        - Restart caddy
       when: motion_levels_deploy_mode in motion_levels_frontend_modes
 
     - name: Install kiosk player script

@@ -67,7 +67,7 @@
 	}
 	handle @camera_recorder_tailscale {
 		uri strip_prefix /camera-recorder
-		reverse_proxy 127.0.0.1:8030
+		reverse_proxy {$MOTION_LEVELS_CAMERA_RECORDER_PROXY_TARGET:127.0.0.1:8030}
 	}
 	handle /camera-recorder/* {
 		respond "Not found" 404

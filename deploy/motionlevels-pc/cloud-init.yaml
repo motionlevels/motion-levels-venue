@@ -425,6 +425,7 @@ write_files:
       MOTION_LEVELS_DISPLAY_SNAPSHOT_FPS=4
       MOTION_LEVELS_REPLAY_MAX_LOCAL_BYTES=536870912
       MOTION_LEVELS_CAMERA_RECORDER_URL=http://127.0.0.1:8030
+      MOTION_LEVELS_CAMERA_RECORDER_PROXY_TARGET=127.0.0.1:8030
       MOTION_LEVELS_CAMERA_RECORDER_TIMEOUT=20s
       MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS=1200
       MOTION_LEVELS_CAMERA_RECORDER_BACKEND=fake
@@ -476,6 +477,19 @@ write_files:
       MOTION_LEVELS_CAMERA_FPS=2
       MOTION_LEVELS_CAMERA_JPEG_QUALITY=55
       MOTION_LEVELS_CAMERA_IDLE_SECONDS=20
+
+  - path: /etc/motion-levels/caddy.env
+    owner: root:root
+    permissions: '0644'
+    content: |
+      MOTION_LEVELS_CAMERA_RECORDER_PROXY_TARGET=127.0.0.1:8030
+
+  - path: /etc/systemd/system/caddy.service.d/motion-levels-env.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Service]
+      EnvironmentFile=-/etc/motion-levels/caddy.env
 
   # 3. Default Caddy reverse proxy config
   - path: /etc/caddy/Caddyfile
@@ -551,7 +565,7 @@ write_files:
         }
         handle @camera_recorder_tailscale {
           uri strip_prefix /camera-recorder
-          reverse_proxy 127.0.0.1:8030
+          reverse_proxy {$MOTION_LEVELS_CAMERA_RECORDER_PROXY_TARGET:127.0.0.1:8030}
         }
         handle /camera-recorder/* {
           respond "Not found" 404
