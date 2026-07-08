@@ -166,6 +166,13 @@ type PlayerSnapshot struct {
 	Lives int    `json:"lives,omitempty"`
 }
 
+type RoundSnapshot struct {
+	Index       int    `json:"index"`
+	WinnerIndex int    `json:"winner_index"`
+	WinnerLabel string `json:"winner_label"`
+	Hits        int    `json:"hits"`
+}
+
 type Snapshot struct {
 	Phase           string           `json:"phase"`
 	Score           int              `json:"score"`
@@ -178,6 +185,11 @@ type Snapshot struct {
 	Lives           int              `json:"lives,omitempty"`
 	Success         bool             `json:"success"`
 	Players         []PlayerSnapshot `json:"players"`
+	MatchTarget     int              `json:"match_target,omitempty"`
+	RoundHits       int              `json:"round_hits,omitempty"`
+	LastRoundHits   int              `json:"last_round_hits,omitempty"`
+	LastRoundWinner string           `json:"last_round_winner,omitempty"`
+	Rounds          []RoundSnapshot  `json:"rounds,omitempty"`
 }
 
 func NewFrame(fill Color) Frame {

@@ -136,6 +136,13 @@ export type EngineStatus = {
 
 export type DisplayPlayer = EnginePlayer;
 
+export type DisplayRound = {
+  index: number;
+  winnerIndex: number;
+  winnerLabel: string;
+  hits: number;
+};
+
 export type DisplayStatus = {
   currentGame: string;
   label: string;
@@ -161,6 +168,11 @@ export type DisplayStatus = {
   introRemainingMillis: number;
   countdownRemainingMillis: number;
   activeTargets: number;
+  matchTarget?: number;
+  roundHits?: number;
+  lastRoundHits?: number;
+  lastRoundWinner?: string;
+  rounds?: DisplayRound[];
   audioEnabled: boolean;
   audioMuted: boolean;
   lastEventUnixNanos: number;

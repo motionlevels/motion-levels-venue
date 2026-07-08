@@ -47,6 +47,9 @@ var ballDY int
 var teamScore [2]int
 var tileHeld [motiongo.Width * motiongo.Height]bool
 var halfHeld [2]int
+var rounds []motiongo.RoundSnapshot
+var lastRoundHits int
+var lastRoundWinner string
 var phase string
 var success bool
 var scorer int
@@ -188,6 +191,11 @@ func gameSnapshot(ptr uint32, length uint32) uint64 {
 		CountdownMillis: countdown,
 		ActiveTargets:   activeHalves(),
 		Success:         success,
+		MatchTarget:     winningScore,
+		RoundHits:       hitCount,
+		LastRoundHits:   lastRoundHits,
+		LastRoundWinner: lastRoundWinner,
+		Rounds:          rounds,
 		Players: []motiongo.PlayerSnapshot{
 			{Index: 0, Label: labelForTeam(0), Color: redColor, Score: teamScore[0], Lives: winningScore - teamScore[0]},
 			{Index: 1, Label: labelForTeam(1), Color: blueColor, Score: teamScore[1], Lives: winningScore - teamScore[1]},
@@ -203,6 +211,9 @@ func resetGame(nowNS int64) {
 	halfHeld[1] = 0
 	teamScore[0] = 0
 	teamScore[1] = 0
+	rounds = nil
+	lastRoundHits = 0
+	lastRoundWinner = ""
 	redPaddleX = (motiongo.Width - paddleWidth) / 2
 	bluePaddleX = redPaddleX
 	phase = "waiting"
@@ -319,6 +330,7 @@ func moveBall(nowNS int64) motiongo.Event {
 func scorePoint(team int, nowNS int64) {
 	teamScore[team]++
 	scorer = team
+	recordRound(team)
 	if teamScore[team] >= winningScore {
 		phase = "finished"
 		success = team == 1
@@ -335,6 +347,17 @@ func scorePoint(team int, nowNS int64) {
 	pauseUntilNS = nowNS + postPointPauseNS
 	lastStepNS = pauseUntilNS
 	lastMessage = "Nuevo saque."
+}
+
+func recordRound(team int) {
+	lastRoundHits = hitCount
+	lastRoundWinner = labelForTeam(team)
+	rounds = append(rounds, motiongo.RoundSnapshot{
+		Index:       len(rounds) + 1,
+		WinnerIndex: team,
+		WinnerLabel: lastRoundWinner,
+		Hits:        lastRoundHits,
+	})
 }
 
 func resetBall() {

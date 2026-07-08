@@ -126,6 +126,13 @@ type PlayerSnapshot struct {
 	Lives int
 }
 
+type RoundSnapshot struct {
+	Index       int
+	WinnerIndex int
+	WinnerLabel string
+	Hits        int
+}
+
 type Snapshot struct {
 	Phase           string
 	Players         []PlayerSnapshot
@@ -138,6 +145,11 @@ type Snapshot struct {
 	ActiveTargets   int
 	Lives           int
 	Success         bool
+	MatchTarget     int
+	RoundHits       int
+	LastRoundHits   int
+	LastRoundWinner string
+	Rounds          []RoundSnapshot
 }
 
 type Point struct {

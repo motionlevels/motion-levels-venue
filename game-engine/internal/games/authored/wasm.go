@@ -82,6 +82,11 @@ type wasmSnapshotResponse struct {
 	Lives           int                  `json:"lives"`
 	Success         bool                 `json:"success"`
 	Players         []wasmPlayerSnapshot `json:"players"`
+	MatchTarget     int                  `json:"match_target"`
+	RoundHits       int                  `json:"round_hits"`
+	LastRoundHits   int                  `json:"last_round_hits"`
+	LastRoundWinner string               `json:"last_round_winner"`
+	Rounds          []wasmRoundSnapshot  `json:"rounds"`
 }
 
 type wasmPlayerSnapshot struct {
@@ -90,6 +95,13 @@ type wasmPlayerSnapshot struct {
 	Color string `json:"color"`
 	Score int    `json:"score"`
 	Lives int    `json:"lives"`
+}
+
+type wasmRoundSnapshot struct {
+	Index       int    `json:"index"`
+	WinnerIndex int    `json:"winner_index"`
+	WinnerLabel string `json:"winner_label"`
+	Hits        int    `json:"hits"`
 }
 
 func NewWASMWithSeed(now time.Time, seed int64, entry CatalogEntry, playerCount int, players []whackamole.PlayerConfig, difficulty string, level string) (*WASMGame, error) {
@@ -389,5 +401,26 @@ func authoredSnapshot(snapshot wasmSnapshotResponse, fallbackPlayers []PlayerSna
 		ActiveTargets:   snapshot.ActiveTargets,
 		Lives:           snapshot.Lives,
 		Success:         snapshot.Success,
+		MatchTarget:     snapshot.MatchTarget,
+		RoundHits:       snapshot.RoundHits,
+		LastRoundHits:   snapshot.LastRoundHits,
+		LastRoundWinner: snapshot.LastRoundWinner,
+		Rounds:          authoredRoundSnapshots(snapshot.Rounds),
 	}
+}
+
+func authoredRoundSnapshots(rounds []wasmRoundSnapshot) []RoundSnapshot {
+	if len(rounds) == 0 {
+		return nil
+	}
+	out := make([]RoundSnapshot, 0, len(rounds))
+	for _, round := range rounds {
+		out = append(out, RoundSnapshot{
+			Index:       round.Index,
+			WinnerIndex: round.WinnerIndex,
+			WinnerLabel: round.WinnerLabel,
+			Hits:        round.Hits,
+		})
+	}
+	return out
 }

@@ -190,6 +190,13 @@ type displayPlayer struct {
 	Lives int          `json:"lives"`
 }
 
+type displayRound struct {
+	Index       int    `json:"index"`
+	WinnerIndex int    `json:"winnerIndex"`
+	WinnerLabel string `json:"winnerLabel"`
+	Hits        int    `json:"hits"`
+}
+
 type playerConfig struct {
 	Index int
 	Label string
@@ -225,6 +232,11 @@ type displayStatus struct {
 	CountdownRemainingMillis int64           `json:"countdownRemainingMillis"`
 	ActiveTargets            int             `json:"activeTargets"`
 	Success                  bool            `json:"success"`
+	MatchTarget              int             `json:"matchTarget,omitempty"`
+	RoundHits                int             `json:"roundHits,omitempty"`
+	LastRoundHits            int             `json:"lastRoundHits,omitempty"`
+	LastRoundWinner          string          `json:"lastRoundWinner,omitempty"`
+	Rounds                   []displayRound  `json:"rounds,omitempty"`
 	AudioEnabled             bool            `json:"audioEnabled"`
 	AudioMuted               bool            `json:"audioMuted"`
 	LastEventUnixNanos       int64           `json:"lastEventUnixNanos"`
@@ -760,6 +772,11 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 			status.CountdownRemainingMillis = snapshot.CountdownMillis
 			status.ActiveTargets = snapshot.ActiveTargets
 			status.Success = snapshot.Success
+			status.MatchTarget = snapshot.MatchTarget
+			status.RoundHits = snapshot.RoundHits
+			status.LastRoundHits = snapshot.LastRoundHits
+			status.LastRoundWinner = snapshot.LastRoundWinner
+			status.Rounds = displayRounds(snapshot.Rounds)
 			status.Lives = snapshot.Lives
 			status.Players = mapDisplayPlayers(snapshot.Players, func(player authored.PlayerSnapshot) displayPlayer {
 				return makeDisplayPlayer(cfg, player.Index, player.Label, player.Color, player.Score, player.Lives)
@@ -779,6 +796,22 @@ func (r *gameRuntime) DisplayStatus(now time.Time) displayStatus {
 		status.Phase = "paused"
 	}
 	return status
+}
+
+func displayRounds(rounds []authored.RoundSnapshot) []displayRound {
+	if len(rounds) == 0 {
+		return nil
+	}
+	out := make([]displayRound, 0, len(rounds))
+	for _, round := range rounds {
+		out = append(out, displayRound{
+			Index:       round.Index,
+			WinnerIndex: round.WinnerIndex,
+			WinnerLabel: round.WinnerLabel,
+			Hits:        round.Hits,
+		})
+	}
+	return out
 }
 
 func (r *gameRuntime) withDisplayAttemptSummary(status displayStatus, sessionStarted time.Time) displayStatus {

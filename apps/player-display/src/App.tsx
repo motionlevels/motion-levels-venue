@@ -30,6 +30,11 @@ const emptyStatus: DisplayStatus = {
   introRemainingMillis: 0,
   countdownRemainingMillis: 0,
   activeTargets: 0,
+  matchTarget: 0,
+  roundHits: 0,
+  lastRoundHits: 0,
+  lastRoundWinner: "",
+  rounds: [],
   audioEnabled: false,
   audioMuted: false,
   lastEventUnixNanos: 0,
@@ -273,7 +278,7 @@ function ClassicDisplay({ status, connected, error }: DisplayProps) {
 
 function ArcadeDisplay({ status, connected, error }: DisplayProps) {
   const displayModel = createArcadeDisplayModel(status, connected, error);
-  const { duelGame, levelGame, memoryGame, showPlayerInfo, teamRosterGame, teamScoreboardGame } = displayModel;
+  const { duelGame, levelGame, memoryGame, pingPongV2Game, showPlayerInfo, teamRosterGame, teamScoreboardGame } = displayModel;
   const leader = useMemo(() => {
     if (teamRosterGame || duelGame || !status.players.length) return null;
     return [...status.players].sort((left, right) => right.score - left.score)[0];
@@ -288,6 +293,8 @@ function ArcadeDisplay({ status, connected, error }: DisplayProps) {
     <ArcadeDisplayShell model={displayModel}>
       {duelGame ? (
         <DuelBoard status={status} clock={clock} />
+      ) : pingPongV2Game ? (
+        <PingPongV2Board status={status} />
       ) : memoryGame ? (
         <MemoryBoard status={status} clock={clock} />
       ) : levelGame ? (
@@ -350,6 +357,7 @@ type ArcadeDisplayModel = {
   duelGame: boolean;
   levelGame: boolean;
   memoryGame: boolean;
+  pingPongV2Game: boolean;
   rootClassName: string;
   showPlayerInfo: boolean;
   teamRosterGame: boolean;
@@ -367,6 +375,7 @@ type ArcadeHeaderModel = {
 
 function createArcadeDisplayModel(status: DisplayStatus, connected: boolean, error: string): ArcadeDisplayModel {
   const memoryGame = isMemoryGame(status);
+  const pingPongV2Game = isPingPongV2Game(status);
   const teamRosterGame = isTeamScoreGame(status);
   const teamScoreboardGame = isTeamScoreboardGame(status);
   const duelGame = isDuelGame(status) && status.players.length >= 2;
@@ -381,6 +390,7 @@ function createArcadeDisplayModel(status: DisplayStatus, connected: boolean, err
     !levelGame && !memoryGame ? "reference-brand" : "",
     duelGame ? "duel-game" : "",
     memoryGame ? "memory-display" : "",
+    pingPongV2Game ? "ping-pong-v2-display" : "",
     levelGame ? "level-display level-points-display" : "",
     !duelGame && !showPlayerInfo ? "no-player-info" : "",
     status.phase,
@@ -391,6 +401,7 @@ function createArcadeDisplayModel(status: DisplayStatus, connected: boolean, err
     duelGame,
     levelGame,
     memoryGame,
+    pingPongV2Game,
     rootClassName: rootClasses.filter(Boolean).join(" "),
     showPlayerInfo,
     teamRosterGame,
@@ -441,6 +452,72 @@ function ArcadeHeader({ model }: { model: ArcadeHeaderModel }) {
         <div className="arcade-top-spacer" aria-hidden="true" />
       )}
     </header>
+  );
+}
+
+function PingPongV2Board({ status }: { status: DisplayStatus }) {
+  const red = pingPongPlayer(status, 0, "Rojo", { r: 255, g: 28, b: 40 });
+  const blue = pingPongPlayer(status, 1, "Azul", { r: 20, g: 92, b: 255 });
+  const target = Math.max(1, status.matchTarget || red.score + red.lives || blue.score + blue.lives || 5);
+  const rounds = pingPongRounds(status, target);
+  const lastWinner = status.lastRoundWinner || winnerFromRounds(rounds);
+  const matchTime = formatClock(status.elapsedMillis || status.sessionElapsedMillis || 0);
+  const rallyLabel = status.phase === "finished" ? "Última ronda" : status.phase === "starting" ? "Preparando" : "Rally actual";
+  const rallyHits = status.phase === "finished" && status.lastRoundHits ? status.lastRoundHits : status.roundHits || 0;
+
+  return (
+    <section className="pingpong-v2-board" aria-label="Marcador Ping Pong V2">
+      <div className="pingpong-score-row">
+        <PingPongPlayerPanel player={red} target={target} side="red" />
+        <article className="pingpong-center-card">
+          <span>Objetivo</span>
+          <strong>{target}</strong>
+          <b>puntos para ganar</b>
+        </article>
+        <PingPongPlayerPanel player={blue} target={target} side="blue" />
+      </div>
+
+      <div className="pingpong-match-row">
+        <MetricPanel className="pingpong-match-metric" label={rallyLabel} value={String(rallyHits)} tone="cyan" />
+        <MetricPanel className="pingpong-match-metric" label="Tiempo total" value={matchTime} tone="amber" />
+        <MetricPanel className="pingpong-match-metric" label="Última ronda" value={lastWinner || "-"} tone="magenta" />
+      </div>
+
+      <section className="pingpong-rounds" aria-label="Ganador de cada ronda">
+        <div className="pingpong-rounds-head">
+          <span>Rondas</span>
+          <strong>{status.score}/{target * 2 - 1}</strong>
+        </div>
+        <div className="pingpong-round-list">
+          {rounds.map((round) => (
+            <article
+              className={`pingpong-round ${round.winnerIndex === 0 ? "red" : round.winnerIndex === 1 ? "blue" : "pending"}`}
+              key={round.index}
+            >
+              <span>#{round.index}</span>
+              <strong>{round.winnerLabel || "-"}</strong>
+              <b>{round.hits > 0 ? `${round.hits} ${round.hits === 1 ? "golpe" : "golpes"}` : "-"}</b>
+            </article>
+          ))}
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function PingPongPlayerPanel({ player, target, side }: { player: DisplayStatus["players"][number]; target: number; side: "red" | "blue" }) {
+  const progress = Math.max(0, Math.min(1, player.score / target));
+  return (
+    <article className={`pingpong-player-panel ${side}`} style={{ "--player": colorCSS(player.color), "--player-rgb": colorRGB(player.color), "--score-progress": progress } as CSSProperties}>
+      <div className="pingpong-player-head">
+        <span>{playerLabelES(player.label)}</span>
+        <b>{player.score}/{target}</b>
+      </div>
+      <strong>{player.score}</strong>
+      <div className="pingpong-score-track" aria-hidden="true">
+        <i />
+      </div>
+    </article>
   );
 }
 
@@ -663,6 +740,12 @@ function isDuelGame(status: Pick<DisplayStatus, "currentGame" | "label">): boole
   return currentGame === "duel" || currentGame === "authoredduel" || normalizedDisplayText(status.label) === "duelo";
 }
 
+function isPingPongV2Game(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
+  const currentGame = compactDisplayText(status.currentGame);
+  const label = compactDisplayText(status.label);
+  return currentGame === "authoredpingpongv2" || currentGame === "pingpongv2" || label === "pingpongv2";
+}
+
 function isScreensaverDisplay(status: Pick<DisplayStatus, "currentGame" | "label">): boolean {
   const currentGame = normalizedDisplayText(status.currentGame);
   return currentGame === "salvapantallas" || currentGame === "screensaver";
@@ -695,9 +778,35 @@ function isLevelGame(status: Pick<DisplayStatus, "level" | "levelNumber" | "leve
 
 function shouldShowPlayerInfo(status: DisplayStatus): boolean {
   if (isMemoryGame(status)) return false;
+  if (isPingPongV2Game(status)) return false;
   if (isLevelGame(status)) return false;
   if (status.playerConfigurable === false) return false;
   return status.players.length > 0 || status.playerConfigurable === true;
+}
+
+function pingPongPlayer(status: DisplayStatus, index: number, label: string, color: DisplayStatus["players"][number]["color"]): DisplayStatus["players"][number] {
+  return status.players.find((player) => player.index === index) || status.players[index] || { index, label, color, score: 0, lives: status.matchTarget || 5 };
+}
+
+function pingPongRounds(status: DisplayStatus, target: number) {
+  const maxRounds = Math.max(target * 2 - 1, status.rounds?.length || 0);
+  const source = status.rounds || [];
+  return Array.from({ length: Math.min(maxRounds, 11) }, (_, index) => {
+    const round = source[index];
+    return {
+      index: index + 1,
+      winnerIndex: typeof round?.winnerIndex === "number" ? round.winnerIndex : -1,
+      winnerLabel: round?.winnerLabel || "",
+      hits: round?.hits || 0,
+    };
+  });
+}
+
+function winnerFromRounds(rounds: Array<{ winnerLabel: string }>): string {
+  for (let index = rounds.length - 1; index >= 0; index--) {
+    if (rounds[index].winnerLabel) return rounds[index].winnerLabel;
+  }
+  return "";
 }
 
 function displayLevelLabel(status: DisplayStatus): string {
@@ -989,6 +1098,37 @@ function demoDisplayStatus(options: DisplayOptions): DisplayStatus | null {
         activeTargets: 16,
         lastEventCue: "hit",
         lastEventMessage: "Jugador 1 18",
+      };
+    case "pingpong-v2":
+      return {
+        ...base,
+        currentGame: options.demoGame || "authored-ping-pong-v2",
+        label: options.demoLabel || "Ping Pong V2",
+        difficulty: "hard",
+        playerCount: 2,
+        players: [
+          { index: 0, label: "Rojo", color: { r: 255, g: 28, b: 40 }, score: 3, lives: 2 },
+          { index: 1, label: "Azul", color: { r: 20, g: 92, b: 255 }, score: 2, lives: 3 },
+        ],
+        score: 5,
+        lives: -1,
+        matchTarget: 5,
+        roundHits: 7,
+        lastRoundHits: 12,
+        lastRoundWinner: "Rojo",
+        rounds: [
+          { index: 1, winnerIndex: 0, winnerLabel: "Rojo", hits: 4 },
+          { index: 2, winnerIndex: 1, winnerLabel: "Azul", hits: 9 },
+          { index: 3, winnerIndex: 0, winnerLabel: "Rojo", hits: 12 },
+          { index: 4, winnerIndex: 1, winnerLabel: "Azul", hits: 6 },
+          { index: 5, winnerIndex: 0, winnerLabel: "Rojo", hits: 12 },
+        ],
+        elapsedMillis: 154000,
+        sessionElapsedMillis: 154000,
+        remainingMillis: 0,
+        activeTargets: 0,
+        lastEventCue: "coin",
+        lastEventMessage: "Azul devuelve.",
       };
     case "classic":
       return base;

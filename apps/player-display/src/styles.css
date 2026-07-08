@@ -526,6 +526,15 @@ body {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+.display.arcade-display.ping-pong-v2-display {
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 22px;
+  background:
+    radial-gradient(circle at 18% 28%, rgba(255, 28, 40, 0.16), transparent 32%),
+    radial-gradient(circle at 82% 68%, rgba(20, 92, 255, 0.2), transparent 34%),
+    linear-gradient(145deg, #03050a 0%, #080b13 52%, #03050a 100%);
+}
+
 .display.arcade-display.level-display.no-player-info,
 .display.arcade-display.memory-display.no-player-info {
   grid-template-rows: auto minmax(0, 1fr);
@@ -597,6 +606,10 @@ body {
 .arcade-team-card,
 .arcade-player-card,
 .arcade-empty,
+.pingpong-player-panel,
+.pingpong-center-card,
+.pingpong-rounds,
+.pingpong-round,
 .duel-side,
 .duel-center {
   border: 1px solid rgba(54, 217, 255, 0.26);
@@ -849,6 +862,253 @@ body {
 
 .memory-display .arcade-top {
   grid-template-columns: max-content minmax(0, 1fr) minmax(160px, 0.24fr);
+}
+
+.ping-pong-v2-display .arcade-top {
+  grid-template-columns: minmax(330px, 0.72fr) minmax(620px, 1.16fr) minmax(330px, 0.72fr);
+}
+
+.ping-pong-v2-display .arcade-title {
+  border-color: rgba(255, 255, 255, 0.28);
+  background:
+    linear-gradient(90deg, rgba(255, 28, 40, 0.12), transparent 42%, rgba(20, 92, 255, 0.14)),
+    rgba(8, 12, 22, 0.74);
+}
+
+.pingpong-v2-board {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(280px, 0.94fr) minmax(132px, 0.34fr) minmax(210px, 0.5fr);
+  gap: 22px;
+}
+
+.pingpong-score-row {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.36fr) minmax(0, 1fr);
+  gap: 22px;
+}
+
+.pingpong-player-panel {
+  min-width: 0;
+  padding: 30px 36px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 20px;
+  overflow: hidden;
+  border-color: rgba(var(--player-rgb), 0.58);
+  background:
+    radial-gradient(80% 120% at 18% 8%, rgba(var(--player-rgb), 0.34), transparent 58%),
+    linear-gradient(180deg, rgba(var(--player-rgb), 0.08), rgba(5, 8, 15, 0.18)),
+    rgba(4, 8, 16, 0.86);
+  box-shadow:
+    0 26px 74px -32px rgba(0, 0, 0, 0.9),
+    0 0 54px -24px rgba(var(--player-rgb), 0.74),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.pingpong-player-panel.red {
+  clip-path: polygon(0 0, 96% 0, 100% 8%, 100% 100%, 0 100%);
+}
+
+.pingpong-player-panel.blue {
+  clip-path: polygon(4% 0, 100% 0, 100% 100%, 0 100%, 0 8%);
+}
+
+.pingpong-player-head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.pingpong-player-head span,
+.pingpong-player-head b,
+.pingpong-center-card span,
+.pingpong-center-card b,
+.pingpong-rounds-head span,
+.pingpong-round span,
+.pingpong-round b {
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 1.28rem;
+  line-height: 1;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.pingpong-player-head span {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 2.15rem;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+}
+
+.pingpong-player-head b {
+  flex: 0 0 auto;
+  color: var(--player);
+}
+
+.pingpong-player-panel > strong {
+  align-self: center;
+  color: #fff;
+  font-size: clamp(9.5rem, 12vw, 15rem);
+  line-height: 0.8;
+  font-weight: 950;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  text-shadow:
+    0 0 0.04em var(--player),
+    0 0 0.22em rgba(var(--player-rgb), 0.68);
+}
+
+.pingpong-player-panel.blue > strong {
+  text-align: right;
+}
+
+.pingpong-score-track {
+  height: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(var(--player-rgb), 0.32);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.pingpong-score-track i {
+  width: calc(var(--score-progress, 0) * 100%);
+  height: 100%;
+  display: block;
+  background: linear-gradient(90deg, var(--player), rgba(255, 255, 255, 0.95));
+  box-shadow: 0 0 24px rgba(var(--player-rgb), 0.72);
+}
+
+.pingpong-center-card {
+  min-width: 0;
+  padding: 28px 24px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  text-align: center;
+  border-color: rgba(255, 255, 255, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(6, 9, 16, 0.88);
+  clip-path: polygon(10% 0, 90% 0, 100% 12%, 100% 88%, 90% 100%, 10% 100%, 0 88%, 0 12%);
+}
+
+.pingpong-center-card strong {
+  color: #fff;
+  font-size: 8rem;
+  line-height: 0.84;
+  font-weight: 950;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  text-shadow:
+    -0.04em 0 0 rgba(255, 28, 40, 0.52),
+    0.04em 0 0 rgba(20, 92, 255, 0.56),
+    0 0 34px rgba(255, 255, 255, 0.24);
+}
+
+.pingpong-match-row {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.pingpong-match-row .arcade-metric {
+  min-height: 0;
+  padding: 20px 28px;
+  gap: 10px;
+  clip-path: polygon(4% 0, 100% 0, 96% 100%, 0 100%);
+}
+
+.pingpong-match-row .arcade-metric strong {
+  font-size: clamp(3.7rem, 4.5vw, 5.6rem);
+  white-space: nowrap;
+}
+
+.pingpong-rounds {
+  min-height: 0;
+  padding: 22px 24px 24px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 18px;
+  border-color: rgba(255, 255, 255, 0.18);
+  background:
+    linear-gradient(90deg, rgba(255, 28, 40, 0.08), transparent 50%, rgba(20, 92, 255, 0.09)),
+    rgba(5, 8, 15, 0.78);
+}
+
+.pingpong-rounds-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.pingpong-rounds-head strong {
+  color: #fff;
+  font-size: 2.35rem;
+  line-height: 1;
+  font-weight: 950;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.pingpong-round-list {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.pingpong-round {
+  min-width: 0;
+  padding: 16px 18px;
+  display: grid;
+  align-content: center;
+  gap: 9px;
+  overflow: hidden;
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.pingpong-round.red {
+  border-color: rgba(255, 28, 40, 0.5);
+  background: linear-gradient(160deg, rgba(255, 28, 40, 0.2), rgba(255, 255, 255, 0.035));
+}
+
+.pingpong-round.blue {
+  border-color: rgba(20, 92, 255, 0.56);
+  background: linear-gradient(160deg, rgba(20, 92, 255, 0.24), rgba(255, 255, 255, 0.035));
+}
+
+.pingpong-round.pending {
+  opacity: 0.42;
+}
+
+.pingpong-round strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 2rem;
+  line-height: 0.95;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pingpong-round b {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 1rem;
+  letter-spacing: 0.08em;
 }
 
 .level-display .arcade-brand-panel,
