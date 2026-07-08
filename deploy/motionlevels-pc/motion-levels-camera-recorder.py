@@ -91,7 +91,7 @@ FRONT_REFRAME_H_FOV = float(os.environ.get("MOTION_LEVELS_CAMERA_FRONT_REFRAME_H
 FRONT_REFRAME_V_FOV = float(os.environ.get("MOTION_LEVELS_CAMERA_FRONT_REFRAME_V_FOV", "65"))
 FRONT_REFRAME_VIDEO_CRF = os.environ.get("MOTION_LEVELS_CAMERA_FRONT_REFRAME_VIDEO_CRF", "20").strip() or "20"
 DELETE_SOURCE_AFTER_REFRAME = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_SOURCE_AFTER_REFRAME", "1").strip().lower() not in FALSE_VALUES
-SESSION_SEGMENT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS", "120"))
+SESSION_SEGMENT_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS", "1200"))
 SESSION_MAX_SECONDS = float(os.environ.get("MOTION_LEVELS_CAMERA_SESSION_MAX_SECONDS", "7200"))
 DELETE_REMOTE_AFTER_DOWNLOAD = os.environ.get("MOTION_LEVELS_CAMERA_DELETE_REMOTE_AFTER_DOWNLOAD", "1").strip().lower() not in FALSE_VALUES
 TV_STATUS_URL = os.environ.get("MOTION_LEVELS_CAMERA_TV_STATUS_URL", "http://127.0.0.1:4101/tv").strip()
@@ -1405,7 +1405,7 @@ def segment_duration_seconds(payload: dict[str, Any] | None = None) -> int:
         parsed = float(value)
     except (TypeError, ValueError):
         parsed = SESSION_SEGMENT_SECONDS
-    return max(10, min(900, round(parsed)))
+    return max(10, min(1200, round(parsed)))
 
 
 def max_session_seconds(payload: dict[str, Any] | None = None) -> int:
