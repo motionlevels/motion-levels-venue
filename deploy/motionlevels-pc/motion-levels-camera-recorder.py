@@ -322,15 +322,32 @@ def usb_devices() -> list[dict[str, Any]]:
 
 def camera_probe() -> dict[str, Any]:
     devices = usb_devices()
-    camera_devices = [device for device in devices if str(device.get("vendor") or "").lower() == USB_VENDOR]
+    vendor_matches = [device for device in devices if str(device.get("vendor") or "").lower() == USB_VENDOR]
+    name_matches = [device for device in devices if usb_device_looks_like_camera(device)]
+    camera_devices = vendor_matches or name_matches
+    detected_by = "vendor" if vendor_matches else "usb-name" if name_matches else None
     return {
         "expectedUsbVendor": USB_VENDOR,
         "detected": bool(camera_devices),
+        "detectedBy": detected_by,
         "devices": camera_devices,
+        "candidateDevices": name_matches if not vendor_matches else camera_devices,
         "usbDeviceCount": len(devices),
         "sdkPath": str(SDK_PATH),
         "sdkPathExists": SDK_PATH.exists(),
     }
+
+
+def usb_device_looks_like_camera(device: dict[str, Any]) -> bool:
+    fields = " ".join(
+        str(device.get(key) or "")
+        for key in ("manufacturer", "product", "serial", "vendor", "productId")
+    ).lower()
+    if any(token in fields for token in ("insta360", "arashi", "x5")):
+        return True
+    if "camera" in fields and "hub" not in fields:
+        return True
+    return False
 
 
 def unix_nanos_to_datetime(value: Any) -> datetime:
@@ -791,7 +808,7 @@ def effective_camera_probe(camera: dict[str, Any], status: dict[str, Any] | None
         **camera,
         "detected": detected,
         "sysfsDetected": camera.get("detected") is True,
-        "detectedBy": "sysfs" if camera.get("detected") is True else "sdk-status" if camera_status_detected(status) else None,
+        "detectedBy": camera.get("detectedBy") or ("sdk-status" if camera_status_detected(status) else None),
     }
 
 
