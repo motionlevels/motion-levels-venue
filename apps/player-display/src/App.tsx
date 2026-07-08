@@ -548,22 +548,11 @@ function MemoriaV2Board({ status, clock }: { status: DisplayStatus; clock: strin
       </article>
       <section className="memoria-v2-metrics" aria-label="Estado de la partida">
         <MetricPanel className="memoria-v2-clock" label={status.phase === "memorize" ? "Memoriza" : "Tiempo"} value={clock} tone="amber" />
-        <MetricPanel className="memoria-v2-lives" label="Vidas" value={<MemoriaV2Hearts lives={status.lives} />} tone="red" />
+        <MetricPanel className="memoria-v2-lives arcade-metric--lives" label="Vidas" value={<HeartMeter model={{ lives: status.lives < 0 ? 3 : status.lives, slots: 3 }} />} tone="red" />
         <MetricPanel className="memoria-v2-targets" label="Objetivos" value={remainingTargets} tone="cyan" icon="targets" />
         <MetricPanel className="memoria-v2-score" label="Puntos" value={status.score} tone="magenta" icon="points" />
       </section>
     </section>
-  );
-}
-
-function MemoriaV2Hearts({ lives }: { lives: number }) {
-  const safeLives = Math.max(0, Math.min(3, lives < 0 ? 3 : lives));
-  return (
-    <span className="memoria-v2-hearts" aria-label={`${safeLives} vidas`}>
-      {[0, 1, 2].map((slot) => (
-        <i className={slot < safeLives ? "full" : "empty"} key={slot} />
-      ))}
-    </span>
   );
 }
 

@@ -1727,56 +1727,6 @@ body {
   min-width: 0;
 }
 
-.memoria-v2-hearts {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: center;
-  gap: clamp(10px, 1vw, 18px);
-}
-
-.memoria-v2-hearts i {
-  width: clamp(62px, 5.8vw, 110px);
-  aspect-ratio: 1;
-  display: block;
-  position: relative;
-  justify-self: center;
-  transform: rotate(-45deg);
-}
-
-.memoria-v2-hearts i::before,
-.memoria-v2-hearts i::after {
-  content: "";
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-}
-
-.memoria-v2-hearts i::before {
-  left: 50%;
-  top: 0;
-}
-
-.memoria-v2-hearts i::after {
-  left: 0;
-  top: -50%;
-}
-
-.memoria-v2-hearts i.full,
-.memoria-v2-hearts i.full::before,
-.memoria-v2-hearts i.full::after {
-  background: #ff2330;
-  box-shadow: 0 0 30px rgba(255, 35, 48, 0.52);
-}
-
-.memoria-v2-hearts i.empty,
-.memoria-v2-hearts i.empty::before,
-.memoria-v2-hearts i.empty::after {
-  background: rgba(255, 35, 48, 0.08);
-  box-shadow: inset 0 0 0 5px rgba(255, 184, 192, 0.72);
-}
-
 .memory-scoreboard {
   min-width: 0;
   min-height: 0;

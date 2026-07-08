@@ -78,8 +78,9 @@ describe("arcade display reference styling", () => {
     assert.match(appSource, /function isMemoriaV2Game/);
     assert.match(appSource, /memoriaV2Game \? "memoria-v2-display" : ""/);
     assert.match(appSource, /case "memoria-v2":/);
+    assert.match(appSource, /value=\{<HeartMeter model=\{\{ lives: status\.lives < 0 \? 3 : status\.lives, slots: 3 \}\} \/>/);
     assert.match(cssSource, /\.memoria-v2-board/);
-    assert.match(cssSource, /\.memoria-v2-hearts i\.empty/);
+    assert.doesNotMatch(cssSource, /\.memoria-v2-hearts/);
   });
 });
 
