@@ -88,6 +88,7 @@ var nativeGamePackages = map[string]string{
 	"authored-memory-challenge": "memorychallengego",
 	"authored-patrones":         "patronesgo",
 	"authored-ping-pong-motion": "pingpongmotion",
+	"authored-ping-pong-v2":     "pingpongv2",
 	"authored-saltos":           "saltosgo",
 	"authored-tetris":           "tetris",
 	"authored-whack-a-mole-go":  "whackamolego",

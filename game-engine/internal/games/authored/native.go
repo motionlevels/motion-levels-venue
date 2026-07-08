@@ -14,6 +14,7 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/memorychallengego"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/patronesgo"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/pingpongmotion"
+	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/pingpongv2"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/saltosgo"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/tetris"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored/nativegames/whackamolego"
@@ -45,6 +46,7 @@ var nativeFactories = map[string]func() NativeABI{
 	"authored-memory-challenge": func() NativeABI { return memorychallengego.NewABI() },
 	"authored-patrones":         func() NativeABI { return patronesgo.NewABI() },
 	"authored-ping-pong-motion": func() NativeABI { return pingpongmotion.NewABI() },
+	"authored-ping-pong-v2":     func() NativeABI { return pingpongv2.NewABI() },
 	"authored-saltos":           func() NativeABI { return saltosgo.NewABI() },
 	"authored-tetris":           func() NativeABI { return tetris.NewABI() },
 	"authored-whack-a-mole-go":  func() NativeABI { return whackamolego.NewABI() },
@@ -107,6 +109,17 @@ var nativeCatalogEntries = map[string]CatalogEntry{
 		MaxPlayers:         8,
 		GameSource:         nativeMotionGoSpecWithConfig(PingPongConfigSpec()),
 	},
+	"authored-ping-pong-v2": {
+		ID:                 "ping-pong-v2",
+		EngineGame:         "authored-ping-pong-v2",
+		Label:              "Ping Pong V2",
+		Description:        "Ping pong arcade rojo contra azul: ocupa cada mitad, espera la cuenta suave y devuelve una pelota blanca.",
+		DefaultMusicRef:    DefaultMusicRef,
+		DefaultMusicVolume: DefaultMusicVolume,
+		MinPlayers:         1,
+		MaxPlayers:         8,
+		GameSource:         nativeMotionGoSpecWithConfig(PingPongV2ConfigSpec()),
+	},
 	"authored-saltos": {
 		ID:                 "saltos",
 		EngineGame:         "authored-saltos",
@@ -141,6 +154,21 @@ var nativeCatalogEntries = map[string]CatalogEntry{
 		MaxPlayers:         8,
 		GameSource:         nativeMotionGoSpec(),
 	},
+}
+
+func PingPongV2ConfigSpec() *ConfigSpec {
+	return &ConfigSpec{Vars: []ConfigVar{
+		{
+			Key:          "points_to_win",
+			Label:        "Puntos para ganar",
+			Description:  "Puntos que necesita un color para llevarse la partida.",
+			Type:         "int",
+			Default:      json.RawMessage("5"),
+			Min:          floatPtr(1),
+			Max:          floatPtr(21),
+			PlayerFacing: true,
+		},
+	}}
 }
 
 func nativeMotionGoSpec() Spec {

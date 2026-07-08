@@ -1,6 +1,7 @@
 package authored
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -47,6 +48,74 @@ func TestNativePingPongRunsWithoutWASMArtifact(t *testing.T) {
 	snapshot := game.Snapshot(start.Add(2 * time.Second))
 	if snapshot.Phase == "" || len(snapshot.Players) != 2 {
 		t.Fatalf("snapshot = %+v", snapshot)
+	}
+}
+
+func TestNativePingPongV2ReadinessPlayfieldAndAutoReset(t *testing.T) {
+	start := time.Unix(1_700_000_000, 0)
+	entry, ok := NativeCatalogEntry("authored-ping-pong-v2")
+	if !ok {
+		t.Fatal("missing native ping pong v2 entry")
+	}
+	game, err := NewNativeWithSeedConfig(start, 7, entry, 2, nil, "hard", "", map[string]json.RawMessage{
+		"points_to_win": json.RawMessage("1"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !HasNative("authored-ping-pong-v2") {
+		t.Fatal("ping pong v2 should be registered as a native authored game")
+	}
+	if snapshot := game.Snapshot(start); snapshot.Phase != "waiting" || snapshot.ActiveTargets != 0 {
+		t.Fatalf("initial snapshot = %+v, want waiting with no ready halves", snapshot)
+	}
+
+	firstHalfTime := start.Add(100 * time.Millisecond)
+	if events := game.Press(pressEvent(0, 4, true), firstHalfTime); len(events) != 0 {
+		t.Fatalf("first half press events = %+v, want none", events)
+	}
+	if snapshot := game.Snapshot(firstHalfTime); snapshot.Phase != "waiting" || snapshot.ActiveTargets != 1 {
+		t.Fatalf("one-half snapshot = %+v, want waiting with one ready half", snapshot)
+	}
+
+	bothHalvesTime := start.Add(200 * time.Millisecond)
+	events := game.Press(pressEvent(0, GridHeight-5, true), bothHalvesTime)
+	if len(events) != 1 || events[0].Cue != "start" {
+		t.Fatalf("second half press events = %+v, want start cue", events)
+	}
+	if snapshot := game.Snapshot(bothHalvesTime.Add(time.Second)); snapshot.Phase != "starting" || snapshot.CountdownMillis == 0 {
+		t.Fatalf("ready animation snapshot = %+v, want starting countdown", snapshot)
+	}
+
+	runningAt := bothHalvesTime.Add(2200 * time.Millisecond)
+	snapshot := game.Snapshot(runningAt)
+	if snapshot.Phase != "running" || snapshot.Players[0].Lives != 1 || snapshot.Players[1].Lives != 1 {
+		t.Fatalf("running snapshot = %+v, want one-point game running", snapshot)
+	}
+	frame := game.Render(runningAt)
+	if len(frame) != GridWidth*GridHeight {
+		t.Fatalf("frame len = %d, want %d", len(frame), GridWidth*GridHeight)
+	}
+	if white := countRGB(frame, RGB{R: 255, G: 255, B: 255}); white != 1 {
+		t.Fatalf("white pixels = %d, want exactly one visible ball", white)
+	}
+	if black := countRGB(frame, RGB{}); black < GridWidth*GridHeight/2 {
+		t.Fatalf("black/off pixels = %d, want black background dominant", black)
+	}
+
+	finishedAt := time.Time{}
+	for tickAt := runningAt.Add(100 * time.Millisecond); tickAt.Before(runningAt.Add(20 * time.Second)); tickAt = tickAt.Add(100 * time.Millisecond) {
+		game.Tick(tickAt)
+		if snapshot := game.Snapshot(tickAt); snapshot.Phase == "finished" {
+			finishedAt = tickAt
+			break
+		}
+	}
+	if finishedAt.IsZero() {
+		t.Fatal("ping pong v2 did not finish after a one-point score window")
+	}
+	if snapshot := game.Snapshot(finishedAt.Add(4 * time.Second)); snapshot.Phase != "waiting" || snapshot.Score != 0 {
+		t.Fatalf("reset snapshot = %+v, want automatic reset to waiting with zero score", snapshot)
 	}
 }
 
@@ -284,6 +353,16 @@ func firstNativeLavaTile(t *testing.T, frame []RGB) (int, int) {
 	}
 	t.Fatalf("no lava-colored tile found in frame")
 	return 0, 0
+}
+
+func countRGB(frame []RGB, want RGB) int {
+	total := 0
+	for _, color := range frame {
+		if color == want {
+			total++
+		}
+	}
+	return total
 }
 
 func pressEvent(x int, y int, pressed bool) whackamole.PressEvent {
