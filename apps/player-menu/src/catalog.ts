@@ -106,6 +106,8 @@ export type GameCard = {
   featured?: boolean;
   supportsLevels?: boolean;
   sourceKind?: string;
+  sourceRevision?: string;
+  sourceGameId?: string;
   countdownFloorOverlay?: boolean;
   revisionHash?: string;
   disabled?: boolean;

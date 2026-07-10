@@ -566,6 +566,8 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
     previewAnimation,
     supportsLevels,
     sourceKind: entry.source_kind || fallback?.sourceKind,
+    sourceRevision: entry.source_revision || fallback?.sourceRevision,
+    sourceGameId: entry.source_game_id || fallback?.sourceGameId,
     countdownFloorOverlay: entry.countdown_floor_overlay === true,
     revisionHash: entry.revision_hash || fallback?.revisionHash,
     disabled: false,
@@ -638,7 +640,7 @@ function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalo
 }
 
 function isPlatformLaunchableSource(game: Pick<GameCard, "sourceKind">): boolean {
-  return game.sourceKind === "motion_go" || game.sourceKind === "platform_levels" || game.sourceKind === "animation";
+  return game.sourceKind === "motion_go" || game.sourceKind === "platform_levels" || game.sourceKind === "motion_levels_games" || game.sourceKind === "animation";
 }
 
 function canLaunchWhileCatalogRefreshes(game: GameCard): boolean {
@@ -2617,6 +2619,8 @@ function MenuApp() {
       const nextStatus = await selectGame({
         game: runtimeGameID(launchGame),
         gameLabel: launchGame.label,
+        sourceKind: launchGame.sourceKind,
+        sourceRevision: launchGame.sourceRevision,
         platformUrl: platformBaseURL() || undefined,
         venueSessionId: nextMenu.sessionId,
         recordingEnabled: nextMenu.recordingEnabled,

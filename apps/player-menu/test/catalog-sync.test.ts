@@ -528,6 +528,7 @@ describe("catalog metadata sync", () => {
 
     assert.match(appSource, /function runtimeGameID\(game: Pick<GameCard, "engineGame" \| "id" \| "sourceKind">\): string/);
     assert.match(appSource, /game\.sourceKind === "platform_levels" && isUUID\(game\.id\) \? game\.id : engineGameID\(game\)/);
+    assert.match(appSource, /game\.sourceKind === "motion_levels_games"/);
     assert.match(appSource, /game: runtimeGameID\(launchGame\)/);
     assert.doesNotMatch(appSource, /runtimeGameID\([^)]*\)[\s\S]{0,120}\|\|\s*"parkour"/);
   });

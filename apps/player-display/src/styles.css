@@ -25,6 +25,31 @@
   box-sizing: border-box;
 }
 
+.motion-levels-games-display-host,
+.motion-levels-games-display-root,
+.motion-levels-games-display-root > * {
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+}
+
+.motion-levels-games-display-host {
+  background: #05070a;
+  overflow: hidden;
+  position: relative;
+}
+
+.motion-levels-games-display-error {
+  align-items: center;
+  background: #05070a;
+  color: #f8fafc;
+  display: flex;
+  font-size: 32px;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+}
+
 html,
 body,
 #root {

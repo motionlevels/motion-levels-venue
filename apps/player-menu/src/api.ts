@@ -10,6 +10,8 @@ export type AnimationPreview = {
 export type SelectGameRequest = {
   game: string;
   gameLabel?: string;
+  sourceKind?: string;
+  sourceRevision?: string;
   platformUrl?: string;
   venueSessionId?: string;
   recordingEnabled?: boolean;

@@ -17,6 +17,7 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/audio"
 	"github.com/lobis/motion-levels/game-engine/internal/games/authored"
+	"github.com/lobis/motion-levels/game-engine/internal/games/motionlevelsgames"
 	"github.com/lobis/motion-levels/game-engine/internal/games/niveles"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 	"github.com/lobis/motion-levels/game-engine/internal/sessionrecording"
@@ -667,6 +668,73 @@ func TestSelectGamePassesConfigOverridesToMotionGoInit(t *testing.T) {
 	// so a fresh match with points_to_win=3 totals 6.
 	if display.Lives != 6 {
 		t.Fatalf("lives = %d, want 6 (points_to_win=3 for both teams)", display.Lives)
+	}
+}
+
+func TestSelectMotionLevelsGamesUsesPinnedRunnerAndExtendedDisplayFeed(t *testing.T) {
+	bundleRoot := filepath.Clean("../../../game-bundles/motion-levels-games")
+	bundle, err := motionlevelsgames.Load(bundleRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision := bundle.Manifest.SourceRevision
+	runtime := newGameRuntime(config{
+		Brightness: 80, PlayerCount: 1, MotionLevelsGamesRoot: bundleRoot, MotionLevelsGamesNode: "node",
+	}, nil, nil)
+	api := httptest.NewServer(gameAPIHandler(runtime))
+	defer api.Close()
+
+	body := bytes.NewBufferString(fmt.Sprintf(`{"game":"motion-levels-games:ping-pong","gameLabel":"Ping Pong","sourceKind":"motion_levels_games","sourceRevision":%q,"playerCount":0,"allowAnyPlayers":true,"difficulty":"medium"}`, revision))
+	response, err := http.Post(api.URL+"/api/select", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("select response = %d", response.StatusCode)
+	}
+	_, frame := runtime.Render(time.Now().Add(20 * time.Millisecond))
+	if len(frame) != 16*32 {
+		t.Fatalf("frame length = %d", len(frame))
+	}
+	display := runtime.DisplayStatus(time.Now().Add(20 * time.Millisecond))
+	if display.SourceKind != "motion_levels_games" || display.SourceRevision != revision {
+		t.Fatalf("display source = %q %q", display.SourceKind, display.SourceRevision)
+	}
+	if len(display.GameSnapshot) == 0 || display.Frame == nil || len(display.Frame.Cells) != 16*32 {
+		t.Fatalf("extended display feed is incomplete: snapshot=%d frame=%+v", len(display.GameSnapshot), display.Frame)
+	}
+	status := runtime.Status()
+	if status.GamesRunner == nil {
+		t.Fatal("runner health is missing")
+	}
+	healthResponse, err := http.Get(api.URL + "/api/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer healthResponse.Body.Close()
+	if healthResponse.StatusCode != http.StatusOK {
+		t.Fatalf("health response = %d", healthResponse.StatusCode)
+	}
+	var health struct {
+		Status      string                         `json:"status"`
+		GamesRunner motionlevelsgames.RunnerHealth `json:"gamesRunner"`
+	}
+	if err := json.NewDecoder(healthResponse.Body).Decode(&health); err != nil {
+		t.Fatal(err)
+	}
+	if health.Status != "ok" || health.GamesRunner.Status != "ok" || health.GamesRunner.SourceRevision != display.SourceRevision {
+		t.Fatalf("health = %+v", health)
+	}
+}
+
+func TestSelectMotionLevelsGamesRejectsRevisionMismatch(t *testing.T) {
+	runtime := newGameRuntime(config{MotionLevelsGamesRoot: filepath.Clean("../../../game-bundles/motion-levels-games")}, nil, nil)
+	request := httptest.NewRequest(http.MethodPost, "/api/select", bytes.NewBufferString(`{"game":"motion-levels-games:ping-pong","sourceKind":"motion_levels_games","sourceRevision":"wrong","playerCount":0,"allowAnyPlayers":true}`))
+	response := httptest.NewRecorder()
+	gameAPIHandler(runtime).ServeHTTP(response, request)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusConflict)
 	}
 }
 

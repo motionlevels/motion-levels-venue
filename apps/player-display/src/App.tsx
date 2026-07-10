@@ -4,6 +4,7 @@ import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./ap
 import { createCoalescer, isFeedStalled } from "./displayFeed";
 import { challengeMode, heartMeterSlotCount, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeLabel, levelDisplayTimeMillis, levelHeartMeterModel } from "./displayMetrics";
 import { colorCSS, colorRGB, difficultyLabelES, formatClock, gameTitleES, levelLabelES, phaseLabel, playerLabelES } from "./utils";
+import { MotionLevelsGamesDisplay } from "./MotionLevelsGamesDisplay";
 
 // If no stream event arrives, keep the display fresh with a 250ms fallback
 // poll. Some kiosk/browser combinations can silently lose EventSource delivery;
@@ -150,6 +151,10 @@ export default function App() {
   const liveStatus = demoStatus || status;
   const liveConnected = demoStatus ? true : connected;
   const liveError = demoStatus ? "" : error;
+
+  if (liveStatus.sourceKind === "motion_levels_games" && liveStatus.sourceRevision && liveStatus.gameSnapshot) {
+    return <MotionLevelsGamesDisplay status={liveStatus} />;
+  }
 
   if (isScreensaverDisplay(liveStatus)) {
     return <ScreensaverDisplay />;

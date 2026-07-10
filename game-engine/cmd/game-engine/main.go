@@ -33,6 +33,8 @@ type config struct {
 	PressureAddr                 string
 	Game                         string
 	GameLabel                    string
+	SourceKind                   string
+	SourceRevision               string
 	VenueSessionID               string
 	Difficulty                   string
 	Level                        string
@@ -79,6 +81,8 @@ type config struct {
 	PlatformURL                  string
 	PlatformToken                string
 	PlatformAssetCacheDir        string
+	MotionLevelsGamesRoot        string
+	MotionLevelsGamesNode        string
 	PlatformSyncInterval         time.Duration
 	VenueIdleTimeout             time.Duration
 	ControllerID                 string
@@ -135,6 +139,8 @@ func main() {
 	flag.StringVar(&cfg.PlatformURL, "platform-url", os.Getenv("MOTION_LEVELS_PLATFORM_URL"), "platform base URL for session ingest; empty disables")
 	flag.StringVar(&cfg.PlatformToken, "platform-token", os.Getenv("MOTION_LEVELS_PLATFORM_TOKEN"), "platform bearer token for session ingest; can also use MOTION_LEVELS_PLATFORM_TOKEN")
 	flag.StringVar(&cfg.PlatformAssetCacheDir, "platform-asset-cache", nonEmptyEnv("MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR", "/var/lib/motion-levels/platform-asset-cache"), "directory for cached platform preview assets")
+	flag.StringVar(&cfg.MotionLevelsGamesRoot, "motion-levels-games-root", nonEmptyEnv("MOTION_LEVELS_GAMES_ROOT", "game-bundles/motion-levels-games"), "pinned motion-levels-games bundle root")
+	flag.StringVar(&cfg.MotionLevelsGamesNode, "motion-levels-games-node", nonEmptyEnv("MOTION_LEVELS_GAMES_NODE", "node"), "Node.js executable for the motion-levels-games runner")
 	flag.DurationVar(&cfg.PlatformSyncInterval, "platform-sync-interval", time.Second, "how often to publish session state to the platform")
 	flag.DurationVar(&cfg.VenueIdleTimeout, "venue-session-idle-timeout", defaultVenueIdleLimit, "end the venue session after this much inactivity; 0 keeps the built-in default")
 	flag.StringVar(&cfg.ControllerID, "controller-id", "", "stable controller UUID to attach platform session records to")
@@ -531,6 +537,9 @@ func clamp01(value float64) float64 {
 func normalizeGame(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	if strings.HasPrefix(value, "authored-") {
+		return value
+	}
+	if strings.HasPrefix(value, "motion-levels-games:") {
 		return value
 	}
 	if strings.HasPrefix(value, "animation-") {

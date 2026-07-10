@@ -62,6 +62,10 @@ export type PlatformGameCatalogEntry = {
   default_music_volume: number;
   countdown_floor_overlay?: boolean;
   source_kind: string;
+  source_revision?: string;
+  source_contract_version?: number;
+  source_artifact_digest?: string;
+  source_game_id?: string;
   code_editable: boolean;
   revision_hash?: string;
   game_source?: Record<string, unknown>;
@@ -90,6 +94,8 @@ export type FinishedLevelAttempt = {
 
 export type EngineStatus = {
   currentGame: string;
+  sourceKind?: string;
+  sourceRevision?: string;
   venueSessionId: string;
   label: string;
   difficulty: string;
@@ -146,6 +152,14 @@ export type DisplayRound = {
 
 export type DisplayStatus = {
   currentGame: string;
+  sourceKind?: string;
+  sourceRevision?: string;
+  gameSnapshot?: Record<string, unknown>;
+  frame?: {
+    width: number;
+    height: number;
+    cells: Array<{ x: number; y: number; color: string }>;
+  };
   label: string;
   phase: string;
   difficulty: string;

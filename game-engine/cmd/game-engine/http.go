@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/lobis/motion-levels/game-engine/internal/games/animations"
+	"github.com/lobis/motion-levels/game-engine/internal/games/motionlevelsgames"
 )
 
 var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -23,6 +24,8 @@ var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[
 type selectGameRequest struct {
 	Game                   string                     `json:"game"`
 	GameLabel              string                     `json:"gameLabel"`
+	SourceKind             string                     `json:"sourceKind"`
+	SourceRevision         string                     `json:"sourceRevision"`
 	PlatformURL            string                     `json:"platformUrl"`
 	VenueSessionID         string                     `json:"venueSessionId"`
 	RecordingEnabled       *bool                      `json:"recordingEnabled"`
@@ -88,7 +91,7 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		writeHealth(w, r)
+		writeHealth(w, r, runtime)
 	})
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -183,6 +186,18 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if isMotionLevelsGamesGame(request.Game) {
+			bundle, err := motionlevelsgames.Load(runtime.base.MotionLevelsGamesRoot)
+			gameID := strings.TrimPrefix(normalizeGame(request.Game), "motion-levels-games:")
+			if err != nil || !bundle.SupportsGame(gameID) {
+				http.Error(w, "motion-levels-games bundle or game is unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			if request.SourceKind != "motion_levels_games" || strings.TrimSpace(request.SourceRevision) != bundle.Manifest.SourceRevision {
+				http.Error(w, "motion-levels-games revision mismatch", http.StatusConflict)
+				return
+			}
+		}
 		players := make([]playerConfig, 0, len(request.Players))
 		for _, player := range request.Players {
 			color := player.Color
@@ -201,7 +216,7 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, "venueSessionId must be a UUID", http.StatusBadRequest)
 			return
 		}
-		runtime.SelectGameWithMetadata(request.Game, request.GameLabel, request.PlayerCount, request.AllowAnyPlayers, request.Difficulty, request.Level, request.LevelMode, request.DurationSeconds, request.ChallengeElapsedMillis, request.ChallengeAttemptCount, request.NarrationEnabled, request.CountdownFloorOverlay, request.TeamName, venueSessionID, recordingEnabledValue(request.RecordingEnabled), normalizeLaunchPlatformURL(request.PlatformURL), players, request.Config)
+		runtime.SelectGameWithMetadata(request.Game, request.GameLabel, request.SourceKind, request.SourceRevision, request.PlayerCount, request.AllowAnyPlayers, request.Difficulty, request.Level, request.LevelMode, request.DurationSeconds, request.ChallengeElapsedMillis, request.ChallengeAttemptCount, request.NarrationEnabled, request.CountdownFloorOverlay, request.TeamName, venueSessionID, recordingEnabledValue(request.RecordingEnabled), normalizeLaunchPlatformURL(request.PlatformURL), players, request.Config)
 		writeJSON(w, runtime.Status())
 	})
 	mux.HandleFunc("/api/control", func(w http.ResponseWriter, r *http.Request) {
@@ -506,16 +521,32 @@ func writeJSON(w http.ResponseWriter, payload any) {
 	}
 }
 
-func writeHealth(w http.ResponseWriter, r *http.Request) {
+func writeHealth(w http.ResponseWriter, r *http.Request, runtime *gameRuntime) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
+	status := http.StatusOK
+	payload := map[string]any{"status": "ok"}
+	if runtime != nil {
+		runtime.mu.RLock()
+		game := runtime.game
+		runtime.mu.RUnlock()
+		if reporter, ok := game.(interface {
+			RunnerHealth() motionlevelsgames.RunnerHealth
+		}); ok {
+			runner := reporter.RunnerHealth()
+			payload["gamesRunner"] = runner
+			if runner.Status != "ok" {
+				status = http.StatusServiceUnavailable
+				payload["status"] = "error"
+			}
+		}
+	}
 	if r.Method == http.MethodHead {
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(status)
 		return
 	}
-	if _, err := w.Write([]byte(`{"status":"ok"}` + "\n")); err != nil {
-		log.Printf("health response: %v", err)
-	}
+	w.WriteHeader(status)
+	writeJSON(w, payload)
 }
 
 func portSuffix(addr string) string {
