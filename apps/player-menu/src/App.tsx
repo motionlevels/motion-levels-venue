@@ -640,7 +640,7 @@ function applyPlatformCatalog(baseGames: GameCard[], catalog: PlatformGameCatalo
 }
 
 function isPlatformLaunchableSource(game: Pick<GameCard, "sourceKind">): boolean {
-  return game.sourceKind === "motion_go" || game.sourceKind === "platform_levels" || game.sourceKind === "motion_levels_games" || game.sourceKind === "animation";
+  return game.sourceKind === "motion_go" || game.sourceKind === "platform_levels" || game.sourceKind === "animation";
 }
 
 function canLaunchWhileCatalogRefreshes(game: GameCard): boolean {
