@@ -25,7 +25,7 @@ The defaults are:
 - controller frame stream: `127.0.0.1:4201`
 - pressure event stream: `127.0.0.1:4202`
 - game: `salvapantallas`
-- desired-state frame rate: `20fps`
+- desired-state frame rate: `50fps`
 - brightness: `100%`
 
 ## Games
@@ -48,6 +48,12 @@ http://127.0.0.1:4103
 Choosing a game updates the running game immediately through the local
 game-engine API at `http://127.0.0.1:4102`. Music is switched with the game, and
 pressure events continue to flow through the same controller stream.
+
+Games whose IDs start with `motion-levels-games:` run from the verified bundle
+pinned under `game-bundles/motion-levels-games`. The Go engine supervises its
+Node.js 20 runner and remains responsible for the 50fps floor stream, audio,
+sessions, recording, health, and the extended display feed. A launch must name
+the source revision installed in the bundle pin.
 
 The player-facing TV display lives in `apps/player-display`. It subscribes to
 the game-engine display stream:

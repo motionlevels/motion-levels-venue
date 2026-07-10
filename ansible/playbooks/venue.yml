@@ -97,6 +97,8 @@
     motion_levels_common_sync_items:
       - src: deploy/
         dest: "{{ motion_levels_remote_src }}/deploy/"
+      - src: game-bundles/
+        dest: "{{ motion_levels_remote_src }}/game-bundles/"
     motion_levels_runtime_sync_items:
       - src: go.mod
         dest: "{{ motion_levels_remote_src }}/"
@@ -137,6 +139,12 @@
         that:
           - motion_levels_deploy_mode in ["all", "frontends", "runtime"]
         fail_msg: "motion_levels_deploy_mode must be one of: all, frontends, runtime"
+
+    - name: Verify pinned motion-levels-games bundle
+      ansible.builtin.command:
+        cmd: node scripts/verify-motion-levels-games-bundle.mjs
+        chdir: "{{ motion_levels_repo_root }}"
+      changed_when: false
 
     - name: Install fixed LAN address helper
       ansible.builtin.copy:
@@ -250,6 +258,7 @@
           - libasound2-dev
           - libudev-dev
           - libusb-1.0-0-dev
+          - nodejs
           - pkg-config
           - python3-opencv
           - rclone
@@ -335,9 +344,16 @@
           + (motion_levels_frontend_sync_items if motion_levels_deploy_mode in motion_levels_frontend_modes else [])
         }}
 
+    - name: Point local game assets at the pinned bundle
+      ansible.builtin.file:
+        src: "{{ motion_levels_remote_src }}/game-bundles/motion-levels-games/{{ (lookup('file', motion_levels_repo_root ~ '/game-bundles/motion-levels-games/pin.json') | from_json).bundlePath }}"
+        dest: "{{ motion_levels_remote_src }}/game-bundles/motion-levels-games/current"
+        state: link
+        force: true
+
     - name: Run focused remote Go tests
       ansible.builtin.command:
-        cmd: "{{ motion_levels_go_bin }} test ./game-engine/cmd/game-engine ./floor-controller/cmd/floor-controller ./game-engine/internal/games/saltos ./game-engine/internal/games/niveles"
+        cmd: "{{ motion_levels_go_bin }} test ./game-engine/cmd/game-engine ./floor-controller/cmd/floor-controller ./game-engine/internal/games/motionlevelsgames ./game-engine/internal/games/saltos ./game-engine/internal/games/niveles"
         chdir: "{{ motion_levels_remote_src }}"
       changed_when: false
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
@@ -398,6 +414,14 @@
         path: /etc/motion-levels/motion-levels.env
         regexp: '^MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR='
         line: MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR=/var/lib/motion-levels/platform-asset-cache
+        mode: "0644"
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+
+    - name: Ensure motion-levels-games runner env is configured
+      ansible.builtin.lineinfile:
+        path: /etc/motion-levels/motion-levels.env
+        regexp: '^MOTION_LEVELS_GAMES_ROOT='
+        line: "MOTION_LEVELS_GAMES_ROOT={{ motion_levels_remote_src }}/game-bundles/motion-levels-games"
         mode: "0644"
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 

@@ -149,6 +149,13 @@
 		file_server
 	}
 
+	redir /games /games/
+	handle_path /games/* {
+		root * /opt/motion-levels/rebuild/src/game-bundles/motion-levels-games
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
 	handle /stack.json {
 		root * /etc/motion-levels
 		file_server
