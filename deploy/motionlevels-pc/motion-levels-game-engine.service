@@ -1,7 +1,7 @@
 [Unit]
 Description=Motion Levels game engine
-After=network-online.target sound.target motion-levels-floor-controller.service motion-levels-camera-recorder.service
-Wants=network-online.target sound.target motion-levels-floor-controller.service motion-levels-camera-recorder.service
+After=network-online.target sound.target motion-levels-floor-controller.service
+Wants=network-online.target sound.target motion-levels-floor-controller.service
 
 [Service]
 Type=simple
@@ -25,7 +25,7 @@ ExecStart=/opt/motion-levels/rebuild/bin/game-engine \
   -replay-keyframe-interval 5s \
   -replay-zstd-path /usr/bin/zstd \
   -display-snapshot-fps ${MOTION_LEVELS_DISPLAY_SNAPSHOT_FPS} \
-  -camera-recorder-url ${MOTION_LEVELS_CAMERA_RECORDER_URL} \
+  -camera-recorder-url=${MOTION_LEVELS_CAMERA_RECORDER_URL} \
   -camera-recorder-segment-seconds ${MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS} \
   -platform-url ${MOTION_LEVELS_PLATFORM_URL} \
   -platform-asset-cache ${MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR} \

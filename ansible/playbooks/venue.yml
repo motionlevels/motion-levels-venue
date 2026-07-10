@@ -71,7 +71,6 @@
     motion_levels_services:
       - motion-levels-floor-controller.service
       - motion-levels-game-engine.service
-      - motion-levels-camera-recorder.service
       - motion-levels-security-recorder.service
       - motion-levels-camera-helper.service
       - motion-levels-kiosk.service
@@ -81,6 +80,7 @@
       - motion-levels-player-display.service
       - motion-levels-player-tv.service
       - motion-levels-camera-helper.service
+      - motion-levels-camera-recorder.service
       - motion-levels.service
     motion_levels_health_urls:
       - http://127.0.0.1/controller/status
@@ -372,33 +372,11 @@
       changed_when: true
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
-    - name: Check Insta360 CameraSDK install
-      ansible.builtin.stat:
-        path: /opt/insta360/CameraSDK/lib/libCameraSDK.so
-      register: motion_levels_insta360_sdk
+    - name: Remove retired host-native Insta360 helper
+      ansible.builtin.file:
+        path: /usr/local/bin/motion-levels-insta360
+        state: absent
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Build Insta360 camera helper
-      ansible.builtin.command:
-        cmd: >-
-          g++ -std=c++17 -O2
-          -I/opt/insta360/CameraSDK/include
-          {{ motion_levels_remote_src }}/deploy/motionlevels-pc/motion-levels-insta360.cpp
-          -L/opt/insta360/CameraSDK/lib
-          -Wl,-rpath,/opt/insta360/CameraSDK/lib
-          -lCameraSDK
-          -o /usr/local/bin/motion-levels-insta360
-      changed_when: true
-      when:
-        - motion_levels_deploy_mode in motion_levels_runtime_modes
-        - motion_levels_insta360_sdk.stat.exists | default(false)
-
-    - name: Warn when Insta360 CameraSDK is missing
-      ansible.builtin.debug:
-        msg: "Insta360 CameraSDK is not installed at /opt/insta360/CameraSDK; USB camera helper was not built."
-      when:
-        - motion_levels_deploy_mode in motion_levels_runtime_modes
-        - not (motion_levels_insta360_sdk.stat.exists | default(false))
 
     - name: Install default motion-levels env if missing
       ansible.builtin.copy:
@@ -461,7 +439,7 @@
       notify: Restart motion levels services
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
-    - name: Ensure camera recorder env is configured
+    - name: Ensure legacy camera recorder integration is disabled
       ansible.builtin.lineinfile:
         path: /etc/motion-levels/motion-levels.env
         regexp: "^{{ item.key }}="
@@ -469,9 +447,7 @@
         mode: "0644"
       loop:
         - key: MOTION_LEVELS_CAMERA_RECORDER_URL
-          value: "{{ motion_levels_camera_recorder_url | default(lookup('env', 'MOTION_LEVELS_CAMERA_RECORDER_URL') | default('http://127.0.0.1:8030', true), true) }}"
-        - key: MOTION_LEVELS_CAMERA_RECORDER_PROXY_TARGET
-          value: "{{ (motion_levels_camera_recorder_url | default(lookup('env', 'MOTION_LEVELS_CAMERA_RECORDER_URL') | default('http://127.0.0.1:8030', true), true)) | regex_replace('^https?://', '') | regex_replace('/+$', '') }}"
+          value: ""
         - key: MOTION_LEVELS_CAMERA_RECORDER_TIMEOUT
           value: 20s
         - key: MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS
@@ -584,22 +560,13 @@
         mode: "0755"
       when: motion_levels_deploy_mode in motion_levels_frontend_modes
 
-    - name: Configure Caddy Motion Levels environment
-      ansible.builtin.copy:
-        dest: /etc/motion-levels/caddy.env
-        mode: "0644"
-        content: |
-          MOTION_LEVELS_CAMERA_RECORDER_PROXY_TARGET={{ (motion_levels_camera_recorder_url | default(lookup('env', 'MOTION_LEVELS_CAMERA_RECORDER_URL') | default('http://127.0.0.1:8030', true), true)) | regex_replace('^https?://', '') | regex_replace('/+$', '') }}
-      notify: Restart caddy
-      when: motion_levels_deploy_mode in motion_levels_frontend_modes
-
-    - name: Install Caddy Motion Levels systemd override
-      ansible.builtin.copy:
-        dest: /etc/systemd/system/caddy.service.d/motion-levels-env.conf
-        mode: "0644"
-        content: |
-          [Service]
-          EnvironmentFile=-/etc/motion-levels/caddy.env
+    - name: Remove retired camera recorder Caddy environment
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/motion-levels/caddy.env
+        - /etc/systemd/system/caddy.service.d/motion-levels-env.conf
       notify:
         - Reload systemd
         - Restart caddy
@@ -646,6 +613,14 @@
         state: stopped
       loop: "{{ motion_levels_old_services }}"
       failed_when: false
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+
+    - name: Persistently mask retired X5 recorder service
+      ansible.builtin.systemd_service:
+        name: motion-levels-camera-recorder.service
+        enabled: false
+        state: stopped
+        masked: true
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Remove retired frontend static service units

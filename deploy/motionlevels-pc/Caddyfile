@@ -58,19 +58,8 @@
 		reverse_proxy 127.0.0.1:8020
 	}
 
-	# The recorder can start/stop the USB camera, so expose it only to callers
-	# reaching the room over Tailscale. Platform API routes provide the logged-in
-	# operator boundary before proxying here.
-	@camera_recorder_tailscale {
-		remote_ip 100.64.0.0/10
-		path /camera-recorder/*
-	}
-	handle @camera_recorder_tailscale {
-		uri strip_prefix /camera-recorder
-		reverse_proxy {$MOTION_LEVELS_CAMERA_RECORDER_PROXY_TARGET:127.0.0.1:8030}
-	}
 	handle /camera-recorder/* {
-		respond "Not found" 404
+		respond "Legacy X5 recorder disabled; use motion-levels-cameras on port 8040" 410
 	}
 
 	@platform_next {

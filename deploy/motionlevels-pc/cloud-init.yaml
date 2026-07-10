@@ -425,8 +425,7 @@ write_files:
       MOTION_LEVELS_GAMES_ROOT=/opt/motion-levels/rebuild/src/game-bundles/motion-levels-games
       MOTION_LEVELS_DISPLAY_SNAPSHOT_FPS=4
       MOTION_LEVELS_REPLAY_MAX_LOCAL_BYTES=536870912
-      MOTION_LEVELS_CAMERA_RECORDER_URL=http://127.0.0.1:8030
-      MOTION_LEVELS_CAMERA_RECORDER_PROXY_TARGET=127.0.0.1:8030
+      MOTION_LEVELS_CAMERA_RECORDER_URL=
       MOTION_LEVELS_CAMERA_RECORDER_TIMEOUT=20s
       MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS=1200
       MOTION_LEVELS_CAMERA_RECORDER_BACKEND=fake
@@ -440,17 +439,9 @@ write_files:
       MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS=1200
       MOTION_LEVELS_CAMERA_SESSION_MAX_SECONDS=7200
       MOTION_LEVELS_CAMERA_DELETE_REMOTE_AFTER_DOWNLOAD=1
-      # For Insta360 X4/X5 SDK control, connect the camera by USB and select
-      # Android mode on the camera prompt. Linux should then show USB vendor
-      # 2e1a. Configure real camera capture on the appliance, preferably in
-      # /etc/motion-levels/camera-recorder.env:
-      # MOTION_LEVELS_CAMERA_RECORDER_BACKEND=command
-      # MOTION_LEVELS_CAMERA_REGULAR_MEDIA_EXTENSION=.mp4
-      # MOTION_LEVELS_CAMERA_360_MEDIA_EXTENSION=.insv
-      # MOTION_LEVELS_CAMERA_PHOTO_EXTENSION=.insp
-      # MOTION_LEVELS_CAMERA_START_COMMAND=/usr/local/bin/motion-levels-insta360 start
-      # MOTION_LEVELS_CAMERA_STOP_COMMAND=/usr/local/bin/motion-levels-insta360 stop
-      # MOTION_LEVELS_CAMERA_PHOTO_COMMAND=/usr/local/bin/motion-levels-insta360 photo
+      # Insta360 X5 ownership lives exclusively in
+      # motionlevels/motion-levels-cameras. This stack must not install a
+      # CameraSDK helper or start a camera recorder service.
       # Object-storage uploads use an rclone S3 remote configured outside this
       # file. The current Motion Levels target is:
       # MOTION_LEVELS_CAMERA_RCLONE_DEST=motionlevels-objects:motionlevels-recordings
@@ -478,19 +469,6 @@ write_files:
       MOTION_LEVELS_CAMERA_FPS=2
       MOTION_LEVELS_CAMERA_JPEG_QUALITY=55
       MOTION_LEVELS_CAMERA_IDLE_SECONDS=20
-
-  - path: /etc/motion-levels/caddy.env
-    owner: root:root
-    permissions: '0644'
-    content: |
-      MOTION_LEVELS_CAMERA_RECORDER_PROXY_TARGET=127.0.0.1:8030
-
-  - path: /etc/systemd/system/caddy.service.d/motion-levels-env.conf
-    owner: root:root
-    permissions: '0644'
-    content: |
-      [Service]
-      EnvironmentFile=-/etc/motion-levels/caddy.env
 
   # 3. Default Caddy reverse proxy config
   - path: /etc/caddy/Caddyfile
@@ -557,19 +535,8 @@ write_files:
           reverse_proxy 127.0.0.1:8020
         }
 
-        # The recorder can start/stop the USB camera, so expose it only to
-        # callers reaching the room over Tailscale. Platform API routes provide
-        # the logged-in operator boundary before proxying here.
-        @camera_recorder_tailscale {
-          remote_ip 100.64.0.0/10
-          path /camera-recorder/*
-        }
-        handle @camera_recorder_tailscale {
-          uri strip_prefix /camera-recorder
-          reverse_proxy {$MOTION_LEVELS_CAMERA_RECORDER_PROXY_TARGET:127.0.0.1:8030}
-        }
         handle /camera-recorder/* {
-          respond "Not found" 404
+          respond "Legacy X5 recorder disabled; use motion-levels-cameras on port 8040" 410
         }
 
         @platform_next {
@@ -721,8 +688,8 @@ write_files:
     content: |
       [Unit]
       Description=Motion Levels game engine
-      After=network-online.target sound.target motion-levels-floor-controller.service motion-levels-camera-recorder.service
-      Wants=network-online.target sound.target motion-levels-floor-controller.service motion-levels-camera-recorder.service
+      After=network-online.target sound.target motion-levels-floor-controller.service
+      Wants=network-online.target sound.target motion-levels-floor-controller.service
 
       [Service]
       Type=simple
@@ -746,7 +713,7 @@ write_files:
         -replay-keyframe-interval 5s \
         -replay-zstd-path /usr/bin/zstd \
         -display-snapshot-fps ${MOTION_LEVELS_DISPLAY_SNAPSHOT_FPS} \
-        -camera-recorder-url ${MOTION_LEVELS_CAMERA_RECORDER_URL} \
+        -camera-recorder-url=${MOTION_LEVELS_CAMERA_RECORDER_URL} \
         -camera-recorder-segment-seconds ${MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS} \
         -platform-url ${MOTION_LEVELS_PLATFORM_URL} \
         -platform-asset-cache ${MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR} \
