@@ -143,6 +143,9 @@ def normalized_video_lens(value: Any, fallback: str = DEFAULT_VIDEO_LENS) -> str
 
 
 def normalized_video_resolution(value: Any, fallback: str = DEFAULT_VIDEO_RESOLUTION) -> str:
+    normalized = re.sub(r"[\s_-]+", "", str(value if value is not None else fallback).strip().lower())
+    if normalized in {"4k", "4k30", "4kp30", "38401920p30"}:
+        return "4k30"
     return "5.7kplus30"
 
 
@@ -155,7 +158,7 @@ def video_resolution_frame_rate(value: Any) -> int:
 
 
 def with_video_frame_rate(resolution: str, frame_rate: int) -> str:
-    return "5.7kplus30"
+    return normalized_video_resolution(resolution)
 
 
 def video_capture_options(payload: dict[str, Any], recording: dict[str, Any] | None = None) -> dict[str, Any]:
