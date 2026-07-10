@@ -32,7 +32,7 @@ write_files:
     content: |
       MOTION_LEVELS_PROVISION_HOSTNAME=""
       TAILSCALE_AUTHKEY=""
-      TAILSCALE_ADVERTISE_TAGS="tag:motionlevels-venue"
+      TAILSCALE_ADVERTISE_TAGS="tag:motion-levels-edge"
 
   # 1. Kiosk display launcher script
   - path: /usr/local/bin/motion-levels-player-kiosk
@@ -875,12 +875,12 @@ runcmd:
       tailscale up \
         --auth-key="${TAILSCALE_AUTHKEY}" \
         --hostname="${PROVISION_HOSTNAME}" \
-        --advertise-tags="${TAILSCALE_ADVERTISE_TAGS:-tag:motionlevels-venue}" \
+        --advertise-tags="${TAILSCALE_ADVERTISE_TAGS:-tag:motion-levels-edge}" \
         --ssh \
         --accept-dns=false
     else
       echo "WARNING: Tailscale auth key was not set."
-      echo "To join later: tailscale up --auth-key <key> --hostname ${PROVISION_HOSTNAME} --advertise-tags ${TAILSCALE_ADVERTISE_TAGS:-tag:motionlevels-venue} --ssh --accept-dns=false"
+      echo "To join later: tailscale up --auth-key <key> --hostname ${PROVISION_HOSTNAME} --advertise-tags ${TAILSCALE_ADVERTISE_TAGS:-tag:motion-levels-edge} --ssh --accept-dns=false"
     fi
 
   # 8. Reload systemd daemon to recognize newly written services

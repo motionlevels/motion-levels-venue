@@ -47,7 +47,7 @@ all:
           motion_levels_postgres_backup_partition: /dev/sdc1
           motion_levels_postgres_backup_dir: /var/backups/motion-levels/postgres
           motion_levels_postgres_tailscale_hostname: motionlevels-postgres-1
-          motion_levels_postgres_tailscale_tags: tag:motion-levels-dev
+          motion_levels_postgres_tailscale_tags: tag:motion-levels-core
           motion_levels_postgres_tailscale_ip: 100.124.16.23
           motion_levels_postgres_listen_addresses: "127.0.0.1,100.124.16.23"
           motion_levels_postgres_allowed_cidrs:
@@ -67,7 +67,7 @@ all:
           motion_levels_objects_bind_ip: 100.69.44.59
           motion_levels_objects_lan_bind_ip: "192.168.1.7"
           motion_levels_objects_tailscale_hostname: motionlevels-objects-1
-          motion_levels_objects_tailscale_tags: tag:motion-levels-dev
+          motion_levels_objects_tailscale_tags: tag:motion-levels-core
           motion_levels_objects_buckets:
             - motionlevels-media-assets
             - motionlevels-recordings

@@ -11,7 +11,7 @@ CLOUD_INIT_TEMPLATE="${CLOUD_INIT_TEMPLATE:-${SCRIPT_DIR}/cloud-init.yaml}"
 VM_HOSTNAME="${VM_HOSTNAME:-motionlevels-venue}"
 OUTPUT="${OUTPUT:-${REPO_ROOT}/release/${VM_HOSTNAME}-seed.iso}"
 TS_AUTHKEY="${TS_AUTHKEY:-}"
-TAILSCALE_ADVERTISE_TAGS="${TAILSCALE_ADVERTISE_TAGS:-tag:motionlevels-venue}"
+TAILSCALE_ADVERTISE_TAGS="${TAILSCALE_ADVERTISE_TAGS:-tag:motion-levels-edge}"
 if [ -z "${SSH_PUBLIC_KEY_FILE:-}" ]; then
   if [ -f "${HOME}/.ssh/id_ed25519.pub" ]; then
     SSH_PUBLIC_KEY_FILE="${HOME}/.ssh/id_ed25519.pub"
