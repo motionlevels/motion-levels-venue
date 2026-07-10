@@ -348,14 +348,18 @@ func (r *gameRuntime) SelectGameWithDifficulty(game string, players int, difficu
 }
 
 func (r *gameRuntime) SelectGameWithOptions(game string, players int, difficulty string, narrationEnabled *bool) {
-	r.SelectGameWithMetadata(game, "", players, difficulty, "", "", 0, 0, 0, narrationEnabled, false, "", "", true, "", nil, nil)
+	r.SelectGameWithMetadata(game, "", players, false, difficulty, "", "", 0, 0, 0, narrationEnabled, false, "", "", true, "", nil, nil)
 }
 
-func (r *gameRuntime) SelectGameWithMetadata(game string, gameLabel string, players int, difficulty string, level string, levelMode string, durationSeconds int, challengeElapsedMillis int64, challengeAttemptCount int, narrationEnabled *bool, countdownFloorOverlay bool, teamName string, venueSessionID string, cameraRecordingEnabled bool, platformURL string, roster []playerConfig, gameConfig map[string]json.RawMessage) {
+func (r *gameRuntime) SelectGameWithMetadata(game string, gameLabel string, players int, allowAnyPlayers bool, difficulty string, level string, levelMode string, durationSeconds int, challengeElapsedMillis int64, challengeAttemptCount int, narrationEnabled *bool, countdownFloorOverlay bool, teamName string, venueSessionID string, cameraRecordingEnabled bool, platformURL string, roster []playerConfig, gameConfig map[string]json.RawMessage) {
 	if r == nil {
 		return
 	}
 	cfg := configForSelection(r.base, game, players)
+	cfg.AllowAnyPlayers = allowAnyPlayers
+	if allowAnyPlayers && players == 0 {
+		cfg.PlayerCount = 0
+	}
 	cfg.GameLabel = strings.TrimSpace(gameLabel)
 	if shouldUseLaunchPlatformURL(r.base.PlatformURL, platformURL) {
 		cfg.PlatformURL = platformURL
@@ -379,7 +383,7 @@ func (r *gameRuntime) SelectGameWithMetadata(game string, gameLabel string, play
 	cfg.CountdownFloorOverlay = countdownFloorOverlay
 	cfg.TeamName = strings.TrimSpace(teamName)
 	cfg.VenueSessionID = strings.TrimSpace(venueSessionID)
-	cfg.Players = normalizePlayerRoster(roster, cfg.PlayerCount)
+	cfg.Players = normalizePlayerRoster(roster, rosterPlayerLimit(cfg.PlayerCount, allowAnyPlayers, len(roster)))
 	cfg.GameConfig = normalizeGameConfigOverrides(gameConfig)
 	mode := narrationAuto
 	if narrationEnabled != nil {
@@ -2487,8 +2491,8 @@ func normalizePlayerRoster(players []playerConfig, playerCount int) []playerConf
 	return normalized
 }
 
-func validatePlayerRoster(players []playerConfig, playerCount int) error {
-	playerCount = normalizeRosterPlayerCount(playerCount)
+func validatePlayerRoster(players []playerConfig, playerCount int, allowAnyPlayers bool) error {
+	playerCount = rosterPlayerLimit(playerCount, allowAnyPlayers, len(players))
 	indexes := map[int]struct{}{}
 	labels := map[string]string{}
 	colors := map[string]struct{}{}
@@ -2524,6 +2528,13 @@ func validatePlayerRoster(players []playerConfig, playerCount int) error {
 		}
 	}
 	return nil
+}
+
+func rosterPlayerLimit(playerCount int, allowAnyPlayers bool, rosterSize int) int {
+	if allowAnyPlayers && playerCount == 0 {
+		return normalizeRosterPlayerCount(max(1, rosterSize))
+	}
+	return normalizeRosterPlayerCount(playerCount)
 }
 
 func normalizeRosterPlayerCount(playerCount int) int {

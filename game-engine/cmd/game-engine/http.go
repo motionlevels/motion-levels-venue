@@ -27,6 +27,7 @@ type selectGameRequest struct {
 	VenueSessionID         string                     `json:"venueSessionId"`
 	RecordingEnabled       *bool                      `json:"recordingEnabled"`
 	PlayerCount            int                        `json:"playerCount"`
+	AllowAnyPlayers        bool                       `json:"allowAnyPlayers"`
 	Difficulty             string                     `json:"difficulty"`
 	Level                  string                     `json:"level"`
 	LevelMode              string                     `json:"levelMode"`
@@ -191,7 +192,7 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 				Color: &color,
 			})
 		}
-		if err := validatePlayerRoster(players, request.PlayerCount); err != nil {
+		if err := validatePlayerRoster(players, request.PlayerCount, request.AllowAnyPlayers); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -200,7 +201,7 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, "venueSessionId must be a UUID", http.StatusBadRequest)
 			return
 		}
-		runtime.SelectGameWithMetadata(request.Game, request.GameLabel, request.PlayerCount, request.Difficulty, request.Level, request.LevelMode, request.DurationSeconds, request.ChallengeElapsedMillis, request.ChallengeAttemptCount, request.NarrationEnabled, request.CountdownFloorOverlay, request.TeamName, venueSessionID, recordingEnabledValue(request.RecordingEnabled), normalizeLaunchPlatformURL(request.PlatformURL), players, request.Config)
+		runtime.SelectGameWithMetadata(request.Game, request.GameLabel, request.PlayerCount, request.AllowAnyPlayers, request.Difficulty, request.Level, request.LevelMode, request.DurationSeconds, request.ChallengeElapsedMillis, request.ChallengeAttemptCount, request.NarrationEnabled, request.CountdownFloorOverlay, request.TeamName, venueSessionID, recordingEnabledValue(request.RecordingEnabled), normalizeLaunchPlatformURL(request.PlatformURL), players, request.Config)
 		writeJSON(w, runtime.Status())
 	})
 	mux.HandleFunc("/api/control", func(w http.ResponseWriter, r *http.Request) {

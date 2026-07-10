@@ -56,6 +56,7 @@ export type PlatformGameCatalogEntry = {
   narration_audio_ref?: string;
   min_players: number;
   max_players: number;
+  allow_any_players?: boolean;
   difficulties?: string[];
   default_music_ref: string;
   default_music_volume: number;

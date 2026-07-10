@@ -41,6 +41,7 @@ type config struct {
 	ChallengeElapsedMillis       int64
 	ChallengeAttemptCount        int
 	PlayerCount                  int
+	AllowAnyPlayers              bool
 	TeamName                     string
 	Players                      []playerConfig
 	GameConfig                   map[string]json.RawMessage
@@ -216,7 +217,9 @@ func (c *config) normalize() {
 	} else {
 		c.Level = ""
 	}
-	if c.PlayerCount < 1 {
+	if c.AllowAnyPlayers && c.PlayerCount < 0 {
+		c.PlayerCount = 0
+	} else if !c.AllowAnyPlayers && c.PlayerCount < 1 {
 		c.PlayerCount = 1
 	}
 	if c.PlayerCount > maxConfigPlayers(c.Game) {

@@ -19,7 +19,8 @@ function playerRequirementKey(value: unknown) {
     .toLowerCase();
 }
 
-export function gameRequiresPlayerCount(game: Pick<GameCard, "players">): boolean {
+export function gameRequiresPlayerCount(game: Pick<GameCard, "allowAnyPlayers" | "players">): boolean {
+  if (game.allowAnyPlayers) return false;
   return !["", "todos", "sin selector", "sin requisito", "sin limite", "sin jugadores", "no aplica", "none", "hidden", "n/a"].includes(playerRequirementKey(game.players));
 }
 
@@ -84,7 +85,7 @@ export function platformPlayerConfigVars(
   const vars = rawVars.flatMap((item): GameConfigVar[] => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const record = item as Record<string, unknown>;
-    if (record.player_facing !== true) return [];
+    if (record.player_facing !== true && record.playerFacing !== true) return [];
     const key = String(record.key || "").trim();
     if (!key || seen.has(key)) return [];
     const type = gameConfigVarTypes.includes(record.type as GameConfigVarType) ? record.type as GameConfigVarType : "int";
@@ -143,9 +144,9 @@ export function platformPlayerBounds(entry: Pick<PlatformGameCatalogEntry, "max_
   return { maxPlayers, minPlayers };
 }
 
-export function platformPlayerRangeLabel(entry: Pick<PlatformGameCatalogEntry, "catalog_category" | "max_players" | "min_players" | "players_label">): string {
+export function platformPlayerRangeLabel(entry: Pick<PlatformGameCatalogEntry, "allow_any_players" | "catalog_category" | "max_players" | "min_players" | "players_label">): string {
   if (entry.catalog_category === "attract") return "Todos";
-  if (!gameRequiresPlayerCount({ players: entry.players_label })) return noPlayerRequirementLabel;
+  if (entry.allow_any_players || !gameRequiresPlayerCount({ allowAnyPlayers: false, players: entry.players_label })) return noPlayerRequirementLabel;
   const { maxPlayers, minPlayers } = platformPlayerBounds(entry);
   return minPlayers === maxPlayers ? String(minPlayers) : `${minPlayers}-${maxPlayers}`;
 }
@@ -211,9 +212,9 @@ export function closestSupportedDifficulty(requested: DifficultyID, supported: D
 }
 
 export function playerBoundsForGame(
-  game: Pick<GameCard, "engineGame" | "id" | "category" | "maxPlayers" | "minPlayers" | "players">,
+  game: Pick<GameCard, "allowAnyPlayers" | "engineGame" | "id" | "category" | "maxPlayers" | "minPlayers" | "players">,
 ): PlayerBounds {
-  if (typeof game.players === "string" && !gameRequiresPlayerCount(game)) return { minPlayers: 1, maxPlayers: 99 };
+  if (game.allowAnyPlayers || (typeof game.players === "string" && !gameRequiresPlayerCount(game))) return { minPlayers: 1, maxPlayers: 99 };
   if (Number.isFinite(game.minPlayers) && Number.isFinite(game.maxPlayers)) {
     const minPlayers = clampInteger(game.minPlayers, 1, 99, 1);
     const maxPlayers = Math.max(minPlayers, clampInteger(game.maxPlayers, 1, 99, minPlayers));
@@ -230,7 +231,7 @@ export function playerBoundsForGame(
 }
 
 export function rosterForGame<T extends { active: boolean }>(
-  game: Pick<GameCard, "engineGame" | "id" | "category" | "maxPlayers" | "minPlayers" | "players">,
+  game: Pick<GameCard, "allowAnyPlayers" | "engineGame" | "id" | "category" | "maxPlayers" | "minPlayers" | "players">,
   players: T[],
 ): T[] {
   const { maxPlayers } = playerBoundsForGame(game);

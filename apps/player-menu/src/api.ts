@@ -14,6 +14,7 @@ export type SelectGameRequest = {
   venueSessionId?: string;
   recordingEnabled?: boolean;
   playerCount: number;
+  allowAnyPlayers?: boolean;
   difficulty?: string;
   level?: string;
   levelMode?: "challenge" | "free";

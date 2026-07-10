@@ -85,6 +85,22 @@ describe("catalog metadata sync", () => {
     assert.equal(platformPlayerRangeLabel(entry), "2-5");
   });
 
+  it("treats explicit allow-any games as roster-flexible without changing legacy bounds", () => {
+    const allowAny = catalogEntry({ allow_any_players: true, min_players: 2, max_players: 2, players_label: "2" });
+    const legacy = catalogEntry({ min_players: 2, max_players: 2, players_label: "2" });
+
+    assert.equal(platformPlayerRangeLabel(allowAny), "Sin requisito");
+    assert.deepEqual(playerBoundsForGame({
+      allowAnyPlayers: true,
+      category: "arcade",
+      id: "allow-any",
+      maxPlayers: 2,
+      minPlayers: 2,
+      players: "Sin requisito",
+    }), { minPlayers: 1, maxPlayers: 99 });
+    assert.equal(platformPlayerRangeLabel(legacy), "2");
+  });
+
   it("derives ambient player labels from category", () => {
     const entry = catalogEntry({ min_players: 3, max_players: 3, players_label: "Tríos" });
 
@@ -425,6 +441,7 @@ describe("catalog metadata sync", () => {
             { key: "points_to_win", label: "Puntos para ganar", type: "int", default: 7, min: 1, max: 21, player_facing: true },
             { key: "internal_speed", type: "float", default: 1.2 },
             { key: "mode", type: "enum", default: "classic", options: [{ value: "classic", label: "Clásico" }, { value: "turbo" }], player_facing: true },
+            { key: "rounds", label: "Rondas", type: "int", default: 3, min: 1, max: 9, playerFacing: true },
             { key: "broken_enum", type: "enum", player_facing: true },
             { key: "", type: "int", player_facing: true },
           ],
@@ -433,7 +450,7 @@ describe("catalog metadata sync", () => {
     });
 
     const vars = platformPlayerConfigVars(entry);
-    assert.equal(vars?.length, 2);
+    assert.equal(vars?.length, 3);
     assert.deepEqual(vars?.[0], {
       key: "points_to_win",
       label: "Puntos para ganar",
@@ -448,6 +465,14 @@ describe("catalog metadata sync", () => {
       type: "enum",
       default: "classic",
       options: [{ value: "classic", label: "Clásico" }, { value: "turbo" }],
+    });
+    assert.deepEqual(vars?.[2], {
+      key: "rounds",
+      label: "Rondas",
+      type: "int",
+      default: 3,
+      min: 1,
+      max: 9,
     });
 
     assert.equal(platformPlayerConfigVars(catalogEntry()), undefined);
@@ -467,6 +492,8 @@ describe("catalog metadata sync", () => {
 
     assert.match(appSource, /const launchConfig = menuConfigOverridesFor\(launchGame, nextMenu\);/);
     assert.match(appSource, /config: launchConfig,/);
+    assert.match(appSource, /playerCount: launchGame\.allowAnyPlayers \? 0 : Math\.max\(1, launchRoster\.length\),/);
+    assert.match(appSource, /allowAnyPlayers: launchGame\.allowAnyPlayers === true,/);
     assert.match(appSource, /configVars: platformPlayerConfigVars\(entry\),/);
     assert.match(appSource, /gameConfig: normalizeGameConfigState\(saved\.gameConfig\),/);
     assert.match(appSource, /<GameConfigDialog/);

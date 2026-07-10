@@ -305,6 +305,27 @@ func TestConfigNormalizeClampsPlaybackSettings(t *testing.T) {
 	}
 }
 
+func TestConfigNormalizePreservesExplicitAllowAnyPlayerCount(t *testing.T) {
+	flexible := config{AllowAnyPlayers: true, FPS: 50, PlayerCount: 0}
+	flexible.normalize()
+	if flexible.PlayerCount != 0 {
+		t.Fatalf("allow-any players = %d, want 0", flexible.PlayerCount)
+	}
+
+	legacy := config{FPS: 50, PlayerCount: 0}
+	legacy.normalize()
+	if legacy.PlayerCount != 1 {
+		t.Fatalf("legacy players = %d, want 1", legacy.PlayerCount)
+	}
+
+	if got := rosterPlayerLimit(0, true, 4); got != 4 {
+		t.Fatalf("allow-any roster limit = %d, want 4", got)
+	}
+	if got := rosterPlayerLimit(0, false, 4); got != 1 {
+		t.Fatalf("legacy roster limit = %d, want 1", got)
+	}
+}
+
 func TestAudioPlayerDisabledByDefault(t *testing.T) {
 	player, err := config{}.audioPlayer()
 	if err != nil {

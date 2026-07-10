@@ -96,6 +96,7 @@ export type GameCard = {
   engineGame?: string;
   maxPlayers?: number;
   minPlayers?: number;
+  allowAnyPlayers?: boolean;
   thumbnailSrc?: string;
   thumbnailSrcs?: string[];
   previewSrc?: string;
