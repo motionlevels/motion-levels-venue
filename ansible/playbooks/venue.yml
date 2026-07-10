@@ -22,7 +22,6 @@
       - motion-levels-player-menu.service
       - motion-levels-player-display.service
       - motion-levels-player-tv.service
-      - motion-levels-camera-helper.service
       - motion-levels-camera-recorder.service
       - motion-levels.service
     motion_levels_health_urls:
@@ -270,16 +269,31 @@
         set -eu
         image="{{ motion_levels_venue_image }}"
         release_dir="{{ motion_levels_venue_release_dir }}"
+        release_tmp="${release_dir}.tmp"
+        current="{{ motion_levels_remote_root }}/current"
         container="motion-levels-release-{{ (motion_levels_venue_revision.stdout | trim)[:12] }}"
-        rm -rf "$release_dir"
-        mkdir -p "$release_dir"
+        if [ -e "$release_dir/.complete" ]; then
+          echo already-present
+          exit 0
+        fi
+        if [ -L "$current" ] && [ "$(readlink -f "$current")" = "$release_dir" ] && [ -d "$release_dir" ]; then
+          touch "$release_dir/.complete"
+          echo already-active
+          exit 0
+        fi
+        rm -rf "$release_tmp"
+        mkdir -p "$release_tmp"
         docker rm -f "$container" >/dev/null 2>&1 || true
         docker create --name "$container" "$image" >/dev/null
         trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
-        docker cp "$container:/release/." "$release_dir/"
+        docker cp "$container:/release/." "$release_tmp/"
+        touch "$release_tmp/.complete"
+        rm -rf "$release_dir"
+        mv "$release_tmp" "$release_dir"
       args:
         executable: /bin/sh
-      changed_when: true
+      register: motion_levels_venue_extract
+      changed_when: motion_levels_venue_extract.stdout | trim not in ['already-present', 'already-active']
 
     - name: Preserve the legacy host release for first-container rollback
       ansible.builtin.shell: |
@@ -315,15 +329,23 @@
         set -eu
         root="{{ motion_levels_remote_root }}"
         candidate="{{ motion_levels_venue_release_dir }}"
+        active=""
         if [ -L "$root/current" ]; then
-          previous="$(readlink -f "$root/current")"
-          ln -sfn "$previous" "$root/previous"
+          active="$(readlink -f "$root/current")"
+        fi
+        if [ "$active" = "$candidate" ]; then
+          echo already-active
+          exit 0
+        fi
+        if [ -n "$active" ]; then
+          ln -sfn "$active" "$root/previous"
         fi
         ln -sfn "$candidate" "$root/current"
         printf '%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "{{ motion_levels_venue_image }}" >> "$root/releases/history.tsv"
       args:
         executable: /bin/sh
-      changed_when: true
+      register: motion_levels_venue_activate
+      changed_when: motion_levels_venue_activate.stdout | trim != 'already-active'
 
     - name: Point local game assets at the pinned bundle
       ansible.builtin.file:
@@ -660,14 +682,39 @@
           }}
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
-    - name: Activate rebuilt Motion Levels services when venue is idle
-      ansible.builtin.systemd_service:
-        name: "{{ item }}"
-        state: restarted
-      loop: "{{ motion_levels_services }}"
+    - name: Queue rebuilt Motion Levels service activation when venue is idle
+      ansible.builtin.command:
+        cmd: >-
+          systemd-run
+          --unit=motion-levels-release-{{ (motion_levels_venue_revision.stdout | trim)[:12] }}
+          --collect --no-block --
+          /bin/systemctl restart {{ motion_levels_services | join(' ') }}
       when:
         - motion_levels_deploy_mode in motion_levels_runtime_modes
         - motion_levels_can_restart_now | default(false)
+        - motion_levels_venue_activate.changed
+
+    - name: Wait for venue SSH after service activation
+      ansible.builtin.wait_for_connection:
+        timeout: 90
+        sleep: 2
+      when:
+        - motion_levels_deploy_mode in motion_levels_runtime_modes
+        - motion_levels_can_restart_now | default(false)
+        - motion_levels_venue_activate.changed
+
+    - name: Verify activated Motion Levels services
+      ansible.builtin.command:
+        argv: "{{ ['systemctl', 'is-active'] + motion_levels_services }}"
+      register: motion_levels_services_active
+      changed_when: false
+      retries: 30
+      delay: 2
+      until: motion_levels_services_active.rc == 0
+      when:
+        - motion_levels_deploy_mode in motion_levels_runtime_modes
+        - motion_levels_can_restart_now | default(false)
+        - motion_levels_venue_activate.changed
 
     - name: Keep rebuilt Motion Levels services staged while a session is active
       ansible.builtin.debug:
