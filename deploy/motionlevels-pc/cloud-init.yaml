@@ -422,7 +422,7 @@ write_files:
       MOTION_LEVELS_REFRESH_FPS=50
       MOTION_LEVELS_ENGINE_FPS=50
       MOTION_LEVELS_ENGINE_BRIGHTNESS=100
-      MOTION_LEVELS_GAMES_ROOT=/opt/motion-levels/rebuild/src/game-bundles/motion-levels-games
+      MOTION_LEVELS_GAMES_ROOT=/opt/motion-levels/rebuild/current/game-bundles/motion-levels-games
       MOTION_LEVELS_DISPLAY_SNAPSHOT_FPS=4
       MOTION_LEVELS_REPLAY_MAX_LOCAL_BYTES=536870912
       MOTION_LEVELS_CAMERA_RECORDER_URL=
@@ -521,7 +521,7 @@ write_files:
           path /cameras /cameras/
         }
         handle @platform_cameras {
-          root * /opt/motion-levels/rebuild/src/deploy/motionlevels-pc
+          root * /opt/motion-levels/rebuild/current/deploy/motionlevels-pc
           rewrite * /cameras.html
           header Cache-Control "no-store"
           file_server
@@ -582,20 +582,20 @@ write_files:
         }
 
         handle /motion-levels-icon.png {
-          root * /opt/motion-levels/rebuild/apps/player-menu/dist
+          root * /opt/motion-levels/rebuild/current/apps/player-menu/dist
           header Cache-Control "public, max-age=31536000, immutable"
           file_server
         }
 
         handle /motion-levels-icon.webp {
-          root * /opt/motion-levels/rebuild/apps/player-menu/dist
+          root * /opt/motion-levels/rebuild/current/apps/player-menu/dist
           header Cache-Control "public, max-age=31536000, immutable"
           file_server
         }
 
         redir /menu /menu/
         handle_path /menu/* {
-          root * /opt/motion-levels/rebuild/apps/player-menu/dist
+          root * /opt/motion-levels/rebuild/current/apps/player-menu/dist
           @menu_assets path /assets/*
           header @menu_assets Cache-Control "public, max-age=31536000, immutable"
           @menu_index path / /index.html
@@ -606,7 +606,7 @@ write_files:
 
         redir /display /display/
         handle_path /display/* {
-          root * /opt/motion-levels/rebuild/apps/player-display/dist
+          root * /opt/motion-levels/rebuild/current/apps/player-display/dist
           @display_assets path /assets/*
           header @display_assets Cache-Control "public, max-age=31536000, immutable"
           @display_index path / /index.html
@@ -617,7 +617,7 @@ write_files:
 
         redir /games /games/
         handle_path /games/* {
-          root * /opt/motion-levels/rebuild/src/game-bundles/motion-levels-games
+          root * /opt/motion-levels/rebuild/current/game-bundles/motion-levels-games
           header Cache-Control "public, max-age=31536000, immutable"
           file_server
         }
@@ -646,10 +646,10 @@ write_files:
 
       [Service]
       Type=simple
-      WorkingDirectory=/opt/motion-levels/rebuild
+      WorkingDirectory=/opt/motion-levels/rebuild/current
       EnvironmentFile=/etc/motion-levels/motion-levels.env
       EnvironmentFile=-/etc/motion-levels/platform.env
-      ExecStart=/opt/motion-levels/rebuild/bin/floor-controller \
+      ExecStart=/opt/motion-levels/rebuild/current/bin/floor-controller \
         -http ${MOTION_LEVELS_CONTROLLER_HTTP} \
         -frames ${MOTION_LEVELS_CONTROLLER_FRAMES} \
         -input-events ${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS} \
@@ -693,12 +693,12 @@ write_files:
 
       [Service]
       Type=simple
-      WorkingDirectory=/opt/motion-levels/rebuild
+      WorkingDirectory=/opt/motion-levels/rebuild/current
       EnvironmentFile=/etc/motion-levels/motion-levels.env
       EnvironmentFile=-/etc/motion-levels/platform.env
       RuntimeDirectory=motion-levels-game-engine
       RuntimeDirectoryMode=0755
-      ExecStart=/opt/motion-levels/rebuild/bin/game-engine \
+      ExecStart=/opt/motion-levels/rebuild/current/bin/game-engine \
         -http ${MOTION_LEVELS_ENGINE_HTTP} \
         -controller ${MOTION_LEVELS_CONTROLLER_FRAMES} \
         -pressure-events ${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS} \
@@ -707,7 +707,7 @@ write_files:
         -brightness ${MOTION_LEVELS_ENGINE_BRIGHTNESS} \
         -audio=true \
         -audio-player aplay-raw \
-        -audio-assets /opt/motion-levels/rebuild/content/audio \
+        -audio-assets /opt/motion-levels/rebuild/current/content/audio \
         -record-replay /run/motion-levels-game-engine/replays \
         -replay-keep-local=false \
         -replay-keyframe-interval 5s \
@@ -788,30 +788,12 @@ runcmd:
   # 3. Add Tailscale and install it using the official script
   - curl -fsSL https://tailscale.com/install.sh | sh
 
-  # 4. Install all runtime, build, VM agent, and display/kiosk packages
+  # 4. Install runtime, container, VM agent, and display/kiosk packages
   - apt-get update
-  - DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::=--force-confold install -y caddy build-essential cmake pkg-config libasound2-dev libudev-dev libusb-1.0-0-dev usbutils zstd git rclone rsync nodejs python3 python3-opencv sudo openssh-server qemu-guest-agent xinit xserver-xorg x11-xserver-utils chromium unclutter alsa-utils
-
-  # 5. Download and install Go compiler (required to build Go programs during deploy)
-  - |
-    GO_VERSION="1.26.3"
-    ARCH=$(uname -m)
-    case "$ARCH" in
-      x86_64|amd64) GO_ARCH=amd64 ;;
-      aarch64|arm64) GO_ARCH=arm64 ;;
-      *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
-    esac
-    TMP_DIR=$(mktemp -d)
-    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz" -o "${TMP_DIR}/go.tar.gz"
-    rm -rf /usr/local/go
-    tar -C /usr/local -xzf "${TMP_DIR}/go.tar.gz"
-    rm -rf "${TMP_DIR}"
+  - DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::=--force-confold install -y caddy curl docker.io ffmpeg libasound2 libudev1 libusb-1.0-0 usbutils zstd rclone python3 python3-opencv sudo openssh-server qemu-guest-agent xinit xserver-xorg x11-xserver-utils chromium unclutter alsa-utils
 
   # 6. Create required appliance deployment directories
-  - mkdir -p /opt/motion-levels/rebuild/src
-  - mkdir -p /opt/motion-levels/rebuild/bin
-  - mkdir -p /opt/motion-levels/rebuild/apps/player-menu
-  - mkdir -p /opt/motion-levels/rebuild/apps/player-display
+  - mkdir -p /opt/motion-levels/rebuild/releases
   - mkdir -p /var/lib/motion-levels
 
   # 7. Apply per-machine hostname and start Tailscale auto-registration

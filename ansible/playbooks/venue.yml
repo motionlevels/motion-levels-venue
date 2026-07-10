@@ -1,70 +1,13 @@
 ---
-- name: Build venue assets locally
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  vars:
-    motion_levels_repo_root: "{{ playbook_dir }}/../.."
-    motion_levels_skip_tests: "{{ lookup('env', 'SKIP_TESTS') | default('0', true) }}"
-    motion_levels_deploy_mode: "{{ lookup('env', 'MOTION_LEVELS_DEPLOY_MODE') | default('all', true) }}"
-    motion_levels_frontend_modes: ["all", "frontends"]
-    motion_levels_runtime_modes: ["all", "runtime"]
-  tasks:
-    - name: Validate venue deploy mode
-      ansible.builtin.assert:
-        that:
-          - motion_levels_deploy_mode in ["all", "frontends", "runtime"]
-        fail_msg: "motion_levels_deploy_mode must be one of: all, frontends, runtime"
-
-    - name: Install player menu dependencies
-      ansible.builtin.command:
-        cmd: npm ci --prefix apps/player-menu
-        chdir: "{{ motion_levels_repo_root }}"
-      changed_when: false
-      when: motion_levels_deploy_mode in motion_levels_frontend_modes
-
-    - name: Install player display dependencies
-      ansible.builtin.command:
-        cmd: npm ci --prefix apps/player-display
-        chdir: "{{ motion_levels_repo_root }}"
-      changed_when: false
-      when: motion_levels_deploy_mode in motion_levels_frontend_modes
-
-    - name: Install shared floor view dependencies
-      ansible.builtin.command:
-        cmd: npm ci --prefix packages/floor-view
-        chdir: "{{ motion_levels_repo_root }}"
-      changed_when: false
-      when: motion_levels_deploy_mode in motion_levels_frontend_modes
-
-    - name: Run repository tests
-      ansible.builtin.command:
-        cmd: go test ./...
-        chdir: "{{ motion_levels_repo_root }}"
-      when:
-        - motion_levels_skip_tests != "1"
-        - motion_levels_deploy_mode in motion_levels_runtime_modes
-      changed_when: false
-
-    - name: Build player menu
-      ansible.builtin.command:
-        cmd: npm run build --prefix apps/player-menu
-        chdir: "{{ motion_levels_repo_root }}"
-      changed_when: true
-      when: motion_levels_deploy_mode in motion_levels_frontend_modes
-
-    - name: Build player display
-      ansible.builtin.command:
-        cmd: npm run build --prefix apps/player-display
-        chdir: "{{ motion_levels_repo_root }}"
-      changed_when: true
-      when: motion_levels_deploy_mode in motion_levels_frontend_modes
-
 - name: Deploy Motion Levels venue stack
   hosts: motion_levels_venues
   gather_facts: true
   vars:
     motion_levels_repo_root: "{{ playbook_dir }}/../.."
+    motion_levels_remote_src: "{{ motion_levels_remote_root }}/current"
+    motion_levels_releases_root: "{{ motion_levels_remote_root }}/releases"
+    motion_levels_ghcr_username: "{{ lookup('env', 'GHCR_USERNAME') | default('lobis', true) }}"
+    motion_levels_ghcr_token: "{{ lookup('env', 'GHCR_TOKEN') }}"
     motion_levels_deploy_mode: "{{ lookup('env', 'MOTION_LEVELS_DEPLOY_MODE') | default('all', true) }}"
     motion_levels_frontend_modes: ["all", "frontends"]
     motion_levels_runtime_modes: ["all", "runtime"]
@@ -139,6 +82,27 @@
         that:
           - motion_levels_deploy_mode in ["all", "frontends", "runtime"]
         fail_msg: "motion_levels_deploy_mode must be one of: all, frontends, runtime"
+
+    - name: Resolve venue bundle revision
+      ansible.builtin.command:
+        cmd: git rev-parse HEAD
+        chdir: "{{ motion_levels_repo_root }}"
+      delegate_to: localhost
+      become: false
+      register: motion_levels_venue_revision
+      changed_when: false
+
+    - name: Validate GHCR pull credentials
+      ansible.builtin.assert:
+        that:
+          - motion_levels_ghcr_token | length > 0
+        fail_msg: Set GHCR_TOKEN to a classic GitHub token with read:packages.
+      no_log: true
+
+    - name: Set venue bundle release facts
+      ansible.builtin.set_fact:
+        motion_levels_venue_image: "ghcr.io/motionlevels/motion-levels-venue-bundle:sha-{{ motion_levels_venue_revision.stdout | trim }}"
+        motion_levels_venue_release_dir: "{{ motion_levels_releases_root }}/{{ motion_levels_venue_revision.stdout | trim }}"
 
     - name: Verify pinned motion-levels-games bundle
       ansible.builtin.command:
@@ -253,18 +217,14 @@
       ansible.builtin.apt:
         name:
           - caddy
-          - build-essential
-          - cmake
           - curl
+          - docker.io
           - ffmpeg
-          - libasound2-dev
-          - libudev-dev
-          - libusb-1.0-0-dev
-          - nodejs
-          - pkg-config
+          - libasound2
+          - libudev1
+          - libusb-1.0-0
           - python3-opencv
           - rclone
-          - rsync
           - usbutils
           - v4l-utils
           - zstd
@@ -276,9 +236,7 @@
           - alsa-utils
         state: present
         update_cache: true
-      when:
-        - ansible_facts.os_family == "Debian"
-        - motion_levels_deploy_mode in motion_levels_runtime_modes
+      when: ansible_facts.os_family == "Debian"
 
     - name: Create deployment directories
       ansible.builtin.file:
@@ -286,65 +244,86 @@
         state: directory
         mode: "0755"
       loop:
-        - "{{ motion_levels_remote_src }}"
-        - "{{ motion_levels_remote_src }}/apps"
-        - "{{ motion_levels_remote_root }}/bin"
-        - "{{ motion_levels_remote_root }}/apps/player-menu"
-        - "{{ motion_levels_remote_root }}/apps/player-display"
+        - "{{ motion_levels_remote_root }}"
+        - "{{ motion_levels_releases_root }}"
         - /etc/motion-levels
         - /etc/caddy
         - /var/lib/motion-levels
         - /var/lib/motion-levels/camera-recordings
         - /var/lib/motion-levels/security-recordings
 
-    - name: Check installed Go version
+    - name: Log Docker into GHCR
       ansible.builtin.command:
-        cmd: "{{ motion_levels_go_bin }} version"
-      register: motion_levels_go_check
-      failed_when: false
+        cmd: docker login ghcr.io --username "{{ motion_levels_ghcr_username }}" --password-stdin
+        stdin: "{{ motion_levels_ghcr_token }}"
       changed_when: false
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+      no_log: true
 
-    - name: Resolve Go architecture
-      ansible.builtin.set_fact:
-        motion_levels_go_arch: "{{ 'arm64' if ansible_facts.architecture in ['aarch64', 'arm64'] else 'amd64' }}"
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+    - name: Pull immutable venue bundle
+      ansible.builtin.command:
+        cmd: docker pull "{{ motion_levels_venue_image }}"
+      register: motion_levels_venue_pull
+      changed_when: "'Downloaded newer image' in motion_levels_venue_pull.stdout"
 
-    - name: Install Go
-      when:
-        - motion_levels_deploy_mode in motion_levels_runtime_modes
-        - "'go' ~ motion_levels_go_version not in (motion_levels_go_check.stdout | default(''))"
-      block:
-        - name: Download Go toolchain
-          ansible.builtin.get_url:
-            url: "https://go.dev/dl/go{{ motion_levels_go_version }}.linux-{{ motion_levels_go_arch }}.tar.gz"
-            dest: "/tmp/go{{ motion_levels_go_version }}.linux-{{ motion_levels_go_arch }}.tar.gz"
-            mode: "0644"
+    - name: Extract immutable venue bundle
+      ansible.builtin.shell: |
+        set -eu
+        image="{{ motion_levels_venue_image }}"
+        release_dir="{{ motion_levels_venue_release_dir }}"
+        container="motion-levels-release-{{ (motion_levels_venue_revision.stdout | trim)[:12] }}"
+        rm -rf "$release_dir"
+        mkdir -p "$release_dir"
+        docker rm -f "$container" >/dev/null 2>&1 || true
+        docker create --name "$container" "$image" >/dev/null
+        trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+        docker cp "$container:/release/." "$release_dir/"
+      args:
+        executable: /bin/sh
+      changed_when: true
 
-        - name: Remove previous Go toolchain
-          ansible.builtin.file:
-            path: /usr/local/go
-            state: absent
+    - name: Preserve the legacy host release for first-container rollback
+      ansible.builtin.shell: |
+        set -eu
+        root="{{ motion_levels_remote_root }}"
+        legacy="$root/releases/legacy-pre-container"
 
-        - name: Extract Go toolchain
-          ansible.builtin.unarchive:
-            src: "/tmp/go{{ motion_levels_go_version }}.linux-{{ motion_levels_go_arch }}.tar.gz"
-            dest: /usr/local
-            remote_src: true
+        if [ -L "$root/current" ] || [ -e "$legacy/.complete" ]; then
+          echo already-present
+          exit 0
+        fi
 
-    - name: Sync source and built frontend assets
-      ansible.posix.synchronize:
-        src: "{{ motion_levels_repo_root }}/{{ item.src }}"
-        dest: "{{ item.dest }}"
-        archive: true
-        delete: true
-        rsync_opts: "{{ motion_levels_rsync_opts }}"
-      loop: >-
-        {{
-          motion_levels_common_sync_items
-          + (motion_levels_runtime_sync_items if motion_levels_deploy_mode in motion_levels_runtime_modes else [])
-          + (motion_levels_frontend_sync_items if motion_levels_deploy_mode in motion_levels_frontend_modes else [])
-        }}
+        mkdir -p "$legacy/src"
+        for path in bin apps content; do
+          if [ -e "$root/$path" ]; then
+            cp -a "$root/$path" "$legacy/$path"
+          fi
+        done
+        for path in deploy game-bundles; do
+          if [ -e "$root/src/$path" ]; then
+            cp -a "$root/src/$path" "$legacy/src/$path"
+          fi
+        done
+        touch "$legacy/.complete"
+        ln -sfn "$legacy" "$root/previous"
+      args:
+        executable: /bin/sh
+      register: motion_levels_legacy_release
+      changed_when: motion_levels_legacy_release.rc == 0 and motion_levels_legacy_release.stdout != 'already-present'
+
+    - name: Activate venue release atomically
+      ansible.builtin.shell: |
+        set -eu
+        root="{{ motion_levels_remote_root }}"
+        candidate="{{ motion_levels_venue_release_dir }}"
+        if [ -L "$root/current" ]; then
+          previous="$(readlink -f "$root/current")"
+          ln -sfn "$previous" "$root/previous"
+        fi
+        ln -sfn "$candidate" "$root/current"
+        printf '%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "{{ motion_levels_venue_image }}" >> "$root/releases/history.tsv"
+      args:
+        executable: /bin/sh
+      changed_when: true
 
     - name: Point local game assets at the pinned bundle
       ansible.builtin.file:
@@ -352,27 +331,6 @@
         dest: "{{ motion_levels_remote_src }}/game-bundles/motion-levels-games/current"
         state: link
         force: true
-
-    - name: Run focused remote Go tests
-      ansible.builtin.command:
-        cmd: "{{ motion_levels_go_bin }} test ./game-engine/cmd/game-engine ./floor-controller/cmd/floor-controller ./game-engine/internal/games/motionlevelsgames ./game-engine/internal/games/saltos ./game-engine/internal/games/niveles"
-        chdir: "{{ motion_levels_remote_src }}"
-      changed_when: false
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Build game engine binary
-      ansible.builtin.command:
-        cmd: "{{ motion_levels_go_bin }} build -o {{ motion_levels_remote_root }}/bin/game-engine ./game-engine/cmd/game-engine"
-        chdir: "{{ motion_levels_remote_src }}"
-      changed_when: true
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Build floor controller binary
-      ansible.builtin.command:
-        cmd: "{{ motion_levels_go_bin }} build -o {{ motion_levels_remote_root }}/bin/floor-controller ./floor-controller/cmd/floor-controller"
-        chdir: "{{ motion_levels_remote_src }}"
-      changed_when: true
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Remove retired host-native Insta360 artifacts
       ansible.builtin.file:
@@ -443,7 +401,6 @@
         dest: /etc/asound.conf
         mode: "0644"
         remote_src: true
-      notify: Restart motion levels services
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Ensure legacy camera recorder integration is disabled
@@ -585,7 +542,6 @@
         dest: /usr/local/bin/motion-levels-player-kiosk
         mode: "0755"
         remote_src: true
-      notify: Restart motion levels services
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Install HDMI watchdog script
@@ -594,7 +550,6 @@
         dest: /usr/local/bin/motion-levels-hdmi-watchdog
         mode: "0755"
         remote_src: true
-      notify: Restart motion levels services
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Create Chromium managed policy directory
@@ -610,7 +565,6 @@
         dest: /etc/chromium/policies/managed/motion-levels-kiosk.json
         mode: "0644"
         remote_src: true
-      notify: Restart motion levels services
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Disable old services
@@ -647,9 +601,7 @@
         mode: "0644"
         remote_src: true
       loop: "{{ motion_levels_services }}"
-      notify:
-        - Reload systemd
-        - Restart motion levels services
+      notify: Reload systemd
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Flush unit/config handlers before validation
@@ -736,6 +688,48 @@
       retries: 80
       delay: 1
       loop: "{{ motion_levels_frontend_health_urls if motion_levels_deploy_mode == 'frontends' else motion_levels_health_urls }}"
+      failed_when: false
+
+    - name: Detect failed venue release health checks
+      ansible.builtin.set_fact:
+        motion_levels_release_health_failed: >-
+          {{
+            motion_levels_health.results
+            | selectattr('status', 'ne', 200)
+            | list
+            | length > 0
+          }}
+
+    - name: Roll back failed venue release
+      when: motion_levels_release_health_failed
+      block:
+        - name: Restore previous venue release symlink
+          ansible.builtin.shell: |
+            set -eu
+            root="{{ motion_levels_remote_root }}"
+            test -L "$root/previous"
+            previous="$(readlink -f "$root/previous")"
+            ln -sfn "$previous" "$root/current"
+            printf '%s\trollback\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$previous" >> "$root/releases/history.tsv"
+          args:
+            executable: /bin/sh
+          changed_when: true
+
+        - name: Restart Caddy after venue rollback
+          ansible.builtin.systemd_service:
+            name: caddy
+            state: restarted
+
+        - name: Restart runtime services after venue rollback
+          ansible.builtin.systemd_service:
+            name: "{{ item }}"
+            state: restarted
+          loop: "{{ motion_levels_services }}"
+          when: motion_levels_deploy_mode in motion_levels_runtime_modes
+
+        - name: Report failed venue release after rollback
+          ansible.builtin.fail:
+            msg: "Venue release {{ motion_levels_venue_revision.stdout | trim }} failed health checks and was rolled back."
 
   handlers:
     - name: Reconfigure dhcpcd LAN interface
@@ -754,9 +748,3 @@
       ansible.builtin.systemd_service:
         name: caddy
         state: restarted
-
-    - name: Restart motion levels services
-      ansible.builtin.systemd_service:
-        name: "{{ item }}"
-        state: restarted
-      loop: "{{ motion_levels_services }}"

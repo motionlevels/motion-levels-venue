@@ -5,10 +5,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/motion-levels/rebuild
+WorkingDirectory=/opt/motion-levels/rebuild/current
 EnvironmentFile=/etc/motion-levels/motion-levels.env
 EnvironmentFile=-/etc/motion-levels/platform.env
-ExecStart=/opt/motion-levels/rebuild/bin/floor-controller \
+ExecStart=/opt/motion-levels/rebuild/current/bin/floor-controller \
   -http ${MOTION_LEVELS_CONTROLLER_HTTP} \
   -frames ${MOTION_LEVELS_CONTROLLER_FRAMES} \
   -input-events ${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS} \
