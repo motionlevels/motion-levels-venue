@@ -145,6 +145,8 @@
         cmd: node scripts/verify-motion-levels-games-bundle.mjs
         chdir: "{{ motion_levels_repo_root }}"
       changed_when: false
+      delegate_to: localhost
+      run_once: true
 
     - name: Install fixed LAN address helper
       ansible.builtin.copy:
@@ -372,10 +374,15 @@
       changed_when: true
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
-    - name: Remove retired host-native Insta360 helper
+    - name: Remove retired host-native Insta360 artifacts
       ansible.builtin.file:
-        path: /usr/local/bin/motion-levels-insta360
+        path: "{{ item }}"
         state: absent
+      loop:
+        - /usr/local/bin/motion-levels-insta360
+        - /usr/local/bin/motion-levels-insta360.disabled-by-motion-levels-cameras
+        - /usr/local/bin/motion-levels-x5ctl
+        - /opt/insta360
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
     - name: Install default motion-levels env if missing
