@@ -6,6 +6,7 @@
     motion_levels_repo_root: "{{ playbook_dir }}/../.."
     motion_levels_remote_src: "{{ motion_levels_remote_root }}/current"
     motion_levels_releases_root: "{{ motion_levels_remote_root }}/releases"
+    motion_levels_venue_components_lock_path: "{{ motion_levels_repo_root }}/deploy/motionlevels-pc/venue-components.lock.json"
     motion_levels_ghcr_username: "{{ lookup('env', 'GHCR_USERNAME') | default('lobis', true) }}"
     motion_levels_ghcr_token: "{{ lookup('env', 'GHCR_TOKEN') }}"
     motion_levels_deploy_mode: "{{ lookup('env', 'MOTION_LEVELS_DEPLOY_MODE') | default('all', true) }}"
@@ -48,8 +49,6 @@
         dest: "{{ motion_levels_remote_src }}/"
       - src: game-engine/
         dest: "{{ motion_levels_remote_src }}/game-engine/"
-      - src: floor-controller/
-        dest: "{{ motion_levels_remote_src }}/floor-controller/"
       - src: packages/
         dest: "{{ motion_levels_remote_src }}/packages/"
       - src: content/
@@ -76,6 +75,25 @@
       - --exclude=*.pbstream.*
       - --exclude=.DS_Store
   tasks:
+    - name: Load the immutable venue component lock
+      ansible.builtin.set_fact:
+        motion_levels_venue_components_lock: >-
+          {{ lookup('file', motion_levels_venue_components_lock_path) | from_json }}
+
+    - name: Validate the pinned controller component contract
+      ansible.builtin.assert:
+        that:
+          - motion_levels_venue_components_lock.schema == 'motion-levels-venue-components-v1'
+          - motion_levels_venue_components_lock.components.controller.repository == 'ghcr.io/motionlevels/motion-levels-controller'
+          - motion_levels_venue_components_lock.components.controller.revision is match('^[0-9a-f]{40}$')
+          - motion_levels_venue_components_lock.components.controller.platform == 'linux/amd64'
+          - motion_levels_venue_components_lock.components.controller.protocol == 'v1'
+        fail_msg: >-
+          deploy/motionlevels-pc/venue-components.lock.json must pin the
+          controller repository, full revision, linux/amd64 platform, and v1 protocol.
+      delegate_to: localhost
+      become: false
+
     - name: Validate venue deploy mode
       ansible.builtin.assert:
         that:
@@ -102,6 +120,12 @@
       ansible.builtin.set_fact:
         motion_levels_venue_image: "ghcr.io/motionlevels/motion-levels-venue-bundle:sha-{{ motion_levels_venue_revision.stdout | trim }}"
         motion_levels_venue_release_dir: "{{ motion_levels_releases_root }}/{{ motion_levels_venue_revision.stdout | trim }}"
+        motion_levels_controller_image: >-
+          {{
+            motion_levels_venue_components_lock.components.controller.repository
+          }}:sha-{{
+            motion_levels_venue_components_lock.components.controller.revision
+          }}
 
     - name: Verify pinned motion-levels-games bundle
       ansible.builtin.command:
@@ -264,6 +288,58 @@
       register: motion_levels_venue_pull
       changed_when: "'Downloaded newer image' in motion_levels_venue_pull.stdout"
 
+    - name: Pull the immutable controller image for the native release
+      ansible.builtin.command:
+        cmd: docker pull "{{ motion_levels_controller_image }}"
+      register: motion_levels_controller_pull
+      changed_when: "'Downloaded newer image' in motion_levels_controller_pull.stdout"
+
+    - name: Verify and pin the native controller image digest
+      ansible.builtin.shell: |
+        /usr/bin/python3 - \
+          "{{ motion_levels_controller_image }}" \
+          "{{ motion_levels_venue_components_lock.components.controller.revision }}" \
+          "{{ motion_levels_venue_components_lock.components.controller.platform.split('/', 1)[1] }}" \
+          "{{ motion_levels_venue_components_lock.components.controller.protocol }}" <<'PY'
+        import json
+        import subprocess
+        import sys
+
+        image, expected_revision, expected_architecture, expected_protocol = sys.argv[1:]
+        payload = json.loads(subprocess.check_output(["docker", "image", "inspect", image]))[0]
+        labels = payload.get("Config", {}).get("Labels") or {}
+        revision = labels.get("org.opencontainers.image.revision")
+        if revision != expected_revision:
+            raise SystemExit(f"{image} revision label is {revision!r}, expected {expected_revision!r}")
+        architecture = payload.get("Architecture")
+        if architecture != expected_architecture:
+            raise SystemExit(
+                f"{image} architecture is {architecture!r}, expected {expected_architecture!r}"
+            )
+        protocol = labels.get("io.motionlevels.controller.protocol")
+        if protocol != expected_protocol:
+            raise SystemExit(
+                f"{image} controller protocol is {protocol!r}, expected {expected_protocol!r}"
+            )
+        repository = image.rsplit(":sha-", 1)[0]
+        digests = [
+            value
+            for value in payload.get("RepoDigests") or []
+            if value.startswith(repository + "@sha256:")
+        ]
+        if not digests:
+            raise SystemExit(f"{image} has no matching registry digest")
+        print(digests[0])
+        PY
+      args:
+        executable: /bin/sh
+      register: motion_levels_controller_digest
+      changed_when: false
+
+    - name: Select the verified native controller digest
+      ansible.builtin.set_fact:
+        motion_levels_controller_pinned_image: "{{ motion_levels_controller_digest.stdout | trim }}"
+
     - name: Extract immutable venue bundle
       ansible.builtin.shell: |
         set -eu
@@ -272,6 +348,8 @@
         release_tmp="${release_dir}.tmp"
         current="{{ motion_levels_remote_root }}/current"
         container="motion-levels-release-{{ (motion_levels_venue_revision.stdout | trim)[:12] }}"
+        controller_image="{{ motion_levels_controller_pinned_image }}"
+        controller_container="motion-levels-controller-release-{{ motion_levels_venue_components_lock.components.controller.revision[:12] }}"
         if [ -e "$release_dir/.complete" ]; then
           echo already-present
           exit 0
@@ -283,10 +361,19 @@
         fi
         rm -rf "$release_tmp"
         mkdir -p "$release_tmp"
-        docker rm -f "$container" >/dev/null 2>&1 || true
+        docker rm -f "$container" "$controller_container" >/dev/null 2>&1 || true
         docker create --name "$container" "$image" >/dev/null
-        trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+        docker create --name "$controller_container" "$controller_image" >/dev/null
+        cleanup() {
+          docker rm -f "$container" "$controller_container" >/dev/null 2>&1 || true
+        }
+        trap cleanup EXIT
         docker cp "$container:/release/." "$release_tmp/"
+        mkdir -p "$release_tmp/bin"
+        docker cp \
+          "$controller_container:/app/bin/motion-levels-controller" \
+          "$release_tmp/bin/floor-controller"
+        chmod 0755 "$release_tmp/bin/floor-controller"
         touch "$release_tmp/.complete"
         rm -rf "$release_dir"
         mv "$release_tmp" "$release_dir"

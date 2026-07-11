@@ -8,6 +8,7 @@
     motion_levels_ghcr_token: "{{ lookup('env', 'GHCR_TOKEN') }}"
     motion_levels_venue_compose_dir: /opt/motion-levels/venue-containers
     motion_levels_venue_config_root: /etc/motion-levels/venue
+    motion_levels_venue_components_lock_path: "{{ motion_levels_repo_root }}/deploy/motionlevels-pc/venue-components.lock.json"
     motion_levels_effective_display_backend: "{{ motion_levels_display_backend | default('x11') }}"
     motion_levels_container_units:
       - motion-levels-audio.socket
@@ -24,6 +25,25 @@
       - motion-levels-security-recorder.service
 
   tasks:
+    - name: Load the immutable venue component lock
+      ansible.builtin.set_fact:
+        motion_levels_venue_components_lock: >-
+          {{ lookup('file', motion_levels_venue_components_lock_path) | from_json }}
+
+    - name: Validate the pinned controller component contract
+      ansible.builtin.assert:
+        that:
+          - motion_levels_venue_components_lock.schema == 'motion-levels-venue-components-v1'
+          - motion_levels_venue_components_lock.components.controller.repository == 'ghcr.io/motionlevels/motion-levels-controller'
+          - motion_levels_venue_components_lock.components.controller.revision is match('^[0-9a-f]{40}$')
+          - motion_levels_venue_components_lock.components.controller.platform == 'linux/amd64'
+          - motion_levels_venue_components_lock.components.controller.protocol == 'v1'
+        fail_msg: >-
+          deploy/motionlevels-pc/venue-components.lock.json must pin the
+          controller repository, full revision, linux/amd64 platform, and v1 protocol.
+      delegate_to: localhost
+      become: false
+
     - name: Restrict the first container migration to opted-in venues
       ansible.builtin.assert:
         that:
@@ -33,7 +53,7 @@
           Set motion_levels_containerized_venue=true for this venue and choose
           motion_levels_display_backend=x11 or wayland.
 
-    - name: Verify controller checkout matches the image revision
+    - name: Verify platform checkout matches the image revision
       ansible.builtin.command:
         cmd: git status --porcelain
         chdir: "{{ motion_levels_repo_root }}"
@@ -73,12 +93,33 @@
         motion_levels_venue_release_root: >-
           {{ motion_levels_venue_config_root }}/releases/{{ motion_levels_venue_revision.stdout | trim }}-{{ ansible_facts.date_time.epoch }}
         motion_levels_venue_images:
-          FLOOR_IMAGE: "ghcr.io/motionlevels/motion-levels-venue-floor:sha-{{ motion_levels_venue_revision.stdout | trim }}"
+          FLOOR_IMAGE: >-
+            {{
+              motion_levels_venue_components_lock.components.controller.repository
+            }}:sha-{{
+              motion_levels_venue_components_lock.components.controller.revision
+            }}
           ENGINE_IMAGE: "ghcr.io/motionlevels/motion-levels-venue-engine:sha-{{ motion_levels_venue_revision.stdout | trim }}"
           CAMERA_HELPER_IMAGE: "ghcr.io/motionlevels/motion-levels-venue-camera-helper:sha-{{ motion_levels_venue_revision.stdout | trim }}"
           SECURITY_RECORDER_IMAGE: "ghcr.io/motionlevels/motion-levels-venue-security-recorder:sha-{{ motion_levels_venue_revision.stdout | trim }}"
           CADDY_IMAGE: "ghcr.io/motionlevels/motion-levels-venue-caddy:sha-{{ motion_levels_venue_revision.stdout | trim }}"
           PLAYER_IMAGE: "ghcr.io/motionlevels/motion-levels-venue-player:sha-{{ motion_levels_venue_revision.stdout | trim }}"
+        motion_levels_venue_image_revisions:
+          FLOOR_IMAGE: "{{ motion_levels_venue_components_lock.components.controller.revision }}"
+          ENGINE_IMAGE: "{{ motion_levels_venue_revision.stdout | trim }}"
+          CAMERA_HELPER_IMAGE: "{{ motion_levels_venue_revision.stdout | trim }}"
+          SECURITY_RECORDER_IMAGE: "{{ motion_levels_venue_revision.stdout | trim }}"
+          CADDY_IMAGE: "{{ motion_levels_venue_revision.stdout | trim }}"
+          PLAYER_IMAGE: "{{ motion_levels_venue_revision.stdout | trim }}"
+        motion_levels_venue_image_protocols:
+          FLOOR_IMAGE: "{{ motion_levels_venue_components_lock.components.controller.protocol }}"
+        motion_levels_venue_image_architectures:
+          FLOOR_IMAGE: amd64
+          ENGINE_IMAGE: amd64
+          CAMERA_HELPER_IMAGE: amd64
+          SECURITY_RECORDER_IMAGE: amd64
+          CADDY_IMAGE: amd64
+          PLAYER_IMAGE: amd64
 
     - name: Validate GHCR pull credentials
       ansible.builtin.assert:
@@ -493,16 +534,32 @@
 
     - name: Resolve pulled SHA tags to verified registry digests
       ansible.builtin.shell: |
-        /usr/bin/python3 - "{{ item.value }}" "{{ motion_levels_venue_revision.stdout | trim }}" <<'PY'
+        /usr/bin/python3 - \
+          "{{ item.value }}" \
+          "{{ motion_levels_venue_image_revisions[item.key] }}" \
+          "{{ motion_levels_venue_image_architectures[item.key] }}" \
+          "{{ motion_levels_venue_image_protocols[item.key] | default('') }}" <<'PY'
         import json
         import subprocess
         import sys
 
-        image, expected_revision = sys.argv[1:]
+        image, expected_revision, expected_architecture, expected_protocol = sys.argv[1:]
         payload = json.loads(subprocess.check_output(["docker", "image", "inspect", image]))[0]
-        revision = (payload.get("Config", {}).get("Labels") or {}).get("org.opencontainers.image.revision")
+        labels = payload.get("Config", {}).get("Labels") or {}
+        revision = labels.get("org.opencontainers.image.revision")
         if revision != expected_revision:
             raise SystemExit(f"{image} revision label is {revision!r}, expected {expected_revision!r}")
+        architecture = payload.get("Architecture")
+        if architecture != expected_architecture:
+            raise SystemExit(
+                f"{image} architecture is {architecture!r}, expected {expected_architecture!r}"
+            )
+        if expected_protocol:
+            protocol = labels.get("io.motionlevels.controller.protocol")
+            if protocol != expected_protocol:
+                raise SystemExit(
+                    f"{image} controller protocol is {protocol!r}, expected {expected_protocol!r}"
+                )
         repository = image.rsplit(":sha-", 1)[0]
         digests = [value for value in payload.get("RepoDigests") or [] if value.startswith(repository + "@sha256:")]
         if not digests:
@@ -548,6 +605,9 @@
           VENUE_COMPOSE_FILE={{ motion_levels_venue_release_root }}/docker-compose.yml
           VENUE_AUDIO_GID={{ motion_levels_audio_group.stdout.split(':')[2] }}
           VENUE_RENDER_GID={{ motion_levels_render_group.stdout.split(':')[2] }}
+          FLOOR_REVISION={{ motion_levels_venue_components_lock.components.controller.revision }}
+          FLOOR_PLATFORM={{ motion_levels_venue_components_lock.components.controller.platform }}
+          FLOOR_PROTOCOL={{ motion_levels_venue_components_lock.components.controller.protocol }}
           FLOOR_IMAGE={{ motion_levels_venue_pinned_images.FLOOR_IMAGE }}
           ENGINE_IMAGE={{ motion_levels_venue_pinned_images.ENGINE_IMAGE }}
           CAMERA_HELPER_IMAGE={{ motion_levels_venue_pinned_images.CAMERA_HELPER_IMAGE }}

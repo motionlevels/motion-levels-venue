@@ -37,7 +37,9 @@ services:
       retries: 12
       start_period: 10s
     labels:
-      com.motionlevels.revision: ${VENUE_REVISION:?set VENUE_REVISION}
+      com.motionlevels.revision: ${FLOOR_REVISION:?set FLOOR_REVISION}
+      com.motionlevels.release-revision: ${VENUE_REVISION:?set VENUE_REVISION}
+      com.motionlevels.protocol: ${FLOOR_PROTOCOL:?set FLOOR_PROTOCOL}
 
   engine:
     image: ${ENGINE_IMAGE:?set ENGINE_IMAGE to an immutable full-SHA tag}

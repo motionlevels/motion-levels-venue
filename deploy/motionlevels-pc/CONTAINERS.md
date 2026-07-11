@@ -1,15 +1,16 @@
 # Venue container boundary
 
-The production venue is deployed manually from images published for the full
-commit SHA and then pinned to their verified registry digests. Nothing on the
-venue polls GitHub, changes image tags, or activates a release in the
-background.
+The production venue is deployed manually from images published for full
+component commit SHAs and then pinned to verified registry digests. The
+platform release SHA and the independently published controller SHA are stored
+together in one candidate manifest. Nothing on the venue polls GitHub, changes
+image tags, or activates a release in the background.
 
 ## Runtime ownership
 
 | Component | Runtime | Hardware or host access |
 | --- | --- | --- |
-| Floor controller | Container, UID 10001, host network | No devices; host networking retained for UDP broadcast/loopback |
+| Floor controller | `motion-levels-controller` image, UID 10001, host network | No devices; host networking retained for UDP broadcast/loopback |
 | Game engine | Container, UID 10001, host network | No devices; host networking plus the audio broker Unix socket |
 | Camera snapshot helper | Container, UID 10002, private bridge | RTSP to cameras `.128`–`.130` only |
 | Security recorder | Container, UID 10002, private bridge | RTSP to `.130`, HTTPS uploads, recording spool |
@@ -52,8 +53,10 @@ make deploy-motionlevels-1
 make status-motionlevels-1
 ```
 
-The playbook pulls only `sha-<full-commit>` images, verifies their revision
-labels, and writes the matching content digests into the candidate manifest.
+The playbook pulls only `sha-<full-commit>` images, verifies each component's
+own revision, architecture, and protocol labels, and writes the matching
+content digests into the candidate manifest. Controller promotion is manual via
+`venue-components.lock.json`; publishing a controller image never deploys it.
 The activation command then:
 
 1. resolves and validates the complete Compose model;

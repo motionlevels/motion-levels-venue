@@ -108,6 +108,16 @@ payload = {
     "target": values.get("VENUE_TARGET", "motionlevels-1"),
     "runtime": runtime,
 }
+floor_image = values.get("FLOOR_IMAGE", "")
+if floor_image:
+    payload["components"] = {
+        "controller": {
+            "image": floor_image,
+            "platform": values.get("FLOOR_PLATFORM", ""),
+            "protocol": values.get("FLOOR_PROTOCOL", ""),
+            "revision": values.get("FLOOR_REVISION") or values.get("VENUE_REVISION", ""),
+        }
+    }
 encoded = json.dumps(payload, indent=2, sort_keys=True) + "\n"
 for destination_value in destinations:
     destination = Path(destination_value)
@@ -447,7 +457,23 @@ import subprocess
 import sys
 from pathlib import Path
 
-prefix = "ghcr.io/motionlevels/motion-levels-venue-"
+managed_repositories = {
+    "ghcr.io/motionlevels/motion-levels-controller",
+    "ghcr.io/motionlevels/motion-levels-venue-bundle",
+    "ghcr.io/motionlevels/motion-levels-venue-camera-helper",
+    "ghcr.io/motionlevels/motion-levels-venue-caddy",
+    "ghcr.io/motionlevels/motion-levels-venue-engine",
+    "ghcr.io/motionlevels/motion-levels-venue-floor",
+    "ghcr.io/motionlevels/motion-levels-venue-player",
+    "ghcr.io/motionlevels/motion-levels-venue-security-recorder",
+}
+
+
+def repository(reference: str) -> str:
+    without_digest = reference.split("@", 1)[0]
+    return without_digest.rsplit(":", 1)[0]
+
+
 keep_ids = set()
 for manifest_value in sys.argv[1:]:
     manifest = Path(manifest_value)
@@ -470,10 +496,12 @@ image_ids = subprocess.check_output(
 for image_id in sorted(set(image_ids)):
     payload = json.loads(subprocess.check_output(["docker", "image", "inspect", image_id]))[0]
     references = (payload.get("RepoTags") or []) + (payload.get("RepoDigests") or [])
-    venue_references = [reference for reference in references if reference.startswith(prefix)]
+    venue_references = [
+        reference for reference in references if repository(reference) in managed_repositories
+    ]
     if not venue_references or image_id in keep_ids:
         continue
-    if any(not reference.startswith(prefix) for reference in references):
+    if any(repository(reference) not in managed_repositories for reference in references):
         continue
     subprocess.run(["docker", "image", "rm", "--force", image_id], check=False)
     if subprocess.run(

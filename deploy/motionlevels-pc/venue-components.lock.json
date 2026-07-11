@@ -1,0 +1,11 @@
+{
+  "schema": "motion-levels-venue-components-v1",
+  "components": {
+    "controller": {
+      "repository": "ghcr.io/motionlevels/motion-levels-controller",
+      "revision": "7e82ce4d053c21022dca427871c495a5f7dc8807",
+      "platform": "linux/amd64",
+      "protocol": "v1"
+    }
+  }
+}

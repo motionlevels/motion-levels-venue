@@ -25,14 +25,12 @@ WORKDIR /workspace
 COPY go.mod go.sum ./
 RUN go mod download
 COPY game-engine ./game-engine
-COPY floor-controller ./floor-controller
 COPY packages ./packages
 COPY game-bundles ./game-bundles
 COPY content ./content
-RUN go test ./game-engine/cmd/game-engine ./floor-controller/cmd/floor-controller \
+RUN go test ./game-engine/cmd/game-engine \
     && mkdir -p /release/bin \
-    && go build -trimpath -ldflags="-s -w" -o /release/bin/game-engine ./game-engine/cmd/game-engine \
-    && go build -trimpath -ldflags="-s -w" -o /release/bin/floor-controller ./floor-controller/cmd/floor-controller
+    && go build -trimpath -ldflags="-s -w" -o /release/bin/game-engine ./game-engine/cmd/game-engine
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -54,25 +52,6 @@ COPY game-bundles /release/game-bundles
 COPY content /release/content
 COPY deploy/motionlevels-pc /release/deploy/motionlevels-pc
 CMD ["sleep", "infinity"]
-
-FROM debian:bookworm-slim AS floor-runtime
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    zstd \
-    && rm -rf /var/lib/apt/lists/* \
-    && groupadd --gid 10001 motionlevels \
-    && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent motionlevels
-ARG BUILD_REVISION=unknown
-ARG BUILD_CREATED_AT=
-LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-platform"
-LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
-LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
-COPY --from=runtime-build /release/bin/floor-controller /app/bin/floor-controller
-COPY deploy/motionlevels-pc/venue-floor-controller /usr/local/bin/venue-floor-controller
-RUN /bin/sh -n /usr/local/bin/venue-floor-controller
-USER 10001:10001
-ENTRYPOINT ["/usr/local/bin/venue-floor-controller"]
 
 FROM ${NODE_IMAGE} AS engine-runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \

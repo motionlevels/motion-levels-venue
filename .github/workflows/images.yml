@@ -30,12 +30,29 @@ jobs:
             deploy/motionlevels-pc/motion-levels-display-agent \
             deploy/motionlevels-pc/motion-levels-hdmi-agent \
             deploy/motionlevels-pc/motion-levels-player-container \
-            deploy/motionlevels-pc/venue-floor-controller \
             deploy/motionlevels-pc/venue-game-engine
           python3 -m py_compile \
             deploy/motionlevels-pc/motion-levels-camera-helper.py \
             deploy/motionlevels-pc/motion-levels-security-recorder.py
           python3 -m unittest discover -s deploy/motionlevels-pc/tests
+
+      - name: Validate the venue component lock
+        run: |
+          python3 - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          payload = json.loads(
+              Path("deploy/motionlevels-pc/venue-components.lock.json").read_text(encoding="utf-8")
+          )
+          assert payload.get("schema") == "motion-levels-venue-components-v1"
+          controller = payload.get("components", {}).get("controller", {})
+          assert controller.get("repository") == "ghcr.io/motionlevels/motion-levels-controller"
+          assert re.fullmatch(r"[0-9a-f]{40}", controller.get("revision", ""))
+          assert controller.get("platform") == "linux/amd64"
+          assert controller.get("protocol") == "v1"
+          PY
 
       - name: Resolve the venue Compose model
         run: |
@@ -57,7 +74,10 @@ jobs:
           VENUE_RUNTIME_ENV=${config_root}/runtime.env
           VENUE_AUDIO_GID=10001
           VENUE_RENDER_GID=10002
-          FLOOR_IMAGE=example.invalid/floor:sha-${GITHUB_SHA}
+          FLOOR_REVISION=0000000000000000000000000000000000000000
+          FLOOR_PLATFORM=linux/amd64
+          FLOOR_PROTOCOL=v1
+          FLOOR_IMAGE=example.invalid/controller:sha-${GITHUB_SHA}
           ENGINE_IMAGE=example.invalid/engine:sha-${GITHUB_SHA}
           CAMERA_HELPER_IMAGE=example.invalid/helper:sha-${GITHUB_SHA}
           SECURITY_RECORDER_IMAGE=example.invalid/security:sha-${GITHUB_SHA}
@@ -89,10 +109,6 @@ jobs:
             image: ghcr.io/motionlevels/motion-levels-venue-bundle
             dockerfile: deploy/motionlevels-pc/venue-bundle.Dockerfile
             target: runtime
-          - name: venue-floor
-            image: ghcr.io/motionlevels/motion-levels-venue-floor
-            dockerfile: deploy/motionlevels-pc/venue-bundle.Dockerfile
-            target: floor-runtime
           - name: venue-engine
             image: ghcr.io/motionlevels/motion-levels-venue-engine
             dockerfile: deploy/motionlevels-pc/venue-bundle.Dockerfile
