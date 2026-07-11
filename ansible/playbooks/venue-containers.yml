@@ -223,14 +223,6 @@
         mode: "0644"
       when: lookup('env', 'MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS') | length > 0
 
-    - name: Apply the inventory-selected camera recorder endpoint
-      ansible.builtin.lineinfile:
-        path: /etc/motion-levels/motion-levels.env
-        regexp: '^MOTION_LEVELS_CAMERA_RECORDER_URL='
-        line: "MOTION_LEVELS_CAMERA_RECORDER_URL={{ motion_levels_camera_recorder_url }}"
-        mode: "0644"
-      when: motion_levels_camera_recorder_url is defined
-
     - name: Build a secret-free runtime env and least-readable secret files
       ansible.builtin.shell: |
         /usr/bin/python3 - <<'PY'
@@ -267,6 +259,10 @@
                     continue
                 key, raw = stripped.split("=", 1)
                 values[key.strip()] = decoded(raw)
+
+        inventory_camera_recorder_url = {{ motion_levels_camera_recorder_url | default('') | to_json }}
+        if inventory_camera_recorder_url:
+            values["MOTION_LEVELS_CAMERA_RECORDER_URL"] = inventory_camera_recorder_url
 
         platform_token = values.get("MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_TOKEN") or values.get("MOTION_LEVELS_PLATFORM_TOKEN") or ""
         camera_password = (
