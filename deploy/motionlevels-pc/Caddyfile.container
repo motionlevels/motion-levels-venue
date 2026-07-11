@@ -51,8 +51,8 @@
 		reverse_proxy 127.0.0.1:8020
 	}
 
-	handle /camera-recorder/* {
-		respond "Legacy X5 recorder disabled; use motion-levels-cameras on port 8040" 410
+	handle_path /camera-recorder/* {
+		reverse_proxy 127.0.0.1:8040
 	}
 
 	@platform_next {

@@ -16,7 +16,7 @@ all:
           motion_levels_platform_bind_ip: 10.137.25.242
           motion_levels_platform_url: https://platform.motionlevels.obis.dev
           motion_levels_tailscale_host_overrides: motionlevels-1-camera-dev=100.66.119.123
-          motion_levels_room_camera_recorders: local|X5 protegida|http://100.76.156.89:8040
+          motion_levels_room_camera_recorders: local|X5 protegida|http://100.76.156.89/camera-recorder
     homelab_caddy:
       hosts:
         caddy:
