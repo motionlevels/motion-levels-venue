@@ -25,9 +25,11 @@ table inet motion_levels_venue {
     ip saddr 172.30.50.10 ip daddr { 192.168.1.128, 192.168.1.129, 192.168.1.130 } tcp dport 554 accept
 
     # Security recorder: its one RTSP source plus HTTPS for the platform and
-    # presigned object-storage uploads. Docker's embedded DNS is local to the
-    # container namespace and does not traverse this forward hook.
+    # presigned object-storage uploads. Docker's embedded DNS forwards through
+    # the host resolver while retaining the container source address.
     ip saddr 172.30.50.11 ip daddr 192.168.1.130 tcp dport 554 accept
+    ip saddr 172.30.50.11 ip daddr 192.168.1.1 udp dport 53 accept
+    ip saddr 172.30.50.11 ip daddr 192.168.1.1 tcp dport 53 accept
     ip saddr 172.30.50.11 ip daddr 84.7.190.81 tcp dport 443 accept
     ip saddr 172.30.50.11 ip daddr 100.69.44.59 tcp dport 9000 accept
 

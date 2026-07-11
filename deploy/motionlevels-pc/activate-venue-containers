@@ -271,6 +271,13 @@ PY
       log "security recorder container health is ${security_health:-missing}"
       return 1
     }
+    /usr/bin/docker exec motion-levels-venue-security-recorder /usr/bin/python3 -c '
+import os
+import urllib.request
+base = (os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_URL") or os.environ.get("MOTION_LEVELS_PLATFORM_URL") or "https://platform.motionlevels.obis.dev").rstrip("/")
+with urllib.request.urlopen(base + "/api/healthz", timeout=8) as response:
+    assert response.status == 200
+' >/dev/null || return 1
     audio_probe || return 1
   else
     systemctl is-active --quiet \
