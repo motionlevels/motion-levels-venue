@@ -29,11 +29,11 @@ Platform and camera credentials are copied into UID-specific, mode `0400`
 files. They are mounted into only the containers that need them and are not
 included in the Compose environment model.
 
-The first venue migration also creates a dedicated camera-recorder operator
-token at `/etc/motion-levels/venue/secrets/camera-recorder-token-core`. Before
-moving the X5, install that same value as the camera service's
-`/etc/motion-levels-cameras/api-token` and as the platform server's
-`MOTION_LEVELS_CAMERA_RECORDER_TOKEN`; do not create three independent tokens.
+The first venue migration and the camera installer share one host-owned
+camera-recorder operator token at
+`/etc/motion-levels/camera-recorder-token`. The release receives a read-only
+snapshot of that value. Copy the same file once to the platform host before
+cutover; do not generate independent engine, camera, and platform tokens.
 
 The camera bridge uses fixed addresses and an nftables forward hook. The
 snapshot helper can open RTSP only to the three venue cameras. The security

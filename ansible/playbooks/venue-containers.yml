@@ -233,7 +233,6 @@
         from pathlib import Path
 
         config_root = Path("{{ motion_levels_venue_release_root }}")
-        canonical_secret_root = Path("/etc/motion-levels/venue/secrets")
         source_paths = [
             Path("/etc/motion-levels/motion-levels.env"),
             Path("/etc/motion-levels/platform.env"),
@@ -271,7 +270,7 @@
             or values.get("ML_TAPO_PASSWORD")
             or ""
         )
-        camera_recorder_secret = canonical_secret_root / "camera-recorder-token-core"
+        camera_recorder_secret = Path("/etc/motion-levels/camera-recorder-token")
         camera_recorder_token = values.get("MOTION_LEVELS_CAMERA_RECORDER_TOKEN") or ""
         if not camera_recorder_token and camera_recorder_secret.exists():
             camera_recorder_token = camera_recorder_secret.read_text(encoding="utf-8").strip()
