@@ -24,7 +24,7 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=16m
     pids_limit: 128
@@ -83,7 +83,7 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
       - /run/motion-levels-game-engine:rw,noexec,nosuid,nodev,size=640m,uid=10001,gid=10001
@@ -123,7 +123,7 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
     pids_limit: 256
@@ -169,7 +169,7 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m,uid=10002,gid=10002
     pids_limit: 256
@@ -194,7 +194,6 @@ services:
     pull_policy: never
     container_name: motion-levels-venue-caddy
     user: "10003:10003"
-    init: true
     restart: unless-stopped
     network_mode: host
     depends_on:
@@ -213,7 +212,7 @@ services:
     cap_drop: [ALL]
     cap_add: [NET_BIND_SERVICE]
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=16m
       - /data:rw,noexec,nosuid,nodev,size=16m,uid=10003,gid=10003
@@ -265,7 +264,7 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=128m
       - /dev/shm:rw,noexec,nosuid,nodev,size=256m
