@@ -84,8 +84,8 @@ all:
           # a connected-TV maintenance window validates hotplug and HDMI audio.
           motion_levels_display_backend: x11
           # X5 plugged into motionlevels-1 itself since 2026-07-10; point back at
-          # http://100.66.119.123:8030 if the camera returns to the camera-dev box.
-          motion_levels_camera_recorder_url: http://127.0.0.1:8030
+          # http://100.66.119.123:8040 after the dedicated camera host cutover.
+          motion_levels_camera_recorder_url: http://127.0.0.1:8040
           motion_levels_lan_interface: enp2s0
           motion_levels_lan_ipv4: 192.168.1.142/24
           motion_levels_lan_gateway: 192.168.1.1

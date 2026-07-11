@@ -223,6 +223,14 @@
         mode: "0644"
       when: lookup('env', 'MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS') | length > 0
 
+    - name: Apply the inventory-selected camera recorder endpoint
+      ansible.builtin.lineinfile:
+        path: /etc/motion-levels/motion-levels.env
+        regexp: '^MOTION_LEVELS_CAMERA_RECORDER_URL='
+        line: "MOTION_LEVELS_CAMERA_RECORDER_URL={{ motion_levels_camera_recorder_url }}"
+        mode: "0644"
+      when: motion_levels_camera_recorder_url is defined
+
     - name: Build a secret-free runtime env and least-readable secret files
       ansible.builtin.shell: |
         /usr/bin/python3 - <<'PY'
