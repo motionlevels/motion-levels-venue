@@ -1,0 +1,749 @@
+#!/bin/sh
+set -eu
+
+compose_dir=/opt/motion-levels/venue-containers
+config_root=/etc/motion-levels/venue
+candidate="$config_root/candidate.env"
+current="$config_root/current.env"
+previous="$config_root/previous.env"
+native_fallback="$config_root/native.env"
+history="$config_root/history.tsv"
+lock=/run/lock/motion-levels-venue-containers.lock
+public_stack=/etc/motion-levels/venue-public/stack.json
+legacy_stack=/etc/motion-levels/stack.json
+
+log() {
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
+}
+
+compose() {
+  manifest=$1
+  shift
+  selected_compose_file="$(manifest_value VENUE_COMPOSE_FILE "$manifest")"
+  selected_compose_file="${selected_compose_file:-$compose_dir/docker-compose.yml}"
+  /usr/bin/docker compose \
+    --env-file "$manifest" \
+    -f "$selected_compose_file" \
+    "$@"
+}
+
+manifest_value() {
+  key=$1
+  manifest=$2
+  sed -n "s/^${key}=//p" "$manifest" | tail -n 1
+}
+
+manifest_is_containers() {
+  [ -f "$1" ] && [ "$(manifest_value VENUE_MODE "$1")" = containers ]
+}
+
+manifest_is_native() {
+  [ -f "$1" ] && [ "$(manifest_value VENUE_MODE "$1")" = native ]
+}
+
+set_manifest_value() {
+  manifest=$1
+  key=$2
+  value=$3
+  /usr/bin/python3 - "$manifest" "$key" "$value" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+manifest_value, key, value = sys.argv[1:]
+manifest = Path(manifest_value)
+lines = manifest.read_text(encoding="utf-8").splitlines()
+replacement = f"{key}={value}"
+updated = []
+found = False
+for line in lines:
+    if line.startswith(f"{key}="):
+        updated.append(replacement)
+        found = True
+    else:
+        updated.append(line)
+if not found:
+    updated.append(replacement)
+temporary = manifest.with_suffix(manifest.suffix + ".tmp")
+temporary.write_text("\n".join(updated) + "\n", encoding="utf-8")
+os.chmod(temporary, 0o600)
+os.replace(temporary, manifest)
+PY
+}
+
+set_runtime_env_link() {
+  manifest=$1
+  runtime_env="$(manifest_value VENUE_RUNTIME_ENV "$manifest")"
+  if [ -n "$runtime_env" ] && [ -f "$runtime_env" ]; then
+    ln -sfn "$runtime_env" "$config_root/runtime.env"
+  else
+    rm -f "$config_root/runtime.env"
+  fi
+}
+
+write_stack_metadata() {
+  manifest=$1
+  runtime=$2
+  /usr/bin/python3 - "$manifest" "$runtime" "$public_stack" "$legacy_stack" <<'PY'
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+manifest_path, runtime, *destinations = sys.argv[1:]
+values = {}
+for raw in Path(manifest_path).read_text(encoding="utf-8").splitlines():
+    if raw and not raw.startswith("#") and "=" in raw:
+        key, value = raw.split("=", 1)
+        values[key] = value
+
+revision = values.get("VENUE_SHORT_REVISION") or values.get("VENUE_REVISION", "")[:7]
+if not revision:
+    raise SystemExit(f"manifest {manifest_path} has no venue revision")
+payload = {
+    "revision": revision,
+    "commit_at": values.get("VENUE_COMMIT_AT", ""),
+    "deployed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    "target": values.get("VENUE_TARGET", "motionlevels-1"),
+    "runtime": runtime,
+}
+encoded = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+for destination_value in destinations:
+    destination = Path(destination_value)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(destination.suffix + ".tmp")
+    temporary.write_text(encoded, encoding="utf-8")
+    os.chmod(temporary, 0o644)
+    os.replace(temporary, destination)
+PY
+}
+
+write_native_manifest() {
+  destination=$1
+  /usr/bin/python3 - "$public_stack" "$legacy_stack" "$destination" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+public_path, legacy_path, destination_value = map(Path, sys.argv[1:])
+source = public_path if public_path.exists() else legacy_path
+payload = json.loads(source.read_text(encoding="utf-8"))
+revision = str(payload.get("revision") or "native")
+lines = [
+    "VENUE_MODE=native",
+    f"VENUE_REVISION={revision}",
+    f"VENUE_SHORT_REVISION={revision[:7]}",
+    f"VENUE_COMMIT_AT={payload.get('commit_at') or ''}",
+    f"VENUE_TARGET={payload.get('target') or 'motionlevels-1'}",
+    "VENUE_DISPLAY_BACKEND=x11",
+]
+destination = Path(destination_value)
+temporary = destination.with_suffix(destination.suffix + ".tmp")
+temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+os.chmod(temporary, 0o600)
+os.replace(temporary, destination)
+PY
+}
+
+venue_is_idle() {
+  /usr/bin/python3 - <<'PY'
+import json
+import subprocess
+import sys
+import urllib.request
+
+ambient_games = {
+    "loop", "animations", "salvapantallas",
+    "ambient-comet", "ambient-pulse", "ambient-spark",
+}
+try:
+    with urllib.request.urlopen("http://127.0.0.1:4102/api/status", timeout=3) as response:
+        status = json.load(response)
+except Exception as exc:
+    native_active = subprocess.run(
+        ["systemctl", "is-active", "--quiet", "motion-levels-game-engine.service"],
+        check=False,
+    ).returncode == 0
+    container_running = subprocess.run(
+        [
+            "docker", "inspect", "--format", "{{.State.Running}}",
+            "motion-levels-venue-engine",
+        ],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    ).stdout.strip() == "true"
+    if not native_active and not container_running:
+        print(f"engine status unavailable and no engine process is active: {exc}")
+        raise SystemExit(0)
+    print(f"engine status unavailable while an engine process is active: {exc}")
+    raise SystemExit(75)
+
+game = str(status.get("currentGame") or "")
+phase = str(status.get("phase") or "")
+venue_session = str(status.get("venueSessionId") or "")
+if game in ambient_games and phase in {"idle", "ambient"} and not venue_session:
+    print(f"venue idle: game={game} phase={phase}")
+    raise SystemExit(0)
+print(f"venue busy: game={game or 'unknown'} phase={phase or 'unknown'} venueSessionId={venue_session or 'none'}")
+raise SystemExit(75)
+PY
+}
+
+audio_probe() {
+  systemctl reset-failed 'motion-levels-audio@*.service' >/dev/null 2>&1 || true
+  /usr/bin/python3 - <<'PY'
+import subprocess
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+payload = b"\0" * (48000 * 2 * 2 // 4)  # 250 ms of silent stereo S16_LE.
+command = ["docker", "exec", "-i", "motion-levels-venue-engine", "/usr/local/bin/aplay"]
+started = time.monotonic()
+def play_silence() -> None:
+    subprocess.run(command, input=payload, check=True, timeout=10)
+
+with ThreadPoolExecutor(max_workers=4) as executor:
+    futures = [executor.submit(play_silence) for _ in range(4)]
+    for future in futures:
+        future.result()
+if time.monotonic() - started > 5:
+    raise SystemExit("concurrent audio probe exceeded 5 seconds")
+PY
+  sleep 1
+  if systemctl --failed --no-legend 'motion-levels-audio@*.service' | grep -q .; then
+    log "audio broker probe failed"
+    systemctl --failed --no-pager 'motion-levels-audio@*.service' || true
+    return 1
+  fi
+}
+
+health_gate_once() {
+  mode=${1:-containers}
+  manifest=$2
+  expected_revision="$(manifest_value VENUE_SHORT_REVISION "$manifest")"
+  [ -n "$expected_revision" ] || expected_revision="$(manifest_value VENUE_REVISION "$manifest" | cut -c1-7)"
+  for url in \
+    http://127.0.0.1:4101/health \
+    http://127.0.0.1:4102/api/health \
+    http://127.0.0.1:8020/health \
+    http://127.0.0.1/controller/status \
+    http://127.0.0.1/engine/api/status \
+    http://127.0.0.1/stack.json \
+    http://127.0.0.1/menu/ \
+    http://127.0.0.1/display/
+  do
+    /usr/bin/curl -fsS --max-time 8 "$url" >/dev/null || return 1
+  done
+
+  EXPECTED_REVISION="$expected_revision" /usr/bin/python3 - <<'PY' || return 1
+import json
+import os
+import urllib.request
+
+with urllib.request.urlopen("http://127.0.0.1:4101/status", timeout=5) as response:
+    status = json.load(response)
+fps = float(status.get("actualFps") or 0)
+assert 48 <= fps <= 52, f"floor actualFps is {fps}"
+assert int(status.get("udpErrorCount") or 0) == 0, "floor has UDP errors"
+assert status.get("gameEngineOnline") is True, "floor cannot see the game engine"
+sync = status.get("sync") or {}
+assert sync.get("status") == "ok", f"floor sync is {sync.get('status')}"
+
+with urllib.request.urlopen("http://127.0.0.1:4102/api/status", timeout=5) as response:
+    engine = json.load(response)
+assert engine.get("currentGame"), "engine has no current game"
+assert engine.get("audioEnabled") is True, "engine audio is disabled"
+
+with urllib.request.urlopen("http://127.0.0.1/stack.json", timeout=5) as response:
+    stack = json.load(response)
+assert stack.get("revision") == os.environ["EXPECTED_REVISION"], (
+    f"stack revision is {stack.get('revision')}, expected {os.environ['EXPECTED_REVISION']}"
+)
+PY
+
+  if [ "$mode" = containers ]; then
+    security_health="$(/usr/bin/docker inspect --format '{{.State.Health.Status}}' motion-levels-venue-security-recorder 2>/dev/null || true)"
+    [ "$security_health" = healthy ] || {
+      log "security recorder container health is ${security_health:-missing}"
+      return 1
+    }
+    audio_probe || return 1
+  else
+    systemctl is-active --quiet \
+      caddy.service \
+      motion-levels-floor-controller.service \
+      motion-levels-game-engine.service \
+      motion-levels-camera-helper.service \
+      motion-levels-security-recorder.service || return 1
+  fi
+
+  return 0
+}
+
+health_gate() {
+  mode=${1:-containers}
+  manifest=$2
+  attempt=1
+  log "checking venue HTTP, floor, recorder, and audio health"
+  while [ "$attempt" -le 45 ]; do
+    if health_gate_once "$mode" "$manifest"; then
+      log "venue health gate passed"
+      return 0
+    fi
+    if [ $((attempt % 10)) -eq 0 ]; then
+      log "venue health is still settling (attempt $attempt/45)"
+    fi
+    attempt=$((attempt + 1))
+    sleep 2
+  done
+
+  log "venue health gate failed"
+  return 1
+}
+
+start_native() {
+  log "restoring host-native venue services"
+  systemctl enable \
+    caddy.service \
+    motion-levels-floor-controller.service \
+    motion-levels-game-engine.service \
+    motion-levels-camera-helper.service \
+    motion-levels-security-recorder.service >/dev/null 2>&1 || true
+  systemctl start motion-levels-floor-controller.service || return 1
+  systemctl start motion-levels-game-engine.service || return 1
+  systemctl start motion-levels-camera-helper.service || return 1
+  systemctl start motion-levels-security-recorder.service || return 1
+  systemctl start caddy.service || return 1
+}
+
+stop_native() {
+  log "stopping host-native core services"
+  systemctl stop motion-levels-game-engine.service || true
+  systemctl stop motion-levels-floor-controller.service || true
+  systemctl stop motion-levels-camera-helper.service || true
+  systemctl stop motion-levels-security-recorder.service || true
+  systemctl stop caddy.service || true
+}
+
+wait_wayland_socket() {
+  attempt=0
+  while [ ! -S /run/motion-levels-display/wayland-0 ] && [ "$attempt" -lt 30 ]; do
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+  [ -S /run/motion-levels-display/wayland-0 ]
+}
+
+reconcile_display() {
+  manifest=$1
+  backend="$(manifest_value VENUE_DISPLAY_BACKEND "$manifest")"
+  backend="${backend:-x11}"
+
+  if [ "$backend" = wayland ]; then
+    systemctl disable --now motion-levels-hdmi-watchdog.service motion-levels-kiosk.service >/dev/null 2>&1 || true
+    if systemctl enable --now motion-levels-display-wayland.service \
+      && wait_wayland_socket \
+      && systemctl enable --now motion-levels-hdmi-agent.service \
+      && systemctl enable motion-levels-player-container.service >/dev/null \
+      && systemctl restart motion-levels-player-container.service; then
+      return 0
+    fi
+
+    log "Wayland display restore failed; falling back to X11"
+    systemctl disable --now \
+      motion-levels-player-container.service \
+      motion-levels-hdmi-agent.service \
+      motion-levels-display-wayland.service >/dev/null 2>&1 || true
+    systemctl enable --now motion-levels-kiosk.service motion-levels-hdmi-watchdog.service >/dev/null
+    set_manifest_value "$manifest" VENUE_DISPLAY_BACKEND x11
+    return 1
+  fi
+
+  systemctl disable --now \
+    motion-levels-player-container.service \
+    motion-levels-hdmi-agent.service \
+    motion-levels-display-wayland.service >/dev/null 2>&1 || true
+  systemctl enable --now motion-levels-kiosk.service motion-levels-hdmi-watchdog.service >/dev/null
+}
+
+fallback_to_native() {
+  manifest=$1
+  native_candidate="$config_root/native-candidate.env"
+  saved_current="$config_root/container-before-native.env"
+  install -m 0600 "$manifest" "$native_candidate"
+  rm -f "$saved_current"
+  if manifest_is_containers "$current"; then
+    install -m 0600 "$current" "$saved_current"
+  fi
+
+  log "falling back to the retained native runtime"
+  write_stack_metadata "$native_candidate" native
+  systemctl disable --now \
+    motion-levels-player-container.service \
+    motion-levels-hdmi-agent.service \
+    motion-levels-display-wayland.service \
+    motion-levels-venue-containers.service >/dev/null 2>&1 || true
+  systemctl disable --now motion-levels-audio.socket motion-levels-container-firewall.service >/dev/null 2>&1 || true
+
+  if start_native \
+    && reconcile_display "$native_candidate" \
+    && health_gate native "$native_candidate"; then
+    if [ -f "$saved_current" ]; then
+      install -m 0600 "$saved_current" "$previous.tmp"
+      mv -f "$previous.tmp" "$previous"
+    fi
+    install -m 0600 "$native_candidate" "$current.tmp"
+    mv -f "$current.tmp" "$current"
+    set_runtime_env_link "$current"
+    rm -f "$native_candidate" "$saved_current"
+    return 0
+  fi
+
+  log "native fallback failed"
+  stop_native
+  if [ -f "$saved_current" ]; then
+    write_stack_metadata "$saved_current" containers
+    systemctl disable \
+      caddy.service \
+      motion-levels-floor-controller.service \
+      motion-levels-game-engine.service \
+      motion-levels-camera-helper.service \
+      motion-levels-security-recorder.service >/dev/null 2>&1 || true
+    systemctl enable --now motion-levels-container-firewall.service motion-levels-audio.socket >/dev/null 2>&1 || true
+    if compose "$saved_current" up -d --no-build --wait --wait-timeout 240 \
+      && health_gate containers "$saved_current"; then
+      install -m 0600 "$saved_current" "$current.tmp"
+      mv -f "$current.tmp" "$current"
+      set_runtime_env_link "$current"
+      systemctl enable motion-levels-venue-containers.service >/dev/null
+      systemctl start motion-levels-venue-containers.service || true
+      reconcile_display "$current" || true
+      rm -f "$native_candidate" "$saved_current"
+      log "restored the prior container runtime after native fallback failure"
+      return 1
+    fi
+  fi
+  rm -f "$native_candidate" "$saved_current"
+  log "native and container recovery both failed"
+  return 1
+}
+
+prune_old_venue_images() {
+  /usr/bin/python3 - "$current" "$previous" <<'PY'
+import json
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+prefix = "ghcr.io/motionlevels/motion-levels-venue-"
+keep_ids = set()
+for manifest_value in sys.argv[1:]:
+    manifest = Path(manifest_value)
+    if not manifest.exists():
+        continue
+    for line in manifest.read_text(encoding="utf-8").splitlines():
+        if "_IMAGE=" not in line:
+            continue
+        _, reference = line.split("=", 1)
+        try:
+            payload = json.loads(subprocess.check_output(["docker", "image", "inspect", reference]))[0]
+        except subprocess.CalledProcessError:
+            continue
+        keep_ids.add(payload["Id"])
+
+image_ids = subprocess.check_output(
+    ["docker", "image", "ls", "--all", "--quiet", "--no-trunc"],
+    text=True,
+).splitlines()
+for image_id in sorted(set(image_ids)):
+    payload = json.loads(subprocess.check_output(["docker", "image", "inspect", image_id]))[0]
+    references = (payload.get("RepoTags") or []) + (payload.get("RepoDigests") or [])
+    venue_references = [reference for reference in references if reference.startswith(prefix)]
+    if not venue_references or image_id in keep_ids:
+        continue
+    if any(not reference.startswith(prefix) for reference in references):
+        continue
+    subprocess.run(["docker", "image", "rm", "--force", image_id], check=False)
+    if subprocess.run(
+        ["docker", "image", "inspect", image_id],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    ).returncode == 0:
+        print(f"warning: old venue image remains referenced: {image_id}", file=sys.stderr)
+
+release_root = Path("/etc/motion-levels/venue/releases")
+keep_roots = set()
+for manifest_value in sys.argv[1:]:
+    manifest = Path(manifest_value)
+    if not manifest.exists():
+        continue
+    for line in manifest.read_text(encoding="utf-8").splitlines():
+        if line.startswith("VENUE_CONFIG_ROOT="):
+            keep_roots.add(Path(line.split("=", 1)[1]).resolve())
+for release in release_root.iterdir() if release_root.exists() else []:
+    if release.resolve() not in keep_roots and release.is_dir():
+        shutil.rmtree(release)
+PY
+}
+
+restore_after_failure() {
+  rollback_manifest=$1
+  rollback_available=$2
+  rollback_mode=native
+  manifest_is_containers "$rollback_manifest" && rollback_mode=containers
+  write_stack_metadata "$rollback_manifest" "$rollback_mode"
+  log "candidate failed; removing it before rollback"
+  compose "$candidate" down --remove-orphans --timeout 120 || true
+
+  if [ "$rollback_available" != 1 ]; then
+    log "no previously healthy runtime was available; candidate remains stopped"
+    return 1
+  fi
+
+  if [ -n "$rollback_manifest" ] && manifest_is_containers "$rollback_manifest"; then
+    log "restoring previous pinned container manifest"
+    if ! compose "$rollback_manifest" up -d --no-build --wait --wait-timeout 240 \
+      || ! health_gate containers "$rollback_manifest"; then
+      compose "$rollback_manifest" down --remove-orphans --timeout 120 || true
+      if manifest_is_native "$native_fallback"; then
+        fallback_to_native "$native_fallback"
+      else
+        log "candidate and previous container releases both failed; no native fallback is recorded"
+        return 1
+      fi
+      return 1
+    fi
+    set_runtime_env_link "$rollback_manifest"
+    reconcile_display "$rollback_manifest"
+    return
+  fi
+
+  fallback_to_native "$rollback_manifest"
+}
+
+activate() {
+  [ -f "$candidate" ] || {
+    log "candidate manifest is missing: $candidate"
+    return 2
+  }
+  manifest_is_containers "$candidate" || {
+    log "candidate manifest does not declare VENUE_MODE=containers"
+    return 2
+  }
+
+  compose "$candidate" config --quiet
+  venue_is_idle
+
+  rollback_manifest=""
+  rollback_available=1
+  active_display_backend=x11
+  if manifest_is_containers "$current"; then
+    rollback_manifest=$current
+    active_display_backend="$(manifest_value VENUE_DISPLAY_BACKEND "$current")"
+    active_display_backend="${active_display_backend:-x11}"
+  elif manifest_is_native "$current"; then
+    rollback_manifest=$current
+  else
+    rollback_manifest="$config_root/native-rollback.env"
+    write_native_manifest "$rollback_manifest"
+  fi
+
+  if ! manifest_is_containers "$rollback_manifest" && ! health_gate_once native "$rollback_manifest"; then
+    if systemctl is-active --quiet motion-levels-floor-controller.service \
+      || systemctl is-active --quiet motion-levels-game-engine.service; then
+      log "native core services are active but not healthy; refusing the cutover"
+      return 74
+    fi
+    rollback_available=0
+    log "no native core runtime exists; proceeding as a bootstrap activation without native rollback"
+  fi
+  if [ "$rollback_available" = 1 ] && manifest_is_native "$rollback_manifest"; then
+    install -m 0600 "$rollback_manifest" "$native_fallback"
+  fi
+
+  systemctl start motion-levels-container-firewall.service
+  systemctl start motion-levels-audio.socket
+
+  if ! manifest_is_containers "$rollback_manifest"; then
+    stop_native
+  fi
+
+  write_stack_metadata "$candidate" containers
+  log "activating pinned venue containers revision=$(manifest_value VENUE_REVISION "$candidate")"
+  if ! compose "$candidate" up -d --no-build --remove-orphans --wait --wait-timeout 240 || ! health_gate containers "$candidate"; then
+    restore_after_failure "$rollback_manifest" "$rollback_available"
+    return 1
+  fi
+
+  # Every deployment has its own immutable config root. Rotate the active
+  # manifest even when the code revision matches so secret/config-only
+  # redeployments retain an exact one-step rollback target.
+  if manifest_is_containers "$current"; then
+    install -m 0600 "$current" "$previous.tmp"
+    mv -f "$previous.tmp" "$previous"
+  elif ! manifest_is_containers "$current"; then
+    if [ "$rollback_available" = 1 ]; then
+      install -m 0600 "$rollback_manifest" "$previous.tmp"
+      mv -f "$previous.tmp" "$previous"
+    else
+      rm -f "$previous"
+    fi
+  fi
+
+  install -m 0600 "$candidate" "$current.tmp"
+  mv -f "$current.tmp" "$current"
+  set_manifest_value "$current" VENUE_DISPLAY_BACKEND "$active_display_backend"
+  set_runtime_env_link "$current"
+  printf '%s\tactivate\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(manifest_value VENUE_REVISION "$current")" >>"$history"
+
+  systemctl disable \
+    caddy.service \
+    motion-levels-floor-controller.service \
+    motion-levels-game-engine.service \
+    motion-levels-camera-helper.service \
+    motion-levels-security-recorder.service >/dev/null 2>&1 || true
+  systemctl enable motion-levels-container-firewall.service motion-levels-audio.socket motion-levels-venue-containers.service >/dev/null
+  systemctl start motion-levels-venue-containers.service
+  prune_old_venue_images || log "warning: old venue image cleanup failed"
+  log "venue container activation complete"
+}
+
+rollback() {
+  [ -f "$previous" ] || {
+    log "no previous venue manifest exists"
+    return 2
+  }
+  venue_is_idle
+
+  if ! manifest_is_containers "$previous"; then
+    log "rolling back to retained host-native services"
+    manifest_is_containers "$current" || {
+      log "current container manifest is missing"
+      return 2
+    }
+    compose "$current" down --remove-orphans --timeout 120 || true
+    fallback_to_native "$previous"
+    printf '%s\trollback\tnative\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$history"
+    log "native rollback complete"
+    return
+  fi
+
+  manifest_is_containers "$current" || {
+    log "current container manifest is missing"
+    return 2
+  }
+  write_stack_metadata "$previous" containers
+  compose "$current" down --remove-orphans --timeout 120 || true
+  if ! compose "$previous" up -d --no-build --wait --wait-timeout 240 || ! health_gate containers "$previous"; then
+    log "previous manifest failed; restoring current manifest"
+    compose "$previous" down --remove-orphans --timeout 120 || true
+    write_stack_metadata "$current" containers
+    if ! compose "$current" up -d --no-build --wait --wait-timeout 240 \
+      || ! health_gate containers "$current"; then
+      compose "$current" down --remove-orphans --timeout 120 || true
+      if manifest_is_native "$native_fallback"; then
+        fallback_to_native "$native_fallback"
+      else
+        log "previous and current container releases both failed; no native fallback is recorded"
+      fi
+    else
+      set_runtime_env_link "$current"
+      reconcile_display "$current" || true
+    fi
+    return 1
+  fi
+
+  install -m 0600 "$current" "$config_root/swap.env"
+  install -m 0600 "$previous" "$current.tmp"
+  mv -f "$current.tmp" "$current"
+  mv -f "$config_root/swap.env" "$previous"
+  set_runtime_env_link "$current"
+  display_ok=1
+  reconcile_display "$current" || display_ok=0
+  printf '%s\trollback\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(manifest_value VENUE_REVISION "$current")" >>"$history"
+  if [ "$display_ok" != 1 ]; then
+    log "container rollback completed with verified X11 display fallback"
+    return 1
+  fi
+  log "container rollback complete"
+}
+
+restart_runtime() {
+  venue_is_idle
+  if manifest_is_containers "$current"; then
+    set_runtime_env_link "$current"
+    systemctl restart motion-levels-venue-containers.service
+    if [ "$(manifest_value VENUE_DISPLAY_BACKEND "$current")" = wayland ]; then
+      systemctl restart motion-levels-player-container.service
+    else
+      systemctl restart motion-levels-kiosk.service
+    fi
+    health_gate containers "$current"
+    log "container runtime restart complete"
+    return
+  fi
+
+  systemctl restart \
+    motion-levels-floor-controller.service \
+    motion-levels-game-engine.service \
+    motion-levels-camera-helper.service \
+    motion-levels-security-recorder.service \
+    caddy.service \
+    motion-levels-kiosk.service
+  health_gate native "$current"
+  log "native runtime restart complete"
+}
+
+status() {
+  if manifest_is_containers "$current"; then
+    log "current mode=containers revision=$(manifest_value VENUE_REVISION "$current") display=$(manifest_value VENUE_DISPLAY_BACKEND "$current")"
+    compose "$current" ps
+  else
+    log "current mode=native"
+    systemctl --no-pager --lines=2 status \
+      caddy.service \
+      motion-levels-floor-controller.service \
+      motion-levels-game-engine.service \
+      motion-levels-camera-helper.service \
+      motion-levels-security-recorder.service
+  fi
+}
+
+logs() {
+  manifest_is_containers "$current" || {
+    journalctl -f -u caddy.service -u motion-levels-floor-controller.service -u motion-levels-game-engine.service
+    return
+  }
+  compose "$current" logs --follow --tail 100
+}
+
+action=${1:-activate}
+case "$action" in
+  status|logs) ;;
+  *)
+    mkdir -p "$(dirname "$lock")"
+    exec 9>"$lock"
+    flock -n 9 || {
+      log "another venue mutation is already running"
+      exit 73
+    }
+    ;;
+esac
+
+case "$action" in
+  activate) activate ;;
+  rollback) rollback ;;
+  restart) restart_runtime ;;
+  status) status ;;
+  logs) logs ;;
+  *)
+    echo "usage: $0 {activate|rollback|restart|status|logs}" >&2
+    exit 2
+    ;;
+esac

@@ -79,6 +79,10 @@ all:
         motionlevels-1:
           ansible_host: 100.76.156.89
           motion_levels_hostname: motionlevels-1
+          motion_levels_containerized_venue: true
+          # The Wayland browser container is installed but remains staged until
+          # a connected-TV maintenance window validates hotplug and HDMI audio.
+          motion_levels_display_backend: x11
           # X5 plugged into motionlevels-1 itself since 2026-07-10; point back at
           # http://100.66.119.123:8030 if the camera returns to the camera-dev box.
           motion_levels_camera_recorder_url: http://127.0.0.1:8030

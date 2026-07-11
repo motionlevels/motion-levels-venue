@@ -54,3 +54,125 @@ COPY game-bundles /release/game-bundles
 COPY content /release/content
 COPY deploy/motionlevels-pc /release/deploy/motionlevels-pc
 CMD ["sleep", "infinity"]
+
+FROM debian:bookworm-slim AS floor-runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    zstd \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 motionlevels \
+    && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent motionlevels
+ARG BUILD_REVISION=unknown
+ARG BUILD_CREATED_AT=
+LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-platform"
+LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
+LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
+COPY --from=runtime-build /release/bin/floor-controller /app/bin/floor-controller
+COPY deploy/motionlevels-pc/venue-floor-controller /usr/local/bin/venue-floor-controller
+RUN /bin/sh -n /usr/local/bin/venue-floor-controller
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/venue-floor-controller"]
+
+FROM ${NODE_IMAGE} AS engine-runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    libasound2 \
+    socat \
+    zstd \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 motionlevels \
+    && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent motionlevels
+ARG BUILD_REVISION=unknown
+ARG BUILD_CREATED_AT=
+LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-platform"
+LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
+LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
+COPY --from=runtime-build /release/bin/game-engine /app/bin/game-engine
+COPY game-bundles /app/game-bundles
+COPY content /app/content
+COPY deploy/motionlevels-pc/aplay-raw /usr/local/bin/aplay
+COPY deploy/motionlevels-pc/venue-game-engine /usr/local/bin/venue-game-engine
+RUN /bin/sh -n /usr/local/bin/aplay \
+    && /bin/sh -n /usr/local/bin/venue-game-engine \
+    && find /app/content /app/game-bundles -type d -exec chmod a+rx {} + \
+    && find /app/content /app/game-bundles -type f -exec chmod a+r {} +
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/venue-game-engine"]
+
+FROM debian:bookworm-slim AS camera-helper-runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    python3 \
+    python3-opencv \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10002 motionlevels-camera \
+    && useradd --uid 10002 --gid 10002 --no-create-home --home-dir /nonexistent motionlevels-camera
+ARG BUILD_REVISION=unknown
+ARG BUILD_CREATED_AT=
+LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-platform"
+LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
+LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
+COPY deploy/motionlevels-pc/motion-levels-camera-helper.py /app/motion-levels-camera-helper.py
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+RUN python3 -m py_compile /app/motion-levels-camera-helper.py
+USER 10002:10002
+ENTRYPOINT ["/usr/bin/python3", "/app/motion-levels-camera-helper.py"]
+
+FROM debian:bookworm-slim AS security-recorder-runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    ffmpeg \
+    python3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10002 motionlevels-camera \
+    && useradd --uid 10002 --gid 10002 --no-create-home --home-dir /nonexistent motionlevels-camera
+ARG BUILD_REVISION=unknown
+ARG BUILD_CREATED_AT=
+LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-platform"
+LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
+LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
+COPY deploy/motionlevels-pc/motion-levels-security-recorder.py /app/motion-levels-security-recorder.py
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+RUN python3 -m py_compile /app/motion-levels-security-recorder.py
+USER 10002:10002
+ENTRYPOINT ["/usr/bin/python3", "/app/motion-levels-security-recorder.py"]
+
+FROM caddy:2-alpine AS caddy-runtime
+RUN apk add --no-cache curl \
+    && addgroup -g 10003 motionlevels-web \
+    && adduser -D -H -u 10003 -G motionlevels-web motionlevels-web
+ARG BUILD_REVISION=unknown
+ARG BUILD_CREATED_AT=
+LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-platform"
+LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
+LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
+COPY deploy/motionlevels-pc/Caddyfile.container /etc/caddy/Caddyfile
+COPY --from=frontends /workspace/apps/player-menu/dist /srv/player-menu
+COPY --from=frontends /workspace/apps/player-display/dist /srv/player-display
+COPY game-bundles/motion-levels-games /srv/games
+COPY deploy/motionlevels-pc/cameras.html /srv/venue/cameras.html
+RUN caddy validate --config /etc/caddy/Caddyfile
+USER 10003:10003
+
+FROM debian:trixie-slim AS player-runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    chromium \
+    curl \
+    fonts-noto-color-emoji \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10003 motionlevels-display \
+    && useradd --uid 10003 --gid 10003 --no-create-home --home-dir /var/lib/motion-levels/player-profile motionlevels-display
+ARG BUILD_REVISION=unknown
+ARG BUILD_CREATED_AT=
+LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-platform"
+LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
+LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
+COPY deploy/motionlevels-pc/motion-levels-player-container /usr/local/bin/motion-levels-player-container
+RUN /bin/sh -n /usr/local/bin/motion-levels-player-container
+USER 10003:10003
+ENTRYPOINT ["/usr/local/bin/motion-levels-player-container"]

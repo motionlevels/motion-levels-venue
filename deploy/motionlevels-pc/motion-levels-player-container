@@ -1,0 +1,42 @@
+#!/bin/sh
+set -eu
+
+runtime_dir="${XDG_RUNTIME_DIR:-/run/motion-levels-display}"
+wayland_display="${WAYLAND_DISPLAY:-wayland-0}"
+socket="${runtime_dir}/${wayland_display}"
+profile="${MOTION_LEVELS_PLAYER_PROFILE:-/var/lib/motion-levels/player-profile}"
+target="${MOTION_LEVELS_PLAYER_URL:-http://host.docker.internal/display/}"
+window_size="${MOTION_LEVELS_PLAYER_WINDOW_SIZE:-1920,1080}"
+
+for _attempt in $(seq 1 90); do
+  [ -S "$socket" ] && break
+  sleep 1
+done
+if [ ! -S "$socket" ]; then
+  echo "Wayland socket ${socket} did not appear" >&2
+  exit 1
+fi
+
+mkdir -p "$profile"
+exec /usr/bin/chromium \
+  --kiosk \
+  --no-sandbox \
+  --ozone-platform=wayland \
+  --enable-features=UseOzonePlatform \
+  --no-first-run \
+  --new-window \
+  --user-data-dir="$profile" \
+  --noerrdialogs \
+  --disable-infobars \
+  --disable-background-networking \
+  --disable-component-update \
+  --disable-session-crashed-bubble \
+  --disable-translate \
+  --disable-features=Translate \
+  --window-position=0,0 \
+  --window-size="$window_size" \
+  --start-fullscreen \
+  --check-for-update-interval=31536000 \
+  --autoplay-policy=no-user-gesture-required \
+  --mute-audio \
+  --app="$target"

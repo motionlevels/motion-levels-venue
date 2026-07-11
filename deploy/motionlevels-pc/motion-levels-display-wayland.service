@@ -1,0 +1,54 @@
+[Unit]
+Description=Motion Levels minimal Weston display boundary
+After=systemd-user-sessions.service network-online.target
+Wants=network-online.target
+Before=motion-levels-player-container.service
+Conflicts=getty@tty7.service display-manager.service motion-levels-kiosk.service
+
+[Service]
+Type=simple
+User=motionlevels-display
+Group=motionlevels-display
+SupplementaryGroups=video render
+PAMName=login
+TTYPath=/dev/tty7
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+UtmpIdentifier=tty7
+Environment=XDG_RUNTIME_DIR=/run/motion-levels-display
+Environment=WAYLAND_DISPLAY=wayland-0
+RuntimeDirectory=motion-levels-display
+RuntimeDirectoryMode=0700
+ExecStart=/usr/local/bin/motion-levels-display-agent
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+LockPersonality=yes
+RemoveIPC=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+DevicePolicy=closed
+DeviceAllow=/dev/dri/card0 rw
+DeviceAllow=/dev/dri/renderD128 rw
+DeviceAllow=/dev/tty0 rw
+DeviceAllow=/dev/tty7 rw
+ReadWritePaths=/run/motion-levels-display
+TasksMax=256
+MemoryMax=512M
+
+[Install]
+WantedBy=graphical.target

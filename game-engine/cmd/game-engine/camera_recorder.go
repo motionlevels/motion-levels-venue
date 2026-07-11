@@ -36,6 +36,7 @@ type cameraVenueSessionFinish struct {
 
 type httpCameraRecorder struct {
 	baseURL string
+	token   string
 	client  *http.Client
 	jobs    chan cameraRecorderJob
 }
@@ -45,7 +46,7 @@ type cameraRecorderJob struct {
 	body any
 }
 
-func newHTTPCameraRecorder(baseURL string, timeout time.Duration) *httpCameraRecorder {
+func newHTTPCameraRecorder(baseURL, token string, timeout time.Duration) *httpCameraRecorder {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
 		return nil
@@ -55,6 +56,7 @@ func newHTTPCameraRecorder(baseURL string, timeout time.Duration) *httpCameraRec
 	}
 	recorder := &httpCameraRecorder{
 		baseURL: baseURL,
+		token:   strings.TrimSpace(token),
 		client:  &http.Client{Timeout: timeout},
 		jobs:    make(chan cameraRecorderJob, 64),
 	}
@@ -107,6 +109,9 @@ func (r *httpCameraRecorder) post(path string, body any) error {
 		return err
 	}
 	request.Header.Set("content-type", "application/json")
+	if r.token != "" {
+		request.Header.Set("authorization", "Bearer "+r.token)
+	}
 	response, err := r.client.Do(request)
 	if err != nil {
 		return err

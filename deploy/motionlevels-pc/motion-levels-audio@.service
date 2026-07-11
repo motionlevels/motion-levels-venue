@@ -1,0 +1,39 @@
+[Unit]
+Description=Motion Levels audio stream %I
+After=sound.target
+
+[Service]
+Type=exec
+User=motionlevels-audio
+Group=motionlevels-audio
+SupplementaryGroups=audio
+StandardInput=socket
+StandardOutput=journal
+StandardError=journal
+ExecStart=/usr/bin/aplay -q -D default -t raw -f S16_LE -c 2 -r 48000 -
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=no
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+DevicePolicy=closed
+DeviceAllow=/dev/snd/pcmC0D5p rw
+DeviceAllow=/dev/snd/timer rw
+TasksMax=16
+MemoryMax=64M
+UMask=0077

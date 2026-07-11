@@ -156,12 +156,25 @@ def env_int(name: str, fallback: int) -> int:
         return fallback
 
 
+def secret_value(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if value:
+        return value
+    path = os.environ.get(f"{name}_FILE", "").strip()
+    if not path:
+        return ""
+    try:
+        return open(path, encoding="utf-8").read().strip()
+    except OSError as exc:
+        raise SystemExit(f"cannot read {name}_FILE: {exc}") from exc
+
+
 def camera_password() -> str:
-    explicit = os.environ.get("MOTION_LEVELS_CAMERA_PASSWORD")
+    explicit = secret_value("MOTION_LEVELS_CAMERA_PASSWORD")
     if explicit:
         return explicit
     password_env = os.environ.get("MOTION_LEVELS_CAMERA_PASSWORD_ENV", "ML_TAPO_PASSWORD")
-    return os.environ.get(password_env, "")
+    return secret_value(password_env)
 
 
 def main() -> None:

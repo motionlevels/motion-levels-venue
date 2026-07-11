@@ -18,12 +18,8 @@
 		reverse_proxy 127.0.0.1:4102
 	}
 
-	# The /tv and /cameras pages — and the platform assets/APIs and camera
-	# streams they depend on — are exposed only on the wired venue LAN address
-	# (192.168.1.142), which lives solely on the ethernet interface. Each
-	# handler ANDs the host with its path so other routes (/menu, /display,
-	# /engine, ...) keep working on 192.168.1.142, while /tv and /cameras stay
-	# unreachable from the wifi interface or any other address.
+	# These platform-backed routes are available only when the request really
+	# arrived on the venue Ethernet address. A Host header alone is spoofable.
 	@platform_tv {
 		path /tv /tv/
 		expression {http.request.local.host} == "192.168.1.142"
@@ -44,16 +40,13 @@
 		expression {http.request.local.host} == "192.168.1.142"
 	}
 	handle @platform_cameras {
-		root * /opt/motion-levels/rebuild/current/deploy/motionlevels-pc
+		root * /srv/venue
 		rewrite * /cameras.html
 		header Cache-Control "no-store"
 		file_server
 	}
 
-	# Camera frame endpoint. NOT restricted to the wired LAN address: the
-	# platform pulls these snapshots over Tailscale (Host: motionlevels-1) for
-	# its own cameras page, so gating this to 192.168.1.142 would break it.
-	# Only the /cameras page above is ethernet-only.
+	# Snapshot data remains reachable through Tailscale for the platform.
 	handle /cam/* {
 		reverse_proxy 127.0.0.1:8020
 	}
@@ -105,20 +98,20 @@
 	}
 
 	handle /motion-levels-icon.png {
-		root * /opt/motion-levels/rebuild/current/apps/player-menu/dist
+		root * /srv/player-menu
 		header Cache-Control "public, max-age=31536000, immutable"
 		file_server
 	}
 
 	handle /motion-levels-icon.webp {
-		root * /opt/motion-levels/rebuild/current/apps/player-menu/dist
+		root * /srv/player-menu
 		header Cache-Control "public, max-age=31536000, immutable"
 		file_server
 	}
 
 	redir /menu /menu/
 	handle_path /menu/* {
-		root * /opt/motion-levels/rebuild/current/apps/player-menu/dist
+		root * /srv/player-menu
 		@menu_assets path /assets/*
 		header @menu_assets Cache-Control "public, max-age=31536000, immutable"
 		@menu_index path / /index.html
@@ -129,7 +122,7 @@
 
 	redir /display /display/
 	handle_path /display/* {
-		root * /opt/motion-levels/rebuild/current/apps/player-display/dist
+		root * /srv/player-display
 		@display_assets path /assets/*
 		header @display_assets Cache-Control "public, max-age=31536000, immutable"
 		@display_index path / /index.html
@@ -140,13 +133,13 @@
 
 	redir /games /games/
 	handle_path /games/* {
-		root * /opt/motion-levels/rebuild/current/game-bundles/motion-levels-games
+		root * /srv/games
 		header Cache-Control "public, max-age=31536000, immutable"
 		file_server
 	}
 
 	handle /stack.json {
-		root * /etc/motion-levels
+		root * /srv/runtime
 		file_server
 	}
 

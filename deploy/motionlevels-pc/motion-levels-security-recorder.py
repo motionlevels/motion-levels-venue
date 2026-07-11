@@ -5,11 +5,25 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib import error, parse, request
+
+
+def secret_value(name: str, fallback: str = "") -> str:
+    value = os.environ.get(name, "").strip()
+    if value:
+        return value
+    path = os.environ.get(f"{name}_FILE", "").strip()
+    if path:
+        try:
+            return Path(path).read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            raise RuntimeError(f"cannot read {name}_FILE: {exc}") from exc
+    return fallback.strip()
 
 
 ROOT = Path(os.environ.get("MOTION_LEVELS_SECURITY_RECORDINGS_ROOT", "/var/lib/motion-levels/security-recordings"))
@@ -24,7 +38,10 @@ CAMERA_HOST = (
 ).strip()
 CAMERA_USER = os.environ.get("MOTION_LEVELS_SECURITY_CAMERA_USER") or os.environ.get("MOTION_LEVELS_CAMERA_USER", "motionlevels")
 PASSWORD_ENV = os.environ.get("MOTION_LEVELS_SECURITY_CAMERA_PASSWORD_ENV") or os.environ.get("MOTION_LEVELS_CAMERA_PASSWORD_ENV", "ML_TAPO_PASSWORD")
-CAMERA_PASSWORD = os.environ.get("MOTION_LEVELS_SECURITY_CAMERA_PASSWORD") or os.environ.get("MOTION_LEVELS_CAMERA_PASSWORD") or os.environ.get(PASSWORD_ENV, "")
+CAMERA_PASSWORD = secret_value(
+    "MOTION_LEVELS_SECURITY_CAMERA_PASSWORD",
+    secret_value("MOTION_LEVELS_CAMERA_PASSWORD", secret_value(PASSWORD_ENV)),
+)
 RTSP_PATH = os.environ.get("MOTION_LEVELS_SECURITY_CAMERA_RTSP_PATH", "/stream2").strip() or "/stream2"
 AUDIO_ENABLED = os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_AUDIO", "0").strip().lower() in {"1", "true", "yes", "on"}
 SEGMENT_SECONDS = max(30, int(os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_SEGMENT_SECONDS", "300")))
@@ -37,13 +54,14 @@ PLATFORM_URL = (
     or os.environ.get("MOTION_LEVELS_PLATFORM_URL")
     or "https://platform.motionlevels.obis.dev"
 ).strip().rstrip("/")
-PLATFORM_TOKEN = (
-    os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_TOKEN")
-    or os.environ.get("MOTION_LEVELS_PLATFORM_TOKEN")
-    or ""
-).strip()
+PLATFORM_TOKEN = secret_value(
+    "MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_TOKEN",
+    secret_value("MOTION_LEVELS_PLATFORM_TOKEN"),
+)
 PLATFORM_TIMEOUT_SECONDS = float(os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_TIMEOUT_SECONDS", "60"))
 CONTROLLER_HOSTNAME = os.environ.get("MOTION_LEVELS_CONTROLLER_HOSTNAME") or os.environ.get("MOTION_LEVELS_HOSTNAME") or os.uname().nodename
+HEARTBEAT_PATH = Path(os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_HEARTBEAT", "/tmp/security-recorder-heartbeat.json"))
+RTSP_INPUT_PATH = Path(os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_INPUT_FILE", "/tmp/security-recorder-input.ffconcat"))
 
 stop_requested = False
 ffmpeg_process: subprocess.Popen[str] | None = None
@@ -61,11 +79,43 @@ def log(message: str) -> None:
     print(f"{iso(utc_now())} {message}", flush=True)
 
 
+def write_heartbeat(state: str, detail: str = "") -> None:
+    payload = {
+        "cameraId": CAMERA_ID,
+        "detail": detail,
+        "ffmpegRunning": bool(ffmpeg_process and ffmpeg_process.poll() is None),
+        "state": state,
+        "stopRequested": stop_requested,
+        "updatedAt": iso(utc_now()),
+    }
+    HEARTBEAT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = HEARTBEAT_PATH.with_suffix(HEARTBEAT_PATH.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(HEARTBEAT_PATH)
+
+
 def rtsp_url() -> str:
     user = parse.quote(CAMERA_USER, safe="")
     password = parse.quote(CAMERA_PASSWORD, safe="")
     path = "/" + RTSP_PATH.strip("/")
     return f"rtsp://{user}:{password}@{CAMERA_HOST}:554{path}"
+
+
+def write_rtsp_input() -> None:
+    content = "\n".join(
+        [
+            "ffconcat version 1.0",
+            f"file '{rtsp_url()}'",
+            "option rtsp_transport tcp",
+            "option timeout 5000000",
+            "",
+        ]
+    )
+    RTSP_INPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = RTSP_INPUT_PATH.with_suffix(RTSP_INPUT_PATH.suffix + ".tmp")
+    temporary.write_text(content, encoding="utf-8")
+    temporary.chmod(0o600)
+    temporary.replace(RTSP_INPUT_PATH)
 
 
 def ffmpeg_command() -> list[str]:
@@ -78,10 +128,14 @@ def ffmpeg_command() -> list[str]:
         "-loglevel",
         os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_FFMPEG_LOG_LEVEL", "error"),
         "-nostdin",
-        "-rtsp_transport",
-        "tcp",
+        "-protocol_whitelist",
+        "file,rtp,udp,tcp,rtsp,http,https,tls,crypto",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
         "-i",
-        rtsp_url(),
+        str(RTSP_INPUT_PATH),
         "-map",
         "0:v:0",
         "-c:v",
@@ -105,6 +159,20 @@ def ffmpeg_command() -> list[str]:
         ]
     )
     return command
+
+
+def log_ffmpeg_stderr(process: subprocess.Popen[str]) -> None:
+    if process.stderr is None:
+        return
+    encoded_password = parse.quote(CAMERA_PASSWORD, safe="")
+    full_url = rtsp_url()
+    for line in process.stderr:
+        redacted = line.replace(full_url, "<rtsp-url>")
+        if CAMERA_PASSWORD:
+            redacted = redacted.replace(CAMERA_PASSWORD, "<redacted-password>")
+        if encoded_password:
+            redacted = redacted.replace(encoded_password, "<redacted-password>")
+        log("ffmpeg: " + redacted.rstrip())
 
 
 def post_json(path: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -247,6 +315,7 @@ def segment_candidates(include_newest: bool = False) -> list[Path]:
 
 
 def upload_pending(include_newest: bool = False) -> None:
+    write_heartbeat("recording")
     if not PLATFORM_TOKEN:
         log("platform token is not configured; security segments will remain local")
         return
@@ -254,6 +323,7 @@ def upload_pending(include_newest: bool = False) -> None:
     for path in segment_candidates(include_newest=include_newest):
         upload_segment(path)
     cleanup_confirmed_local_segments()
+    write_heartbeat("recording")
 
 
 def cleanup_confirmed_local_segments() -> None:
@@ -273,6 +343,7 @@ def handle_signal(signum: int, _frame: Any) -> None:
     global stop_requested
     stop_requested = True
     log(f"received signal {signum}; stopping")
+    write_heartbeat("stopping", f"signal={signum}")
     if ffmpeg_process and ffmpeg_process.poll() is None:
         ffmpeg_process.terminate()
 
@@ -293,22 +364,34 @@ def main() -> int:
         log("ffmpeg is not installed")
         return 2
     ROOT.mkdir(parents=True, exist_ok=True)
+    write_heartbeat("starting")
     log(f"starting security recorder camera={CAMERA_ID} host={CAMERA_HOST} role={CAMERA_ROLE} audio={'on' if AUDIO_ENABLED else 'off'} root={ROOT}")
     log(f"segments={SEGMENT_SECONDS}s retention={RETENTION_DAYS}d platform={PLATFORM_URL}")
 
     while not stop_requested:
+        write_rtsp_input()
         command = ffmpeg_command()
-        redacted = ["<rtsp-url>" if part.startswith("rtsp://") else part for part in command]
-        log("launching ffmpeg " + " ".join(redacted))
-        ffmpeg_process = subprocess.Popen(command, text=True)
+        log("launching ffmpeg " + " ".join(command))
+        ffmpeg_process = subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        threading.Thread(target=log_ffmpeg_stderr, args=(ffmpeg_process,), daemon=True).start()
+        write_heartbeat("recording")
         while ffmpeg_process.poll() is None and not stop_requested:
             upload_pending(include_newest=False)
             time.sleep(SCAN_SECONDS)
         upload_pending(include_newest=True)
         if stop_requested:
             break
-        log(f"ffmpeg exited code={ffmpeg_process.returncode}; restarting in 10s")
+        detail = f"ffmpeg exited code={ffmpeg_process.returncode}; restarting in 10s"
+        log(detail)
+        write_heartbeat("restarting", detail)
         time.sleep(10)
+    RTSP_INPUT_PATH.unlink(missing_ok=True)
+    write_heartbeat("stopped")
     return 0
 
 

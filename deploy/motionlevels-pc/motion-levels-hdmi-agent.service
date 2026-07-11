@@ -1,0 +1,41 @@
+[Unit]
+Description=Motion Levels HDMI state and audio-control agent
+After=sound.target motion-levels-display-wayland.service
+Wants=sound.target motion-levels-display-wayland.service
+
+[Service]
+Type=simple
+User=motionlevels-hdmi
+Group=motionlevels-hdmi
+SupplementaryGroups=audio
+EnvironmentFile=/etc/motion-levels/venue/runtime.env
+ExecStart=/usr/local/bin/motion-levels-hdmi-agent
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+DevicePolicy=closed
+DeviceAllow=/dev/snd/controlC0 rw
+TasksMax=32
+MemoryMax=64M
+
+[Install]
+WantedBy=graphical.target

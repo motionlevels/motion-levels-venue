@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+exec /usr/bin/weston \
+  --config=/etc/motion-levels/weston.ini \
+  --continue-without-input \
+  --idle-time=0

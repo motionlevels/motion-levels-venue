@@ -1,0 +1,17 @@
+[Unit]
+Description=Motion Levels audio broker socket
+Before=motion-levels-venue-containers.service
+
+[Socket]
+ListenStream=/run/motion-levels-audio/audio.sock
+Accept=yes
+SocketUser=motionlevels-audio
+SocketGroup=motionlevels-audio
+SocketMode=0660
+DirectoryMode=0755
+RemoveOnStop=yes
+Backlog=32
+MaxConnections=32
+
+[Install]
+WantedBy=sockets.target

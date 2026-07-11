@@ -149,6 +149,7 @@ func New(vendorRoot string, cfg Config) (*Game, error) {
 	}
 	runnerPath := filepath.Join(bundle.Root, filepath.FromSlash(bundle.Manifest.Runtime.Entry))
 	cmd := exec.Command(node, runnerPath)
+	cmd.Env = runnerEnvironment(os.Environ())
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -183,6 +184,26 @@ func New(vendorRoot string, cfg Config) (*Game, error) {
 		return nil, err
 	}
 	return game, nil
+}
+
+func runnerEnvironment(environment []string) []string {
+	blocked := []string{"TOKEN", "PASSWORD", "SECRET", "PRIVATE_KEY", "CREDENTIAL"}
+	filtered := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		key, _, _ := strings.Cut(entry, "=")
+		upper := strings.ToUpper(key)
+		sensitive := false
+		for _, marker := range blocked {
+			if strings.Contains(upper, marker) {
+				sensitive = true
+				break
+			}
+		}
+		if !sensitive {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
 }
 
 func (g *Game) Render(now time.Time) []animation.RGB {

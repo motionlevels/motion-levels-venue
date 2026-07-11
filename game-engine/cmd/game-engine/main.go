@@ -75,6 +75,7 @@ type config struct {
 	ReplayKeepLocal              bool
 	DisplaySnapshotFPS           int
 	CameraRecorderURL            string
+	CameraRecorderToken          string
 	CameraRecorderTimeout        time.Duration
 	CameraRecorderSegmentSeconds int
 	AuthoredRuntime              string
@@ -133,6 +134,7 @@ func main() {
 	flag.BoolVar(&cfg.ReplayKeepLocal, "replay-keep-local", true, "keep replay files locally when platform upload is not configured")
 	flag.IntVar(&cfg.DisplaySnapshotFPS, "display-snapshot-fps", 4, "display snapshots per second to write into game session recordings")
 	flag.StringVar(&cfg.CameraRecorderURL, "camera-recorder-url", os.Getenv("MOTION_LEVELS_CAMERA_RECORDER_URL"), "local camera recorder API base URL; empty disables external video recording")
+	flag.StringVar(&cfg.CameraRecorderToken, "camera-recorder-token", os.Getenv("MOTION_LEVELS_CAMERA_RECORDER_TOKEN"), "bearer token for camera recorder mutations; can also use MOTION_LEVELS_CAMERA_RECORDER_TOKEN")
 	flag.DurationVar(&cfg.CameraRecorderTimeout, "camera-recorder-timeout", durationEnv("MOTION_LEVELS_CAMERA_RECORDER_TIMEOUT", 2*time.Second), "HTTP timeout for camera recorder API calls")
 	flag.IntVar(&cfg.CameraRecorderSegmentSeconds, "camera-recorder-segment-seconds", intEnv("MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS", 0), "video segment seconds to request from the camera recorder for stitched venue recordings; 0 uses recorder default")
 	flag.StringVar(&cfg.AuthoredRuntime, "authored-runtime", "auto", "runtime for motion-go-v1 games: auto, native, or wasm")
@@ -190,7 +192,7 @@ func main() {
 		}
 	}()
 
-	cameraRecorder := newHTTPCameraRecorder(cfg.CameraRecorderURL, cfg.CameraRecorderTimeout)
+	cameraRecorder := newHTTPCameraRecorder(cfg.CameraRecorderURL, cfg.CameraRecorderToken, cfg.CameraRecorderTimeout)
 	defer func() {
 		if err := cameraRecorder.Close(); err != nil {
 			log.Printf("camera recorder close: %v", err)

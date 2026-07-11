@@ -1,7 +1,7 @@
 [Unit]
 Description=Motion Levels HDMI kiosk browser
-After=network-online.target sound.target caddy.service motion-levels-game-engine.service
-Wants=network-online.target sound.target caddy.service motion-levels-game-engine.service
+After=network-online.target sound.target caddy.service motion-levels-venue-containers.service
+Wants=network-online.target sound.target
 Conflicts=getty@tty7.service display-manager.service motion-levels-player-tv.service
 
 [Service]
