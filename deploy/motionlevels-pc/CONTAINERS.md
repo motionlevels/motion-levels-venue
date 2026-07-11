@@ -15,7 +15,7 @@ background.
 | Security recorder | Container, UID 10002, private bridge | RTSP to `.130`, HTTPS uploads, recording spool |
 | Caddy | Container, UID 10003, host network | `NET_BIND_SERVICE` only |
 | Player browser | Optional container, UID 10003 | Wayland socket and `/dev/dri/renderD128` only |
-| Audio broker | Host systemd socket service | `/dev/snd/pcmC0D5p` and `/dev/snd/timer` |
+| Audio broker | Host systemd socket service | `/dev/snd/controlC0`, exact playback PCM `/dev/snd/pcmC0D5p`, and `/dev/snd/timer` |
 | Weston compositor | Host systemd service | DRM card/render node and VT 7; no input devices |
 | HDMI agent | Host systemd service | `/dev/snd/controlC0` only |
 

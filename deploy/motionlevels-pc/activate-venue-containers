@@ -214,9 +214,9 @@ if time.monotonic() - started > 5:
     raise SystemExit("concurrent audio probe exceeded 5 seconds")
 PY
   sleep 1
-  if systemctl --failed --no-legend 'motion-levels-audio@*.service' | grep -q .; then
+  if systemctl list-units --failed --no-legend 'motion-levels-audio@*.service' | grep -q .; then
     log "audio broker probe failed"
-    systemctl --failed --no-pager 'motion-levels-audio@*.service' || true
+    systemctl list-units --failed --no-pager 'motion-levels-audio@*.service' || true
     return 1
   fi
 }

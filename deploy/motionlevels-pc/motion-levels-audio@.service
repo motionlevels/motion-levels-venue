@@ -10,6 +10,7 @@ SupplementaryGroups=audio
 StandardInput=socket
 StandardOutput=journal
 StandardError=journal
+Environment=HOME=/tmp
 ExecStart=/usr/bin/aplay -q -D default -t raw -f S16_LE -c 2 -r 48000 -
 NoNewPrivileges=yes
 PrivateNetwork=yes
@@ -32,6 +33,9 @@ RestrictSUIDSGID=yes
 SystemCallArchitectures=native
 CapabilityBoundingSet=
 DevicePolicy=closed
+# ALSA dmix opens the card control node while negotiating the one permitted
+# playback PCM. It does not work with a read-only open.
+DeviceAllow=/dev/snd/controlC0 rw
 DeviceAllow=/dev/snd/pcmC0D5p rw
 DeviceAllow=/dev/snd/timer rw
 TasksMax=16
