@@ -66,6 +66,7 @@ export type PlatformGameCatalogEntry = {
   source_contract_version?: number;
   source_artifact_digest?: string;
   source_game_id?: string;
+  source_available: boolean;
   code_editable: boolean;
   revision_hash?: string;
   game_source?: Record<string, unknown>;

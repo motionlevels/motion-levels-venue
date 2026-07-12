@@ -51,6 +51,7 @@ function catalogEntry(patch: Partial<PlatformGameCatalogEntry> = {}): PlatformGa
     default_music_ref: "",
     default_music_volume: 0.16,
     source_kind: "platform_levels",
+    source_available: true,
     code_editable: false,
     ...patch,
   };

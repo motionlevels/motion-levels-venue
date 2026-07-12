@@ -1,0 +1,122 @@
+name: Sync Motion Levels games bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published games release tag (games-vMAJOR.MINOR.PATCH)
+        required: true
+        type: string
+      source_revision:
+        description: Full games repository source revision
+        required: true
+        type: string
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: sync-motion-levels-games
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Verify, pin, and publish games release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      SOURCE_REVISION: ${{ inputs.source_revision }}
+      GAMES_REPOSITORY: motionlevels/motion-levels-games
+    steps:
+      - name: Checkout platform main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Validate release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^games-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$SOURCE_REVISION" =~ ^[0-9a-f]{40}$ ]]
+
+      - name: Download exact private release assets
+        env:
+          GH_TOKEN: ${{ secrets.GAMES_REPO_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          release_dir="$RUNNER_TEMP/motion-levels-games-release"
+          mkdir -p "$release_dir"
+          archive="motion-levels-games-${SOURCE_REVISION}.tgz"
+          gh release download "$RELEASE_TAG" \
+            --repo "$GAMES_REPOSITORY" \
+            --dir "$release_dir" \
+            --pattern "$archive" \
+            --pattern "$archive.sha256"
+          test -f "$release_dir/$archive"
+          test -f "$release_dir/$archive.sha256"
+
+      - name: Import verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir="$RUNNER_TEMP/motion-levels-games-release"
+          archive="motion-levels-games-${SOURCE_REVISION}.tgz"
+          node scripts/import-motion-levels-games-release.mjs \
+            --archive "$release_dir/$archive" \
+            --checksum "$release_dir/$archive.sha256" \
+            --release-tag "$RELEASE_TAG" \
+            --source-revision "$SOURCE_REVISION"
+
+      - name: Verify platform bundle boundary
+        run: |
+          npm run verify:games-bundle
+          node --test platform/app/test/unit/motion-levels-games-integration.test.cjs
+
+      - name: Commit pin update
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain -- game-bundles/motion-levels-games)" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "motion-levels-games-release[bot]"
+          git config user.email "motion-levels-games-release[bot]@users.noreply.github.com"
+          git add game-bundles/motion-levels-games
+          git commit -m "Pin Motion Levels games ${RELEASE_TAG}"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push normal forward commit
+        if: steps.commit.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "platform main kept moving; refusing to rewrite history" >&2
+              exit 1
+            fi
+            git fetch origin main
+            git merge --no-edit origin/main
+            npm run verify:games-bundle
+          done
+
+      - name: Run platform CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref main

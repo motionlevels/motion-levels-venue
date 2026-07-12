@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { controlGame, fetchAnimationPreview, fetchEngineStatus, fetchGameCatalog, fetchMenuState, platformBaseURL, postMenuEvent, postMenuState, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus, type MenuStateEnvelope, type PlatformGameCatalogEntry } from "./api";
 import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard, type GameConfigVar, type PartyMiniGame } from "./catalog";
+import { partyCatalogIsComplete, partyLaunchGame } from "./party";
 import {
   catalogDifficultyIDs,
   closestSupportedDifficulty,
@@ -365,7 +366,7 @@ function gameForEngineStatus(engineGame: string, currentMenuGameID: string, cata
   if (currentMenuGame && isPartyCard(currentMenuGame)) {
     const partyMiniGameMatches = (currentMenuGame.partyMiniGames || []).some((_, index) => {
       const launchGame = partyLaunchGame(currentMenuGame, catalogGames, index);
-      return runtimeGameID(launchGame) === engineGame || engineGameID(launchGame) === engineGame;
+      return Boolean(launchGame && (runtimeGameID(launchGame) === engineGame || engineGameID(launchGame) === engineGame));
     });
     if (partyMiniGameMatches) return currentMenuGame;
   }
@@ -438,12 +439,6 @@ function platformPartyMiniGames(entry: PlatformGameCatalogEntry): PartyMiniGame[
     }];
   });
   return miniGames.length ? miniGames : undefined;
-}
-
-function partyLaunchGame(game: GameCard, catalogGames: GameCard[], index = 0): GameCard {
-  if (!isPartyCard(game) || !game.partyMiniGames?.length) return game;
-  const miniGame = game.partyMiniGames[index] || game.partyMiniGames[0];
-  return catalogGames.find((candidate) => candidate.id === miniGame.gameId || engineGameID(candidate) === miniGame.gameId) || game;
 }
 
 function scoreFromStatus(status: EngineStatus | null): number {
@@ -1622,6 +1617,12 @@ function MenuApp() {
     const party = menuGames.find((game) => game.id === partyRun.partyGameID);
     if (!party?.partyMiniGames?.length) return;
     const currentMiniGame = partyLaunchGame(party, menuGames, partyRun.index);
+    if (!currentMiniGame) {
+      setPartyRun(null);
+      setMessage("");
+      setError("El siguiente juego del Party ya no está disponible");
+      return;
+    }
     if (runtimeGameID(currentMiniGame) !== status.currentGame && engineGameID(currentMiniGame) !== status.currentGame) return;
     const activeSession = status.venueSessionId || status.sessionId;
     if (partyRun.sessionId && activeSession && partyRun.sessionId !== activeSession) return;
@@ -1683,7 +1684,9 @@ function MenuApp() {
   const isGameLaunchable = useCallback((game: GameCard) => {
     if (!status) return false;
     if (catalogLoading && isPlatformLaunchableSource(game) && !canLaunchWhileCatalogRefreshes(game)) return false;
+    if (!partyCatalogIsComplete(game, menuGames)) return false;
     const launchGame = partyLaunchGame(game, menuGames);
+    if (!launchGame) return false;
     if (isScreensaverCard(launchGame)) return true;
     if (availableGames.has(runtimeGameID(launchGame)) || availableGames.has(engineGameID(launchGame))) return true;
     if (game.sourceKind === "animation" && engineGameID(game).startsWith("animation-")) return true;
@@ -2449,6 +2452,17 @@ function MenuApp() {
     let nextMenu = ensurePlayers({ ...menu, selectedGame: game.id });
     const partyIndex = isPartyCard(game) ? Math.max(0, Math.min((game.partyMiniGames?.length || 1) - 1, options.partyIndex || 0)) : 0;
     const launchGame = partyLaunchGame(game, menuGames, partyIndex);
+    if (!launchGame) {
+      captureMenuEvent("start_blocked", {
+        engine_game: engineGameID(game),
+        game: game.id,
+        reason: "party_game_unavailable",
+      });
+      setPartyRun(null);
+      setMessage("");
+      setError("Este juego del Party ya no está disponible");
+      return;
+    }
     const partyFirstMiniGame = isPartyCard(game) ? game.partyMiniGames?.[partyIndex] : undefined;
     const levelOverride = options.levelID && launchGame.levels?.some((level) => level.id === options.levelID) ? options.levelID : undefined;
     if (levelOverride) {

@@ -11,6 +11,7 @@ assert.equal(pin.schema, "motion-levels-games-pin-v1");
 assert.match(String(pin.sourceRevision), /^[0-9a-f]{40}$/u);
 assert.match(String(pin.artifactDigest), /^[0-9a-f]{64}$/u);
 assert.equal(pin.bundlePath, pin.sourceRevision);
+assert.match(String(pin.releaseTag), /^games-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u);
 
 const bundleRoot = path.join(vendorRoot, pin.bundlePath);
 const bundle = JSON.parse(await readFile(path.join(bundleRoot, "bundle.json"), "utf8"));
