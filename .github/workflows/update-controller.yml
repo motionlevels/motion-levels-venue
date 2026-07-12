@@ -1,0 +1,47 @@
+name: Update controller pin
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Full controller commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: controller-pin-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+      - name: Validate and update immutable pin
+        env:
+          REVISION: ${{ inputs.revision }}
+        run: |
+          set -euo pipefail
+          [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]]
+          tmp="$(mktemp)"
+          jq --arg revision "$REVISION" '.components.controller.revision = $revision' deploy/motionlevels-pc/venue-components.lock.json > "$tmp"
+          mv "$tmp" deploy/motionlevels-pc/venue-components.lock.json
+      - name: Commit pin
+        env:
+          REVISION: ${{ inputs.revision }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Controller already pinned at $REVISION"
+            exit 0
+          fi
+          git config user.name "Motion Levels"
+          git config user.email "noreply@motionlevels.com"
+          git add deploy/motionlevels-pc/venue-components.lock.json
+          git commit -m "chore: update controller to ${REVISION:0:12}"
+          git push origin HEAD:main
