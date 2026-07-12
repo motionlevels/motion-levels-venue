@@ -29,8 +29,6 @@ all:
         motionlevels-website:
           ansible_host: 100.103.216.65
           motion_levels_repo_root: /opt/motion-levels/repo
-          motion_levels_website_health_url: http://127.0.0.1:3000
-          motion_levels_website_url: https://website.motionlevels.obis.dev
           motion_levels_website_strapi_health_url: http://127.0.0.1:1337/healthz
           motion_levels_website_strapi_url: https://strapi.motionlevels.obis.dev
     motion_levels_postgres:
