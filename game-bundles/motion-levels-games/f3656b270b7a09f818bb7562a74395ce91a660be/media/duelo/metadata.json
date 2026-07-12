@@ -64,16 +64,16 @@
       "width": 1280,
       "height": 720,
       "mimeType": "image/webp",
-      "bytes": 50846,
-      "sha256": "1692b37d493daf5f1be048771615790c92b4b94bb47cea3ffe7bb5d13f7649ba"
+      "bytes": 52662,
+      "sha256": "d6813da9252aaa770c0fca5df37786e69e135e7d1ad92bd6c5ac5820a602fcaa"
     },
     "playerDisplayAnimation": {
       "file": "duelo-player-display-animation.webp",
       "width": 640,
       "height": 360,
       "mimeType": "image/webp",
-      "bytes": 31786,
-      "sha256": "7bf262d8fa10437af0311a448c86856120496a0945bfd111600f94fc35019102"
+      "bytes": 38048,
+      "sha256": "97c8d9f8d2eb0d250258b65ed2e171d04e53dbb0c6a911614a2e9fdf820b4c4f"
     }
   }
 }

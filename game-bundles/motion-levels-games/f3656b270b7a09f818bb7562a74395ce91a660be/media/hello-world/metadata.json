@@ -63,16 +63,16 @@
       "width": 1280,
       "height": 720,
       "mimeType": "image/webp",
-      "bytes": 37286,
-      "sha256": "4805440b4f1e4eb2daf95ed367e1ed83c59de8fe0d2302e311dca9e72820b4ed"
+      "bytes": 37784,
+      "sha256": "8f9d0bfec305a495320c8144bb576e9b4e666babf5959b02f4471d4da9b601b0"
     },
     "playerDisplayAnimation": {
       "file": "hello-world-player-display-animation.webp",
       "width": 640,
       "height": 360,
       "mimeType": "image/webp",
-      "bytes": 13722,
-      "sha256": "a7db9efeff87a836e842b37ac8d9d0de7f790160b28e30943a65565dc21d7945"
+      "bytes": 14350,
+      "sha256": "f58478a7cfbeaf801a6c71e74bff3098baa04539dcda2ad10219b532141c0fe2"
     }
   }
 }

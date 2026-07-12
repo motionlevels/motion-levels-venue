@@ -52,16 +52,16 @@
       "width": 1280,
       "height": 720,
       "mimeType": "image/webp",
-      "bytes": 37188,
-      "sha256": "f0508bb41639b18088c96e6a12f193b41dd43ec6d33f00f3f3c24fdb01055333"
+      "bytes": 38142,
+      "sha256": "b74caa5a4639dc72e421d3103c5252769b94040af4a9e75917b16d7204c4871a"
     },
     "playerDisplayAnimation": {
       "file": "meteor-dodge-player-display-animation.webp",
       "width": 640,
       "height": 360,
       "mimeType": "image/webp",
-      "bytes": 64988,
-      "sha256": "48fb1a3d9c5f9ecf0e44e9297b7041b5e27d689e631831f1ac3587dd7f174aa3"
+      "bytes": 65144,
+      "sha256": "f884bd831f00133c76a52b1e8535465566ab12f7fd1b6bb586bed65bc39c7854"
     }
   }
 }

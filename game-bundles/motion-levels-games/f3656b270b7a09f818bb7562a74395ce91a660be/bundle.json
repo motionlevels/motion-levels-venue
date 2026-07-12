@@ -4,7 +4,7 @@
   "runnerProtocolVersion": 1,
   "sourceRevision": "f3656b270b7a09f818bb7562a74395ce91a660be",
   "sdkFps": 50,
-  "artifactDigest": "ae20f4ae9e0c2e6c9d1120c20bdd9e9e3ce5ee523223e695b0e1cdcbab52e750",
+  "artifactDigest": "d1a245098d8ae0051a62f82e05519565636dc2896556889c97fa3276636bf46d",
   "runtime": {
     "entry": "runtime/runner.mjs",
     "games": [
@@ -35,13 +35,13 @@
     },
     {
       "path": "media/arkanoid/arkanoid-player-display-animation.webp",
-      "sha256": "b1df57c0123a28e3cce49bf536238008986541aaf52d291ec9fe17f6e1dd66aa",
-      "bytes": 60172
+      "sha256": "d87065d87a383df6cdf18604ba3b034f9fb7a4cbf28b425e2c7b93fbf1116328",
+      "bytes": 65730
     },
     {
       "path": "media/arkanoid/arkanoid-player-display.webp",
-      "sha256": "0610cdedf47454f967d9382721a17e81ee48f580de46a4f249366ee1280f5054",
-      "bytes": 36708
+      "sha256": "5499180eee6edf754a8f3b7f6362af8a9a2437409d85acc1235e27f87bb7d572",
+      "bytes": 37280
     },
     {
       "path": "media/arkanoid/arkanoid-preview.webp",
@@ -60,18 +60,18 @@
     },
     {
       "path": "media/arkanoid/metadata.json",
-      "sha256": "c5f1735a27a5dddfa7874cd50fb4f0cb0b826e8317629d1a451b2feff7baf33a",
+      "sha256": "690ba725063def77e8d07f4a91162c87ec152dbca736b5e784df1c8b602d4017",
       "bytes": 1913
     },
     {
       "path": "media/duelo/duelo-player-display-animation.webp",
-      "sha256": "7bf262d8fa10437af0311a448c86856120496a0945bfd111600f94fc35019102",
-      "bytes": 31786
+      "sha256": "97c8d9f8d2eb0d250258b65ed2e171d04e53dbb0c6a911614a2e9fdf820b4c4f",
+      "bytes": 38048
     },
     {
       "path": "media/duelo/duelo-player-display.webp",
-      "sha256": "1692b37d493daf5f1be048771615790c92b4b94bb47cea3ffe7bb5d13f7649ba",
-      "bytes": 50846
+      "sha256": "d6813da9252aaa770c0fca5df37786e69e135e7d1ad92bd6c5ac5820a602fcaa",
+      "bytes": 52662
     },
     {
       "path": "media/duelo/duelo-preview.webp",
@@ -90,18 +90,18 @@
     },
     {
       "path": "media/duelo/metadata.json",
-      "sha256": "8a4486b6f98025a8630077151af2170e6cd14154fb7b4822e4b5e551150d7ae3",
+      "sha256": "99c22246ac68cd27d01111ecf7d7a4a61e51bfaddd04a71e099eddfeb9a4c9b4",
       "bytes": 1892
     },
     {
       "path": "media/hello-world/hello-world-player-display-animation.webp",
-      "sha256": "a7db9efeff87a836e842b37ac8d9d0de7f790160b28e30943a65565dc21d7945",
-      "bytes": 13722
+      "sha256": "f58478a7cfbeaf801a6c71e74bff3098baa04539dcda2ad10219b532141c0fe2",
+      "bytes": 14350
     },
     {
       "path": "media/hello-world/hello-world-player-display.webp",
-      "sha256": "4805440b4f1e4eb2daf95ed367e1ed83c59de8fe0d2302e311dca9e72820b4ed",
-      "bytes": 37286
+      "sha256": "8f9d0bfec305a495320c8144bb576e9b4e666babf5959b02f4471d4da9b601b0",
+      "bytes": 37784
     },
     {
       "path": "media/hello-world/hello-world-preview.webp",
@@ -120,23 +120,23 @@
     },
     {
       "path": "media/hello-world/metadata.json",
-      "sha256": "44c1734f927e4d0c278cbf071a0a80ae79af5242a36baba466ce87609e52652d",
+      "sha256": "0f1f6e6c39f9efc924d71e337124301acd577f13400b84252c9bd330c59bc0fd",
       "bytes": 1901
     },
     {
       "path": "media/meteor-dodge/metadata.json",
-      "sha256": "e049e418af2b818c80ec492420b2357a61f5187587777e10e83f0278890bdd7e",
+      "sha256": "9088ef9ab8cc402f47caecd3a68626be911b16de01a5ee979bd924db3bec916b",
       "bytes": 1735
     },
     {
       "path": "media/meteor-dodge/meteor-dodge-player-display-animation.webp",
-      "sha256": "48fb1a3d9c5f9ecf0e44e9297b7041b5e27d689e631831f1ac3587dd7f174aa3",
-      "bytes": 64988
+      "sha256": "f884bd831f00133c76a52b1e8535465566ab12f7fd1b6bb586bed65bc39c7854",
+      "bytes": 65144
     },
     {
       "path": "media/meteor-dodge/meteor-dodge-player-display.webp",
-      "sha256": "f0508bb41639b18088c96e6a12f193b41dd43ec6d33f00f3f3c24fdb01055333",
-      "bytes": 37188
+      "sha256": "b74caa5a4639dc72e421d3103c5252769b94040af4a9e75917b16d7204c4871a",
+      "bytes": 38142
     },
     {
       "path": "media/meteor-dodge/meteor-dodge-preview.webp",
@@ -155,18 +155,18 @@
     },
     {
       "path": "media/ping-pong/metadata.json",
-      "sha256": "a23873dbc00952794dee02a810be715c508f21850c4d4659578b3cbf4aa2b326",
+      "sha256": "b924237de94063590901189c21fb83c7c47a1f9b96ae506b981d9bfa887819ed",
       "bytes": 1765
     },
     {
       "path": "media/ping-pong/ping-pong-player-display-animation.webp",
-      "sha256": "78887b23d81660a41cc5ce370ff3c34fd48f4d567513740d65d8bf69d42f42b6",
-      "bytes": 130252
+      "sha256": "ebbeb4150717126e4fda2338c8c2d787cdc64c91cce2fc1a240a8df367c97726",
+      "bytes": 122282
     },
     {
       "path": "media/ping-pong/ping-pong-player-display.webp",
-      "sha256": "66168217af73b149c05915154a8ef35f24259fef9afd272c2ea1d4f6bbbac6b6",
-      "bytes": 41440
+      "sha256": "60f5828d358f7bd1dd894c316e96d1a96cc161ff8771dad8949bec9a5c5e8217",
+      "bytes": 42640
     },
     {
       "path": "media/ping-pong/ping-pong-preview.webp",

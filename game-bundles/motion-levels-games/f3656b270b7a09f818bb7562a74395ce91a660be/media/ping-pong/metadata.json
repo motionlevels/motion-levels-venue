@@ -55,16 +55,16 @@
       "width": 1280,
       "height": 720,
       "mimeType": "image/webp",
-      "bytes": 41440,
-      "sha256": "66168217af73b149c05915154a8ef35f24259fef9afd272c2ea1d4f6bbbac6b6"
+      "bytes": 42640,
+      "sha256": "60f5828d358f7bd1dd894c316e96d1a96cc161ff8771dad8949bec9a5c5e8217"
     },
     "playerDisplayAnimation": {
       "file": "ping-pong-player-display-animation.webp",
       "width": 640,
       "height": 360,
       "mimeType": "image/webp",
-      "bytes": 130252,
-      "sha256": "78887b23d81660a41cc5ce370ff3c34fd48f4d567513740d65d8bf69d42f42b6"
+      "bytes": 122282,
+      "sha256": "ebbeb4150717126e4fda2338c8c2d787cdc64c91cce2fc1a240a8df367c97726"
     }
   }
 }

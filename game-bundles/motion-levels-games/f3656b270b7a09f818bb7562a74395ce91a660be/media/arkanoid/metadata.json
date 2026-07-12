@@ -64,16 +64,16 @@
       "width": 1280,
       "height": 720,
       "mimeType": "image/webp",
-      "bytes": 36708,
-      "sha256": "0610cdedf47454f967d9382721a17e81ee48f580de46a4f249366ee1280f5054"
+      "bytes": 37280,
+      "sha256": "5499180eee6edf754a8f3b7f6362af8a9a2437409d85acc1235e27f87bb7d572"
     },
     "playerDisplayAnimation": {
       "file": "arkanoid-player-display-animation.webp",
       "width": 640,
       "height": 360,
       "mimeType": "image/webp",
-      "bytes": 60172,
-      "sha256": "b1df57c0123a28e3cce49bf536238008986541aaf52d291ec9fe17f6e1dd66aa"
+      "bytes": 65730,
+      "sha256": "d87065d87a383df6cdf18604ba3b034f9fb7a4cbf28b425e2c7b93fbf1116328"
     }
   }
 }
