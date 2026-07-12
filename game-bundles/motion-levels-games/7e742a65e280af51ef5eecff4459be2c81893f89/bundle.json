@@ -1,0 +1,160 @@
+{
+  "schema": "motion-levels-games-bundle-v1",
+  "contractVersion": 1,
+  "runnerProtocolVersion": 1,
+  "sourceRevision": "7e742a65e280af51ef5eecff4459be2c81893f89",
+  "sdkFps": 50,
+  "artifactDigest": "167853ab0b0da78f9ebff99be97aed9309fb9049245b9ded22d7717441aadf05",
+  "runtime": {
+    "entry": "runtime/runner.mjs",
+    "games": [
+      "arkanoid",
+      "ping-pong"
+    ]
+  },
+  "playerDisplay": {
+    "entry": "display/display.js",
+    "games": [
+      "arkanoid",
+      "ping-pong"
+    ]
+  },
+  "catalog": "catalog.json",
+  "files": [
+    {
+      "path": "catalog.json",
+      "sha256": "dc40428476d98e063459efe7f96cb1795623d420116bd0d83eadc5308fdd5880",
+      "bytes": 10071
+    },
+    {
+      "path": "display/display.js",
+      "sha256": "dea4060c8564bf531f64de1b6c27e22b30e88fd451c4e08f2f80a87f77c197d2",
+      "bytes": 299712
+    },
+    {
+      "path": "media/arkanoid/arkanoid-player-display-animation.webp",
+      "sha256": "32e2d220ed0780e823eeed0cbdf469dfab824b190fa3d6aec9bf60e8d3aacb3e",
+      "bytes": 92202
+    },
+    {
+      "path": "media/arkanoid/arkanoid-player-display.webp",
+      "sha256": "535fb47543aed99fe8921e4c633baf92e64956e1d292f7b174e0e0288ca5cae8",
+      "bytes": 36806
+    },
+    {
+      "path": "media/arkanoid/arkanoid-preview.webp",
+      "sha256": "0ef40b6ce9ae9770af291a58e06ec30609d628e42a0e32152c37e64386f36ea7",
+      "bytes": 7904
+    },
+    {
+      "path": "media/arkanoid/arkanoid-thumbnail-small.webp",
+      "sha256": "957fb84cc5742dccc93cf261fa814b2059f1ed731521fefe27935bb2ced33b77",
+      "bytes": 822
+    },
+    {
+      "path": "media/arkanoid/arkanoid-thumbnail.webp",
+      "sha256": "bfe3bd64447abdda1031af717e07c2af4b26b6e1a8ba259dd08ec4465b320a0f",
+      "bytes": 7682
+    },
+    {
+      "path": "media/arkanoid/metadata.json",
+      "sha256": "03e0647aeedb7207941f95dd752f45d9b85d046fbdbf90b4b5733fb45751345a",
+      "bytes": 1913
+    },
+    {
+      "path": "media/hello-world/hello-world-player-display-animation.webp",
+      "sha256": "ff5dc03cb03e3a9d69662ed7d5ec35b92d26b65e3012c2daa1d14919f406aa59",
+      "bytes": 59056
+    },
+    {
+      "path": "media/hello-world/hello-world-player-display.webp",
+      "sha256": "e2a587af6578c3a270ae51a823c89bda2b6f5df0b3ee91ea76b830405903b686",
+      "bytes": 37208
+    },
+    {
+      "path": "media/hello-world/hello-world-preview.webp",
+      "sha256": "315adc834bc0d5e6f63dd8c191d6533765df58ae7fba631eb3b9aeb97239d8b1",
+      "bytes": 530
+    },
+    {
+      "path": "media/hello-world/hello-world-thumbnail-small.webp",
+      "sha256": "37d322f70745ba45787d6ed410fdd3be2499200df1cd9cf5fc392aaa92a2f7cc",
+      "bytes": 694
+    },
+    {
+      "path": "media/hello-world/hello-world-thumbnail.webp",
+      "sha256": "b33d6d766069725ac2f326f30452c2beb0a8158117018d018161b865a7bc6ec5",
+      "bytes": 2668
+    },
+    {
+      "path": "media/hello-world/metadata.json",
+      "sha256": "3e1f501d729e67f7d0e471597563d5b7a4014127edf0f70c98b30fdbd862d2d1",
+      "bytes": 1901
+    },
+    {
+      "path": "media/meteor-dodge/metadata.json",
+      "sha256": "87e6b7672fcc89a3951b77a0f1772408d82ee57b0531ce89e08d4d3e159268aa",
+      "bytes": 1735
+    },
+    {
+      "path": "media/meteor-dodge/meteor-dodge-player-display-animation.webp",
+      "sha256": "e5535822e126c07147b1b956bea7267550779c5f5f16e95bd09b75c270ad4d57",
+      "bytes": 85426
+    },
+    {
+      "path": "media/meteor-dodge/meteor-dodge-player-display.webp",
+      "sha256": "761269a00ad7dd1d35023bdf27e61ed27a5e828e1d933b2874b2b88683a6d3ec",
+      "bytes": 37154
+    },
+    {
+      "path": "media/meteor-dodge/meteor-dodge-preview.webp",
+      "sha256": "6b6251be263ac8f42f90be0dbd200f82a2b81e27b99e1732b6887d29d040bdd5",
+      "bytes": 5494
+    },
+    {
+      "path": "media/meteor-dodge/meteor-dodge-thumbnail-small.webp",
+      "sha256": "6e42862768d97bef2297a30e24cb2753a3dabb315c2dd7316e5e4cc915af5716",
+      "bytes": 742
+    },
+    {
+      "path": "media/meteor-dodge/meteor-dodge-thumbnail.webp",
+      "sha256": "4c78cc6e4c5785c9bd0d9d7f8bf23eb5b9bad873582854016a322998f2ace85e",
+      "bytes": 2990
+    },
+    {
+      "path": "media/ping-pong/metadata.json",
+      "sha256": "a45bfaea04f7725677fb304c9c86ca3d5fd7432961ce17a0e8b15681e0b4273d",
+      "bytes": 1765
+    },
+    {
+      "path": "media/ping-pong/ping-pong-player-display-animation.webp",
+      "sha256": "ffe036a831d8470c69359f45be41bfa39b4f5516d672a4843b27a1cf173b0ad2",
+      "bytes": 187928
+    },
+    {
+      "path": "media/ping-pong/ping-pong-player-display.webp",
+      "sha256": "e304b3f410f584069d385fc05b9ef25989044209eafc07c58fce4305ec961477",
+      "bytes": 42404
+    },
+    {
+      "path": "media/ping-pong/ping-pong-preview.webp",
+      "sha256": "66cc06c2efdde7167e2c885c12651335d67ac5295766dd3be82b4070c514de44",
+      "bytes": 29406
+    },
+    {
+      "path": "media/ping-pong/ping-pong-thumbnail-small.webp",
+      "sha256": "dfd4880472611b0ec8c168507580e1df307df4a0df399b5aaf121ea5cad034d1",
+      "bytes": 1040
+    },
+    {
+      "path": "media/ping-pong/ping-pong-thumbnail.webp",
+      "sha256": "bce77da67d6be968e0c4169edec12452d0c1568496f2e5ea123333e5f0913706",
+      "bytes": 8436
+    },
+    {
+      "path": "runtime/runner.mjs",
+      "sha256": "1a5babc1c5d3f0ffe72091403e0815b1fe3bd7eed30387d62d808488e3591f58",
+      "bytes": 210383
+    }
+  ]
+}
