@@ -479,6 +479,45 @@ describe("catalog metadata sync", () => {
     assert.equal(platformPlayerConfigVars(catalogEntry({ game_source: { schema: "motion-go-v1", kind: "wasm" } })), undefined);
   });
 
+  it("extracts player-facing config vars from motion-levels-games sources", () => {
+    const vars = platformPlayerConfigVars(catalogEntry({
+      game_source: {
+        schema: "motion-levels-games-v1",
+        kind: "typescript",
+        config: {
+          vars: [
+            {
+              key: "target_fill_percent",
+              label: "Densidad de objetivos",
+              description: "Porcentaje del suelo ocupado por objetivos",
+              type: "int",
+              default: 60,
+              min: 30,
+              max: 90,
+              step: 5,
+              player_facing: true,
+            },
+            { key: "internal_animation_speed", type: "float", default: 1.2, player_facing: false },
+          ],
+        },
+      },
+    }));
+
+    assert.deepEqual(vars, [{
+      key: "target_fill_percent",
+      label: "Densidad de objetivos",
+      description: "Porcentaje del suelo ocupado por objetivos",
+      type: "int",
+      default: 60,
+      min: 30,
+      max: 90,
+      step: 5,
+    }]);
+    assert.equal(platformPlayerConfigVars(catalogEntry({
+      game_source: { schema: "unknown-game-source-v1", config: { vars: [] } },
+    })), undefined);
+  });
+
   it("purges retired platform catalog cache keys at boot", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
 

@@ -68,15 +68,17 @@ export function shouldPreferCatalogFallbackPreviewAnimation(
 
 const gameConfigVarTypes = ["int", "float", "bool", "enum"] as const satisfies readonly GameConfigVarType[];
 
+const playerConfigSourceSchemas = new Set(["motion-go-v1", "motion-levels-games-v1"]);
+
 /**
- * Player-facing config vars declared in a motion-go game_source
+ * Player-facing config vars declared by a playable game source
  * (config.vars[].player_facing). They power the game card's settings dialog.
  */
 export function platformPlayerConfigVars(
   entry: Pick<PlatformGameCatalogEntry, "game_source">,
 ): GameConfigVar[] | undefined {
   const source = entry.game_source;
-  if (!source || source.schema !== "motion-go-v1") return undefined;
+  if (!source || !playerConfigSourceSchemas.has(String(source.schema || ""))) return undefined;
   const config = source.config;
   if (!config || typeof config !== "object" || Array.isArray(config)) return undefined;
   const rawVars = (config as { vars?: unknown }).vars;
