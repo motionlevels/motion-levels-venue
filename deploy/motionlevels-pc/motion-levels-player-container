@@ -18,6 +18,15 @@ if [ ! -S "$socket" ]; then
 fi
 
 mkdir -p "$profile"
+# The profile survives immutable container replacement, but Chromium's
+# singleton files encode the old container hostname/PID. Compose guarantees a
+# single player container, so remove only those stale process locks before the
+# new Chromium instance claims the preserved profile.
+rm -f \
+  "$profile/SingletonCookie" \
+  "$profile/SingletonLock" \
+  "$profile/SingletonSocket"
+
 exec /usr/bin/chromium \
   --kiosk \
   --no-sandbox \
