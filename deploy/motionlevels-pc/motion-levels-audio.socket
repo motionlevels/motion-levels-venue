@@ -1,5 +1,7 @@
 [Unit]
 Description=Motion Levels audio broker socket
+Requires=motion-levels-audio-keepalive.service
+After=motion-levels-audio-keepalive.service
 Before=motion-levels-venue-containers.service
 
 [Socket]

@@ -1,20 +1,20 @@
 [Unit]
-Description=Motion Levels audio stream %I
+Description=Motion Levels persistent HDMI mixer owner
 After=sound.target
+Before=motion-levels-audio.socket
 
 [Service]
 Type=exec
 User=motionlevels-audio
 Group=motionlevels-audio
 SupplementaryGroups=audio
-StandardInput=socket
-StandardOutput=journal
-StandardError=journal
 Environment=HOME=/tmp
-ExecStart=/usr/bin/aplay -q -D default -t raw -f S16_LE -c 2 -r 48000 -
-# Current venue assets are shorter than this; the ceiling prevents a stalled
-# HDMI generation from occupying every socket worker indefinitely.
-RuntimeMaxSec=4min
+# Keep dmix and the SOF HDMI PCM open across individual music and effect
+# streams. Rapid close/reopen cycles can leave this appliance's HDMI DMA
+# pointer stalled until every client is terminated.
+ExecStart=/usr/bin/aplay -q -D default -t raw -f S16_LE -c 2 -r 48000 /dev/zero
+Restart=always
+RestartSec=1
 NoNewPrivileges=yes
 PrivateNetwork=yes
 PrivateTmp=yes
@@ -36,11 +36,12 @@ RestrictSUIDSGID=yes
 SystemCallArchitectures=native
 CapabilityBoundingSet=
 DevicePolicy=closed
-# ALSA dmix opens the card control node while negotiating the one permitted
-# playback PCM. It does not work with a read-only open.
 DeviceAllow=/dev/snd/controlC0 rw
 DeviceAllow=/dev/snd/pcmC0D5p rw
 DeviceAllow=/dev/snd/timer rw
 TasksMax=16
 MemoryMax=64M
 UMask=0077
+
+[Install]
+WantedBy=multi-user.target

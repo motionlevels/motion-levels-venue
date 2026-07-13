@@ -11,6 +11,7 @@
     motion_levels_venue_components_lock_path: "{{ motion_levels_repo_root }}/deploy/motionlevels-pc/venue-components.lock.json"
     motion_levels_effective_display_backend: "{{ motion_levels_display_backend | default('x11') }}"
     motion_levels_container_units:
+      - motion-levels-audio-keepalive.service
       - motion-levels-audio.socket
       - motion-levels-audio@.service
       - motion-levels-container-firewall.service
@@ -675,6 +676,7 @@
         state: started
       loop:
         - motion-levels-container-firewall.service
+        - motion-levels-audio-keepalive.service
         - motion-levels-audio.socket
 
     - name: Detect a connected display before a Wayland switchover

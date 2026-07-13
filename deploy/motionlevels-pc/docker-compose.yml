@@ -17,6 +17,10 @@ services:
       MOTION_LEVELS_FLOOR_SOURCE_IP: ${VENUE_FLOOR_LAN_IPV4:?set VENUE_FLOOR_LAN_IPV4}
       MOTION_LEVELS_LED_BROADCAST_IP: ${VENUE_FLOOR_BROADCAST_IPV4:?set VENUE_FLOOR_BROADCAST_IPV4}
       MOTION_LEVELS_PLATFORM_TOKEN_FILE: /run/secrets/platform-token
+    # The venue router is on-link through floor-hardware, where the netdev
+    # boundary intentionally permits only tile UDP. External resolvers follow
+    # the egress bridge instead and keep DNS off the hardware interface.
+    dns: [1.1.1.1, 1.0.0.1]
     networks:
       core:
         ipv4_address: 172.30.52.10

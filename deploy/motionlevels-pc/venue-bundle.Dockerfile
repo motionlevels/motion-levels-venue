@@ -122,6 +122,7 @@ ENTRYPOINT ["/usr/bin/python3", "/app/motion-levels-security-recorder.py"]
 
 FROM caddy:2-alpine AS caddy-runtime
 RUN apk add --no-cache curl \
+    && setcap -r /usr/bin/caddy \
     && addgroup -g 10003 motionlevels-web \
     && adduser -D -H -u 10003 -G motionlevels-web motionlevels-web
 ARG BUILD_REVISION=unknown
