@@ -124,7 +124,7 @@ describe("runtime screen flow", () => {
     assert.match(source, /if \(controlInFlightRef\.current\) return/);
     assert.match(source, /setPendingControlAction\(action\)/);
     assert.match(source, /status\.pressureStreamConnected === false/);
-    assert.match(source, /floorBlocked \? "Suelo sin conexión"/);
+    assert.match(source, /floorBlocked \? "Suelo sin señal"/);
   });
 
   it("schedules the inactivity deadline instead of waiting for another pressure update", () => {

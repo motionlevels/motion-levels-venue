@@ -358,7 +358,7 @@ describe("catalog metadata sync", () => {
     assert.match(styleSource, /\.game-body\s*\{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) minmax\(54px, max-content\);[\s\S]*?align-items: center;/);
     assert.match(styleSource, /\.game-card-meta\s*\{[\s\S]*?justify-self: end;[\s\S]*?align-self: center;/);
     assert.match(styleSource, /\.game-body h3\s*\{[\s\S]*?line-height: 1\.05;/);
-    assert.match(styleSource, /grid-template-columns: minmax\(0, 1fr\) minmax\(76px, max-content\);[\s\S]*?font-size: 38px;/);
+    assert.match(styleSource, /grid-template-columns: minmax\(0, 1fr\) minmax\(76px, max-content\);[\s\S]*?font-size: 28px;/);
   });
 
   it("prefers authored preview animations for engine games without static preview art", () => {

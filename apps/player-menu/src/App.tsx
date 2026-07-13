@@ -180,6 +180,24 @@ function clampInteger(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
+function systemStatusLabel(connectionState: ConnectionState, floorReady: boolean): string {
+  if (connectionState === "connection-pending") return "Motor conectando";
+  if (connectionState === "connection-off") return "Motor reconectando";
+  return floorReady ? "Sistema listo" : "Suelo sin señal";
+}
+
+function engineStatusLabel(connectionState: ConnectionState): string {
+  if (connectionState === "connection-pending") return "Conectando";
+  if (connectionState === "connection-off") return "Reconectando";
+  return "Conectado";
+}
+
+function playerColorInk(color: string): string {
+  const { r, g, b } = hexToColor(color);
+  // Keep player labels crisp without muting the floor-identifying colors.
+  return (r * 299 + g * 587 + b * 114) / 1000 >= 142 ? "#061018" : "#f7fbff";
+}
+
 function playerRangeLabel(game: GameCard): string {
   if (!gameRequiresPlayerCount(game)) return noPlayerRequirementLabel;
   const bounds = playerBoundsForGame(game);
@@ -1870,9 +1888,8 @@ function MenuApp() {
   const rosterIssue = useMemo(() => gameRosterIssue(selectedGame, menu.players), [selectedGame, menu.players]);
   const floorReady = status?.pressureStreamConnected !== false;
   const systemStatusClass = connectionState === "connection-on" && !floorReady ? "floor-off" : connectionState;
-  const connectionLabel = connectionState === "connection-on"
-    ? floorReady ? "Sistema listo" : "Suelo desconectado"
-    : connectionState === "connection-off" ? "Reconectando" : "Conectando";
+  const connectionLabel = systemStatusLabel(connectionState, floorReady);
+  const engineLabel = engineStatusLabel(connectionState);
 
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", colors.blue);
@@ -3236,7 +3253,7 @@ function MenuApp() {
               const invalidPlayer = Boolean(rosterIssue?.playerIds.has(player.id));
               const editingPlayer = keyboardTarget?.kind === "player" && keyboardTarget.id === player.id;
               return (
-                <article key={player.id} className={`player ph-no-capture ${player.active ? "" : "off"} ${invalidPlayer ? "invalid" : ""} ${editingPlayer ? "editing" : ""}`} style={{ "--pc": player.color } as CSSProperties}>
+                <article key={player.id} className={`player ph-no-capture ${player.active ? "" : "off"} ${invalidPlayer ? "invalid" : ""} ${editingPlayer ? "editing" : ""}`} style={{ "--pc": player.color, "--pc-ink": playerColorInk(player.color) } as CSSProperties}>
                   <button className="avatar" type="button" onClick={() => setColorPickerFor(player.id)} aria-label={`Elegir color de ${playerLabel(menu.players, player)}`}>
                     {avatarLabel(menu.players, player)}
                   </button>
@@ -3358,7 +3375,7 @@ function MenuApp() {
                       <button
                         key={game.id}
                         className={`card game-card ${future ? "disabled" : ""} ${!future && !engineAvailable ? "unavailable" : ""} ${selected ? "selected" : ""} ${active ? "active" : ""}`}
-                        style={{ "--c": game.color, "--crgb": hexToRGB(game.color), "--i": index } as CSSProperties}
+                        style={{ "--c": game.color, "--crgb": hexToRGB(game.color), "--i": Math.min(index, 8) } as CSSProperties}
                         type="button"
                         disabled={future}
                         data-game-id={game.id}
@@ -3625,7 +3642,7 @@ function MenuApp() {
                     : selectedGame.disabled ? "Próximamente"
                       : connectionState === "connection-off" ? "Reconectando"
                         : connectionState === "connection-pending" ? "Preparando sala"
-                          : floorBlocked ? "Suelo sin conexión"
+                          : floorBlocked ? "Suelo sin señal"
                           : !engineAvailable ? "No disponible" : readyLabel;
               const loadingVisual = launching || catalogBlocked;
               const handleLaunchAction = () => {
@@ -3667,7 +3684,7 @@ function MenuApp() {
                       onClick={() => setNarrationArmed(selectedGame, !narrationArmedFor(selectedGame))}
                     >
                       <BoltIcon />
-                      {narrationArmedFor(selectedGame) ? "Narración ON" : "Narración OFF"}
+                      {narrationArmedFor(selectedGame) ? "Con narración" : "Sin narración"}
                     </button>
                   ) : null}
                   <button className={`btn primary play ${loadingVisual ? "loading" : ""} ${rosterAction ? "roster-action" : ""}`} type="button" disabled={launchDisabled} aria-busy={loadingVisual} onClick={handleLaunchAction}>
@@ -3701,16 +3718,9 @@ function MenuApp() {
               <div className="empty-launch">
                 <div>
                   <span className="micro">Catálogo</span>
-                  <strong>No hay ningún juego seleccionado</strong>
+                  <strong>Explora las categorías para continuar</strong>
                 </div>
-                <button className="btn primary" type="button" onClick={() => {
-                  const featured = gamesForCategory(menuGames, "featured")[0] || menuGames[0];
-                  if (!featured) return;
-                  setMenu((current) => ({ ...current, category: "featured", selectedGame: featured.id }));
-                }}>
-                  <ArrowLeftIcon />
-                  Volver a destacados
-                </button>
+                <span className="empty-launch-status">Sin selección</span>
               </div>
             )}
           </section>
@@ -3809,7 +3819,7 @@ function MenuApp() {
           lockedOut={Date.now() < settingsLockoutUntil}
           levelsUnlocked={levelsUnlocked}
           envUnlockLevels={envUnlockLevels}
-          connectionLabel={connectionLabel}
+          engineLabel={engineLabel}
           floorLabel={floorReady ? "Conectado" : "Sin señal"}
           audioLabel={status?.audioEnabled ? status.audioMuted ? "Silenciado" : "Activo" : "No disponible"}
           catalogLabel={catalogRefreshing ? "Actualizando" : `${menuGames.length} ${menuGames.length === 1 ? "modo" : "modos"}`}
@@ -3878,9 +3888,7 @@ function WelcomeScreen({
   const welcomePreviewSrc = welcomeGame ? levelPreviewSrc(welcomeGame, welcomeLevel, "easy") : undefined;
   const welcomePreviewAnimation = welcomeGame ? levelFallbackPreviewAnimationID(welcomeGame, welcomeLevel) : "lava";
   const systemStatusClass = connectionState === "connection-on" && !floorReady ? "floor-off" : connectionState;
-  const connectionLabel = connectionState === "connection-on"
-    ? floorReady ? "Sistema listo" : "Suelo desconectado"
-    : connectionState === "connection-off" ? "Reconectando con la sala" : "Preparando la sala";
+  const connectionLabel = systemStatusLabel(connectionState, floorReady);
   return (
     <main className={`app welcome-app ${systemStatusClass} ${readOnly ? "read-only-mirror" : ""}`} inert={readOnly}>
       <section className="welcome-screen" aria-label="Inicio">
@@ -4048,7 +4056,7 @@ function ColorPicker({
               <button
                 key={color}
                 className={`swatch ${selected ? "selected" : ""} ${taken ? "taken" : ""}`}
-                style={{ "--pc": color } as CSSProperties}
+                style={{ "--pc": color, "--pc-ink": playerColorInk(color) } as CSSProperties}
                 type="button"
                 disabled={taken}
                 aria-label={taken ? `${playerColorNames[index]} en uso` : playerColorNames[index]}
@@ -4215,7 +4223,7 @@ function OperatorSettingsDialog({
   lockedOut,
   levelsUnlocked,
   envUnlockLevels,
-  connectionLabel,
+  engineLabel,
   floorLabel,
   audioLabel,
   catalogLabel,
@@ -4232,7 +4240,7 @@ function OperatorSettingsDialog({
   lockedOut: boolean;
   levelsUnlocked: boolean;
   envUnlockLevels: boolean;
-  connectionLabel: string;
+  engineLabel: string;
   floorLabel: string;
   audioLabel: string;
   catalogLabel: string;
@@ -4261,19 +4269,19 @@ function OperatorSettingsDialog({
             <span className="micro">Versión del menú</span>
             <strong>menu {__MENU_BUILD_REVISION__}</strong>
             <div className="settings-health" aria-label="Estado del sistema">
-              <div>
+              <div className={engineLabel === "Conectado" ? "ok" : "warn"}>
                 <span>Motor</span>
-                <b>{connectionLabel}</b>
+                <b>{engineLabel}</b>
               </div>
-              <div>
+              <div className={floorLabel === "Conectado" ? "ok" : "danger"}>
                 <span>Suelo</span>
                 <b>{floorLabel}</b>
               </div>
-              <div>
+              <div className={audioLabel === "Activo" ? "ok" : "warn"}>
                 <span>Audio</span>
                 <b>{audioLabel}</b>
               </div>
-              <div>
+              <div className={catalogLabel === "Actualizando" ? "warn" : "ok"}>
                 <span>Catálogo</span>
                 <b>{catalogLabel}</b>
               </div>
@@ -4596,7 +4604,7 @@ function GameControlScreen({
           ) : null}
           {!ambient ? <div className="control-roster" data-count={Math.min(players.length, 8)}>
             {players.slice(0, 8).map((player) => (
-              <span key={player.id} className="player-pill ph-mask" style={{ "--pc": player.color } as CSSProperties}>
+              <span key={player.id} className="player-pill ph-mask" style={{ "--pc": player.color, "--pc-ink": playerColorInk(player.color) } as CSSProperties}>
                 <span />
                 <span>{playerLabel(allPlayers, player)}</span>
               </span>
