@@ -10,6 +10,9 @@ The cloud side (platform app, website, homelab infra) lives in
 `motionlevels/motion-levels-platform`. Generated motion-go seeds are consumed
 by the platform repo — after editing an authored native game, run
 `make sync-platform-seeds` and commit the platform side too (see README).
+This repo is also canonical for `packages/`, `go.mod`/`go.sum`, and
+`content/audio`; run `make check-platform-mirrors` before publishing changes to
+those paths and `make sync-platform-mirrors` when the platform copy is stale.
 
 ## Multiple parties share this repo
 

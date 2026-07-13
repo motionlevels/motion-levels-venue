@@ -42,7 +42,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 ARG BUILD_REVISION=unknown
 ARG BUILD_CREATED_AT=
-LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-platform"
+LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-venue"
 LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
 COPY --from=runtime-build /release /release
@@ -65,7 +65,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent motionlevels
 ARG BUILD_REVISION=unknown
 ARG BUILD_CREATED_AT=
-LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-platform"
+LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-venue"
 LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
 COPY --from=runtime-build /release/bin/game-engine /app/bin/game-engine
@@ -90,7 +90,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd --uid 10002 --gid 10002 --no-create-home --home-dir /nonexistent motionlevels-camera
 ARG BUILD_REVISION=unknown
 ARG BUILD_CREATED_AT=
-LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-platform"
+LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-venue"
 LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
 COPY deploy/motionlevels-pc/motion-levels-camera-helper.py /app/motion-levels-camera-helper.py
@@ -110,7 +110,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd --uid 10002 --gid 10002 --no-create-home --home-dir /nonexistent motionlevels-camera
 ARG BUILD_REVISION=unknown
 ARG BUILD_CREATED_AT=
-LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-platform"
+LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-venue"
 LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
 COPY deploy/motionlevels-pc/motion-levels-security-recorder.py /app/motion-levels-security-recorder.py
@@ -127,7 +127,7 @@ RUN apk add --no-cache curl \
     && adduser -D -H -u 10003 -G motionlevels-web motionlevels-web
 ARG BUILD_REVISION=unknown
 ARG BUILD_CREATED_AT=
-LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-platform"
+LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-venue"
 LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
 COPY deploy/motionlevels-pc/Caddyfile.container /etc/caddy/Caddyfile
@@ -151,7 +151,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd --uid 10003 --gid 10003 --no-create-home --home-dir /var/lib/motion-levels/player-profile motionlevels-display
 ARG BUILD_REVISION=unknown
 ARG BUILD_CREATED_AT=
-LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-platform"
+LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-venue"
 LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
 COPY deploy/motionlevels-pc/motion-levels-player-container /usr/local/bin/motion-levels-player-container

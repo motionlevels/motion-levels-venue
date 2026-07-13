@@ -5,7 +5,7 @@ STANDARD_VENUES ?= motionlevels-1
 # Local checkout of motionlevels/motion-levels-platform, used by sync-platform-seeds.
 PLATFORM_DIR ?= ../motion-levels
 
-.PHONY: motion-go-seeds sync-platform-seeds install-ansible-collections ansible-ping deploy-venues deploy-standard-venues deploy-motionlevels-1 deploy-motionlevels-cloud-1 deploy-frontends-motionlevels-cloud-1 deploy-runtime-motionlevels-cloud-1 status-motionlevels-1 logs-motionlevels-1 restart-motionlevels-1 rollback-motionlevels-1
+.PHONY: motion-go-seeds check-platform-mirrors sync-platform-mirrors sync-platform-seeds install-ansible-collections ansible-ping deploy-venues deploy-standard-venues deploy-motionlevels-1 deploy-motionlevels-cloud-1 deploy-frontends-motionlevels-cloud-1 deploy-runtime-motionlevels-cloud-1 status-motionlevels-1 logs-motionlevels-1 restart-motionlevels-1 rollback-motionlevels-1
 
 # Regenerate the motion-go seeds from the native engine games
 # (game-engine/internal/games/authored/nativegames). The engine copy is the
@@ -14,13 +14,20 @@ PLATFORM_DIR ?= ../motion-levels
 motion-go-seeds:
 	go run ./game-engine/cmd/motion-go-seeds
 
-# Copy the generated seeds into a motion-levels-platform checkout
-# (platform/app/src/lib/seed). Run after motion-go-seeds whenever an authored
-# game changed, then commit the platform side.
+# Verify every platform-side mirror without modifying either checkout.
+check-platform-mirrors:
+	go run ./game-engine/cmd/motion-go-seeds -check
+	scripts/sync-platform-mirrors.sh --check --platform-dir "$(PLATFORM_DIR)"
+
+# Synchronize shared packages, the Go module, audio, and generated seeds into
+# the platform checkout. Review and commit that checkout separately.
+sync-platform-mirrors: motion-go-seeds
+	scripts/sync-platform-mirrors.sh --sync --platform-dir "$(PLATFORM_DIR)"
+
+# Copy only generated seeds into a motion-levels-platform checkout. Run after
+# motion-go-seeds whenever an authored game changed, then commit both repos.
 sync-platform-seeds: motion-go-seeds
-	@test -d "$(PLATFORM_DIR)/platform/app/src/lib/seed" || { echo "platform checkout not found at $(PLATFORM_DIR); pass PLATFORM_DIR=<path>"; exit 1; }
-	cp game-engine/internal/games/authored/seeds/*.ts "$(PLATFORM_DIR)/platform/app/src/lib/seed/"
-	@echo "Seeds synced to $(PLATFORM_DIR)/platform/app/src/lib/seed; review and commit there."
+	scripts/sync-platform-mirrors.sh --sync --scope seeds --platform-dir "$(PLATFORM_DIR)"
 
 install-ansible-collections:
 	ansible-galaxy collection install -r ansible/requirements.yml

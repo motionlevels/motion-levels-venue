@@ -4,7 +4,8 @@
 # Instructions:
 # 1. Set MOTION_LEVELS_PROVISION_HOSTNAME and TAILSCALE_AUTHKEY in
 #    /etc/motion-levels/provision.env below, or use
-#    deploy/homelab/create-motionlevels-venue-vm.sh to render them for Proxmox.
+#    deploy/motionlevels-pc/create-motionlevels-venue-vm.sh to render them for
+#    Proxmox.
 # 2. Add SSH keys through your cloud platform or hypervisor cloud-init settings.
 # 3. Boot your VM/server, wait for cloud-init to finish, then deploy updates with
 #    ansible/playbooks/venue-containers.yml. The cloud-init native services are

@@ -29,10 +29,13 @@ go run ./game-engine/cmd/game-engine
 # Player menu (talks to the engine on :4102)
 npm ci --prefix packages/floor-view
 npm ci --prefix apps/player-menu
+npm ci --prefix apps/player-display
+npm test --prefix apps/player-menu
+npm test --prefix apps/player-display
 npm run dev --prefix apps/player-menu
 ```
 
-## Motion-go seeds (cross-repo contract)
+## Cross-repo mirrors
 
 The native games under `game-engine/internal/games/authored/nativegames` are
 the source of truth for motion-go games. Generated TypeScript seeds live in
@@ -47,6 +50,29 @@ make sync-platform-seeds PLATFORM_DIR=../motion-levels
 ```
 
 then commit the refreshed seeds in the platform repo.
+
+This repo is also canonical for `packages/`, `go.mod`/`go.sum`, and
+`content/audio/`. The platform keeps mirrors because its application and image
+build consume them directly. Check or synchronize every mirror with:
+
+```sh
+make check-platform-mirrors PLATFORM_DIR=../motion-levels
+make sync-platform-mirrors PLATFORM_DIR=../motion-levels
+```
+
+The sync command changes the platform checkout, so review and commit both repos
+separately. `game-bundles/` is not copied by this command: platform and venue
+pin the same published games release through their own sync workflows.
+
+Audio generation belongs here with the canonical assets. For example:
+
+```sh
+scripts/generate-elevenlabs-narration.sh
+```
+
+Set `ELEVENLABS_API_KEY`, or put it in the ignored
+`.secrets/elevenlabs.env` file. Pass an output path and `ELEVENLABS_TEXT` to
+generate a different narration.
 
 ## Releases and deploys
 
@@ -64,8 +90,9 @@ make deploy-venues            # containerized venues (default: motionlevels-1)
 make status-motionlevels-1
 ```
 
-> **Note:** the platform's auto-deploy pipeline (`deploy-production` in the old
-> monorepo `images.yml`) deployed platform and venues atomically at one
-> revision. That link was severed by the repo split; until the platform
-> deployer learns to check out this repo at a pinned venue revision, venue
-> deploys are manual (`make deploy-venues`).
+The venue repository owns its image revision and deployment lifecycle
+independently from the cloud platform. See
+[`docs/operations/venue-deployment.md`](docs/operations/venue-deployment.md)
+for provisioning, validation, activation, and rollback. Games release pinning
+is documented in
+[`docs/operations/games-bundle-sync.md`](docs/operations/games-bundle-sync.md).
