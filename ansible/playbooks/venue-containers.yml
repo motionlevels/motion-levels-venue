@@ -135,8 +135,10 @@
           - alsa-utils
           - curl
           - docker.io
+          - kbd
           - nftables
           - python3
+          - seatd
           - weston
         state: present
         update_cache: true

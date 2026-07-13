@@ -1,7 +1,8 @@
 [Unit]
 Description=Motion Levels minimal Weston display boundary
-After=systemd-user-sessions.service network-online.target
+After=systemd-user-sessions.service network-online.target seatd.service
 Wants=network-online.target
+Requires=seatd.service
 Before=motion-levels-player-container.service
 Conflicts=getty@tty7.service display-manager.service motion-levels-kiosk.service
 
@@ -10,7 +11,6 @@ Type=simple
 User=motionlevels-display
 Group=motionlevels-display
 SupplementaryGroups=video render
-PAMName=login
 TTYPath=/dev/tty7
 TTYReset=yes
 TTYVHangup=yes
@@ -19,8 +19,12 @@ StandardInput=tty-fail
 UtmpIdentifier=tty7
 Environment=XDG_RUNTIME_DIR=/run/motion-levels-display
 Environment=WAYLAND_DISPLAY=wayland-0
+Environment=XDG_SEAT=seat0
+Environment=LIBSEAT_BACKEND=seatd
 RuntimeDirectory=motion-levels-display
 RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=restart
+ExecStartPre=+/usr/bin/chvt 7
 ExecStart=/usr/local/bin/motion-levels-display-agent
 Restart=always
 RestartSec=3
@@ -46,6 +50,7 @@ DeviceAllow=/dev/dri/card0 rw
 DeviceAllow=/dev/dri/renderD128 rw
 DeviceAllow=/dev/tty0 rw
 DeviceAllow=/dev/tty7 rw
+InaccessiblePaths=/dev/input
 ReadWritePaths=/run/motion-levels-display
 TasksMax=256
 MemoryMax=512M

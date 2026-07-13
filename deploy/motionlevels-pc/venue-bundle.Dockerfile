@@ -144,6 +144,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     curl \
     fonts-noto-color-emoji \
+    libegl1 \
+    libgl1-mesa-dri \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10003 motionlevels-display \
     && useradd --uid 10003 --gid 10003 --no-create-home --home-dir /var/lib/motion-levels/player-profile motionlevels-display

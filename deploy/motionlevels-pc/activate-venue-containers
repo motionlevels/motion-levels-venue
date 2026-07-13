@@ -313,12 +313,13 @@ base = (os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_URL") or os.env
 with urllib.request.urlopen(base + "/api/healthz", timeout=8) as response:
     assert response.status == 200
 ' >/dev/null || return 1
-    # The floor has both an egress bridge and an ipvlan hardware endpoint.
-    # Verify its resolver and HTTPS route use the former before committing the
-    # release; the security recorder probe above exercises a different network.
-    /usr/bin/docker exec motion-levels-venue-floor \
-      /usr/bin/curl -fsS --max-time 8 \
-      https://platform.motionlevels.obis.dev/api/healthz >/dev/null || return 1
+    if [ -n "$(manifest_value VENUE_FLOOR_LAN_IPV4 "$manifest")" ]; then
+      # Isolated floor manifests must resolve and reach the platform through
+      # their egress bridge. Legacy host-network manifests lack this marker.
+      /usr/bin/docker exec motion-levels-venue-floor \
+        /usr/bin/curl -fsS --max-time 8 \
+        https://platform.motionlevels.obis.dev/api/healthz >/dev/null || return 1
+    fi
     audio_probe || return 1
   else
     /usr/bin/curl -fsS --max-time 8 http://127.0.0.1:8020/health >/dev/null || return 1
@@ -644,7 +645,9 @@ activate() {
     install -m 0600 "$rollback_manifest" "$native_fallback"
   fi
 
-  systemctl start motion-levels-container-firewall.service
+  # Always apply the validated on-disk policy. A prior interrupted playbook may
+  # have copied it without reaching its notified reload handler.
+  systemctl reload-or-restart motion-levels-container-firewall.service
   # Preflight the new mixer owner before touching the running producer. Once it
   # is known to start, stop the producer before clearing accepted audio workers
   # so it cannot reconnect into the broker generation being drained.

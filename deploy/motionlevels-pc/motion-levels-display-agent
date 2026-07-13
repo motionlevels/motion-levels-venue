@@ -1,7 +1,15 @@
 #!/bin/sh
 set -eu
 
+# Keep the compositor socket in the systemd-owned runtime path that is mounted
+# read-only into the player container. The service uses seatd instead of a PAM
+# login session so Weston remains inside its device-constrained service cgroup.
+export XDG_RUNTIME_DIR=/run/motion-levels-display
+export WAYLAND_DISPLAY=wayland-0
+
 exec /usr/bin/weston \
   --config=/etc/motion-levels/weston.ini \
   --continue-without-input \
-  --idle-time=0
+  --idle-time=0 \
+  --socket=wayland-0 \
+  --log=/run/motion-levels-display/weston.log
