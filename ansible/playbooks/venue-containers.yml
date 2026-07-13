@@ -388,6 +388,14 @@
         group: root
         mode: "0644"
 
+    - name: Install the dormant X5 venue-gateway binding
+      ansible.builtin.copy:
+        src: "{{ motion_levels_repo_root }}/deploy/motionlevels-pc/x5-camera-gateway.compose.yml"
+        dest: "{{ motion_levels_venue_config_root }}/x5-camera-gateway.compose.yml"
+        owner: root
+        group: root
+        mode: "0644"
+
     - name: Install container-boundary executables
       ansible.builtin.copy:
         src: "{{ motion_levels_repo_root }}/deploy/motionlevels-pc/{{ item.src }}"
