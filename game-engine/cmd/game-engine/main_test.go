@@ -1326,6 +1326,7 @@ func TestRuntimeStatusExposesRecentFinishedLevelAttempts(t *testing.T) {
 
 	runtime.RecordDisplaySnapshot(displayStatus{
 		CurrentGame:              "parkour",
+		VenueSessionID:           "venue-session-1",
 		Label:                    "Parkour",
 		Phase:                    "running",
 		Difficulty:               "easy",
@@ -1340,6 +1341,7 @@ func TestRuntimeStatusExposesRecentFinishedLevelAttempts(t *testing.T) {
 	}, gameplayStarted)
 	runtime.RecordDisplaySnapshot(displayStatus{
 		CurrentGame:              "parkour",
+		VenueSessionID:           "venue-session-1",
 		Label:                    "Parkour",
 		Phase:                    "finished",
 		Difficulty:               "easy",
@@ -1362,8 +1364,23 @@ func TestRuntimeStatusExposesRecentFinishedLevelAttempts(t *testing.T) {
 		t.Fatalf("finished attempts = %d, want 1: %+v", len(status.FinishedLevelAttempts), status.FinishedLevelAttempts)
 	}
 	attempt := status.FinishedLevelAttempts[0]
-	if attempt.Game != "parkour" || attempt.Level != "level-1" || attempt.Result != "success" || !attempt.Success || attempt.ElapsedMillis != 16100 {
+	if attempt.VenueSessionID != "venue-session-1" || attempt.Game != "parkour" || attempt.Level != "level-1" || attempt.Result != "success" || !attempt.Success || attempt.ElapsedMillis != 16100 {
 		t.Fatalf("finished attempt = %+v", attempt)
+	}
+}
+
+func TestRuntimeStatusExposesPressureStreamHealth(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "lava"}, nil, nil)
+	if runtime.Status().PressureStreamConnected {
+		t.Fatal("pressure stream should start disconnected")
+	}
+	runtime.SetPressureStreamConnected(true)
+	if !runtime.Status().PressureStreamConnected {
+		t.Fatal("pressure stream should report connected")
+	}
+	runtime.SetPressureStreamConnected(false)
+	if runtime.Status().PressureStreamConnected {
+		t.Fatal("pressure stream should report disconnected")
 	}
 }
 

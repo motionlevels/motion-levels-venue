@@ -1,6 +1,6 @@
 import posthog from "posthog-js";
 import type { Properties } from "posthog-js";
-import { randomUUID } from "./utils";
+import { randomUUID } from "./utils.ts";
 
 const defaultPostHogKey = "phc_pmpLzyqQbK6WU3fHtxMUuaSfWF3PA3aYREKpeCLE5Uow";
 // Ingestion goes through the reverse proxy at p.obis.dev to dodge ad blockers.
@@ -9,6 +9,8 @@ const defaultPostHogHost = "https://p.obis.dev";
 const defaultPostHogUiHost = "https://us.posthog.com";
 const deviceStorageKey = "ml-player-menu-device-id";
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const privateAnalyticsKeys = new Set(["player_name", "players", "team_name"]);
+let volatileDeviceID = "";
 
 function readEnv(name: string): string {
   const value = import.meta.env[name];
@@ -27,12 +29,27 @@ function getDeviceID(): string {
   if (configured && uuidPattern.test(configured)) return configured.toLowerCase();
   if (configured) console.warn("Ignoring configured kiosk id because it is not a UUID.");
 
-  const existing = localStorage.getItem(deviceStorageKey);
-  if (existing && uuidPattern.test(existing)) return existing.toLowerCase();
+  try {
+    const existing = localStorage.getItem(deviceStorageKey);
+    if (existing && uuidPattern.test(existing)) return existing.toLowerCase();
+  } catch {
+    // Privacy/storage settings must not prevent the kiosk from starting.
+  }
+
+  if (volatileDeviceID) return volatileDeviceID;
 
   const generated = randomUUID();
-  localStorage.setItem(deviceStorageKey, generated);
+  volatileDeviceID = generated;
+  try {
+    localStorage.setItem(deviceStorageKey, generated);
+  } catch {
+    // Use the in-memory ID for this renderer lifetime.
+  }
   return generated;
+}
+
+export function analyticsSafeProperties(properties: Properties): Properties {
+  return Object.fromEntries(Object.entries(properties).filter(([key]) => !privateAnalyticsKeys.has(key)));
 }
 
 function baseProperties(): Properties {
@@ -52,8 +69,11 @@ export function initMenuAnalytics() {
     api_host: readEnv("VITE_POSTHOG_HOST") || defaultPostHogHost,
     ui_host: readEnv("VITE_POSTHOG_UI_HOST") || defaultPostHogUiHost,
     defaults: "2026-05-30",
-    autocapture: true,
-    capture_heatmaps: true,
+    // The kiosk already emits intentional operational events. Automatic DOM
+    // capture can include player-derived text and accessible labels, so keep
+    // it disabled to uphold the no-player-identity analytics contract.
+    autocapture: false,
+    capture_heatmaps: false,
     capture_pageview: false,
     disable_session_recording: false,
     session_recording: {
@@ -94,6 +114,6 @@ export function captureMenuEvent(event: string, properties: Properties = {}) {
   if (!analyticsEnabled()) return;
   posthog.capture(`player_menu_${event}`, {
     ...baseProperties(),
-    ...properties,
+    ...analyticsSafeProperties(properties),
   });
 }

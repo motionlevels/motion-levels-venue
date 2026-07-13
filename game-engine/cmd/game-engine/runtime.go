@@ -51,6 +51,7 @@ type gameRuntime struct {
 	pauseTotal        time.Duration
 	lastPressure      time.Time
 	lastPressureInput time.Time
+	pressureConnected bool
 	narrated          map[string]bool
 	introUntil        time.Time
 	audioMuted        bool
@@ -90,6 +91,7 @@ type ambientTouch struct {
 
 type levelAttemptTracker struct {
 	AttemptID                string
+	VenueSessionID           string
 	Game                     string
 	Level                    string
 	LevelNumber              int
@@ -104,6 +106,7 @@ type levelAttemptTracker struct {
 
 type finishedLevelAttemptStatus struct {
 	AttemptID      string `json:"attemptId"`
+	VenueSessionID string `json:"venueSessionId"`
 	Game           string `json:"game"`
 	Level          string `json:"level"`
 	LevelNumber    int    `json:"levelNumber"`
@@ -301,6 +304,7 @@ type runtimeStatus struct {
 	Success                  bool                         `json:"success"`
 	SessionID                string                       `json:"sessionId"`
 	LastPressureUnix         int64                        `json:"lastPressureUnix"`
+	PressureStreamConnected  bool                         `json:"pressureStreamConnected"`
 	RNGSeed                  int64                        `json:"rngSeed"`
 	Recorder                 any                          `json:"recorder"`
 	FinishedLevelAttempts    []finishedLevelAttemptStatus `json:"finishedLevelAttempts,omitempty"`
@@ -979,6 +983,7 @@ func (r *gameRuntime) Status() runtimeStatus {
 	audioMuted := r.audioMuted
 	sessionID := r.sessionID
 	lastPressureInput := r.lastPressureInput
+	pressureConnected := r.pressureConnected
 	rngSeed := r.rngSeed
 	paused := r.paused
 	game := r.game
@@ -1035,12 +1040,22 @@ func (r *gameRuntime) Status() runtimeStatus {
 		Success:                  display.Success,
 		SessionID:                sessionID,
 		LastPressureUnix:         unixOrZero(lastPressureInput),
+		PressureStreamConnected:  pressureConnected,
 		RNGSeed:                  rngSeed,
 		Recorder:                 recorderStats,
 		FinishedLevelAttempts:    recentAttempts,
 		Performance:              r.framePerf.Snapshot(),
 		Catalog:                  gameCatalog(cfg.PlatformURL),
 	}
+}
+
+func (r *gameRuntime) SetPressureStreamConnected(connected bool) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.pressureConnected = connected
+	r.mu.Unlock()
 }
 
 func (r *gameRuntime) Performance() framePerfSnapshot {
@@ -1644,6 +1659,7 @@ func (r *gameRuntime) startLevelAttemptLocked(status displayStatus, startedUnixN
 	}
 	attempt := &levelAttemptTracker{
 		AttemptID:                fmt.Sprintf("%s:%s:%d", r.sessionID, status.Level, startedUnixNanos),
+		VenueSessionID:           strings.TrimSpace(status.VenueSessionID),
 		Game:                     status.CurrentGame,
 		Level:                    status.Level,
 		LevelNumber:              status.LevelNumber,
@@ -1698,6 +1714,7 @@ func (r *gameRuntime) finishActiveLevelAttemptLocked(result string, status displ
 	if result == "success" || result == "failed" {
 		r.recentAttempts = append(r.recentAttempts, finishedLevelAttemptStatus{
 			AttemptID:      attempt.AttemptID,
+			VenueSessionID: attempt.VenueSessionID,
 			Game:           attempt.Game,
 			Level:          attempt.Level,
 			LevelNumber:    attempt.LevelNumber,

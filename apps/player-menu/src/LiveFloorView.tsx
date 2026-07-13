@@ -52,6 +52,8 @@ export function LiveFloorView({ interactive = false, orientation = "landscape" }
   const pressedRef = useRef<Set<number>>(new Set());
   const pointerPressRef = useRef<{ x: number; y: number } | null>(null);
   const reconnectRef = useRef<number | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const lastFrameAtRef = useRef(0);
   const [connection, setConnection] = useState<ConnectionState>("connecting");
 
   useEffect(() => {
@@ -135,7 +137,10 @@ export function LiveFloorView({ interactive = false, orientation = "landscape" }
           if (bytes[pressureOffset + Math.floor(index / 8)] & (1 << (index % 8))) pressed.add(index);
         }
         pressedRef.current = pressed;
-      }
+      } else pressedRef.current = new Set();
+      lastFrameAtRef.current = Date.now();
+      reconnectAttemptRef.current = 0;
+      setConnection("live");
       draw();
     }
 
@@ -147,6 +152,9 @@ export function LiveFloorView({ interactive = false, orientation = "landscape" }
       if (message.pressed) pressed.add(index);
       else pressed.delete(index);
       pressedRef.current = pressed;
+      lastFrameAtRef.current = Date.now();
+      reconnectAttemptRef.current = 0;
+      setConnection("live");
       draw();
     }
 
@@ -160,10 +168,11 @@ export function LiveFloorView({ interactive = false, orientation = "landscape" }
     function connect() {
       if (closed) return;
       setConnection("connecting");
+      lastFrameAtRef.current = Date.now();
       const socket = new WebSocket(controllerWebSocketURL());
       socketRef.current = socket;
       socket.binaryType = "arraybuffer";
-      socket.addEventListener("open", () => setConnection("live"));
+      socket.addEventListener("open", () => setConnection("connecting"));
       socket.addEventListener("message", (event) => {
         if (event.data instanceof ArrayBuffer) {
           applyFrame(event.data);
@@ -175,19 +184,33 @@ export function LiveFloorView({ interactive = false, orientation = "landscape" }
           // Ignore status/config text messages here; the controller view owns those details.
         }
       });
-      socket.addEventListener("error", () => setConnection("error"));
+      socket.addEventListener("error", () => {
+        setConnection("error");
+        socket.close();
+      });
       socket.addEventListener("close", () => {
         if (socketRef.current === socket) socketRef.current = null;
         if (closed) return;
+        pressedRef.current = new Set();
+        draw();
         setConnection("error");
-        reconnectRef.current = window.setTimeout(connect, 600);
+        const delay = Math.min(5_000, 600 * (2 ** reconnectAttemptRef.current));
+        reconnectAttemptRef.current = Math.min(reconnectAttemptRef.current + 1, 4);
+        reconnectRef.current = window.setTimeout(connect, delay);
       });
     }
 
     connect();
+    const watchdog = window.setInterval(() => {
+      const socket = socketRef.current;
+      if (!socket || socket.readyState !== WebSocket.OPEN || Date.now() - lastFrameAtRef.current <= 4_000) return;
+      setConnection("error");
+      socket.close();
+    }, 1_000);
     return () => {
       closed = true;
       resizeObserver.disconnect();
+      window.clearInterval(watchdog);
       if (reconnectRef.current !== null) window.clearTimeout(reconnectRef.current);
       socketRef.current?.close();
       socketRef.current = null;
@@ -244,7 +267,7 @@ export function LiveFloorView({ interactive = false, orientation = "landscape" }
         onPointerCancel={releasePointer}
         onPointerLeave={releasePointer}
       />
-      <span className="live-floor-status">{connection === "live" ? "Suelo en vivo" : connection === "connecting" ? "Conectando al suelo" : "Sin señal del suelo"}</span>
+      <span className="live-floor-status" role="status" aria-live="polite">{connection === "live" ? "Suelo en vivo" : connection === "connecting" ? "Conectando al suelo" : "Sin señal del suelo"}</span>
     </div>
   );
 }

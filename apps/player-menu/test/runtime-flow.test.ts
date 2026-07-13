@@ -114,4 +114,53 @@ describe("runtime screen flow", () => {
     assert.match(appSource, /const stopLevelOnly = action === "exit" && activeMode === "free" && isLevelRuntimeActive\(status, launchedGame\)/);
     assert.match(appSource, /exitLabel=\{launchedLevelActive && launchedLevelMode === "free" \? "Terminar nivel" : "Salir del juego"\}/);
   });
+
+  it("serializes polling and protects engine commands from rapid repeated taps", () => {
+    const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+    assert.match(source, /nextRefresh = window\.setTimeout\(refresh, 2500\)/);
+    assert.match(source, /nextRefresh = window\.setTimeout\(refreshMenuState, 700\)/);
+    assert.match(source, /if \(launchInFlightRef\.current\) return false/);
+    assert.match(source, /if \(controlInFlightRef\.current\) return/);
+    assert.match(source, /setPendingControlAction\(action\)/);
+    assert.match(source, /status\.pressureStreamConnected === false/);
+    assert.match(source, /floorBlocked \? "Suelo sin conexión"/);
+  });
+
+  it("schedules the inactivity deadline instead of waiting for another pressure update", () => {
+    const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+    assert.match(source, /const remainingMillis = Math\.max\(0, noPressureSessionLimitMillis - idleMillis\)/);
+    assert.match(source, /window\.setTimeout\(\(\) => \{\s*void closeSession\("no_pressure_1h"\)/);
+  });
+
+  it("persists replay protection and Party progress across renderer reloads", () => {
+    const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+    assert.match(source, /processedAttemptIDs: \[\]/);
+    assert.match(source, /processedAttemptIDs = \[\.\.\.new Set\(\[\.\.\.nextMenu\.processedAttemptIDs, \.\.\.processedIDs\]\)\]\.slice\(-maxProcessedAttemptIDs\)/);
+    assert.match(source, /if \(!status\?\.sessionId \|\| !menu\.sessionId\) return/);
+    assert.match(source, /attempt\.venueSessionId === menu\.sessionId/);
+    assert.match(source, /localStorage\.setItem\(partyRunStorageKey, JSON\.stringify\(partyRun\)\)/);
+  });
+
+  it("fails closed for an empty category and confirms destructive controls", () => {
+    const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+    assert.match(source, /const categorySelectionValid = visibleGames\.some/);
+    assert.match(source, /if \(categoryGames\.length === 0\) return current/);
+    assert.match(source, /className="empty-category"/);
+    assert.match(source, /\{categorySelectionValid \? \(/);
+    assert.match(source, /title=\{pendingGameControl === "restart" \? "¿Reiniciar partida\?"/);
+    assert.match(source, /onNarration=\{\(\) => sendGameControl\("narration"\)\}/);
+  });
+
+  it("keeps modal and mirror recovery semantics robust", () => {
+    const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+    assert.match(source, /current === "Sin conexión con el menú principal" \? "" : current/);
+    assert.match(source, /<header className="topbar" inert=\{teamOpen\}>/);
+    assert.match(source, /<section className="main-panel" inert=\{teamOpen\}>/);
+    assert.match(source, /onKeyDown=\{\(event\) => trapKioskFocus\(event, \(\) => setTeamOpen\(false\)\)\}/);
+  });
 });

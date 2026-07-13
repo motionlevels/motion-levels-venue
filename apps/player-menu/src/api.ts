@@ -2,6 +2,57 @@ import type { EngineGame, EngineStatus, PlatformGameCatalogEntry } from "@motion
 
 export type { EngineGame, EngineStatus, PlatformGameCatalogEntry };
 
+export type RequestFailureKind = "network" | "response" | "timeout";
+
+export class RequestError extends Error {
+  readonly kind: RequestFailureKind;
+  readonly status?: number;
+
+  constructor(kind: RequestFailureKind, message: string, options: { cause?: unknown; status?: number } = {}) {
+    super(message, options.cause === undefined ? undefined : { cause: options.cause });
+    this.name = "RequestError";
+    this.kind = kind;
+    this.status = options.status;
+  }
+}
+
+const statusTimeoutMillis = 3_000;
+const mirrorTimeoutMillis = 2_500;
+const readTimeoutMillis = 8_000;
+const commandTimeoutMillis = 12_000;
+
+export async function requestJSON<T>(url: string, init: RequestInit = {}, timeoutMillis = readTimeoutMillis): Promise<T> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), Math.max(1, timeoutMillis));
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    if (!response.ok) {
+      const detail = (await response.text().catch(() => "")).trim();
+      throw new RequestError("response", detail || `HTTP ${response.status}`, { status: response.status });
+    }
+    try {
+      return await response.json() as T;
+    } catch (cause) {
+      throw new RequestError("response", "La respuesta del sistema no es válida", { cause, status: response.status });
+    }
+  } catch (cause) {
+    if (cause instanceof RequestError) throw cause;
+    if (controller.signal.aborted) {
+      throw new RequestError("timeout", "La solicitud ha superado el tiempo de espera", { cause });
+    }
+    throw new RequestError("network", "No se pudo conectar con el sistema", { cause });
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
+export function friendlyRequestError(error: unknown, fallback: string): string {
+  if (!(error instanceof RequestError)) return fallback;
+  if (error.kind === "timeout") return "El sistema está tardando más de lo esperado. Inténtalo de nuevo.";
+  if (error.kind === "network") return "Sin conexión con el motor. Comprueba la conexión e inténtalo de nuevo.";
+  return fallback;
+}
+
 export type AnimationPreview = {
   level: string;
   frames: Array<{ pixels: string }>;
@@ -78,58 +129,38 @@ export function platformBaseURL(): string {
 }
 
 export async function fetchEngineStatus(): Promise<EngineStatus> {
-  const response = await fetch(`${engineBaseURL()}/api/status`);
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  return response.json() as Promise<EngineStatus>;
+  return requestJSON<EngineStatus>(`${engineBaseURL()}/api/status`, { cache: "no-store" }, statusTimeoutMillis);
 }
 
 export async function fetchGameCatalog(): Promise<PlatformGameCatalogEntry[]> {
   const baseURL = platformBaseURL();
   if (!baseURL) return [];
-  const response = await fetch(`${baseURL}/api/game-catalog`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  const payload = await response.json() as { games?: PlatformGameCatalogEntry[] };
+  const payload = await requestJSON<{ games?: PlatformGameCatalogEntry[] }>(`${baseURL}/api/game-catalog`, { cache: "no-store" });
   return Array.isArray(payload.games) ? payload.games : [];
 }
 
 export async function fetchAnimationPreview(level: string, frames = 16, revision?: string): Promise<AnimationPreview> {
   const params = new URLSearchParams({ level, frames: String(frames) });
   if (revision) params.set("revision", revision);
-  const response = await fetch(`${engineBaseURL()}/api/animation-preview?${params.toString()}`);
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  return response.json() as Promise<AnimationPreview>;
+  return requestJSON<AnimationPreview>(`${engineBaseURL()}/api/animation-preview?${params.toString()}`);
 }
 
 export async function selectGame(request: SelectGameRequest): Promise<EngineStatus> {
-  const response = await fetch(`${engineBaseURL()}/api/select`, {
+  return requestJSON<EngineStatus>(`${engineBaseURL()}/api/select`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
-  });
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  return response.json() as Promise<EngineStatus>;
+  }, commandTimeoutMillis);
 }
 
 export type ControlGameAction = "pause" | "resume" | "restart" | "exit" | "narration" | "mute" | "unmute" | "toggle_mute";
 
 export async function controlGame(action: ControlGameAction): Promise<EngineStatus> {
-  const response = await fetch(`${engineBaseURL()}/api/control`, {
+  return requestJSON<EngineStatus>(`${engineBaseURL()}/api/control`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action }),
-  });
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  return response.json() as Promise<EngineStatus>;
+  }, commandTimeoutMillis);
 }
 
 export type VenueSessionRequest = {
@@ -156,39 +187,72 @@ export type MenuStateEnvelope<TSnapshot = unknown> = {
   snapshot: TSnapshot | null;
 };
 
+let pendingMenuStateWrite: { kioskId: string; snapshot: unknown } | null = null;
+let menuStateWriteInFlight = false;
+let menuStateRetryDelayMillis = 500;
+
 // Visit recording is best-effort: the kiosk must never block or surface errors
 // because the engine is briefly unreachable, so these are fire-and-forget.
 export function postVenueSession(request: VenueSessionRequest) {
-  void fetch(`${engineBaseURL()}/api/venue-session`, {
+  postBestEffort(`${engineBaseURL()}/api/venue-session`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
     keepalive: true,
-  }).catch(() => {});
+  });
 }
 
 export function postMenuEvent(request: MenuEventRequest) {
-  void fetch(`${engineBaseURL()}/api/menu-event`, {
+  postBestEffort(`${engineBaseURL()}/api/menu-event`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
     keepalive: true,
-  }).catch(() => {});
+  });
+}
+
+function postBestEffort(url: string, init: RequestInit) {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), mirrorTimeoutMillis);
+  void fetch(url, { ...init, signal: controller.signal })
+    .catch(() => {})
+    .finally(() => globalThis.clearTimeout(timeout));
 }
 
 export async function fetchMenuState<TSnapshot = unknown>(): Promise<MenuStateEnvelope<TSnapshot>> {
-  const response = await fetch(`${engineBaseURL()}/api/menu-state`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  return response.json() as Promise<MenuStateEnvelope<TSnapshot>>;
+  return requestJSON<MenuStateEnvelope<TSnapshot>>(`${engineBaseURL()}/api/menu-state`, { cache: "no-store" }, mirrorTimeoutMillis);
 }
 
 export function postMenuState<TSnapshot>(request: { kioskId: string; snapshot: TSnapshot }) {
-  void fetch(`${engineBaseURL()}/api/menu-state`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-    keepalive: true,
-  }).catch(() => {});
+  pendingMenuStateWrite = request;
+  if (menuStateWriteInFlight) return;
+  void flushMenuStateWrites();
+}
+
+async function flushMenuStateWrites() {
+  menuStateWriteInFlight = true;
+  try {
+    while (pendingMenuStateWrite) {
+      const request = pendingMenuStateWrite;
+      pendingMenuStateWrite = null;
+      try {
+        await requestJSON<MenuStateEnvelope>(`${engineBaseURL()}/api/menu-state`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        }, mirrorTimeoutMillis);
+        menuStateRetryDelayMillis = 500;
+      } catch {
+        // Keep the latest snapshot queued across a transient outage. If a newer
+        // snapshot arrived while this request was running, it supersedes the
+        // failed one and will be the payload retried after the backoff.
+        if (!pendingMenuStateWrite) pendingMenuStateWrite = request;
+        await new Promise((resolve) => globalThis.setTimeout(resolve, menuStateRetryDelayMillis));
+        menuStateRetryDelayMillis = Math.min(5_000, menuStateRetryDelayMillis * 2);
+      }
+    }
+  } finally {
+    menuStateWriteInFlight = false;
+    if (pendingMenuStateWrite) void flushMenuStateWrites();
+  }
 }

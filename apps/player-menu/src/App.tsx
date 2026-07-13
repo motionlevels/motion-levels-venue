@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
-import { controlGame, fetchAnimationPreview, fetchEngineStatus, fetchGameCatalog, fetchMenuState, platformBaseURL, postMenuEvent, postMenuState, postVenueSession, selectGame, type AnimationPreview, type EngineGame, type EngineStatus, type MenuStateEnvelope, type PlatformGameCatalogEntry } from "./api";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import { controlGame, fetchAnimationPreview, fetchEngineStatus, fetchGameCatalog, fetchMenuState, friendlyRequestError, platformBaseURL, postMenuEvent, postMenuState, postVenueSession, selectGame, type AnimationPreview, type ControlGameAction, type EngineGame, type EngineStatus, type MenuStateEnvelope, type PlatformGameCatalogEntry } from "./api";
 import { categories, colors, difficulties, games, playerColorNames, playerColors, type CategoryID, type DifficultyID, type GameCard, type GameConfigVar, type PartyMiniGame } from "./catalog";
 import { partyCatalogIsComplete, partyLaunchGame } from "./party";
 import {
@@ -76,6 +76,7 @@ type MenuState = {
   narrationArmed: Record<string, boolean>;
   operatorUnlockLevels: boolean;
   gameConfig: Record<string, GameConfigValues>;
+  processedAttemptIDs: string[];
 };
 
 type GameConfigValues = Record<string, number | boolean | string>;
@@ -112,7 +113,9 @@ type ChallengeCompletion = {
   totalElapsedMillis: number;
 };
 
-type FinishedLevelAttempt = NonNullable<EngineStatus["finishedLevelAttempts"]>[number];
+type PlayerMenuEngineStatus = EngineStatus & { pressureStreamConnected?: boolean };
+type FinishedLevelAttempt = NonNullable<PlayerMenuEngineStatus["finishedLevelAttempts"]>[number] & { venueSessionId?: string };
+type ConnectionState = "connection-off" | "connection-on" | "connection-pending";
 type KeyboardTarget = { kind: "team" } | { kind: "player"; id: number };
 type PartyRunState = {
   cumulativeScore: number;
@@ -141,6 +144,7 @@ type RemoteSessionRequest = {
 
 const emptyPreviewSources: string[] = [];
 const storageKey = "ml-player-menu-state-v1";
+const partyRunStorageKey = "ml-player-menu-party-run-v1";
 const platformCatalogStorageKey = "ml-player-menu-platform-catalog-v3";
 // Cache keys older menu builds wrote; purged at boot so long-lived kiosks do
 // not carry multi-megabyte orphaned catalog payloads forever.
@@ -149,10 +153,12 @@ const retiredStorageKeys = [
   "ml-player-menu-platform-catalog-v2",
 ];
 const platformCatalogRefreshMillis = 5000;
+const platformCatalogRefreshMaxMillis = 60_000;
 const maxPlayers = 8;
 const maxTeamNameLength = 24;
 const maxPlayerNameLength = 12;
 const noPressureSessionLimitMillis = 60 * 60 * 1000;
+const maxProcessedAttemptIDs = 128;
 // Spanish QWERTY adapted for a kiosk touch surface.
 const keyboardLetterRows = ["qwertyuiop", "asdfghjklñ", "zxcvbnm"];
 const keyboardNumberRows = ["1234567890", "-_/&()'\"", ".,!?"];
@@ -208,7 +214,7 @@ function remoteSessionRequestFromURL(): RemoteSessionRequest | null {
   const venueSessionId = params.get("venueSessionId") || "";
   const reservationId = params.get("reservationId") || venueSessionId;
   if (!isUUID(venueSessionId) || !isUUID(reservationId)) return null;
-  const reservedPlayers = Math.max(1, Math.round(Number(params.get("players") || 1)));
+  const reservedPlayers = clampInteger(Number(params.get("players") || 1), 1, maxPlayers);
 
   return {
     configuredPlayerCount: clampInteger(reservedPlayers, 1, maxPlayers),
@@ -1098,6 +1104,9 @@ function loadMenuState(): MenuState {
         narrationArmed,
         operatorUnlockLevels: envUnlockLevels || Boolean(saved.operatorUnlockLevels),
         gameConfig: normalizeGameConfigState(saved.gameConfig),
+        processedAttemptIDs: Array.isArray(saved.processedAttemptIDs)
+          ? saved.processedAttemptIDs.filter((value): value is string => typeof value === "string" && value.length > 0).slice(-maxProcessedAttemptIDs)
+          : [],
       };
     }
   } catch {
@@ -1122,6 +1131,7 @@ function loadMenuState(): MenuState {
     narrationArmed: {},
     operatorUnlockLevels: envUnlockLevels,
     gameConfig: {},
+    processedAttemptIDs: [],
   };
 }
 
@@ -1149,6 +1159,28 @@ function cachePlatformCatalog(catalog: PlatformGameCatalogEntry[]) {
   }
 }
 
+function loadPartyRun(): PartyRunState | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const value = JSON.parse(localStorage.getItem(partyRunStorageKey) || "null") as Partial<PartyRunState> | null;
+    if (
+      !value
+      || typeof value.partyGameID !== "string"
+      || typeof value.sessionId !== "string"
+      || !Number.isFinite(value.index)
+      || !Number.isFinite(value.cumulativeScore)
+    ) return null;
+    return {
+      cumulativeScore: Math.max(0, Number(value.cumulativeScore)),
+      index: Math.max(0, Math.floor(Number(value.index))),
+      partyGameID: value.partyGameID,
+      sessionId: value.sessionId,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function isPlatformGameCatalogEntry(value: unknown): value is PlatformGameCatalogEntry {
   return Boolean(value && typeof value === "object" && !Array.isArray(value) && "id" in value && "label" in value);
 }
@@ -1170,7 +1202,8 @@ export default function App() {
 function MenuApp() {
   const readOnlyMirror = useMemo(() => menuReadOnlyFromURL(), []);
   const [menu, setMenu] = useState<MenuState>(() => loadMenuState());
-  const [status, setStatus] = useState<EngineStatus | null>(null);
+  const [status, setStatus] = useState<PlayerMenuEngineStatus | null>(null);
+  const [connectionState, setConnectionState] = useState<ConnectionState>("connection-pending");
   const [platformCatalog, setPlatformCatalog] = useState<PlatformGameCatalogEntry[] | null>(() => loadCachedPlatformCatalog());
   const [catalogRefreshing, setCatalogRefreshing] = useState(false);
   const [catalogLoading, setCatalogLoading] = useState(() => platformBaseURL() !== "" && platformCatalog === null);
@@ -1181,6 +1214,7 @@ function MenuApp() {
   const [confirmRemove, setConfirmRemove] = useState<number | null>(null);
   const [confirmResetSession, setConfirmResetSession] = useState(false);
   const [pendingLevelSwitch, setPendingLevelSwitch] = useState<{ gameID: string; levelID: string } | null>(null);
+  const [pendingGameControl, setPendingGameControl] = useState<"exit" | "restart" | null>(null);
   const [gameConfigOpen, setGameConfigOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsUnlocked, setSettingsUnlocked] = useState(false);
@@ -1194,26 +1228,53 @@ function MenuApp() {
   const [launchedGameID, setLaunchedGameID] = useState(menu.selectedGame);
   const [stoppedLevelGameID, setStoppedLevelGameID] = useState<string | null>(null);
   const [launchingGameID, setLaunchingGameID] = useState<string | null>(null);
+  const [pendingControlAction, setPendingControlAction] = useState<ControlGameAction | null>(null);
   const [activeLevelLaunch, setActiveLevelLaunch] = useState<ActiveLevelLaunch | null>(null);
   const [levelBrowserGameID, setLevelBrowserGameID] = useState<string | null>(null);
-  const [partyRun, setPartyRun] = useState<PartyRunState | null>(null);
+  const [partyRun, setPartyRun] = useState<PartyRunState | null>(() => {
+    const saved = loadPartyRun();
+    return saved?.sessionId && saved.sessionId === menu.sessionId ? saved : null;
+  });
   const [introUntil, setIntroUntil] = useState(0);
   const [countdownUntil, setCountdownUntil] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const processedFinishedSessions = useRef(new Set<string>());
+  const processedFinishedSessions = useRef(new Set<string>(menu.processedAttemptIDs));
   const processedChallengeCompletions = useRef(new Set<string>());
   const processedPartyFinishes = useRef(new Set<string>());
   const catalogRefreshInFlight = useRef(false);
+  const catalogRefreshDelayRef = useRef(platformCatalogRefreshMillis);
   const platformCatalogRef = useRef(platformCatalog);
   const syncedEngineSession = useRef("");
   const stoppedLevelGameIDRef = useRef<string | null>(null);
   const mirroredMenuVersion = useRef(0);
+  const mirroredMenuUpdatedUnixMillis = useRef(0);
   const venueSessionIDRef = useRef(menu.sessionId);
+  const launchInFlightRef = useRef(false);
+  const controlInFlightRef = useRef(false);
+  const levelSwitchInFlightRef = useRef(false);
+  const sessionCloseInFlightRef = useRef(false);
+  const teamTriggerRef = useRef<HTMLButtonElement>(null);
+  const teamCloseRef = useRef<HTMLButtonElement>(null);
+  const teamWasOpenRef = useRef(false);
 
   useEffect(() => {
     if (readOnlyMirror) return;
-    localStorage.setItem(storageKey, JSON.stringify(menu));
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(menu));
+    } catch {
+      // Storage is a convenience, never a reason for the kiosk to stop working.
+    }
   }, [menu, readOnlyMirror]);
+
+  useEffect(() => {
+    if (readOnlyMirror) return;
+    try {
+      if (partyRun) localStorage.setItem(partyRunStorageKey, JSON.stringify(partyRun));
+      else localStorage.removeItem(partyRunStorageKey);
+    } catch {
+      // The Party still runs in memory if kiosk storage is unavailable.
+    }
+  }, [partyRun, readOnlyMirror]);
 
   useEffect(() => {
     venueSessionIDRef.current = menu.sessionId;
@@ -1226,11 +1287,25 @@ function MenuApp() {
   }, [menu]);
 
   useEffect(() => {
+    for (const attemptID of menu.processedAttemptIDs) processedFinishedSessions.current.add(attemptID);
+  }, [menu.processedAttemptIDs]);
+
+  useEffect(() => {
+    const wasOpen = teamWasOpenRef.current;
+    teamWasOpenRef.current = teamOpen;
+    const frame = window.requestAnimationFrame(() => {
+      if (teamOpen) teamCloseRef.current?.focus({ preventScroll: true });
+      else if (wasOpen) teamTriggerRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [teamOpen]);
+
+  useEffect(() => {
     platformCatalogRef.current = platformCatalog;
   }, [platformCatalog]);
 
   const refreshPlatformCatalog = useCallback(async (options: { manual?: boolean } = {}) => {
-    if (catalogRefreshInFlight.current) return;
+    if (catalogRefreshInFlight.current) return false;
     catalogRefreshInFlight.current = true;
     if (options.manual || platformCatalogRef.current === null) setCatalogRefreshing(true);
     if (platformCatalogRef.current === null) setCatalogLoading(true);
@@ -1238,6 +1313,7 @@ function MenuApp() {
       const next = await fetchGameCatalog();
       cachePlatformCatalog(next);
       setPlatformCatalog(next);
+      catalogRefreshDelayRef.current = platformCatalogRefreshMillis;
       if (options.manual) {
         const selectedID = menuRef.current.selectedGame;
         const selected = next.find((entry) => entry.id === selectedID);
@@ -1249,8 +1325,11 @@ function MenuApp() {
           previous_revision: platformCatalogRef.current?.find((entry) => entry.id === selectedID)?.revision_hash,
         });
       }
+      return true;
     } catch {
+      catalogRefreshDelayRef.current = Math.min(platformCatalogRefreshMaxMillis, catalogRefreshDelayRef.current * 2);
       if (options.manual) setError("No se pudo actualizar el catálogo");
+      return false;
     } finally {
       catalogRefreshInFlight.current = false;
       setCatalogRefreshing(false);
@@ -1270,11 +1349,12 @@ function MenuApp() {
       setLaunchedGameID(menuGames[0].id);
     }
     setMenu((current) => {
-      const selected =
-        menuGames.find((game) => game.id === current.selectedGame)
-        || gamesForCategory(menuGames, current.category)[0]
-        || menuGames[0];
-      const category = menuCategoryForGame(selected, current.category);
+      const categoryGames = gamesForCategory(menuGames, current.category);
+      // An empty category is a valid catalog view. Keep it selected so the
+      // recovery surface remains stable instead of snapping back to the stale
+      // game that happened to be selected in the previous category.
+      if (categoryGames.length === 0) return current;
+      const selected = categoryGames.find((game) => game.id === current.selectedGame) || categoryGames[0];
       const difficulty = normalizedDifficultyForGame(selected, current.difficulty);
       const levelID = selected.levels?.length
         ? closestLevelIDForDifficulty(selected, current.selectedLevels[selected.id] || defaultLevelIDForDifficulty(selected, difficulty), difficulty)
@@ -1284,7 +1364,6 @@ function MenuApp() {
         : current.selectedLevels;
       if (
         current.selectedGame === selected.id
-        && current.category === category
         && current.difficulty === difficulty
         && current.selectedLevels === selectedLevels
       ) {
@@ -1292,7 +1371,6 @@ function MenuApp() {
       }
       return {
         ...current,
-        category,
         difficulty,
         selectedGame: selected.id,
         selectedLevels,
@@ -1343,12 +1421,17 @@ function MenuApp() {
   useEffect(() => {
     if (!readOnlyMirror) return;
     let cancelled = false;
+    let nextRefresh: number | undefined;
 
     function applyEnvelope(envelope: MenuStateEnvelope<MenuMirrorSnapshot>) {
-      if (cancelled || !envelope.snapshot || envelope.version <= mirroredMenuVersion.current) return;
+      if (cancelled || !envelope.snapshot) return;
+      const newerVersion = envelope.version > mirroredMenuVersion.current;
+      const newerSnapshot = envelope.updatedUnixMillis > mirroredMenuUpdatedUnixMillis.current;
+      if (!newerVersion && !newerSnapshot) return;
       mirroredMenuVersion.current = envelope.version;
+      mirroredMenuUpdatedUnixMillis.current = envelope.updatedUnixMillis;
       const snapshot = envelope.snapshot;
-      setMenu(snapshot.menu);
+      setMenu({ ...snapshot.menu, processedAttemptIDs: snapshot.menu.processedAttemptIDs || [] });
       setScreenMode(snapshot.screenMode);
       setLaunchedGameID(snapshot.launchedGameID);
       setLevelBrowserGameID(snapshot.levelBrowserGameID);
@@ -1365,60 +1448,66 @@ function MenuApp() {
 
     async function refreshMenuState() {
       try {
-        applyEnvelope(await fetchMenuState<MenuMirrorSnapshot>());
+        const envelope = await fetchMenuState<MenuMirrorSnapshot>();
+        if (!cancelled) {
+          setError((current) => current === "Sin conexión con el menú principal" ? "" : current);
+          applyEnvelope(envelope);
+        }
       } catch {
         if (!cancelled) setError("Sin conexión con el menú principal");
+      } finally {
+        if (!cancelled) nextRefresh = window.setTimeout(refreshMenuState, 700);
       }
     }
 
-    refreshMenuState();
-    const interval = window.setInterval(refreshMenuState, 700);
+    void refreshMenuState();
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      if (nextRefresh !== undefined) window.clearTimeout(nextRefresh);
     };
   }, [readOnlyMirror]);
 
   useEffect(() => {
     let cancelled = false;
+    let nextRefresh: number | undefined;
     async function refresh() {
       try {
         const next = await fetchEngineStatus();
         if (cancelled) return;
         setStatus(next);
-        setError("");
+        setConnectionState("connection-on");
       } catch {
-        // Never surface the raw browser error (e.g. "Failed to fetch") on the
-        // player-facing kiosk; show a friendly Spanish status instead.
-        if (!cancelled) setError("Sin conexión con el motor");
+        if (!cancelled) setConnectionState("connection-off");
+      } finally {
+        if (!cancelled) nextRefresh = window.setTimeout(refresh, 2500);
       }
     }
-    refresh();
-    const id = window.setInterval(refresh, 2500);
+    void refresh();
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      if (nextRefresh !== undefined) window.clearTimeout(nextRefresh);
     };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
+    let nextRefresh: number | undefined;
     async function refreshCatalog() {
       if (cancelled) return;
       await refreshPlatformCatalog();
+      if (!cancelled) nextRefresh = window.setTimeout(refreshCatalog, catalogRefreshDelayRef.current);
     }
-    const refreshOnDemand = () => { void refreshCatalog(); };
+    const refreshOnDemand = () => { void refreshPlatformCatalog(); };
     const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") void refreshCatalog();
+      if (document.visibilityState === "visible") void refreshPlatformCatalog();
     };
     void refreshCatalog();
-    const interval = window.setInterval(refreshCatalog, platformCatalogRefreshMillis);
     window.addEventListener("motion-levels:refresh-catalog", refreshOnDemand);
     window.addEventListener("focus", refreshOnDemand);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      if (nextRefresh !== undefined) window.clearTimeout(nextRefresh);
       window.removeEventListener("motion-levels:refresh-catalog", refreshOnDemand);
       window.removeEventListener("focus", refreshOnDemand);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
@@ -1432,12 +1521,23 @@ function MenuApp() {
   }, [screenMode]);
 
   useEffect(() => {
+    if (screenMode !== "browse" || !message) return;
+    const timeout = window.setTimeout(() => {
+      setMessage((current) => (current === message ? "" : current));
+    }, 4_000);
+    return () => window.clearTimeout(timeout);
+  }, [message, screenMode]);
+
+  useEffect(() => {
     if (!menu.sessionActive) return;
     const latestActivityUnix = Math.max(menu.sessionStartedUnix || 0, status?.lastPressureUnix || 0);
     if (!latestActivityUnix) return;
-    const idleMillis = Date.now() - latestActivityUnix * 1000;
-    if (idleMillis < noPressureSessionLimitMillis) return;
-    void closeSession("no_pressure_1h");
+    const idleMillis = Math.max(0, Date.now() - latestActivityUnix * 1000);
+    const remainingMillis = Math.max(0, noPressureSessionLimitMillis - idleMillis);
+    const timeout = window.setTimeout(() => {
+      void closeSession("no_pressure_1h");
+    }, remainingMillis);
+    return () => window.clearTimeout(timeout);
   }, [menu.sessionActive, menu.sessionStartedUnix, status?.lastPressureUnix]);
 
   useEffect(() => {
@@ -1556,7 +1656,8 @@ function MenuApp() {
   }, [screenMode]);
 
   useEffect(() => {
-    if (!status?.sessionId) return;
+    if (!status?.sessionId || !menu.sessionId) return;
+    if (status.venueSessionId !== menu.sessionId) return;
     const attempts: FinishedLevelAttempt[] = [...(status.finishedLevelAttempts || [])];
     if (status.phase === "finished") {
       const game = menuGames.find((candidate) => runtimeGameID(candidate) === status.currentGame || engineGameID(candidate) === status.currentGame);
@@ -1565,6 +1666,7 @@ function MenuApp() {
       if (game?.levels?.length && finishedLevel && !alreadyHasAttempt) {
         attempts.push({
           attemptId: `${status.sessionId}:${status.currentGame}:${finishedLevel}:${status.success ? "success" : "failed"}:${status.elapsedMillis || 0}`,
+          venueSessionId: status.venueSessionId,
           game: status.currentGame,
           level: finishedLevel,
           levelNumber: levelNumber(finishedLevel),
@@ -1579,14 +1681,20 @@ function MenuApp() {
 
     const pending = attempts
       .map((attempt) => ({ attempt, game: menuGames.find((candidate) => engineGameID(candidate) === attempt.game || runtimeGameID(candidate) === attempt.game) }))
-      .filter(({ attempt, game }) => game?.levels?.length && attempt.level && !processedFinishedSessions.current.has(attempt.attemptId));
+      .filter(({ attempt, game }) => (
+        game?.levels?.length
+        && attempt.level
+        && attempt.venueSessionId === menu.sessionId
+        && !processedFinishedSessions.current.has(attempt.attemptId)
+      ));
     if (pending.length === 0) return;
 
-    for (const { attempt } of pending) {
-      processedFinishedSessions.current.add(attempt.attemptId);
-    }
-    setMenu((current) =>
-      pending.reduce((next, { attempt, game }) => {
+    const processedIDs = pending.map(({ attempt }) => attempt.attemptId);
+    processedFinishedSessions.current = new Set(
+      [...processedFinishedSessions.current, ...processedIDs].slice(-maxProcessedAttemptIDs),
+    );
+    setMenu((current) => {
+      const nextMenu = pending.reduce((next, { attempt, game }) => {
         if (!game?.levels?.length) return next;
         const difficulty = difficultyFromEngine(attempt.difficulty, next.difficulty);
         const completion = challengeCompletionForAttempt(next, game, attempt.level, attempt.success, difficulty, attempt.elapsedMillis || 0);
@@ -1608,9 +1716,14 @@ function MenuApp() {
           });
         }
         return recordLevelCompletion(next, game, attempt.level, attempt.success, difficulty, attempt.elapsedMillis || 0);
-      }, current),
-    );
-  }, [status, menuGames]);
+      }, current);
+      const processedAttemptIDs = [...new Set([...nextMenu.processedAttemptIDs, ...processedIDs])].slice(-maxProcessedAttemptIDs);
+      return processedAttemptIDs.length === nextMenu.processedAttemptIDs.length
+        && processedAttemptIDs.every((value, index) => value === nextMenu.processedAttemptIDs[index])
+        ? nextMenu
+        : { ...nextMenu, processedAttemptIDs };
+    });
+  }, [status, menu.sessionId, menuGames]);
 
   useEffect(() => {
     if (!partyRun || !status || status.phase !== "finished") return;
@@ -1667,13 +1780,14 @@ function MenuApp() {
       else if (confirmRemove !== null) setConfirmRemove(null);
       else if (confirmResetSession) setConfirmResetSession(false);
       else if (pendingLevelSwitch) setPendingLevelSwitch(null);
+      else if (pendingGameControl) setPendingGameControl(null);
       else if (gameConfigOpen) setGameConfigOpen(false);
       else if (settingsOpen) setSettingsOpen(false);
       else if (teamOpen) setTeamOpen(false);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [keyboardTarget, colorPickerFor, confirmRemove, confirmResetSession, pendingLevelSwitch, gameConfigOpen, settingsOpen, teamOpen]);
+  }, [keyboardTarget, colorPickerFor, confirmRemove, confirmResetSession, pendingLevelSwitch, pendingGameControl, gameConfigOpen, settingsOpen, teamOpen]);
 
   const availableGames = useMemo(() => new Set((status?.catalog || []).map((entry) => entry.game)), [status]);
   const platformEnabledGames = useMemo(() => (
@@ -1682,29 +1796,31 @@ function MenuApp() {
       .flatMap((entry) => [entry.id, platformEntryEngineGame(entry)]))
   ), [platformCatalog]);
   const isGameLaunchable = useCallback((game: GameCard) => {
-    if (!status) return false;
+    if (!status || connectionState !== "connection-on") return false;
     if (catalogLoading && isPlatformLaunchableSource(game) && !canLaunchWhileCatalogRefreshes(game)) return false;
     if (!partyCatalogIsComplete(game, menuGames)) return false;
     const launchGame = partyLaunchGame(game, menuGames);
     if (!launchGame) return false;
     if (isScreensaverCard(launchGame)) return true;
+    if (!isAmbientCard(launchGame) && status.pressureStreamConnected === false) return false;
     if (availableGames.has(runtimeGameID(launchGame)) || availableGames.has(engineGameID(launchGame))) return true;
     if (game.sourceKind === "animation" && engineGameID(game).startsWith("animation-")) return true;
     return isPlatformLaunchableSource(game) && (
       platformEnabledGames.has(game.id) || platformEnabledGames.has(engineGameID(game))
     );
-  }, [availableGames, catalogLoading, menuGames, platformEnabledGames, status]);
+  }, [availableGames, catalogLoading, connectionState, menuGames, platformEnabledGames, status]);
   const activePlayers = menu.players.filter((player) => player.active);
   const enginePlayers = statusPlayersForDisplay(status);
   const activeCategory = categories.find((category) => category.id === menu.category) || categories[0];
   const levelsUnlocked = unlockLevelsEnabled(menu);
+  const visibleGames = gamesForCategory(menuGames, menu.category);
   const selectedGame = menuGames.find((game) => game.id === menu.selectedGame) || menuGames[0] || games[0];
+  const categorySelectionValid = visibleGames.some((game) => game.id === selectedGame.id);
   const launchedGame = menuGames.find((game) => game.id === launchedGameID) || selectedGame;
   const levelBrowserGame = menuGames.find((game) => game.id === levelBrowserGameID && gameBelongsToCategory(game, menu.category) && game.levels?.length) || null;
   const browsingLevels = Boolean(levelBrowserGame);
   const levelBrowserDifficulty = levelBrowserGame ? normalizedDifficultyForGame(levelBrowserGame, menu.difficulty) : menu.difficulty;
   const levelBrowserLevels = levelBrowserGame ? levelsForDifficulty(levelBrowserGame, levelBrowserDifficulty) : [];
-  const visibleGames = gamesForCategory(menuGames, menu.category);
   const selectedSupportedDifficulties = usesDifficulty(selectedGame) ? selectableDifficultiesForGame(selectedGame) : supportedDifficultiesFor(selectedGame);
   const effectiveDifficulty = closestSupportedDifficulty(menu.difficulty, selectedSupportedDifficulties);
   const selectedVisibleLevels = levelsForDifficulty(selectedGame, effectiveDifficulty);
@@ -1723,6 +1839,10 @@ function MenuApp() {
     : "0/0";
   const launchedLevelMode = activeLevelModeFor(launchedGame, menu, status);
   const selectedPartyMiniGames = isPartyCard(selectedGame) ? selectedGame.partyMiniGames || [] : [];
+  const selectedGameActive = Boolean(status) && (
+    status?.currentGame === runtimeGameID(selectedGame)
+    || status?.currentGame === engineGameID(selectedGame)
+  );
   const levelDetail = Boolean(selectedGame.levels?.length && selectedLevel);
   const gameActive = screenMode === "game";
   const launchedPlayers = rosterForGame(launchedGame, activePlayers);
@@ -1743,12 +1863,16 @@ function MenuApp() {
   const pendingLevelSwitchLevel = pendingLevelSwitchGame?.levels?.find((level) => level.id === pendingLevelSwitch?.levelID) || null;
   const pickerPlayer = menu.players.find((player) => player.id === colorPickerFor) || null;
   const removePlayer = menu.players.find((player) => player.id === confirmRemove) || null;
-  const connectionState = error ? "connection-off" : status ? "connection-on" : "connection-pending";
   const menuPlayerCount = activePlayers.length || 1;
   const headerPlayerCount = headerPlayers.length || 1;
   const playerCountLabel = `${headerPlayerCount} ${headerPlayerCount === 1 ? "jugador" : "jugadores"}`;
   const selectedGamePlayerRangeLabel = playerRangeLabel(selectedGame);
   const rosterIssue = useMemo(() => gameRosterIssue(selectedGame, menu.players), [selectedGame, menu.players]);
+  const floorReady = status?.pressureStreamConnected !== false;
+  const systemStatusClass = connectionState === "connection-on" && !floorReady ? "floor-off" : connectionState;
+  const connectionLabel = connectionState === "connection-on"
+    ? floorReady ? "Sistema listo" : "Suelo desconectado"
+    : connectionState === "connection-off" ? "Reconectando" : "Conectando";
 
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", colors.blue);
@@ -1774,6 +1898,7 @@ function MenuApp() {
   }, [menu.difficulty, menu.selectedGame, menu.selectedLevels, menuGames, selectedGame]);
 
   function addPlayer() {
+    setError("");
     const previousPlayerCount = activePlayers.length;
     const nextPlayers = menu.players.length < maxPlayers
       ? [
@@ -1821,6 +1946,7 @@ function MenuApp() {
   }
 
   function updatePlayer(id: number, patch: Partial<Player>) {
+    setError("");
     const requestedPatch = typeof patch.name === "string" ? { ...patch, name: cleanNameWhitespace(patch.name, maxPlayerNameLength) } : patch;
     const currentPlayer = menu.players.find((player) => player.id === id);
     const nextPlayers = currentPlayer
@@ -1866,6 +1992,7 @@ function MenuApp() {
   }
 
   function deletePlayer(id: number) {
+    setError("");
     const nextPlayers = menu.players.filter((player) => player.id !== id);
     captureMenuEvent("player_removed", {
       player_count: menu.players.filter((player) => player.active).length,
@@ -1915,6 +2042,7 @@ function MenuApp() {
       freeRuns: {},
       nextPlayerId: Math.max(0, ...nextPlayers.map((player) => player.id)),
       narrationArmed: {},
+      processedAttemptIDs: [],
     }));
     if (remoteRequest) {
       setRemoteSessionRequest(null);
@@ -1930,9 +2058,25 @@ function MenuApp() {
     setConfirmRemove(null);
     setConfirmResetSession(false);
     setPendingLevelSwitch(null);
+    setPartyRun(null);
   }
 
   async function closeSession(reason = "manual") {
+    if (sessionCloseInFlightRef.current) return;
+    sessionCloseInFlightRef.current = true;
+    setConfirmResetSession(false);
+    setError("");
+    if (status?.currentGame && !animationIsIdleLoop(status.currentGame, status.phase)) {
+      setMessage("Cerrando sesión");
+      try {
+        setStatus(await controlGame("exit"));
+      } catch (err) {
+        setMessage("");
+        setError(friendlyRequestError(err, "No se pudo detener el juego. La sesión sigue abierta para que puedas reintentarlo."));
+        sessionCloseInFlightRef.current = false;
+        return;
+      }
+    }
     const defaultGame = menuGames[0] || games[0];
     const defaultSelectedLevels = defaultGame.levels?.length ? { [defaultGame.id]: defaultLevelID(defaultGame) } : {};
     if (menu.sessionId) {
@@ -1968,24 +2112,20 @@ function MenuApp() {
       freeRuns: {},
       nextPlayerId: 1,
       narrationArmed: {},
+      processedAttemptIDs: [],
     }));
     setKeyboardTarget(null);
     setColorPickerFor(null);
     setConfirmRemove(null);
     setConfirmResetSession(false);
     setPendingLevelSwitch(null);
+    setPartyRun(null);
     setTeamOpen(false);
     setLevelBrowserGameID(null);
     setScreenMode("browse");
     setMessage("");
     setError("");
-    if (status?.currentGame && !animationIsIdleLoop(status.currentGame, status.phase)) {
-      try {
-        setStatus(await controlGame("exit"));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "No se pudo cerrar la sesión");
-      }
-    }
+    sessionCloseInFlightRef.current = false;
   }
 
   function confirmRemoteSessionStart() {
@@ -2023,9 +2163,7 @@ function MenuApp() {
     setSettingsOpen(true);
     setSettingsUnlocked(false);
     setSettingsPin("");
-    setSettingsError("");
-    setSettingsPinFailures(0);
-    setSettingsLockoutUntil(0);
+    setSettingsError(Date.now() < settingsLockoutUntil ? "Demasiados intentos. Espera unos segundos." : "");
   }
 
   function closeSettings() {
@@ -2033,8 +2171,6 @@ function MenuApp() {
     setSettingsUnlocked(false);
     setSettingsPin("");
     setSettingsError("");
-    setSettingsPinFailures(0);
-    setSettingsLockoutUntil(0);
   }
 
   function setOperatorUnlockLevels(enabled: boolean) {
@@ -2151,6 +2287,8 @@ function MenuApp() {
       };
     });
     setLevelBrowserGameID(game?.levels?.length ? game.id : null);
+    setError("");
+    setMessage("");
     if (game && isAmbientCard(game) && !game.disabled && isGameLaunchable(game)) {
       void launch(game.id);
     }
@@ -2439,7 +2577,8 @@ function MenuApp() {
     });
   }
 
-  async function launch(gameID = selectedGame.id, options: { difficulty?: DifficultyID; levelID?: string; levelMode?: LevelMode; partyIndex?: number; partyScore?: number; resetChallengeRun?: boolean } = {}) {
+  async function launch(gameID = selectedGame.id, options: { difficulty?: DifficultyID; levelID?: string; levelMode?: LevelMode; partyIndex?: number; partyScore?: number; resetChallengeRun?: boolean } = {}): Promise<boolean> {
+    if (launchInFlightRef.current) return false;
     const game = menuGames.find((candidate) => candidate.id === gameID);
     if (!game || game.disabled || !isGameLaunchable(game)) {
       captureMenuEvent("start_blocked", {
@@ -2447,7 +2586,7 @@ function MenuApp() {
         game: game?.id || gameID,
         reason: !game ? "missing" : game.disabled ? "disabled" : "engine_unavailable",
       });
-      return;
+      return false;
     }
     let nextMenu = ensurePlayers({ ...menu, selectedGame: game.id });
     const partyIndex = isPartyCard(game) ? Math.max(0, Math.min((game.partyMiniGames?.length || 1) - 1, options.partyIndex || 0)) : 0;
@@ -2461,7 +2600,7 @@ function MenuApp() {
       setPartyRun(null);
       setMessage("");
       setError("Este juego del Party ya no está disponible");
-      return;
+      return false;
     }
     const partyFirstMiniGame = isPartyCard(game) ? game.partyMiniGames?.[partyIndex] : undefined;
     const levelOverride = options.levelID && launchGame.levels?.some((level) => level.id === options.levelID) ? options.levelID : undefined;
@@ -2522,7 +2661,7 @@ function MenuApp() {
       setMessage("");
       setError(nextRosterIssue.message);
       setTeamOpen(true);
-      return;
+      return false;
     }
     const playNarration = narrationArmedFor(game, nextMenu);
     const showCountdownOverlay = launchGame.countdownFloorOverlay === true;
@@ -2585,8 +2724,9 @@ function MenuApp() {
       setMenu(nextMenu);
       setMessage("");
       setError("Nivel bloqueado");
-      return;
+      return false;
     }
+    launchInFlightRef.current = true;
     setMenu(nextMenu);
     setMessage(isPartyCard(game) && game.partyMiniGames?.length ? `Party ${partyIndex + 1}/${game.partyMiniGames.length}` : "Iniciando");
     setError("");
@@ -2674,14 +2814,18 @@ function MenuApp() {
       setTeamOpen(false);
       setKeyboardTarget(null);
       setScreenMode(isAmbientCard(game) ? "browse" : "game");
+      return true;
     } catch (err) {
       captureMenuEvent("start_failed", {
         engine_game: engineGameID(launchGame),
         error: err instanceof Error ? err.message : "unknown",
         game: game.id,
       });
-      setError(err instanceof Error ? err.message : "No se pudo iniciar el juego");
+      setMessage("");
+      setError(friendlyRequestError(err, "No se pudo iniciar el juego. Inténtalo de nuevo."));
+      return false;
     } finally {
+      launchInFlightRef.current = false;
       setLaunchingGameID((current) => (current === game.id ? null : current));
     }
   }
@@ -2694,8 +2838,8 @@ function MenuApp() {
       game: launchedGame.id,
       level: status?.level || selectedLevelFor(launchedGame) || undefined,
     });
-    await launch(launchedGame.id, { resetChallengeRun: true });
-    setMessage("Reiniciando");
+    const restarted = await launch(launchedGame.id, { resetChallengeRun: true });
+    if (restarted) setMessage("Reiniciando");
   }
 
   function requestActiveLevelSwitch(levelID: string) {
@@ -2716,8 +2860,11 @@ function MenuApp() {
   }
 
   async function switchLaunchedLevel(game: GameCard, levelID: string, stopCurrent: boolean, mode = levelModeFor(game, menu)) {
+    if (levelSwitchInFlightRef.current || controlInFlightRef.current || launchInFlightRef.current) return;
     const level = game.levels?.find((candidate) => candidate.id === levelID);
     if (!level || !isLevelUnlockedForMode(game, levelID, menu, mode)) return;
+    levelSwitchInFlightRef.current = true;
+    if (stopCurrent) controlInFlightRef.current = true;
     const difficulty = activeDifficultyForGame(game, menu);
     setPendingLevelSwitch(null);
     setActiveLevelLaunch({ gameID: game.id, levelID, phase: stopCurrent ? "stopping" : "loading" });
@@ -2743,15 +2890,30 @@ function MenuApp() {
       setMessage("Cambiando nivel");
       await launch(game.id, { levelID, levelMode: mode });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo cambiar de nivel");
+      if (stopCurrent) {
+        stoppedLevelGameIDRef.current = null;
+        setStoppedLevelGameID(null);
+      }
+      setMessage("");
+      setError(friendlyRequestError(err, "No se pudo cambiar de nivel. Inténtalo de nuevo."));
     } finally {
+      levelSwitchInFlightRef.current = false;
+      if (stopCurrent) controlInFlightRef.current = false;
       setActiveLevelLaunch((current) => (
         current?.gameID === game.id && current.levelID === levelID ? null : current
       ));
     }
   }
 
-  async function sendGameControl(action: "pause" | "resume" | "restart" | "exit" | "narration" | "mute" | "unmute" | "toggle_mute") {
+  async function sendGameControl(action: ControlGameAction) {
+    if (controlInFlightRef.current) return;
+    if (connectionState !== "connection-on") {
+      setMessage("");
+      setError("La sala está reconectando. Espera un momento e inténtalo de nuevo.");
+      return;
+    }
+    controlInFlightRef.current = true;
+    setPendingControlAction(action);
     setError("");
     const activeMode = activeLevelModeFor(launchedGame, menu, status);
     const stopLevelOnly = action === "exit" && activeMode === "free" && isLevelRuntimeActive(status, launchedGame);
@@ -2798,7 +2960,15 @@ function MenuApp() {
         setMessage(action === "pause" ? "Pausado" : "En curso");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo controlar el juego");
+      if (stopLevelOnly) {
+        stoppedLevelGameIDRef.current = null;
+        setStoppedLevelGameID(null);
+      }
+      setMessage("");
+      setError(friendlyRequestError(err, "No se pudo completar la acción. Inténtalo de nuevo."));
+    } finally {
+      controlInFlightRef.current = false;
+      setPendingControlAction(null);
     }
   }
 
@@ -2822,7 +2992,6 @@ function MenuApp() {
 
   const introActive = screenMode === "game" && introUntil > nowMs;
   const countdownValue = screenMode === "game" && !introActive ? Math.max(0, Math.ceil((countdownUntil - nowMs) / 1000)) : 0;
-  const launchIssue = !isAmbientCard(selectedGame) ? rosterIssue?.message || "" : "";
   function enterBrowserFullscreen() {
     const fullscreenDocument = document as Document & { webkitFullscreenElement?: Element | null };
     if (document.fullscreenElement || fullscreenDocument.webkitFullscreenElement) return;
@@ -2839,6 +3008,7 @@ function MenuApp() {
     return (
       <WelcomeScreen
         connectionState={connectionState}
+        floorReady={floorReady}
         previewGames={menuGames}
         readOnly={readOnlyMirror}
         remoteSessionRequest={remoteSessionRequest}
@@ -2851,8 +3021,8 @@ function MenuApp() {
   }
 
   return (
-    <main className={`app ${connectionState} ${readOnlyMirror ? "read-only-mirror" : ""} ${keyboardTarget ? `keyboard-open keyboard-${keyboardTarget.kind}` : ""} ${screenMode === "game" ? "playing" : ""}`}>
-      <header className="topbar">
+    <main className={`app ${systemStatusClass} ${readOnlyMirror ? "read-only-mirror" : ""} ${keyboardTarget ? `keyboard-open keyboard-${keyboardTarget.kind}` : ""} ${screenMode === "game" ? "playing" : ""}`} inert={readOnlyMirror}>
+      <header className="topbar" inert={teamOpen}>
         <div className="brand">
           <button className="brand-mark" type="button" aria-label="Pantalla completa" title="Pantalla completa" onClick={enterBrowserFullscreen} />
           <div className="brand-copy">
@@ -2903,17 +3073,23 @@ function MenuApp() {
           ))}
         </nav>
         <div className="status-capsules">
+          <span className={`system-status ${systemStatusClass}`} role="status" aria-live="polite">
+            <span className="system-status-dot" aria-hidden="true" />
+            {connectionLabel}
+          </span>
           <button
             className={`capsule audio-btn ${status?.audioMuted ? "muted" : ""}`}
             type="button"
             onClick={() => sendGameControl("toggle_mute")}
-            disabled={!status?.audioEnabled}
-            aria-label={status?.audioMuted ? "Unmute" : "Mute"}
-            title={status?.audioMuted ? "Unmute" : "Mute"}
+            disabled={!status?.audioEnabled || connectionState !== "connection-on" || Boolean(pendingControlAction)}
+            aria-busy={pendingControlAction === "toggle_mute" || undefined}
+            aria-label={status?.audioMuted ? "Activar audio" : "Silenciar audio"}
+            title={status?.audioMuted ? "Activar audio" : "Silenciar audio"}
           >
             {status?.audioMuted ? <VolumeMutedIcon /> : <VolumeIcon />}
           </button>
           <button
+            ref={teamTriggerRef}
             className={`capsule equipo-btn ${rosterIssue ? "invalid" : ""}`}
             type="button"
             onClick={() => {
@@ -2925,6 +3101,8 @@ function MenuApp() {
               setTeamOpen(true);
             }}
             disabled={gameActive}
+            aria-haspopup="dialog"
+            aria-expanded={teamOpen}
             aria-label={gameActive ? "Equipo no disponible durante la partida" : "Abrir equipo"}
             title={gameActive ? "Sal de la partida para cambiar el equipo" : undefined}
           >
@@ -2940,7 +3118,8 @@ function MenuApp() {
             type="button"
             onClick={openSettings}
             aria-label="Ajustes"
-            aria-pressed={levelsUnlocked}
+            aria-haspopup="dialog"
+            aria-expanded={settingsOpen}
             title="Ajustes"
           >
             <GearIcon />
@@ -2966,7 +3145,11 @@ function MenuApp() {
           ambient={isAmbientCard(launchedGame)}
           introActive={introActive}
           countdownValue={countdownValue}
-          error={error}
+          error={!floorReady && !isAmbientCard(launchedGame)
+            ? "El suelo no está enviando pulsaciones. La partida queda protegida mientras reconectamos."
+            : connectionState === "connection-off" ? "Conexión con el motor interrumpida. Reintentando automáticamente." : error}
+          busy={connectionState !== "connection-on" || Boolean(launchingGameID || pendingControlAction || activeLevelLaunch)}
+          pendingControlAction={pendingControlAction}
           onDifficultyChange={(difficulty) => {
             captureMenuEvent("difficulty_changed", {
               difficulty,
@@ -2989,23 +3172,36 @@ function MenuApp() {
             if (nextLevel) requestActiveLevelSwitch(nextLevel.id);
           }}
           onPauseToggle={() => sendGameControl(status?.paused ? "resume" : "pause")}
-          onRestart={() => restartLaunchedGame()}
+          onRestart={() => setPendingGameControl("restart")}
           narrationSupported={supportsNarration(launchedGame)}
-          narrationArmed={narrationArmedFor(launchedGame)}
-          onNarrationToggle={() => setNarrationArmed(launchedGame, !narrationArmedFor(launchedGame))}
+          onNarration={() => sendGameControl("narration")}
           exitLabel={launchedLevelActive && launchedLevelMode === "free" ? "Terminar nivel" : "Salir del juego"}
-          onExit={() => sendGameControl("exit")}
+          onExit={() => setPendingGameControl("exit")}
         />
       ) : (
       <section className="layout">
+        {error || message ? (
+          <div className={`kiosk-toast ${error ? "error" : ""}`} role="status" aria-live="polite">
+            <span aria-hidden="true">{error ? "!" : "✓"}</span>
+            {error || message}
+          </div>
+        ) : null}
         <div className={`drawer-backdrop ${teamOpen ? "open" : ""}`} onClick={() => setTeamOpen(false)} />
-        <aside className={`panel team-panel team-drawer ${teamOpen ? "open" : ""}`} aria-label="Configuración del equipo" aria-hidden={!teamOpen}>
+        <aside
+          className={`panel team-panel team-drawer ${teamOpen ? "open" : ""}`}
+          role="dialog"
+          aria-modal={teamOpen || undefined}
+          aria-label="Configuración del equipo"
+          aria-hidden={!teamOpen}
+          inert={!teamOpen}
+          onKeyDown={(event) => trapKioskFocus(event, () => setTeamOpen(false))}
+        >
           <div className="drawer-head">
             <div>
               <strong>Equipo</strong>
               <span>{playerCountLabel}</span>
             </div>
-            <button className="icon-button" type="button" aria-label="Cerrar equipo" onClick={() => setTeamOpen(false)}>
+            <button ref={teamCloseRef} className="icon-button" type="button" aria-label="Cerrar equipo" onClick={() => setTeamOpen(false)}>
               <CloseIcon />
             </button>
           </div>
@@ -3040,7 +3236,7 @@ function MenuApp() {
               const invalidPlayer = Boolean(rosterIssue?.playerIds.has(player.id));
               const editingPlayer = keyboardTarget?.kind === "player" && keyboardTarget.id === player.id;
               return (
-                <article key={player.id} className={`player ${player.active ? "" : "off"} ${invalidPlayer ? "invalid" : ""} ${editingPlayer ? "editing" : ""}`} style={{ "--pc": player.color } as CSSProperties}>
+                <article key={player.id} className={`player ph-no-capture ${player.active ? "" : "off"} ${invalidPlayer ? "invalid" : ""} ${editingPlayer ? "editing" : ""}`} style={{ "--pc": player.color } as CSSProperties}>
                   <button className="avatar" type="button" onClick={() => setColorPickerFor(player.id)} aria-label={`Elegir color de ${playerLabel(menu.players, player)}`}>
                     {avatarLabel(menu.players, player)}
                   </button>
@@ -3048,7 +3244,7 @@ function MenuApp() {
                     className="ph-no-capture"
                     value={player.name}
                     maxLength={maxPlayerNameLength}
-                    aria-label="Nombre del jugador"
+                    aria-label={`Nombre del jugador ${index + 1}`}
                     autoComplete="off"
                     spellCheck={false}
                     inputMode="none"
@@ -3093,11 +3289,11 @@ function MenuApp() {
             type="button"
             onClick={() => setSessionRecordingEnabled(!menu.recordingEnabled)}
             aria-pressed={menu.recordingEnabled}
-            title={menu.recordingEnabled ? "Grabación de cámara activada" : "Grabación de cámara desactivada"}
+            title={menu.recordingEnabled ? "Grabación de sesión activada" : "Grabación de sesión desactivada"}
           >
             <span aria-hidden="true" />
-            <b>REC</b>
-            <small>{menu.recordingEnabled ? "on" : "off"}</small>
+            <b>Grabación de sesión</b>
+            <small>{menu.recordingEnabled ? "Activada" : "Desactivada"}</small>
           </button>
 
           <button className="btn primary drawer-done" type="button" onClick={() => setTeamOpen(false)}>
@@ -3106,7 +3302,7 @@ function MenuApp() {
           </button>
         </aside>
 
-        <section className="main-panel">
+        <section className="main-panel" inert={teamOpen}>
           <section className="browse-content">
             <section className="game-grid-panel" aria-labelledby="games-heading">
               <div className="section-head">
@@ -3123,7 +3319,7 @@ function MenuApp() {
                     </button>
                   </div>
                 ) : (
-                  <span className="grid-count">{visibleGames.length} modos</span>
+                  <span className="grid-count">{visibleGames.length} {visibleGames.length === 1 ? "modo" : "modos"}</span>
                 )}
               </div>
               {browsingLevels && levelBrowserGame?.levels?.length ? (
@@ -3132,7 +3328,27 @@ function MenuApp() {
                 </section>
               ) : (
                 <section key={menu.category} className={`games game-grid count-${Math.min(visibleGames.length, 5)}`} aria-label="Juegos">
-                  {visibleGames.map((game, index) => {
+                  {visibleGames.length === 0 ? (
+                    <div className="empty-category" role="status">
+                      <span className="empty-category-icon" aria-hidden="true"><GamepadIcon /></span>
+                      <strong>Aún no hay juegos aquí</strong>
+                      <p>El catálogo puede estar actualizándose. Prueba otra categoría o vuelve a sincronizar.</p>
+                      <div className="empty-category-actions">
+                        <button className="btn" type="button" onClick={() => {
+                          const featured = gamesForCategory(menuGames, "featured")[0] || menuGames[0];
+                          if (!featured) return;
+                          setMenu((current) => ({ ...current, category: "featured", selectedGame: featured.id }));
+                        }}>
+                          <ArrowLeftIcon />
+                          Ir a destacados
+                        </button>
+                        <button className="btn primary" type="button" disabled={catalogRefreshing} onClick={() => refreshPlatformCatalog({ manual: true })}>
+                          <RefreshIcon />
+                          {catalogRefreshing ? "Actualizando" : "Actualizar catálogo"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : visibleGames.map((game, index) => {
                     const future = Boolean(game.disabled);
                     const engineAvailable = isGameLaunchable(game);
                     const selected = menu.selectedGame === game.id;
@@ -3166,7 +3382,9 @@ function MenuApp() {
               )}
             </section>
 
-            <aside className={`panel detail-panel ${levelDetail ? "level-detail-panel" : ""}`} style={{ "--c": selectedGame.color, "--crgb": hexToRGB(selectedGame.color) } as CSSProperties} aria-label="Juego seleccionado">
+            <aside key={`${menu.category}:${categorySelectionValid ? selectedGame.id : "empty"}`} className={`panel detail-panel ${levelDetail ? "level-detail-panel" : ""} ${categorySelectionValid ? "" : "empty-detail-panel"}`} style={{ "--c": selectedGame.color, "--crgb": hexToRGB(selectedGame.color) } as CSSProperties} aria-label={categorySelectionValid ? "Juego seleccionado" : "Categoría vacía"}>
+              {categorySelectionValid ? (
+                <>
               <div className="detail-preview">
                 {isPartyCard(selectedGame) ? renderPartyPreview(selectedGame, { rich: true }) : (
                   <Preview
@@ -3270,14 +3488,29 @@ function MenuApp() {
                     <h2>{selectedGame.label}</h2>
                     <p>{selectedGame.description}</p>
                     <section className="season-facts" aria-label="Resumen de partida">
-                      <div>
-                        <span>{isIndividualCard(selectedGame) ? "Jugador" : "Equipo"}</span>
-                        <strong>{selectedGamePlayerRangeLabel}</strong>
-                      </div>
-                      <div>
-                        <span>Mejor</span>
-                        <strong>Sin superar</strong>
-                      </div>
+                      {isAmbientCard(selectedGame) ? (
+                        <>
+                          <div>
+                            <span>Estado</span>
+                            <strong>{selectedGameActive ? "Activo" : "Listo"}</strong>
+                          </div>
+                          <div>
+                            <span>Rotación</span>
+                            <strong>Automática</strong>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <span>{isIndividualCard(selectedGame) ? "Jugador" : "Equipo"}</span>
+                            <strong>{selectedGamePlayerRangeLabel}</strong>
+                          </div>
+                          <div>
+                            <span>Mejor</span>
+                            <strong>Sin superar</strong>
+                          </div>
+                        </>
+                      )}
                     </section>
                     {isPartyCard(selectedGame) ? (
                       <div className="detail-rules">
@@ -3311,10 +3544,20 @@ function MenuApp() {
                   </>
                 )}
               </div>
+                </>
+              ) : (
+                <div className="empty-detail">
+                  <span className="micro">Sin selección</span>
+                  <strong>Explora otra categoría</strong>
+                  <p>Cuando haya nuevos modos disponibles aparecerán aquí automáticamente.</p>
+                </div>
+              )}
             </aside>
           </section>
 
           <section className="panel launch-bar" aria-label="Resumen de inicio">
+            {categorySelectionValid ? (
+              <>
             {usesDifficulty(selectedGame) ? (
               <div className="launch-difficulty-deck">
                 <div className="launch-deck-label">
@@ -3368,17 +3611,22 @@ function MenuApp() {
               const rosterBlocked = !isAmbientCard(selectedGame) && Boolean(rosterIssue);
               const levelBlocked = Boolean(selectedGame.levels?.length && !isLevelUnlocked(selectedGame, selectedLevelFor(selectedGame), menu));
               const catalogBlocked = catalogLoading && isPlatformLaunchableSource(selectedGame) && !canLaunchWhileCatalogRefreshes(selectedGame);
+              const floorBlocked = !isAmbientCard(selectedGame) && !isScreensaverCard(selectedGame) && status?.pressureStreamConnected === false;
               const launching = launchingGameID === selectedGame.id;
-              const ambientActive = isAmbientCard(selectedGame) && Boolean(status) && (
-                status?.currentGame === runtimeGameID(selectedGame)
-                || status?.currentGame === engineGameID(selectedGame)
-              );
+              const ambientActive = isAmbientCard(selectedGame) && selectedGameActive;
               const blocked = launching || catalogBlocked || selectedGame.disabled || !engineAvailable || rosterBlocked || levelBlocked;
               const rosterAction = rosterBlocked && !launching && !catalogBlocked && !selectedGame.disabled && !levelBlocked;
               const launchDisabled = (blocked && !rosterAction) || ambientActive;
               const readyLabel = isAmbientCard(selectedGame) ? (ambientActive ? "Ambiente activo" : "Activar ambiente") : "Empezar partida";
-              const unavailableByEngine = !engineAvailable || Boolean(error);
-              const blockedLabel = catalogBlocked ? "Sincronizando" : levelBlocked ? "Nivel bloqueado" : rosterBlocked ? "Jugadores" : selectedGame.disabled ? "Próximamente" : unavailableByEngine ? readyLabel : "No disponible";
+              const blockedLabel = catalogBlocked
+                ? "Sincronizando"
+                : levelBlocked ? "Nivel bloqueado"
+                  : rosterBlocked ? "Jugadores"
+                    : selectedGame.disabled ? "Próximamente"
+                      : connectionState === "connection-off" ? "Reconectando"
+                        : connectionState === "connection-pending" ? "Preparando sala"
+                          : floorBlocked ? "Suelo sin conexión"
+                          : !engineAvailable ? "No disponible" : readyLabel;
               const loadingVisual = launching || catalogBlocked;
               const handleLaunchAction = () => {
                 if (rosterAction) {
@@ -3448,6 +3696,23 @@ function MenuApp() {
                 </div>
               );
             })()}
+              </>
+            ) : (
+              <div className="empty-launch">
+                <div>
+                  <span className="micro">Catálogo</span>
+                  <strong>No hay ningún juego seleccionado</strong>
+                </div>
+                <button className="btn primary" type="button" onClick={() => {
+                  const featured = gamesForCategory(menuGames, "featured")[0] || menuGames[0];
+                  if (!featured) return;
+                  setMenu((current) => ({ ...current, category: "featured", selectedGame: featured.id }));
+                }}>
+                  <ArrowLeftIcon />
+                  Volver a destacados
+                </button>
+              </div>
+            )}
           </section>
         </section>
       </section>
@@ -3484,6 +3749,26 @@ function MenuApp() {
           cancelLabel="Cancelar"
           onConfirm={() => void closeSession("manual")}
           onCancel={() => setConfirmResetSession(false)}
+        />
+      ) : null}
+
+      {pendingGameControl ? (
+        <ConfirmDialog
+          title={pendingGameControl === "restart" ? "¿Reiniciar partida?" : launchedLevelActive && launchedLevelMode === "free" ? "¿Terminar nivel?" : "¿Salir del juego?"}
+          body={pendingGameControl === "restart"
+            ? "El progreso de la partida actual empezará de nuevo."
+            : launchedLevelActive && launchedLevelMode === "free"
+              ? "Se detendrá este nivel y podrás elegir otro."
+              : "La partida actual terminará y volverás al menú."}
+          confirmLabel={pendingGameControl === "restart" ? "Reiniciar" : launchedLevelActive && launchedLevelMode === "free" ? "Terminar nivel" : "Salir"}
+          cancelLabel="Seguir jugando"
+          onConfirm={() => {
+            const action = pendingGameControl;
+            setPendingGameControl(null);
+            if (action === "restart") void restartLaunchedGame();
+            else void sendGameControl("exit");
+          }}
+          onCancel={() => setPendingGameControl(null)}
         />
       ) : null}
 
@@ -3524,6 +3809,10 @@ function MenuApp() {
           lockedOut={Date.now() < settingsLockoutUntil}
           levelsUnlocked={levelsUnlocked}
           envUnlockLevels={envUnlockLevels}
+          connectionLabel={connectionLabel}
+          floorLabel={floorReady ? "Conectado" : "Sin señal"}
+          audioLabel={status?.audioEnabled ? status.audioMuted ? "Silenciado" : "Activo" : "No disponible"}
+          catalogLabel={catalogRefreshing ? "Actualizando" : `${menuGames.length} ${menuGames.length === 1 ? "modo" : "modos"}`}
           onTypeDigit={typeSettingsPinDigit}
           onBackspace={() => {
             setSettingsError("");
@@ -3564,6 +3853,7 @@ function FloorOnlyApp() {
 
 function WelcomeScreen({
   connectionState,
+  floorReady,
   previewGames,
   readOnly,
   remoteSessionRequest,
@@ -3572,7 +3862,8 @@ function WelcomeScreen({
   onStart,
   onFullscreen,
 }: {
-  connectionState: string;
+  connectionState: ConnectionState;
+  floorReady: boolean;
   previewGames?: GameCard[];
   readOnly?: boolean;
   remoteSessionRequest: RemoteSessionRequest | null;
@@ -3585,28 +3876,33 @@ function WelcomeScreen({
   const welcomeGame = availableGames.find((game) => game.levels?.length && game.featured) || availableGames.find((game) => game.levels?.length);
   const welcomeLevel = welcomeGame?.levels?.[0];
   const welcomePreviewSrc = welcomeGame ? levelPreviewSrc(welcomeGame, welcomeLevel, "easy") : undefined;
+  const welcomePreviewAnimation = welcomeGame ? levelFallbackPreviewAnimationID(welcomeGame, welcomeLevel) : "lava";
+  const systemStatusClass = connectionState === "connection-on" && !floorReady ? "floor-off" : connectionState;
+  const connectionLabel = connectionState === "connection-on"
+    ? floorReady ? "Sistema listo" : "Suelo desconectado"
+    : connectionState === "connection-off" ? "Reconectando con la sala" : "Preparando la sala";
   return (
-    <main className={`app welcome-app ${connectionState} ${readOnly ? "read-only-mirror" : ""}`}>
+    <main className={`app welcome-app ${systemStatusClass} ${readOnly ? "read-only-mirror" : ""}`} inert={readOnly}>
       <section className="welcome-screen" aria-label="Inicio">
         <div className="welcome-copy">
           <button className="welcome-mark" type="button" aria-label="Pantalla completa" title="Pantalla completa" onClick={onFullscreen} />
+          <span className={`system-status welcome-status ${systemStatusClass}`} role="status" aria-live="polite">
+            <span className="system-status-dot" aria-hidden="true" />
+            {connectionLabel}
+          </span>
           <h1>Motion Levels</h1>
           <p>Preparad el equipo, elegid un reto y jugad sobre el suelo LED.</p>
         </div>
         <div className="welcome-visual" aria-hidden="true">
           <div className="welcome-floor" style={{ "--crgb": welcomeGame ? hexToRGB(welcomeGame.color) : "47, 216, 108" } as CSSProperties}>
-            <Preview src={welcomePreviewSrc} animationID={welcomeGame?.id || "levels"} />
+            <Preview src={welcomePreviewSrc} animationID={welcomePreviewAnimation} promoteAnimation />
           </div>
         </div>
-        <button className="btn primary welcome-start" type="button" onClick={onStart} disabled={readOnly}>
-          <PlayIcon />
-          {readOnly ? "Esperando menú" : "Comenzar"}
-        </button>
         {remoteSessionRequest ? (
           <section className="remote-session-card" aria-label="Reserva pendiente">
             <div>
               <span className="micro">Reserva desde plataforma</span>
-              <strong>{remoteSessionRequest.teamName}</strong>
+              <strong className="ph-mask">{remoteSessionRequest.teamName}</strong>
               <p>
                 {remoteSessionRequest.room} · {remoteSessionPlayerCopy(remoteSessionRequest)}
                 {remoteSessionRequest.startsAt ? ` · ${formatRemoteStartTime(remoteSessionRequest.startsAt)}` : ""}
@@ -3622,7 +3918,12 @@ function WelcomeScreen({
               </button>
             </div>
           </section>
-        ) : null}
+        ) : (
+          <button className="btn primary welcome-start" type="button" onClick={onStart} disabled={readOnly}>
+            <PlayIcon />
+            {readOnly ? "Esperando menú" : "Comenzar"}
+          </button>
+        )}
       </section>
     </main>
   );
@@ -3642,6 +3943,83 @@ function formatRemoteStartTime(value: string) {
   return new Intl.DateTimeFormat("es", { day: "2-digit", hour: "2-digit", minute: "2-digit", month: "short" }).format(date);
 }
 
+function trapKioskFocus(event: ReactKeyboardEvent<HTMLElement>, onDismiss?: () => void) {
+  if (event.key === "Escape" && onDismiss) {
+    event.preventDefault();
+    event.stopPropagation();
+    onDismiss();
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), [href], input:not(:disabled), [tabindex]:not([tabindex='-1'])"));
+  if (focusable.length === 0) {
+    event.preventDefault();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function KioskDialogLayer({
+  children,
+  className = "modal-overlay",
+  label,
+  onDismiss,
+  preservePointerFocus = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  label: string;
+  onDismiss?: () => void;
+  preservePointerFocus?: boolean;
+}) {
+  const layerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer) return;
+    const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const parent = layer.parentElement;
+    const background = parent
+      ? Array.from(parent.children).filter((element): element is HTMLElement => element instanceof HTMLElement && element !== layer)
+      : [];
+    const priorInert = background.map((element) => ({ element, inert: element.inert }));
+    for (const { element } of priorInert) element.inert = true;
+    const frame = window.requestAnimationFrame(() => {
+      layer.querySelector<HTMLElement>("button:not(:disabled), [href], input:not(:disabled), [tabindex]:not([tabindex='-1'])")?.focus({ preventScroll: true });
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      for (const item of priorInert) item.element.inert = item.inert;
+      returnFocus?.focus({ preventScroll: true });
+    };
+  }, []);
+
+  return (
+    <div
+      ref={layerRef}
+      className={className}
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+      onKeyDown={(event) => trapKioskFocus(event, onDismiss)}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onDismiss?.();
+      }}
+      onMouseDown={preservePointerFocus ? (event) => event.preventDefault() : undefined}
+    >
+      {children}
+    </div>
+  );
+}
+
 function ColorPicker({
   player,
   takenColors,
@@ -3654,8 +4032,8 @@ function ColorPicker({
   onClose: () => void;
 }) {
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Elegir color" onClick={onClose}>
-      <div className="modal" onClick={(event) => event.stopPropagation()}>
+    <KioskDialogLayer label="Elegir color" onDismiss={onClose}>
+      <div className="modal color-picker-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-head">
           <strong>Elige un color</strong>
           <button className="icon-button" type="button" aria-label="Cerrar" onClick={onClose}>
@@ -3677,13 +4055,15 @@ function ColorPicker({
                 aria-pressed={selected}
                 onClick={() => onPick(color)}
               >
+                <span className="swatch-name">{playerColorNames[index]}</span>
+                <span className="swatch-state">{selected ? "Elegido" : taken ? "En uso" : "Disponible"}</span>
                 {selected ? <CheckIcon /> : null}
               </button>
             );
           })}
         </div>
       </div>
-    </div>
+    </KioskDialogLayer>
   );
 }
 
@@ -3706,7 +4086,7 @@ function GameConfigDialog({
     return stored !== undefined && stored !== item.default;
   });
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={`Ajustes de ${game.label}`} onClick={onClose}>
+    <KioskDialogLayer label={`Ajustes de ${game.label}`} onDismiss={onClose}>
       <div className="modal game-config-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-head">
           <div>
@@ -3733,7 +4113,7 @@ function GameConfigDialog({
           </button>
         </div>
       </div>
-    </div>
+    </KioskDialogLayer>
   );
 }
 
@@ -3835,6 +4215,10 @@ function OperatorSettingsDialog({
   lockedOut,
   levelsUnlocked,
   envUnlockLevels,
+  connectionLabel,
+  floorLabel,
+  audioLabel,
+  catalogLabel,
   onTypeDigit,
   onBackspace,
   onClear,
@@ -3848,6 +4232,10 @@ function OperatorSettingsDialog({
   lockedOut: boolean;
   levelsUnlocked: boolean;
   envUnlockLevels: boolean;
+  connectionLabel: string;
+  floorLabel: string;
+  audioLabel: string;
+  catalogLabel: string;
   onTypeDigit: (digit: string) => void;
   onBackspace: () => void;
   onClear: () => void;
@@ -3856,7 +4244,7 @@ function OperatorSettingsDialog({
   onClose: () => void;
 }) {
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Ajustes" onClick={onClose}>
+    <KioskDialogLayer label="Ajustes" onDismiss={onClose}>
       <div className="modal settings-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-head">
           <div>
@@ -3872,6 +4260,24 @@ function OperatorSettingsDialog({
           <section className="settings-version-card" aria-label="Versión del menú">
             <span className="micro">Versión del menú</span>
             <strong>menu {__MENU_BUILD_REVISION__}</strong>
+            <div className="settings-health" aria-label="Estado del sistema">
+              <div>
+                <span>Motor</span>
+                <b>{connectionLabel}</b>
+              </div>
+              <div>
+                <span>Suelo</span>
+                <b>{floorLabel}</b>
+              </div>
+              <div>
+                <span>Audio</span>
+                <b>{audioLabel}</b>
+              </div>
+              <div>
+                <span>Catálogo</span>
+                <b>{catalogLabel}</b>
+              </div>
+            </div>
           </section>
 
           {unlocked ? (
@@ -3930,7 +4336,7 @@ function OperatorSettingsDialog({
           )}
         </div>
       </div>
-    </div>
+    </KioskDialogLayer>
   );
 }
 
@@ -3950,12 +4356,12 @@ function ConfirmDialog({
   onCancel: () => void;
 }) {
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={title} onClick={onCancel}>
+    <KioskDialogLayer label={title} onDismiss={onCancel}>
       <div className="modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-head">
           <strong>{title}</strong>
         </div>
-        <p className="modal-body">{body}</p>
+        <p className="modal-body ph-mask">{body}</p>
         <div className="modal-actions">
           <button className="btn" type="button" onClick={onCancel}>
             {cancelLabel}
@@ -3965,7 +4371,7 @@ function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </KioskDialogLayer>
   );
 }
 
@@ -3987,14 +4393,15 @@ function GameControlScreen({
   introActive,
   countdownValue,
   error,
+  busy,
+  pendingControlAction,
   onDifficultyChange,
   onLevelSelect,
   onNextLevel,
   onPauseToggle,
   onRestart,
   narrationSupported,
-  narrationArmed,
-  onNarrationToggle,
+  onNarration,
   exitLabel,
   onExit,
 }: {
@@ -4022,14 +4429,15 @@ function GameControlScreen({
   introActive: boolean;
   countdownValue: number;
   error: string;
+  busy: boolean;
+  pendingControlAction: ControlGameAction | null;
   onDifficultyChange: (difficulty: DifficultyID) => void;
   onLevelSelect: (levelID: string) => void;
   onNextLevel: () => void;
   onPauseToggle: () => void;
   onRestart: () => void;
   narrationSupported: boolean;
-  narrationArmed: boolean;
-  onNarrationToggle: () => void;
+  onNarration: () => void;
   exitLabel: string;
   onExit: () => void;
 }) {
@@ -4163,10 +4571,10 @@ function GameControlScreen({
                       className={`active-difficulty ${difficulty === candidate.id ? "active" : ""}`}
                       style={{ "--difficulty-color": candidate.color, "--difficulty-rgb": hexToRGB(candidate.color) } as CSSProperties}
                       type="button"
-                      disabled={!supported || difficultyLocked || Boolean(activeLevelLaunch)}
+                      disabled={!supported || difficultyLocked || busy}
                       aria-pressed={difficulty === candidate.id}
                       onClick={() => {
-                        if (supported && !difficultyLocked && !activeLevelLaunch) onDifficultyChange(candidate.id);
+                        if (supported && !difficultyLocked && !busy) onDifficultyChange(candidate.id);
                       }}
                     >
                       <span>{candidate.label}</span>
@@ -4176,7 +4584,7 @@ function GameControlScreen({
                 })}
               </div>
               {difficultyLocked ? <p className="active-lock-note">Detén el nivel para cambiar dificultad.</p> : null}
-              <button className="btn active-next-level" type="button" onClick={onNextLevel} disabled={Boolean(activeLevelLaunch)} aria-busy={Boolean(activeLevelLaunch) || undefined}>
+              <button className="btn active-next-level" type="button" onClick={onNextLevel} disabled={busy} aria-busy={busy || undefined}>
                 {activeLevelLaunch ? (
                   <>
                     <span className="launch-spinner" aria-hidden="true" />
@@ -4188,13 +4596,13 @@ function GameControlScreen({
           ) : null}
           {!ambient ? <div className="control-roster" data-count={Math.min(players.length, 8)}>
             {players.slice(0, 8).map((player) => (
-              <span key={player.id} className="player-pill" style={{ "--pc": player.color } as CSSProperties}>
+              <span key={player.id} className="player-pill ph-mask" style={{ "--pc": player.color } as CSSProperties}>
                 <span />
                 <span>{playerLabel(allPlayers, player)}</span>
               </span>
             ))}
           </div> : null}
-          {error ? <div className="message error">{error}</div> : null}
+          {error ? <div className="message error" role="alert">{error}</div> : null}
         </div>
         {hasLevels ? (
           <section className="active-level-rail" aria-label={levelModeFree ? "Elegir nivel" : "Niveles del reto"} role="radiogroup">
@@ -4208,7 +4616,7 @@ function GameControlScreen({
                 launchingLevelID: activeLevelLaunch?.levelID || null,
                 launchPhase: activeLevelLaunch?.phase || null,
                 levelMode,
-                selectable: levelModeFree && !activeLevelLaunch,
+                selectable: levelModeFree && !busy,
                 onSelect: onLevelSelect,
               }))}
             </div>
@@ -4217,26 +4625,27 @@ function GameControlScreen({
       </div>
 
       <div className="game-control-actions">
-        <button className="btn control-action" type="button" onClick={onPauseToggle}>
-          {paused ? <PlayIcon /> : <PauseIcon />}
-          {paused ? "Reanudar" : "Pausar"}
+        <button className="btn control-action" type="button" onClick={onPauseToggle} disabled={busy} aria-busy={pendingControlAction === "pause" || pendingControlAction === "resume" || undefined}>
+          {pendingControlAction === "pause" || pendingControlAction === "resume" ? <span className="launch-spinner" aria-hidden="true" /> : paused ? <PlayIcon /> : <PauseIcon />}
+          {pendingControlAction === "pause" || pendingControlAction === "resume" ? "Aplicando" : paused ? "Reanudar" : "Pausar"}
         </button>
-        <button className="btn control-action" type="button" onClick={onRestart}>
+        <button className="btn control-action" type="button" onClick={onRestart} disabled={busy}>
           <RestartIcon />
           Reiniciar
         </button>
         {narrationSupported ? (
           <button
-            className={`btn control-action narration-toggle ${narrationArmed ? "active" : ""}`}
+            className="btn control-action narration-toggle"
             type="button"
-            aria-pressed={narrationArmed}
-            onClick={onNarrationToggle}
+            disabled={busy}
+            aria-busy={pendingControlAction === "narration" || undefined}
+            onClick={onNarration}
           >
-            <BoltIcon />
-            {narrationArmed ? "Narración ON" : "Narración OFF"}
+            {pendingControlAction === "narration" ? <span className="launch-spinner" aria-hidden="true" /> : <BoltIcon />}
+            {pendingControlAction === "narration" ? "Reproduciendo" : "Repetir narración"}
           </button>
         ) : null}
-        <button className="btn control-action danger" type="button" onClick={onExit}>
+        <button className="btn control-action danger" type="button" onClick={onExit} disabled={busy}>
           <CloseIcon />
           {exitLabel}
         </button>
@@ -4331,7 +4740,7 @@ function TouchKeyboard({
   }
 
   return (
-    <div className="keyboard-modal-layer" role="dialog" aria-modal="true" aria-label="Editar nombre" onMouseDown={(event) => event.preventDefault()}>
+    <KioskDialogLayer className="keyboard-modal-layer" label="Editar nombre" onDismiss={onDone} preservePointerFocus>
       <section className="touch-keyboard" aria-label="Teclado táctil">
         <div className="kb-title-tab">
           <span aria-hidden="true">●</span>
@@ -4365,7 +4774,7 @@ function TouchKeyboard({
                 </button>
               ))}
               {index === 2 ? (
-                <button className="key backspace" type="button" aria-label="Borrar" onClick={pressBackspace}>
+                <button className="key backspace" type="button" aria-label="Borrar carácter" onClick={pressBackspace}>
                   <BackspaceIcon />
                 </button>
               ) : null}
@@ -4381,13 +4790,13 @@ function TouchKeyboard({
             <button className={`key space ${spacePending ? "pending" : ""}`} type="button" aria-pressed={spacePending} onClick={pressSpace}>
               Espacio
             </button>
-            <button className="key clear" type="button" onClick={pressClear} disabled={!value}>
-              Borrar
+            <button className="key clear" type="button" aria-label="Borrar todo" onClick={pressClear} disabled={!value}>
+              Borrar todo
             </button>
           </div>
         </div>
       </section>
-    </div>
+    </KioskDialogLayer>
   );
 }
 
@@ -4538,6 +4947,10 @@ function Preview({
     setLoadedPosterSrc("");
     setPromotedSrc("");
   }, [posterSrc, richCandidate]);
+
+  useEffect(() => {
+    setLivePreview(null);
+  }, [liveLevelID, revisionHash]);
 
   useEffect(() => {
     if (!richCandidate || (posterSrc && !posterReady)) return;

@@ -461,6 +461,7 @@ func pressureEventLoop(ctx context.Context, cfg config, runtime *gameRuntime, st
 		}
 		conn, err := net.Dial("tcp", cfg.PressureAddr)
 		if err != nil {
+			runtime.SetPressureStreamConnected(false)
 			log.Printf("pressure stream: %v", err)
 			select {
 			case <-ctx.Done():
@@ -469,11 +470,13 @@ func pressureEventLoop(ctx context.Context, cfg config, runtime *gameRuntime, st
 			}
 			continue
 		}
+		runtime.SetPressureStreamConnected(true)
 		log.Printf("connected to pressure events: %s", cfg.PressureAddr)
 		reader := bufio.NewReader(conn)
 		for {
 			var event inputpb.PressureEvent
 			if err := pbstream.Read(reader, &event); err != nil {
+				runtime.SetPressureStreamConnected(false)
 				_ = conn.Close()
 				log.Printf("pressure stream ended: %v", err)
 				break
