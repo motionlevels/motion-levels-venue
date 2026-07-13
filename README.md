@@ -79,7 +79,10 @@ generate a different narration.
 CI on `main` builds and publishes the immutable venue images
 (`ghcr.io/motionlevels/motion-levels-venue-*`) tagged `sha-<venue revision>`
 via the `Container images` workflow. The controller image is pinned separately
-in `deploy/motionlevels-pc/venue-components.lock.json`.
+in `deploy/motionlevels-pc/venue-components.lock.json`. Successful image
+publication automatically requests an exact-revision deployment to
+`motionlevels-1`; a scheduled reconciliation retries releases deferred by the
+physical-display safety gate.
 
 Deploy venues from a checkout of this repo (the playbook resolves the venue
 revision from `git rev-parse HEAD`, so the images for that commit must be

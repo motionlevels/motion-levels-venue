@@ -20,7 +20,22 @@ deploy/motionlevels-pc/create-motionlevels-venue-vm.sh
 
 The helper accepts environment overrides documented at the top of the script.
 
-## Deploy `motionlevels-1`
+## Automatic production deployment
+
+After CI publishes the complete immutable image set for a new `main` commit,
+the `Container images` workflow requests activation of that exact revision on
+`motionlevels-1`. A scheduled reconciliation workflow retries releases that
+were safely deferred while the physical display was disconnected. The relay
+rejects stale revisions, and an already-active revision is a no-op.
+
+Automatic activation uses the same idle, HDMI, image-contract, health, and
+rollback gates as an operator deployment. It never bypasses the venue release
+helper. The `Production` environment must contain
+`VENUE_AUTO_DEPLOY_TOKEN`; the authenticated relay URL defaults to
+`https://platform.motionlevels.obis.dev/api/venue/auto-deploy` and can be
+overridden with the `VENUE_AUTO_DEPLOY_URL` environment variable.
+
+## Deploy `motionlevels-1` manually
 
 ```sh
 make ansible-ping LIMIT=motionlevels-1

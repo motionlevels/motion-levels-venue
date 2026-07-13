@@ -56,11 +56,15 @@ test("venue core services are non-root, read-only, capability-dropped containers
   );
 });
 
-test("venue release activation is manual, idle-gated, and rollback-aware", () => {
+test("venue release activation is automated, idle-gated, and rollback-aware", () => {
   const activation = readRepoFile("deploy/motionlevels-pc/activate-venue-containers");
   const service = readRepoFile("deploy/motionlevels-pc/motion-levels-venue-containers.service");
   const playbook = readRepoFile("ansible/playbooks/venue-containers.yml");
   const makefile = readRepoFile("Makefile");
+  const imagesWorkflow = readRepoFile(".github/workflows/images.yml");
+  const productionWorkflow = readRepoFile(".github/workflows/deploy-production.yml");
+  const reconcileWorkflow = readRepoFile(".github/workflows/reconcile-deployment.yml");
+  const deployRequest = readRepoFile("scripts/request-venue-deployment.sh");
 
   assert.match(activation, /venue_is_idle/);
   assert.match(activation, /venue busy:/);
@@ -102,6 +106,21 @@ test("venue release activation is manual, idle-gated, and rollback-aware", () =>
   assert.match(makefile, /venue-containers\.yml/);
   assert.doesNotMatch(makefile, /deploy-(?:frontends|runtime)-motionlevels-1/);
   assert.doesNotMatch(makefile, /deploy-motionlevels-1-legacy/);
+  assert.match(imagesWorkflow, /scripts\/request-venue-deployment\.sh/);
+  assert.doesNotMatch(imagesWorkflow, /deploy-production:|VENUE_AUTO_DEPLOY_TOKEN/);
+  assert.match(productionWorkflow, /workflows:[\s\S]*?- Container images[\s\S]*?types:[\s\S]*?- completed/);
+  assert.match(productionWorkflow, /github\.event\.workflow_run\.conclusion == 'success'/);
+  assert.match(productionWorkflow, /VENUE_DEPLOY_REVISION: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
+  assert.match(productionWorkflow, /scripts\/request-venue-deployment\.sh/);
+  assert.match(reconcileWorkflow, /cron: "\*\/15 \* \* \* \*"/);
+  assert.match(reconcileWorkflow, /gh run list[\s\S]*?--workflow images\.yml[\s\S]*?--commit "\$VENUE_DEPLOY_REVISION"/);
+  assert.match(reconcileWorkflow, /ready=false[\s\S]*?if: steps\.images\.outputs\.ready == 'true'/);
+  assert.match(deployRequest, /if \[ "\$status" = 409 \]/);
+  assert.match(deployRequest, /--connect-timeout 10[\s\S]*?--max-time 30/);
+  assert.match(deployRequest, /deadline=\$\(\( \$\(date \+%s\) \+ 1800 \)\)/);
+  assert.match(deployRequest, /succeeded\)[\s\S]*?motionlevels-1 is active/);
+  assert.match(deployRequest, /deferred\)[\s\S]*?deployment deferred safely/);
+  assert.doesNotMatch(deployRequest, /--limit motionlevels-cloud-1|deploy-standard-venues/);
 });
 
 test("controller releases are externally pinned and remain part of atomic venue rollback", () => {
