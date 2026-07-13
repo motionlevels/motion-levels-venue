@@ -1,7 +1,9 @@
-// Command motion-go-seeds regenerates the platform motion-go seed files from
-// the native game sources in game-engine/internal/games/authored/nativegames.
+// Command motion-go-seeds regenerates the motion-go seed files under
+// game-engine/internal/games/authored/seeds from the native game sources in
+// game-engine/internal/games/authored/nativegames.
 // Run it from the repo root ("make motion-go-seeds"); use -check to verify the
-// seeds are up to date without writing.
+// seeds are up to date without writing. Copies consumed by the platform repo
+// are synced separately with "make sync-platform-seeds".
 package main
 
 import (
@@ -28,7 +30,7 @@ func main() {
 		}
 		repoRoot = wd
 	}
-	if _, err := os.Stat(filepath.Join(repoRoot, "platform", "app", "src", "lib", "seed")); err != nil {
+	if _, err := os.Stat(filepath.Join(repoRoot, "game-engine", "internal", "games", "authored", "seeds")); err != nil {
 		log.Fatalf("run from the repo root (or pass -root): %v", err)
 	}
 

@@ -2,11 +2,13 @@
 // game sources embedded in the engine.
 //
 // The engine copy under nativegames/<pkg>/game.go is the source of truth for a
-// motion-go game. The platform seed under platform/app/src/lib/seed/<file> is
+// motion-go game. The seed under game-engine/internal/games/authored/seeds is
 // derived from it: same gameplay code with the package clause rewritten to
 // package main and a func main stub appended, wrapped in a TypeScript export.
 // Run "make motion-go-seeds" (go run ./game-engine/cmd/motion-go-seeds) after
-// editing a native game; tests fail when a generated seed is stale.
+// editing a native game; tests fail when a generated seed is stale. The
+// platform repo consumes copies under platform/app/src/lib/seed; sync them
+// with "make sync-platform-seeds" after regenerating.
 //
 // patronesgo and saltosgo are not generated: their native runners are adapters
 // over the built-in engines, so their seeds are maintained by hand.
@@ -23,7 +25,7 @@ import (
 type Seed struct {
 	// Pkg is the nativegames package directory holding game.go.
 	Pkg string
-	// SeedFile is the file name under platform/app/src/lib/seed.
+	// SeedFile is the file name under game-engine/internal/games/authored/seeds.
 	SeedFile string
 	// ExportName is the TypeScript export const holding the Go source.
 	ExportName string
@@ -64,7 +66,7 @@ func NativePath(repoRoot string, seed Seed) string {
 }
 
 func SeedPath(repoRoot string, seedFile string) string {
-	return filepath.Join(repoRoot, "platform", "app", "src", "lib", "seed", seedFile)
+	return filepath.Join(repoRoot, "game-engine", "internal", "games", "authored", "seeds", seedFile)
 }
 
 // Generate produces the TypeScript seed file content for one game from its

@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "test": "npm --prefix apps/player-menu test",
+    "check:player-menu": "npm --prefix apps/player-menu test && npm --prefix apps/player-menu run build",
+    "check:player-display": "npm --prefix apps/player-display run build",
+    "verify:games-bundle": "node scripts/verify-motion-levels-games-bundle.mjs"
+  }
+}

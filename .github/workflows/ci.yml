@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install native audio headers
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Compile packages
+        run: go build ./...
+
+      - name: Verify motion-go seeds are current
+        run: go run ./game-engine/cmd/motion-go-seeds -check
+
+  node:
+    name: Node / ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: player-display
+            working-directory: apps/player-display
+            lockfile: apps/player-display/package-lock.json
+            commands: npm run build
+          - name: player-menu
+            working-directory: apps/player-menu
+            lockfile: apps/player-menu/package-lock.json
+            commands: |
+              npm test
+              npm run build
+          - name: floor-view
+            working-directory: packages/floor-view
+            lockfile: packages/floor-view/package-lock.json
+            commands: npm run typecheck
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ${{ matrix.lockfile }}
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.working-directory }}
+        run: npm ci
+
+      - name: Install shared floor-view dependencies
+        run: npm ci --prefix packages/floor-view
+
+      - name: Run checks
+        working-directory: ${{ matrix.working-directory }}
+        run: ${{ matrix.commands }}
