@@ -149,6 +149,23 @@
         cmd: docker compose version
       changed_when: false
 
+    - name: Inspect the retired X5 recorder container while its capability is disabled
+      ansible.builtin.command:
+        cmd: docker container inspect motion-levels-cameras
+      register: motion_levels_legacy_x5_container
+      changed_when: false
+      failed_when:
+        - motion_levels_legacy_x5_container.rc != 0
+        - "'No such container: motion-levels-cameras' not in motion_levels_legacy_x5_container.stderr"
+      when: not (motion_levels_x5_enabled | default(false) | bool)
+
+    - name: Remove the retired X5 recorder runtime while its capability is disabled
+      ansible.builtin.command:
+        cmd: docker container rm --force motion-levels-cameras
+      when:
+        - not (motion_levels_x5_enabled | default(false) | bool)
+        - (motion_levels_legacy_x5_container.rc | default(1)) == 0
+
     - name: Create the audio broker group
       ansible.builtin.group:
         name: motionlevels-audio

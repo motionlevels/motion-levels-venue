@@ -128,9 +128,13 @@ The X5 surface is disabled by default, not deleted. With
 `MOTION_LEVELS_X5_ENABLED=0`, the engine receives an empty recorder URL/token,
 the platform does not register a recorder, and both container and native Caddy
 return no `/camera-recorder/*` route. The implementation, token source, and
-separate `motionlevels/motion-levels-cameras` ownership remain intact.
+separate `motionlevels/motion-levels-cameras` ownership remain intact. A venue
+deployment with the switch off removes any legacy `motion-levels-cameras`
+runtime container so its restart policy cannot resurrect USB or port access;
+the image, host state, configuration, credentials, and source are preserved.
 
-Restoration is configuration-only: set `motion_levels_x5_enabled: true`, supply
+Restoration does not require redevelopment: recreate the preserved camera
+service from its Compose project, set `motion_levels_x5_enabled: true`, supply
 the dormant recorder URL and Caddy upstream, and redeploy. For a recorder on
 the venue host, the deterministic container upstream is
 `http://172.30.53.1:8040`; do not use container loopback or an ambiguous
