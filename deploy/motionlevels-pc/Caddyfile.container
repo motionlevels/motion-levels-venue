@@ -1,99 +1,36 @@
-:80 {
+(venue_common) {
 	encode zstd gzip
 
 	handle_path /controller/* {
-		reverse_proxy 127.0.0.1:4101
+		reverse_proxy floor-core:4101
 	}
 
 	handle /controller {
 		rewrite * /
-		reverse_proxy 127.0.0.1:4101
+		reverse_proxy floor-core:4101
 	}
 
 	handle /ws {
-		reverse_proxy 127.0.0.1:4101
+		reverse_proxy floor-core:4101
 	}
 
 	handle_path /engine/* {
-		reverse_proxy 127.0.0.1:4102
+		reverse_proxy engine-core:4102
 	}
 
-	# These platform-backed routes are available only when the request really
-	# arrived on the venue Ethernet address. A Host header alone is spoofable.
-	@platform_tv {
-		path /tv /tv/
-		expression {http.request.local.host} == "192.168.1.142"
-	}
-	handle @platform_tv {
-		rewrite * /salas/motionlevels-1/tv
-		reverse_proxy https://84.7.190.81 {
-			header_up Host platform.motionlevels.obis.dev
-			transport http {
-				dial_timeout 10s
-				tls_server_name platform.motionlevels.obis.dev
-			}
-		}
-	}
-
-	@platform_cameras {
-		path /cameras /cameras/
-		expression {http.request.local.host} == "192.168.1.142"
-	}
-	handle @platform_cameras {
-		root * /srv/venue
-		rewrite * /cameras.html
-		header Cache-Control "no-store"
-		file_server
-	}
-
-	# Snapshot data remains reachable through Tailscale for the platform.
+	# Snapshot data remains reachable through Tailscale for the platform, but
+	# the helper itself is not published on a host port.
 	handle /cam/* {
-		reverse_proxy 127.0.0.1:8020
+		reverse_proxy camera-helper-api:8020
 	}
 
+	# X5 support remains a configuration-only restoration. The route is absent
+	# by default and becomes active only when the release manifest opts in.
 	handle_path /camera-recorder/* {
-		reverse_proxy 127.0.0.1:8040
-	}
-
-	@platform_next {
-		path /_next/*
-		expression {http.request.local.host} == "192.168.1.142"
-	}
-	handle @platform_next {
-		reverse_proxy https://84.7.190.81 {
-			header_up Host platform.motionlevels.obis.dev
-			transport http {
-				dial_timeout 10s
-				tls_server_name platform.motionlevels.obis.dev
-			}
-		}
-	}
-
-	@platform_rooms {
-		path /api/rooms/*
-		expression {http.request.local.host} == "192.168.1.142"
-	}
-	handle @platform_rooms {
-		reverse_proxy https://84.7.190.81 {
-			header_up Host platform.motionlevels.obis.dev
-			transport http {
-				dial_timeout 10s
-				tls_server_name platform.motionlevels.obis.dev
-			}
-		}
-	}
-
-	@platform_live_floor {
-		path /api/live-floor/*
-		expression {http.request.local.host} == "192.168.1.142"
-	}
-	handle @platform_live_floor {
-		reverse_proxy https://84.7.190.81 {
-			header_up Host platform.motionlevels.obis.dev
-			transport http {
-				dial_timeout 10s
-				tls_server_name platform.motionlevels.obis.dev
-			}
+		@x5_enabled expression `"{$MOTION_LEVELS_X5_ENABLED:0}" == "1"`
+		route {
+			reverse_proxy @x5_enabled {$MOTION_LEVELS_X5_UPSTREAM:http://172.30.53.1:8040}
+			respond 404
 		}
 	}
 
@@ -145,4 +82,81 @@
 
 	redir /status /engine/api/status
 	redir / /menu/
+}
+
+(venue_lan_only) {
+	# Docker publishes this listener only on the venue Ethernet address. The
+	# separate socket preserves the interface boundary after destination NAT;
+	# no spoofable Host header is used for authorization.
+	@platform_tv path /tv /tv/
+	handle @platform_tv {
+		rewrite * /salas/motionlevels-1/tv
+		reverse_proxy https://84.7.190.81 {
+			header_up Host platform.motionlevels.obis.dev
+			transport http {
+				dial_timeout 10s
+				tls_server_name platform.motionlevels.obis.dev
+			}
+		}
+	}
+
+	@platform_cameras path /cameras /cameras/
+	handle @platform_cameras {
+		root * /srv/venue
+		rewrite * /cameras.html
+		header Cache-Control "no-store"
+		file_server
+	}
+
+	handle /_next/* {
+		reverse_proxy https://84.7.190.81 {
+			header_up Host platform.motionlevels.obis.dev
+			transport http {
+				dial_timeout 10s
+				tls_server_name platform.motionlevels.obis.dev
+			}
+		}
+	}
+
+	handle /api/rooms/* {
+		reverse_proxy https://84.7.190.81 {
+			header_up Host platform.motionlevels.obis.dev
+			transport http {
+				dial_timeout 10s
+				tls_server_name platform.motionlevels.obis.dev
+			}
+		}
+	}
+
+	handle /api/live-floor/* {
+		reverse_proxy https://84.7.190.81 {
+			header_up Host platform.motionlevels.obis.dev
+			transport http {
+				dial_timeout 10s
+				tls_server_name platform.motionlevels.obis.dev
+			}
+		}
+	}
+}
+
+(venue_general_only) {
+	# Make the wired-only surface explicitly absent on loopback/Tailscale rather
+	# than relying on Caddy's empty fallthrough response.
+	@lan_only_paths path /tv /tv/ /cameras /cameras/ /_next/* /api/rooms/* /api/live-floor/*
+	handle @lan_only_paths {
+		respond 404
+	}
+}
+
+# Loopback and Tailscale are published to the general listener. The player
+# reaches this same listener directly over the private display bridge.
+:8080 {
+	import venue_general_only
+	import venue_common
+}
+
+# Only the fixed Ethernet host address is published to this enriched listener.
+:8081 {
+	import venue_lan_only
+	import venue_common
 }

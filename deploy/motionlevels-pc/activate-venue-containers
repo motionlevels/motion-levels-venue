@@ -169,7 +169,7 @@ ambient_games = {
     "ambient-comet", "ambient-pulse", "ambient-spark",
 }
 try:
-    with urllib.request.urlopen("http://127.0.0.1:4102/api/status", timeout=3) as response:
+    with urllib.request.urlopen("http://127.0.0.1/engine/api/status", timeout=3) as response:
         status = json.load(response)
 except Exception as exc:
     native_active = subprocess.run(
@@ -237,9 +237,8 @@ health_gate_once() {
   expected_revision="$(manifest_value VENUE_SHORT_REVISION "$manifest")"
   [ -n "$expected_revision" ] || expected_revision="$(manifest_value VENUE_REVISION "$manifest" | cut -c1-7)"
   for url in \
-    http://127.0.0.1:4101/health \
-    http://127.0.0.1:4102/api/health \
-    http://127.0.0.1:8020/health \
+    http://127.0.0.1/controller/health \
+    http://127.0.0.1/engine/api/health \
     http://127.0.0.1/controller/status \
     http://127.0.0.1/engine/api/status \
     http://127.0.0.1/stack.json \
@@ -254,7 +253,7 @@ import json
 import os
 import urllib.request
 
-with urllib.request.urlopen("http://127.0.0.1:4101/status", timeout=5) as response:
+with urllib.request.urlopen("http://127.0.0.1/controller/status", timeout=5) as response:
     status = json.load(response)
 fps = float(status.get("actualFps") or 0)
 assert 48 <= fps <= 52, f"floor actualFps is {fps}"
@@ -263,7 +262,7 @@ assert status.get("gameEngineOnline") is True, "floor cannot see the game engine
 sync = status.get("sync") or {}
 assert sync.get("status") == "ok", f"floor sync is {sync.get('status')}"
 
-with urllib.request.urlopen("http://127.0.0.1:4102/api/status", timeout=5) as response:
+with urllib.request.urlopen("http://127.0.0.1/engine/api/status", timeout=5) as response:
     engine = json.load(response)
 assert engine.get("currentGame"), "engine has no current game"
 assert engine.get("audioEnabled") is True, "engine audio is disabled"
@@ -276,6 +275,11 @@ assert stack.get("revision") == os.environ["EXPECTED_REVISION"], (
 PY
 
   if [ "$mode" = containers ]; then
+    camera_health="$(/usr/bin/docker inspect --format '{{.State.Health.Status}}' motion-levels-venue-camera-helper 2>/dev/null || true)"
+    [ "$camera_health" = healthy ] || {
+      log "camera helper container health is ${camera_health:-missing}"
+      return 1
+    }
     security_health="$(/usr/bin/docker inspect --format '{{.State.Health.Status}}' motion-levels-venue-security-recorder 2>/dev/null || true)"
     [ "$security_health" = healthy ] || {
       log "security recorder container health is ${security_health:-missing}"
@@ -290,6 +294,7 @@ with urllib.request.urlopen(base + "/api/healthz", timeout=8) as response:
 ' >/dev/null || return 1
     audio_probe || return 1
   else
+    /usr/bin/curl -fsS --max-time 8 http://127.0.0.1:8020/health >/dev/null || return 1
     systemctl is-active --quiet \
       caddy.service \
       motion-levels-floor-controller.service \

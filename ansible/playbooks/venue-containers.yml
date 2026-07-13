@@ -300,9 +300,11 @@
                 key, raw = stripped.split("=", 1)
                 values[key.strip()] = decoded(raw)
 
+        x5_enabled = {{ (motion_levels_x5_enabled | default(false) | bool) | ternary('True', 'False') }}
         inventory_camera_recorder_url = {{ motion_levels_camera_recorder_url | default('') | to_json }}
-        if inventory_camera_recorder_url:
-            values["MOTION_LEVELS_CAMERA_RECORDER_URL"] = inventory_camera_recorder_url
+        values["MOTION_LEVELS_X5_ENABLED"] = "1" if x5_enabled else "0"
+        # Always overwrite any stale value inherited from the legacy host env.
+        values["MOTION_LEVELS_CAMERA_RECORDER_URL"] = inventory_camera_recorder_url if x5_enabled else ""
 
         platform_token = values.get("MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_TOKEN") or values.get("MOTION_LEVELS_PLATFORM_TOKEN") or ""
         camera_password = (
@@ -312,16 +314,18 @@
             or ""
         )
         camera_recorder_secret = Path("/etc/motion-levels/camera-recorder-token")
-        camera_recorder_token = values.get("MOTION_LEVELS_CAMERA_RECORDER_TOKEN") or ""
-        if not camera_recorder_token and camera_recorder_secret.exists():
-            camera_recorder_token = camera_recorder_secret.read_text(encoding="utf-8").strip()
-        if not camera_recorder_token:
-            camera_recorder_token = secrets.token_urlsafe(48)
-        camera_recorder_secret_tmp = camera_recorder_secret.with_suffix(".tmp")
-        camera_recorder_secret_tmp.write_text(camera_recorder_token, encoding="utf-8")
-        os.chown(camera_recorder_secret_tmp, 10001, 10001)
-        os.chmod(camera_recorder_secret_tmp, 0o400)
-        os.replace(camera_recorder_secret_tmp, camera_recorder_secret)
+        camera_recorder_token = ""
+        if x5_enabled:
+            camera_recorder_token = values.get("MOTION_LEVELS_CAMERA_RECORDER_TOKEN") or ""
+            if not camera_recorder_token and camera_recorder_secret.exists():
+                camera_recorder_token = camera_recorder_secret.read_text(encoding="utf-8").strip()
+            if not camera_recorder_token:
+                camera_recorder_token = secrets.token_urlsafe(48)
+            camera_recorder_secret_tmp = camera_recorder_secret.with_suffix(".tmp")
+            camera_recorder_secret_tmp.write_text(camera_recorder_token, encoding="utf-8")
+            os.chown(camera_recorder_secret_tmp, 10001, 10001)
+            os.chmod(camera_recorder_secret_tmp, 0o400)
+            os.replace(camera_recorder_secret_tmp, camera_recorder_secret)
         if not platform_token:
             raise SystemExit("MOTION_LEVELS_PLATFORM_TOKEN is missing")
         if not camera_password:
@@ -437,6 +441,35 @@
         owner: root
         group: root
         mode: "0644"
+
+    - name: Ensure the native Caddy override directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/system/caddy.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the native Caddy X5 capability environment
+      ansible.builtin.copy:
+        dest: /etc/motion-levels/caddy.env
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          MOTION_LEVELS_X5_ENABLED={{ (motion_levels_x5_enabled | default(false) | bool) | ternary('1', '0') }}
+          MOTION_LEVELS_X5_UPSTREAM=http://127.0.0.1:8040
+
+    - name: Attach the X5 capability environment to native Caddy rollback
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/caddy.service.d/motion-levels-x5.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Service]
+          EnvironmentFile=-/etc/motion-levels/caddy.env
+      notify: Reload systemd
 
     - name: Validate native Caddy rollback configuration
       ansible.builtin.command:
@@ -600,6 +633,14 @@
           VENUE_COMMIT_AT={{ motion_levels_venue_revision_metadata.stdout_lines[1] }}
           VENUE_TARGET={{ inventory_hostname }}
           VENUE_DISPLAY_BACKEND={{ motion_levels_effective_display_backend }}
+          VENUE_LAN_INTERFACE={{ motion_levels_lan_interface }}
+          VENUE_LAN_IPV4={{ motion_levels_lan_ipv4 | regex_replace('/.*$', '') }}
+          VENUE_TAILSCALE_IPV4={{ motion_levels_tailscale_ipv4 }}
+          VENUE_LAN_SUBNET={{ motion_levels_lan_subnet }}
+          VENUE_FLOOR_LAN_IPV4={{ motion_levels_floor_lan_ipv4 }}
+          VENUE_FLOOR_BROADCAST_IPV4={{ motion_levels_floor_broadcast_ipv4 }}
+          MOTION_LEVELS_X5_ENABLED={{ (motion_levels_x5_enabled | default(false) | bool) | ternary('1', '0') }}
+          MOTION_LEVELS_X5_UPSTREAM={{ motion_levels_x5_caddy_upstream | default('') if (motion_levels_x5_enabled | default(false) | bool) else '' }}
           VENUE_CONFIG_ROOT={{ motion_levels_venue_release_root }}
           VENUE_RUNTIME_ENV={{ motion_levels_venue_release_root }}/runtime.env
           VENUE_COMPOSE_FILE={{ motion_levels_venue_release_root }}/docker-compose.yml

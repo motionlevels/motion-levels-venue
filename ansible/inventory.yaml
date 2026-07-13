@@ -6,6 +6,10 @@ all:
     motion_levels_go_bin: /usr/local/go/bin/go
     motion_levels_remote_root: /opt/motion-levels/rebuild
     motion_levels_remote_src: /opt/motion-levels/rebuild/src
+    # The X5 implementation stays in the repo, but its runtime capabilities are
+    # disabled. Set this to true and deploy both platform and motionlevels-1 to
+    # restore the preserved recorder URL, token paths, proxy, and operator UI.
+    motion_levels_x5_enabled: false
   children:
     motion_levels_platform:
       hosts:
@@ -17,6 +21,8 @@ all:
           motion_levels_platform_bind_ip: 10.137.25.242
           motion_levels_platform_url: https://platform.motionlevels.obis.dev
           motion_levels_tailscale_host_overrides: motionlevels-1-camera-dev=100.66.119.123
+          # Dormant while motion_levels_x5_enabled=false; retained verbatim so
+          # restoring the X5 does not require reconstructing its registration.
           motion_levels_room_camera_recorders: local|X5 protegida|http://100.76.156.89/camera-recorder
     homelab_caddy:
       hosts:
@@ -70,15 +76,25 @@ all:
           ansible_host: 100.76.156.89
           motion_levels_hostname: motionlevels-1
           motion_levels_containerized_venue: true
-          # The Wayland browser container is installed but remains staged until
-          # a connected-TV maintenance window validates hotplug and HDMI audio.
-          motion_levels_display_backend: x11
-          # X5 plugged into motionlevels-1 itself since 2026-07-10; point back at
-          # http://100.66.119.123:8040 after the dedicated camera host cutover.
-          motion_levels_camera_recorder_url: http://127.0.0.1:8040
+          # The player is isolated behind the host Weston compositor and the
+          # render-only device boundary; validate TV hotplug and HDMI audio live.
+          motion_levels_display_backend: wayland
+          # Dormant while motion_levels_x5_enabled=false. The explicit egress
+          # gateway is deterministic from both core containers; use the camera
+          # host's Tailnet URL instead after a future dedicated-host cutover.
+          motion_levels_camera_recorder_url: http://172.30.53.1:8040
+          motion_levels_x5_caddy_upstream: http://172.30.53.1:8040
           motion_levels_lan_interface: enp2s0
           motion_levels_lan_ipv4: 192.168.1.142/24
           motion_levels_lan_gateway: 192.168.1.1
+          motion_levels_lan_subnet: 192.168.1.0/24
+          motion_levels_tailscale_ipv4: 100.76.156.89
+          # Dedicated ipvlan L2 address for the floor hardware interface. Live
+          # ARP and passive broadcast validation confirmed that .143 is unused.
+          motion_levels_floor_lan_ipv4: 192.168.1.143
+          # Tiles use link-local addresses, so preserve limited broadcast; the
+          # controller pins the source/interface with IPv4 packet information.
+          motion_levels_floor_broadcast_ipv4: 255.255.255.255
         motionlevels-cloud-1:
           ansible_host: 100.94.69.53
           motion_levels_hostname: motionlevels-cloud-1

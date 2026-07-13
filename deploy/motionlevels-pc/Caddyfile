@@ -58,8 +58,14 @@
 		reverse_proxy 127.0.0.1:8020
 	}
 
+	# Keep native rollback from silently restoring the retired X5 surface. The
+	# route remains available as an explicit configuration-only opt-in.
 	handle_path /camera-recorder/* {
-		reverse_proxy 127.0.0.1:8040
+		@x5_enabled expression `"{$MOTION_LEVELS_X5_ENABLED:0}" == "1"`
+		route {
+			reverse_proxy @x5_enabled {$MOTION_LEVELS_X5_UPSTREAM:127.0.0.1:8040}
+			respond 404
+		}
 	}
 
 	@platform_next {

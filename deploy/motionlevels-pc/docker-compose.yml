@@ -8,11 +8,23 @@ services:
     user: "10001:10001"
     init: true
     restart: unless-stopped
-    network_mode: host
     env_file:
       - ${VENUE_RUNTIME_ENV:-/etc/motion-levels/venue/runtime.env}
     environment:
+      MOTION_LEVELS_CONTROLLER_FRAMES: 0.0.0.0:4201
+      MOTION_LEVELS_CONTROLLER_HTTP: 0.0.0.0:4101
+      MOTION_LEVELS_CONTROLLER_INPUT_EVENTS: 0.0.0.0:4202
+      MOTION_LEVELS_FLOOR_SOURCE_IP: ${VENUE_FLOOR_LAN_IPV4:?set VENUE_FLOOR_LAN_IPV4}
+      MOTION_LEVELS_LED_BROADCAST_IP: ${VENUE_FLOOR_BROADCAST_IPV4:?set VENUE_FLOOR_BROADCAST_IPV4}
       MOTION_LEVELS_PLATFORM_TOKEN_FILE: /run/secrets/platform-token
+    networks:
+      core:
+        ipv4_address: 172.30.52.10
+        aliases: [floor-core]
+      egress:
+        ipv4_address: 172.30.53.10
+      floor-hardware:
+        ipv4_address: ${VENUE_FLOOR_LAN_IPV4:?set VENUE_FLOOR_LAN_IPV4}
     volumes:
       - type: bind
         source: /opt/motion-levels/rebuild/var/floor-controller
@@ -50,7 +62,6 @@ services:
       - ${VENUE_AUDIO_GID:?set VENUE_AUDIO_GID}
     init: true
     restart: unless-stopped
-    network_mode: host
     depends_on:
       floor:
         condition: service_healthy
@@ -59,9 +70,18 @@ services:
     environment:
       MOTION_LEVELS_AUDIO_SOCKET: /run/motion-levels-audio/audio.sock
       MOTION_LEVELS_CAMERA_RECORDER_TOKEN_FILE: /run/secrets/camera-recorder-token
+      MOTION_LEVELS_CONTROLLER_FRAMES: floor-core:4201
+      MOTION_LEVELS_CONTROLLER_INPUT_EVENTS: floor-core:4202
+      MOTION_LEVELS_ENGINE_HTTP: 0.0.0.0:4102
       MOTION_LEVELS_GAMES_ROOT: /app/game-bundles/motion-levels-games
       MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR: /var/lib/motion-levels/platform-asset-cache
       MOTION_LEVELS_PLATFORM_TOKEN_FILE: /run/secrets/platform-token
+    networks:
+      core:
+        ipv4_address: 172.30.52.11
+        aliases: [engine-core]
+      egress:
+        ipv4_address: 172.30.53.11
     volumes:
       - type: bind
         source: /run/motion-levels-audio
@@ -112,11 +132,13 @@ services:
     environment:
       MOTION_LEVELS_CAMERA_BIND: 0.0.0.0
       MOTION_LEVELS_CAMERA_PASSWORD_FILE: /run/secrets/tapo-password
-    ports:
-      - 127.0.0.1:8020:8020
     networks:
       cameras:
         ipv4_address: 172.30.50.10
+        aliases: [camera-helper-cameras]
+      camera-api:
+        ipv4_address: 172.30.54.10
+        aliases: [camera-helper-api]
     volumes:
       - type: bind
         source: ${VENUE_CONFIG_ROOT:-/etc/motion-levels/venue}/secrets/tapo-password
@@ -197,7 +219,6 @@ services:
     container_name: motion-levels-venue-caddy
     user: "10003:10003"
     restart: unless-stopped
-    network_mode: host
     depends_on:
       floor:
         condition: service_healthy
@@ -205,6 +226,24 @@ services:
         condition: service_healthy
       camera-helper:
         condition: service_healthy
+    environment:
+      MOTION_LEVELS_X5_ENABLED: ${MOTION_LEVELS_X5_ENABLED:-0}
+      MOTION_LEVELS_X5_UPSTREAM: ${MOTION_LEVELS_X5_UPSTREAM:-http://172.30.53.1:8040}
+    ports:
+      - "127.0.0.1:80:8080"
+      - "${VENUE_TAILSCALE_IPV4:?set VENUE_TAILSCALE_IPV4}:80:8080"
+      - "${VENUE_LAN_IPV4:?set VENUE_LAN_IPV4}:80:8081"
+    networks:
+      core:
+        ipv4_address: 172.30.52.13
+        aliases: [caddy-core]
+      display:
+        ipv4_address: 172.30.51.2
+        aliases: [caddy-display]
+      egress:
+        ipv4_address: 172.30.53.12
+      camera-api:
+        ipv4_address: 172.30.54.2
     volumes:
       - type: bind
         source: /etc/motion-levels/venue-public
@@ -212,7 +251,6 @@ services:
         read_only: true
     read_only: true
     cap_drop: [ALL]
-    cap_add: [NET_BIND_SERVICE]
     security_opt:
       - no-new-privileges=true
     tmpfs:
@@ -223,7 +261,7 @@ services:
     mem_limit: 192m
     cpus: 0.35
     healthcheck:
-      test: [CMD, curl, -fsS, http://127.0.0.1/menu/]
+      test: [CMD, curl, -fsS, http://127.0.0.1:8080/menu/]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -248,7 +286,7 @@ services:
       XDG_RUNTIME_DIR: /run/motion-levels-display
       WAYLAND_DISPLAY: wayland-0
       MOTION_LEVELS_PLAYER_PROFILE: /var/lib/motion-levels/player-profile
-      MOTION_LEVELS_PLAYER_URL: http://172.30.51.1/display/
+      MOTION_LEVELS_PLAYER_URL: http://caddy-display:8080/display/
       MOTION_LEVELS_PLAYER_WINDOW_SIZE: 1920,1080
     networks:
       display:
@@ -274,7 +312,7 @@ services:
     mem_limit: 1024m
     cpus: 1.25
     healthcheck:
-      test: [CMD-SHELL, "grep -aq chromium /proc/[0-9]*/comm && curl -fsS http://172.30.51.1/display/ >/dev/null"]
+      test: [CMD-SHELL, "grep -aq chromium /proc/[0-9]*/comm && curl -fsS http://caddy-display:8080/display/ >/dev/null"]
       interval: 10s
       timeout: 3s
       retries: 12
@@ -283,6 +321,36 @@ services:
       com.motionlevels.revision: ${VENUE_REVISION:?set VENUE_REVISION}
 
 networks:
+  camera-api:
+    name: motion-levels-venue-camera-api
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.54.0/24
+  core:
+    name: motion-levels-venue-core
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.52.0/24
+  egress:
+    name: motion-levels-venue-egress
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.53.0/24
+  floor-hardware:
+    name: motion-levels-venue-floor-hardware
+    driver: ipvlan
+    internal: true
+    driver_opts:
+      parent: ${VENUE_LAN_INTERFACE:?set VENUE_LAN_INTERFACE}
+      ipvlan_mode: l2
+    ipam:
+      config:
+        - subnet: ${VENUE_LAN_SUBNET:?set VENUE_LAN_SUBNET}
   cameras:
     name: motion-levels-venue-cameras
     driver: bridge
@@ -292,6 +360,7 @@ networks:
   display:
     name: motion-levels-venue-display
     driver: bridge
+    internal: true
     ipam:
       config:
         - subnet: 172.30.51.0/24
