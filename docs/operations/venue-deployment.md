@@ -19,6 +19,17 @@ deploy/motionlevels-pc/create-motionlevels-venue-vm.sh
 ```
 
 The helper accepts environment overrides documented at the top of the script.
+Cloud-init carries bootstrapping copies of a small set of canonical runtime
+files from `deploy/motionlevels-pc/`. After changing one of those files, refresh
+and verify the embedded copies before committing:
+
+```sh
+npm run sync:cloud-init-mirrors
+npm run check:cloud-init-mirrors
+```
+
+The static test suite also rejects drift so newly provisioned venues cannot
+silently start with older kiosk, Caddy, audio, environment, or service files.
 
 ## Automatic production deployment
 
