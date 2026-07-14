@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const assert = require("node:assert/strict");
+const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
@@ -9,6 +10,15 @@ const repoRoot = path.resolve(__dirname, "../..");
 function readRepoFile(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
 }
+
+test("cloud-init embeds the canonical venue runtime files", () => {
+  const result = spawnSync(
+    process.execPath,
+    [path.join(repoRoot, "scripts/sync-cloud-init-runtime-files.mjs"), "--check"],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+});
 
 test("venue core services are non-root, read-only, capability-dropped containers", () => {
   const compose = readRepoFile("deploy/motionlevels-pc/docker-compose.yml");
@@ -328,43 +338,28 @@ test("venue Caddy and cloud-init expose local TV and camera proxy routes", () =>
   assert.doesNotMatch(cloudInitSource, /deploy\/homelab\/create-motionlevels-venue-vm\.sh/);
 });
 
-test("venue deployment carries the bounded camera recording segment policy", () => {
+test("venue game-engine carries the bounded external recording segment policy", () => {
   const makefileSource = readRepoFile("Makefile");
   const playbookSource = readRepoFile("ansible/playbooks/venue.yml");
-  const cameraRecorderSource = readRepoFile(
-    "deploy/motionlevels-pc/motion-levels-camera-recorder.py",
-  );
   const gameEngineServiceSource = readRepoFile(
     "deploy/motionlevels-pc/motion-levels-game-engine.service",
   );
 
   assert.match(playbookSource, /default\('1200', true\)/);
-  assert.match(cameraRecorderSource, /SESSION_SEGMENT_SECONDS = float\(os\.environ\.get\("MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS", "1200"\)\)/);
-  assert.match(cameraRecorderSource, /min\(1200, round\(parsed\)\)/);
   assert.match(gameEngineServiceSource, /-camera-recorder-segment-seconds \$\{MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS\}/);
   assert.match(makefileSource, /deployment-policy/);
   assert.match(makefileSource, /MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS="\$\$segment"/);
 });
 
 test("venue retains supported X5 settings behind its disabled switch", () => {
-  const recorderSource = readRepoFile("deploy/motionlevels-pc/motion-levels-camera-recorder.py");
+  const gatewaySource = readRepoFile("deploy/motionlevels-pc/x5-camera-gateway.compose.yml");
   const envSource = readRepoFile("deploy/motionlevels-pc/motion-levels.env");
   const playbookSource = readRepoFile("ansible/playbooks/venue.yml");
   const caddySource = readRepoFile("deploy/motionlevels-pc/Caddyfile");
 
-  assert.match(recorderSource, /DEFAULT_VIDEO_RESOLUTION = os\.environ\.get\("MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION", "5\.7kplus30"\)/);
-  assert.match(recorderSource, /def usb_device_looks_like_camera/);
-  assert.match(recorderSource, /vendor_matches or name_matches/);
-  assert.match(recorderSource, /def normalized_video_projection[\s\S]*?return "360"/);
-  assert.match(recorderSource, /def normalized_video_lens[\s\S]*?return "all"/);
-  assert.match(recorderSource, /def normalized_video_resolution[\s\S]*?return "4k30"/);
-  assert.match(recorderSource, /def normalized_video_frame_rate[\s\S]*?return 30/);
-  assert.match(recorderSource, /"adaptiveToneEnabled": normalized_bool\(base\.get\("adaptiveToneEnabled"\), False\)/);
-  assert.match(recorderSource, /def effective_camera_detected/);
-  assert.match(recorderSource, /camera_status_detected\(status\)/);
-  assert.match(recorderSource, /currentSegmentExpectedStopAt/);
-  assert.match(recorderSource, /lastSegmentBytes/);
-  assert.match(recorderSource, /video_mode = "purevideo"/);
+  assert.match(gatewaySource, /Dormant compatibility binding/);
+  assert.match(gatewaySource, /172\.30\.53\.1:8040:8040/);
+  assert.doesNotMatch(gatewaySource, /network_mode:\s*host/);
   assert.match(envSource, /MOTION_LEVELS_CAMERA_VIDEO_PROJECTION_DEFAULT=360/);
   assert.match(envSource, /MOTION_LEVELS_CAMERA_VIDEO_LENS_DEFAULT=all/);
   assert.match(envSource, /^MOTION_LEVELS_CAMERA_RECORDER_URL=$/m);
@@ -375,6 +370,7 @@ test("venue retains supported X5 settings behind its disabled switch", () => {
   assert.match(playbookSource, /\/usr\/local\/bin\/motion-levels-x5ctl/);
   assert.match(playbookSource, /\/opt\/insta360/);
   assert.doesNotMatch(playbookSource, /Build Insta360 camera helper/);
+  assert.doesNotMatch(playbookSource, /motion-levels-camera-recorder\.py/);
   assert.match(
     caddySource,
     /handle_path \/camera-recorder\/\* \{[\s\S]*MOTION_LEVELS_X5_ENABLED:0[\s\S]*reverse_proxy @x5_enabled \{\$MOTION_LEVELS_X5_UPSTREAM:127\.0\.0\.1:8040\}[\s\S]*respond 404/,

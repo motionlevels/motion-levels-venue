@@ -43,8 +43,11 @@ write_files:
     content: |
       #!/usr/bin/env bash
       # Motion Levels Kiosk Launcher
+      # Configures the display and launches the Chromium player kiosk under xinit.
       set -euo pipefail
 
+      # 1. Read kiosk settings from the systemd-style environment file without
+      # sourcing it as shell; labels and names may contain spaces.
       ENV_FILE=/etc/motion-levels/motion-levels.env
 
       env_file_value() {
@@ -85,6 +88,8 @@ write_files:
       MOTION_LEVELS_PLAYER_PROFILE="$(env_file_value MOTION_LEVELS_PLAYER_PROFILE /var/lib/motion-levels/rebuild-player-chromium)"
       MOTION_LEVELS_PLAYER_URL="$(env_file_value MOTION_LEVELS_PLAYER_URL http://127.0.0.1/display/)"
       MOTION_LEVELS_FORCE_ALSA_OUTPUT="$(env_file_value MOTION_LEVELS_FORCE_ALSA_OUTPUT 0)"
+      MOTION_LEVELS_PLAYER_WINDOW_SIZE="${MOTION_LEVELS_XRANDR_MODE:-1920x1080}"
+      MOTION_LEVELS_PLAYER_WINDOW_SIZE="${MOTION_LEVELS_PLAYER_WINDOW_SIZE//x/,}"
 
       truthy_env() {
         case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
@@ -93,13 +98,24 @@ write_files:
         esac
       }
 
+      # 2. Enable and configure the connected display output.
+      # Whenever an output (HDMI/DP) is connected we want the player visible on it,
+      # so always bring the output up at its preferred mode first. Previously we only
+      # attempted an explicit --mode and swallowed failures, which could leave a
+      # connected TV on a phantom default resolution (e.g. 1024x768) with no signal.
       configure_display() {
         local output mode rate attempt geometry size
         mode="${MOTION_LEVELS_XRANDR_MODE:-}"
         rate="${MOTION_LEVELS_XRANDR_RATE:-60}"
+        # The output may appear a few seconds after X starts (slow EDID, TV powering
+        # on), and the modeset sometimes silently leaves X on the 1024x768 dummy
+        # default. Retry detection AND the modeset until a real geometry is active, so
+        # the TV reliably ends up on a proper resolution instead of a phantom one.
         for attempt in $(seq 1 15); do
           output=$(/usr/bin/xrandr --query 2>/dev/null | awk '/ connected/ { print $1; exit }')
           if [ -n "${output}" ]; then
+            # Preferred mode first so a connected TV always gets a real signal, then
+            # the configured mode on top if it is available.
             /usr/bin/xrandr --output "${output}" --auto --primary 2>/dev/null || true
             if [ -n "${mode}" ]; then
               /usr/bin/xrandr --output "${output}" --mode "${mode}" --rate "${rate}" 2>/dev/null || true
@@ -141,18 +157,25 @@ write_files:
       }
       configure_audio_output
 
-      SCREEN_GEOMETRY="$(/usr/bin/xrandr --query 2>/dev/null | grep -oE '[0-9]+x[0-9]+\+0\+0' | head -1)"
+      # Capture the active screen geometry so Chromium can be forced to fill it. There
+      # is no window manager under this bare xinit session, so --kiosk alone keeps the
+      # Chromium window at its previously saved size; an explicit --window-size makes
+      # the player cover the whole TV even after the output resolution changes.
+      SCREEN_GEOMETRY="$(/usr/bin/xrandr --query 2>/dev/null | grep -oE '[0-9]+x[0-9]+\+0\+0' | head -1 || true)"
       SCREEN_SIZE="${SCREEN_GEOMETRY%%+*}"
       SCREEN_WIDTH="${SCREEN_SIZE%x*}"
       SCREEN_HEIGHT="${SCREEN_SIZE#*x}"
 
+      # 3. Ensure player user data directory exists
       USER_DATA_DIR="${MOTION_LEVELS_PLAYER_PROFILE}"
       mkdir -p "${USER_DATA_DIR}"
 
+      # 4. Hide mouse cursor if unclutter is available
       if command -v /usr/bin/unclutter >/dev/null 2>&1; then
         /usr/bin/unclutter -idle 0.1 -root &
       fi
 
+      # 5. Build Chromium arguments
       CHROME_FLAGS=(
         --kiosk
         --no-first-run
@@ -161,22 +184,30 @@ write_files:
         --noerrdialogs
         --disable-infobars
         --disable-session-crashed-bubble
+        --disable-translate
         --disable-features=Translate
+        --window-position=0,0
+        --window-size="${MOTION_LEVELS_PLAYER_WINDOW_SIZE}"
+        --start-fullscreen
         --check-for-update-interval=31536000
         --autoplay-policy=no-user-gesture-required
       )
 
+      # Force the window to cover the whole screen (no WM to maximise it for us).
       if [ -n "${SCREEN_WIDTH:-}" ] && [ -n "${SCREEN_HEIGHT:-}" ]; then
         CHROME_FLAGS+=( --window-position=0,0 "--window-size=${SCREEN_WIDTH},${SCREEN_HEIGHT}" )
       fi
 
+      # Chromium won't run as root without --no-sandbox
       if [ "$(id -u)" -eq 0 ]; then
         CHROME_FLAGS+=( --no-sandbox )
       fi
 
+      # Determine target URL
       TARGET_URL="${MOTION_LEVELS_PLAYER_URL}"
+
       echo "Starting Chromium kiosk pointing to ${TARGET_URL}..."
-      exec /usr/bin/chromium "${CHROME_FLAGS[@]}" "${TARGET_URL}"
+      exec /usr/bin/chromium "${CHROME_FLAGS[@]}" --app="${TARGET_URL}"
 
   - path: /etc/asound.conf
     owner: root:root
@@ -219,6 +250,7 @@ write_files:
     permissions: '0755'
     content: |
       #!/usr/bin/env bash
+      # Keeps the HDMI TV output usable after hotplug, power-cycle, or EDID glitches.
       set -euo pipefail
 
       ENV_FILE=/etc/motion-levels/motion-levels.env
@@ -241,6 +273,14 @@ write_files:
         fi
 
         value="${value%$'\r'}"
+        if [ "${#value}" -ge 2 ]; then
+          local first="${value:0:1}"
+          local last="${value: -1}"
+          if { [ "${first}" = '"' ] && [ "${last}" = '"' ]; } || { [ "${first}" = "'" ] && [ "${last}" = "'" ]; }; then
+            value="${value:1:${#value}-2}"
+          fi
+        fi
+
         if [ -n "${value}" ]; then
           printf '%s' "${value}"
         else
@@ -401,6 +441,8 @@ write_files:
     permissions: '0644'
     content: |
       # Motion Levels local appliance defaults.
+      # Installed to /etc/motion-levels/motion-levels.env if that file does not exist.
+
       MOTION_LEVELS_CONTROLLER_HTTP=127.0.0.1:4101
       MOTION_LEVELS_ENGINE_HTTP=127.0.0.1:4102
 
@@ -413,7 +455,10 @@ write_files:
 
       MOTION_LEVELS_PLATFORM_URL=https://platform.motionlevels.obis.dev
       MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR=/var/lib/motion-levels/platform-asset-cache
-      MOTION_LEVELS_CONTROLLER_LABEL=Venue Floor 1
+      # Room name shown on the platform (operations, history, session pages).
+      MOTION_LEVELS_CONTROLLER_LABEL=Zaragoza Caracol 1
+      # Tailnet hostname for the platform gateway links (Menu/Display/Controller/Engine).
+      # Kept separate from the label so the room can be renamed freely.
       MOTION_LEVELS_CONTROLLER_HOSTNAME=motionlevels-1
       # Controller frame recording is opt-in; leave upload disabled by default.
       MOTION_LEVELS_RECORDING_UPLOAD_PLATFORM_URL=
@@ -441,15 +486,30 @@ write_files:
       MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS=1200
       MOTION_LEVELS_CAMERA_SESSION_MAX_SECONDS=7200
       MOTION_LEVELS_CAMERA_DELETE_REMOTE_AFTER_DOWNLOAD=1
-      # Insta360 X5 ownership lives exclusively in
-      # motionlevels/motion-levels-cameras. This stack must not install a
-      # CameraSDK helper or start a camera recorder service.
-      # Object-storage uploads use an rclone S3 remote configured outside this
-      # file. The current Motion Levels target is:
+      # Insta360 X5 ownership lives exclusively in motionlevels/motion-levels-cameras.
+      # This stack must not install CameraSDK helpers or start a camera recorder service.
+      # Object-storage uploads use an rclone S3 remote configured outside this file.
+      # The current Motion Levels target is:
       # MOTION_LEVELS_CAMERA_RCLONE_DEST=motionlevels-objects:motionlevels-recordings
       # MOTION_LEVELS_CAMERA_RCLONE_PATH_PREFIX=x5-camera
+      # USB/UVC camera recording can be enabled with:
+      # MOTION_LEVELS_CAMERA_RECORDER_BACKEND=ffmpeg
+      # MOTION_LEVELS_CAMERA_RECORDER_DEVICE=/dev/v4l/by-id/usb-Insta360_...-video-index0
+      # MOTION_LEVELS_CAMERA_RECORDER_INPUT_FORMAT=mjpeg
+      # MOTION_LEVELS_CAMERA_RECORDER_VIDEO_SIZE=2880x1440
+      # MOTION_LEVELS_CAMERA_RECORDER_FRAMERATE=30
       MOTION_LEVELS_CAMERA_RCLONE_DEST=
       MOTION_LEVELS_CAMERA_RCLONE_PATH_PREFIX=
+
+      MOTION_LEVELS_SECURITY_RECORDER_ENABLED=1
+      MOTION_LEVELS_SECURITY_CAMERA_ID=130
+      MOTION_LEVELS_SECURITY_CAMERA_LABEL=Cámara frontal
+      MOTION_LEVELS_SECURITY_CAMERA_ROLE=front
+      MOTION_LEVELS_SECURITY_RECORDINGS_ROOT=/var/lib/motion-levels/security-recordings
+      MOTION_LEVELS_SECURITY_RECORDER_AUDIO=0
+      MOTION_LEVELS_SECURITY_RECORDER_SEGMENT_SECONDS=300
+      MOTION_LEVELS_SECURITY_RECORDER_RETENTION_DAYS=14
+      MOTION_LEVELS_SECURITY_RECORDER_DELETE_LOCAL_AFTER_UPLOAD=1
 
       MOTION_LEVELS_PLAYER_URL=http://127.0.0.1/display/
       MOTION_LEVELS_PLAYER_PROFILE=/var/lib/motion-levels/rebuild-player-chromium
@@ -462,15 +522,14 @@ write_files:
       MOTION_LEVELS_HDMI_WATCHDOG_FAILURES=3
       MOTION_LEVELS_HDMI_WATCHDOG_RESTART_COOLDOWN=45
 
-      # Camera snapshot helper. Store secrets only on the appliance, preferably
-      # in /etc/motion-levels/camera.env as MOTION_LEVELS_CAMERA_PASSWORD.
+      # Camera snapshot helper. Store secrets only on the appliance, preferably in
+      # /etc/motion-levels/camera.env as MOTION_LEVELS_CAMERA_PASSWORD.
       MOTION_LEVELS_CAMERA_USER=motionlevels
       MOTION_LEVELS_CAMERA_128_HOST=192.168.1.128
       MOTION_LEVELS_CAMERA_129_HOST=192.168.1.129
       MOTION_LEVELS_CAMERA_130_HOST=192.168.1.130
       MOTION_LEVELS_CAMERA_FPS=2
       MOTION_LEVELS_CAMERA_JPEG_QUALITY=55
-      MOTION_LEVELS_CAMERA_IDLE_SECONDS=20
 
   # 3. Default Caddy reverse proxy config
   - path: /etc/caddy/Caddyfile
@@ -498,14 +557,14 @@ write_files:
         }
 
         # The /tv and /cameras pages — and the platform assets/APIs and camera
-        # streams they depend on — are exposed only on the wired venue LAN
-        # address (192.168.1.142), which lives solely on the ethernet
-        # interface. Each handler ANDs the host with its path so other routes
-        # (/menu, /display, /engine, ...) keep working on 192.168.1.142, while
-        # /tv and /cameras stay unreachable from wifi or any other address.
+        # streams they depend on — are exposed only on the wired venue LAN address
+        # (192.168.1.142), which lives solely on the ethernet interface. Each
+        # handler ANDs the host with its path so other routes (/menu, /display,
+        # /engine, ...) keep working on 192.168.1.142, while /tv and /cameras stay
+        # unreachable from the wifi interface or any other address.
         @platform_tv {
-          host 192.168.1.142
           path /tv /tv/
+          expression {http.request.local.host} == "192.168.1.142"
         }
         handle @platform_tv {
           rewrite * /salas/motionlevels-1/tv
@@ -519,8 +578,8 @@ write_files:
         }
 
         @platform_cameras {
-          host 192.168.1.142
           path /cameras /cameras/
+          expression {http.request.local.host} == "192.168.1.142"
         }
         handle @platform_cameras {
           root * /opt/motion-levels/rebuild/current/deploy/motionlevels-pc
@@ -530,20 +589,26 @@ write_files:
         }
 
         # Camera frame endpoint. NOT restricted to the wired LAN address: the
-        # platform pulls these snapshots over Tailscale (Host: motionlevels-1)
-        # for its own cameras page, so gating this to 192.168.1.142 would break
-        # it. Only the /cameras page above is ethernet-only.
+        # platform pulls these snapshots over Tailscale (Host: motionlevels-1) for
+        # its own cameras page, so gating this to 192.168.1.142 would break it.
+        # Only the /cameras page above is ethernet-only.
         handle /cam/* {
           reverse_proxy 127.0.0.1:8020
         }
 
-        handle /camera-recorder/* {
-          respond "Legacy X5 recorder disabled; use motion-levels-cameras on port 8040" 410
+        # Keep native rollback from silently restoring the retired X5 surface. The
+        # route remains available as an explicit configuration-only opt-in.
+        handle_path /camera-recorder/* {
+          @x5_enabled expression `"{$MOTION_LEVELS_X5_ENABLED:0}" == "1"`
+          route {
+            reverse_proxy @x5_enabled {$MOTION_LEVELS_X5_UPSTREAM:127.0.0.1:8040}
+            respond 404
+          }
         }
 
         @platform_next {
-          host 192.168.1.142
           path /_next/*
+          expression {http.request.local.host} == "192.168.1.142"
         }
         handle @platform_next {
           reverse_proxy https://84.7.190.81 {
@@ -556,8 +621,8 @@ write_files:
         }
 
         @platform_rooms {
-          host 192.168.1.142
           path /api/rooms/*
+          expression {http.request.local.host} == "192.168.1.142"
         }
         handle @platform_rooms {
           reverse_proxy https://84.7.190.81 {
@@ -570,8 +635,8 @@ write_files:
         }
 
         @platform_live_floor {
-          host 192.168.1.142
           path /api/live-floor/*
+          expression {http.request.local.host} == "192.168.1.142"
         }
         handle @platform_live_floor {
           reverse_proxy https://84.7.190.81 {
@@ -621,6 +686,11 @@ write_files:
         handle_path /games/* {
           root * /opt/motion-levels/rebuild/current/game-bundles/motion-levels-games
           header Cache-Control "public, max-age=31536000, immutable"
+          file_server
+        }
+
+        handle /stack.json {
+          root * /etc/motion-levels
           file_server
         }
 
@@ -737,10 +807,10 @@ write_files:
     content: |
       [Unit]
       Description=Motion Levels HDMI kiosk browser
-      After=network-online.target sound.target caddy.service motion-levels-game-engine.service
-      Wants=network-online.target sound.target caddy.service motion-levels-game-engine.service
-      Conflicts=getty@tty7.service display-manager.service
-      
+      After=network-online.target sound.target caddy.service motion-levels-venue-containers.service
+      Wants=network-online.target sound.target
+      Conflicts=getty@tty7.service display-manager.service motion-levels-player-tv.service
+
       [Service]
       Type=simple
       EnvironmentFile=/etc/motion-levels/motion-levels.env
@@ -836,6 +906,6 @@ runcmd:
 
   # 8. Reload systemd daemon to recognize newly written services
   - systemctl daemon-reload
-  
+
   # 9. Enable Caddy web server (will start up and reload Caddyfile)
   - systemctl enable --now caddy
