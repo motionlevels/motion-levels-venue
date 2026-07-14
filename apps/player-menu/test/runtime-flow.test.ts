@@ -125,6 +125,43 @@ describe("runtime screen flow", () => {
     assert.match(source, /setPendingControlAction\(action\)/);
     assert.match(source, /status\.pressureStreamConnected === false/);
     assert.match(source, /floorBlocked \? "Suelo sin señal"/);
+    assert.match(source, /const blocked = [^;]*\|\| floorBlocked;/);
+    assert.match(source, /floorUnavailable \? "floor_unavailable"/);
+  });
+
+  it("commits launch state and started events only after the engine accepts the game", () => {
+    const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const launchStart = source.indexOf("  async function launch(");
+    const launchEnd = source.indexOf("\n  async function restartLaunchedGame", launchStart);
+    assert.ok(launchStart >= 0 && launchEnd > launchStart, "launch function should be present");
+    const launchSource = source.slice(launchStart, launchEnd);
+
+    const selectIndex = launchSource.indexOf("const nextStatus = await selectGame(");
+    const menuCommitIndex = launchSource.indexOf("setMenu((current) => {");
+    const partyCommitIndex = launchSource.indexOf("setPartyRun(isPartyCard(game)");
+    const gameStartedIndex = launchSource.indexOf('captureMenuEvent("game_started"');
+    const challengeStartedIndex = launchSource.indexOf('captureMenuEvent("challenge_started"');
+    assert.ok(selectIndex >= 0, "engine selection should be awaited");
+    assert.ok(menuCommitIndex > selectIndex, "menu state should commit after engine selection");
+    assert.ok(partyCommitIndex > selectIndex, "Party state should commit after engine selection");
+    assert.ok(gameStartedIndex > selectIndex, "game_started should describe a successful start");
+    assert.ok(challengeStartedIndex > selectIndex, "challenge_started should describe a successful start");
+    assert.match(launchSource.slice(menuCommitIndex), /\.\.\.current,[\s\S]*selectedGame: game\.id/);
+  });
+
+  it("advances Party state only after the next game starts and retries a rejected transition", () => {
+    const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const effectStart = source.indexOf('    if (!partyRun || !status || status.phase !== "finished") return;');
+    const effectEnd = source.indexOf("\n  // Selecting another card", effectStart);
+    assert.ok(effectStart >= 0 && effectEnd > effectStart, "Party auto-advance effect should be present");
+    const effectSource = source.slice(effectStart, effectEnd);
+
+    const launchIndex = effectSource.indexOf("void launch(party.id");
+    assert.ok(launchIndex >= 0, "Party should launch the next child");
+    assert.doesNotMatch(effectSource.slice(0, launchIndex), /setPartyRun\(\{[\s\S]*index: nextIndex/);
+    assert.match(effectSource, /\.then\(\(started\) => \{/);
+    assert.match(effectSource, /processedPartyFinishes\.current\.delete\(finishKey\)/);
+    assert.match(effectSource, /setPartyAdvanceRetry\(\(current\) => current \+ 1\)/);
   });
 
   it("schedules the inactivity deadline instead of waiting for another pressure update", () => {

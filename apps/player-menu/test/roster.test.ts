@@ -8,6 +8,7 @@ import {
   channelToHex,
   colorChannels,
   colorDistanceSquared,
+  ensureActiveRoster,
   firstAvailableColor,
   gameRosterIssue,
   normalizeRosterName,
@@ -108,6 +109,34 @@ describe("roster labels", () => {
     assert.equal(snapshot.length, 1);
     assert.equal(snapshot[0].label, "Ana");
     assert.deepEqual(snapshot[0].color, { r: 255, g: 0, b: 0 });
+  });
+});
+
+describe("roster activation", () => {
+  it("keeps an active roster unchanged", () => {
+    const players = [player({ id: 4, active: true })];
+    const result = ensureActiveRoster(players, 9);
+    assert.equal(result.players, players);
+    assert.equal(result.nextPlayerId, 9);
+  });
+
+  it("reactivates an existing player instead of appending a ghost player", () => {
+    const players = [player({ id: 4, active: false }), player({ id: 7, active: false })];
+    const result = ensureActiveRoster(players, 7);
+    assert.equal(result.players.length, 2);
+    assert.equal(result.players[0].active, true);
+    assert.equal(result.players[1].active, false);
+    assert.equal(result.nextPlayerId, 7);
+  });
+
+  it("creates the first player only when the roster is empty", () => {
+    const result = ensureActiveRoster([], 7);
+    assert.equal(result.players.length, 1);
+    assert.equal(result.players[0].id, 8);
+    assert.equal(result.players[0].name, "");
+    assert.equal(result.players[0].active, true);
+    assert.match(result.players[0].color, /^#[0-9a-f]{6}$/i);
+    assert.equal(result.nextPlayerId, 8);
   });
 });
 

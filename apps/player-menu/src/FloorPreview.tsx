@@ -7,14 +7,20 @@ const GAP = 2;
 const LIT = PITCH - GAP;
 const IDLE: [number, number, number] = [13, 19, 30]; // unlit LED, matches controller preview tile tone
 const IDLE_CSS = `rgb(${IDLE[0]}, ${IDLE[1]}, ${IDLE[2]})`;
-const FPS = 50;
-
 type FloorPreviewOrientation = "portrait" | "landscape";
 
 // Renders the 16x32 LED floor as crisp tiles on a canvas and
-// loops the given per-game animation. One self-contained rAF loop per card; pauses when the
-// tab is hidden and falls back to a single static frame under prefers-reduced-motion.
-export function FloorPreview({ anim, orientation = "portrait" }: { anim: FloorAnim; orientation?: FloorPreviewOrientation }) {
+// loops the given per-game animation. Each preview pauses outside the viewport or while the
+// tab is hidden, and falls back to a single static frame under prefers-reduced-motion.
+export function FloorPreview({
+  anim,
+  orientation = "portrait",
+  fps = 50,
+}: {
+  anim: FloorAnim;
+  orientation?: FloorPreviewOrientation;
+  fps?: number;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -69,39 +75,55 @@ export function FloorPreview({ anim, orientation = "portrait" }: { anim: FloorAn
       });
     }
 
-    if (reduceMotion) {
-      draw(2.4);
-      return () => resizeObserver.disconnect();
-    }
+    draw(2.4);
+    if (reduceMotion) return () => resizeObserver.disconnect();
 
+    const interval = 1000 / Math.max(1, Math.min(60, fps));
     let raf = 0;
     let last = -1;
-    const interval = 1000 / FPS;
+    let inViewport = true;
+
+    function shouldAnimate() {
+      return !document.hidden && inViewport;
+    }
 
     function frame(nowMs: number) {
-      raf = requestAnimationFrame(frame);
-      if (nowMs - last < interval) return;
-      last = nowMs;
-      draw(nowMs / 1000);
-    }
-
-    function onVisibility() {
-      if (document.hidden) {
-        cancelAnimationFrame(raf);
-      } else {
-        last = -1;
-        raf = requestAnimationFrame(frame);
+      raf = 0;
+      if (!shouldAnimate()) return;
+      if (nowMs - last >= interval) {
+        last = nowMs;
+        draw(nowMs / 1000);
       }
+      raf = requestAnimationFrame(frame);
     }
 
-    raf = requestAnimationFrame(frame);
-    document.addEventListener("visibilitychange", onVisibility);
+    function updateAnimation() {
+      if (!shouldAnimate()) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+        return;
+      }
+      if (raf) return;
+      last = -1;
+      raf = requestAnimationFrame(frame);
+    }
+
+    const intersectionObserver = typeof IntersectionObserver === "undefined"
+      ? null
+      : new IntersectionObserver(([entry]) => {
+          inViewport = entry?.isIntersecting ?? true;
+          updateAnimation();
+        }, { rootMargin: "80px" });
+    intersectionObserver?.observe(targetCanvas);
+    updateAnimation();
+    document.addEventListener("visibilitychange", updateAnimation);
     return () => {
       resizeObserver.disconnect();
+      intersectionObserver?.disconnect();
       cancelAnimationFrame(raf);
-      document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener("visibilitychange", updateAnimation);
     };
-  }, [anim, orientation]);
+  }, [anim, fps, orientation]);
 
   return <canvas ref={canvasRef} className="floor-canvas" aria-hidden="true" />;
 }

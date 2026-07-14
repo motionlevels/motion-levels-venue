@@ -12,6 +12,21 @@ export type Player = {
 
 export type RosterIssue = { message: string; playerIds: Set<number> };
 
+export function ensureActiveRoster(players: Player[], nextPlayerId: number): { players: Player[]; nextPlayerId: number } {
+  if (players.some((player) => player.active)) return { players, nextPlayerId };
+  if (players.length > 0) {
+    return {
+      players: players.map((player, index) => index === 0 ? { ...player, active: true } : player),
+      nextPlayerId,
+    };
+  }
+  const id = nextPlayerId + 1;
+  return {
+    players: [{ id, name: "", color: playerColors[0], active: true }],
+    nextPlayerId: id,
+  };
+}
+
 export function playerLabel(players: Player[], player: Player): string {
   const name = player.name.trim();
   if (name) return name;
