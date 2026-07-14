@@ -1,0 +1,478 @@
+{
+  "schema": "motion-levels-games-bundle-v1",
+  "contractVersion": 1,
+  "runnerProtocolVersion": 1,
+  "sourceRevision": "ce30c13d1421b8436c8b0c8e517e13c8a8871b5e",
+  "sdkFps": 50,
+  "artifactDigest": "81719d52d97d1cc73a25ffdebabab312f3ab5513b5a1a28ccdca3b598f70364e",
+  "runtime": {
+    "entry": "runtime/runner.mjs",
+    "games": [
+      "arkanoid",
+      "duelo",
+      "lava",
+      "memoria-v2",
+      "memory-challenge",
+      "patrones",
+      "ping-pong",
+      "ping-pong-v2",
+      "saltos",
+      "tetris",
+      "whack-a-mole"
+    ]
+  },
+  "playerDisplay": {
+    "entry": "display/display.js",
+    "games": [
+      "arkanoid",
+      "duelo",
+      "lava",
+      "memoria-v2",
+      "memory-challenge",
+      "patrones",
+      "ping-pong",
+      "ping-pong-v2",
+      "saltos",
+      "tetris",
+      "whack-a-mole"
+    ]
+  },
+  "catalog": "catalog.json",
+  "files": [
+    {
+      "path": "catalog.json",
+      "sha256": "ceda7335d84c086fb8eb1e36eb88f3ac5e74c5d86eaf42cf57dbe4e848dd44eb",
+      "bytes": 31842
+    },
+    {
+      "path": "display/display.js",
+      "sha256": "5fae63c31fbb063afe9f43ce558f0530a9214673310f6b91bb54f27d82fa0553",
+      "bytes": 443612
+    },
+    {
+      "path": "media/arkanoid/arkanoid-player-display-animation.webp",
+      "sha256": "ac5d58317a59f0178c62af52c96c45a3b9f64f7cb7db4a128e7409ce666fa97f",
+      "bytes": 68410
+    },
+    {
+      "path": "media/arkanoid/arkanoid-player-display.webp",
+      "sha256": "1e0faa592c1582fbfefeaf3dcb1d80fb509bb520c67a3510af0418dbff63da65",
+      "bytes": 37250
+    },
+    {
+      "path": "media/arkanoid/arkanoid-preview.webp",
+      "sha256": "0ef40b6ce9ae9770af291a58e06ec30609d628e42a0e32152c37e64386f36ea7",
+      "bytes": 7904
+    },
+    {
+      "path": "media/arkanoid/arkanoid-thumbnail-small.webp",
+      "sha256": "957fb84cc5742dccc93cf261fa814b2059f1ed731521fefe27935bb2ced33b77",
+      "bytes": 822
+    },
+    {
+      "path": "media/arkanoid/arkanoid-thumbnail.webp",
+      "sha256": "bfe3bd64447abdda1031af717e07c2af4b26b6e1a8ba259dd08ec4465b320a0f",
+      "bytes": 7682
+    },
+    {
+      "path": "media/arkanoid/metadata.json",
+      "sha256": "cc270f20d648b7977b4b172fa2cc5df7d8eb8099741642cf91a231a311595863",
+      "bytes": 1913
+    },
+    {
+      "path": "media/duelo/duelo-player-display-animation.webp",
+      "sha256": "c26f4a21b98ca42a204afd9a08e559f2d0f236b478569ee43cb60f9ad715a296",
+      "bytes": 38358
+    },
+    {
+      "path": "media/duelo/duelo-player-display.webp",
+      "sha256": "dd74853fea633bb7d99a8fb0465764b62f519c6ea0ddb876e3c29484f25510dd",
+      "bytes": 52556
+    },
+    {
+      "path": "media/duelo/duelo-preview.webp",
+      "sha256": "ca0dc089d9981f260f64ccdde2af15bc575400c41e5410bc75b1662e952a06f1",
+      "bytes": 104794
+    },
+    {
+      "path": "media/duelo/duelo-thumbnail-small.webp",
+      "sha256": "f204ef1aa68c904afd31aed4437d3d52c3705d16644e0cbd822b19d4ca3a8086",
+      "bytes": 1810
+    },
+    {
+      "path": "media/duelo/duelo-thumbnail.webp",
+      "sha256": "9bbc4ede711481801d568e22da01a44f7fd2f535a16a043e4e10c0f536fa077f",
+      "bytes": 25722
+    },
+    {
+      "path": "media/duelo/metadata.json",
+      "sha256": "4d5068177d8a62b927702a45b7d32731aaeb1f7a9095730bddbc3cd923735c4e",
+      "bytes": 1892
+    },
+    {
+      "path": "media/hello-world/hello-world-player-display-animation.webp",
+      "sha256": "097d229220eddaef5767064411413b702caa488c047d5bfd0ab3e9f7626bc3ff",
+      "bytes": 15460
+    },
+    {
+      "path": "media/hello-world/hello-world-player-display.webp",
+      "sha256": "f2563e8e53e9a572d97d9a6deb86e83bc470ef5b1153bcba60a48a259fd23baf",
+      "bytes": 37786
+    },
+    {
+      "path": "media/hello-world/hello-world-preview.webp",
+      "sha256": "315adc834bc0d5e6f63dd8c191d6533765df58ae7fba631eb3b9aeb97239d8b1",
+      "bytes": 530
+    },
+    {
+      "path": "media/hello-world/hello-world-thumbnail-small.webp",
+      "sha256": "37d322f70745ba45787d6ed410fdd3be2499200df1cd9cf5fc392aaa92a2f7cc",
+      "bytes": 694
+    },
+    {
+      "path": "media/hello-world/hello-world-thumbnail.webp",
+      "sha256": "b33d6d766069725ac2f326f30452c2beb0a8158117018d018161b865a7bc6ec5",
+      "bytes": 2668
+    },
+    {
+      "path": "media/hello-world/metadata.json",
+      "sha256": "15d4103bc0cef9876d505d47338fd81bedcaddbe9d3efbbfe7f69183fb86a88e",
+      "bytes": 1901
+    },
+    {
+      "path": "media/lava/lava-player-display-animation.webp",
+      "sha256": "370c9cb22479dc876b8d2f976a9e0ad4a749f947e0e6dbbe850e42e2cdd8edef",
+      "bytes": 179474
+    },
+    {
+      "path": "media/lava/lava-player-display.webp",
+      "sha256": "1e135900763bda11efdc52534fddb7f2de79e15f6cef6c0f3e12131cdda78303",
+      "bytes": 55442
+    },
+    {
+      "path": "media/lava/lava-preview.webp",
+      "sha256": "376cb928b654ba33b9befccdae91d1762123c32b90ec9bec36538a896a3db01a",
+      "bytes": 72778
+    },
+    {
+      "path": "media/lava/lava-thumbnail-small.webp",
+      "sha256": "5bed57e13ed9b2aaa6ebcb934f094dc5bdcc7fa6d56f4e113ea1dc630239792c",
+      "bytes": 1110
+    },
+    {
+      "path": "media/lava/lava-thumbnail.webp",
+      "sha256": "5c6ffd51f0c2c201b453bd2805edbdc10d06c89bc8bc9acf7f9bbb884b660fc5",
+      "bytes": 26344
+    },
+    {
+      "path": "media/lava/metadata.json",
+      "sha256": "9b0867e68b7f999e358e762d7371d7a9fa9c7de16c7e8d6cd215f7babcd3e8b2",
+      "bytes": 1589
+    },
+    {
+      "path": "media/memoria-v2/memoria-v2-player-display-animation.webp",
+      "sha256": "7977545065684ff4624426d6cb9a8e94c0c096cdbe1484520b593fa71c93d020",
+      "bytes": 17724
+    },
+    {
+      "path": "media/memoria-v2/memoria-v2-player-display.webp",
+      "sha256": "938f404a33f45e2f2fa0db861af6b75f8e80aaa182bffe0d97cbe7333bbd2b23",
+      "bytes": 33416
+    },
+    {
+      "path": "media/memoria-v2/memoria-v2-preview.webp",
+      "sha256": "40a0af4aa9fc6de4b305bfebd50aef441405771f09774521bffd7cefd1f62119",
+      "bytes": 634
+    },
+    {
+      "path": "media/memoria-v2/memoria-v2-thumbnail-small.webp",
+      "sha256": "319631bbb9878620cc614c45a01a42c666c789e0a9df532988d61ad19c1bd37d",
+      "bytes": 696
+    },
+    {
+      "path": "media/memoria-v2/memoria-v2-thumbnail.webp",
+      "sha256": "f3a7c0a67c5885c6cbf9e6666bbf2be3e35c1a5ec871c956c849410e787591bb",
+      "bytes": 3892
+    },
+    {
+      "path": "media/memoria-v2/metadata.json",
+      "sha256": "e66622eb92330e753b68d727dc15f6fa62ab70d46a4dd9955f09cf57eee7d714",
+      "bytes": 1592
+    },
+    {
+      "path": "media/memory-challenge/memory-challenge-player-display-animation.webp",
+      "sha256": "e92faf5d11519824a36979558dba60255ae0abb32c902ea0c95eaaf469d18d63",
+      "bytes": 31978
+    },
+    {
+      "path": "media/memory-challenge/memory-challenge-player-display.webp",
+      "sha256": "dcc9e56c30a64e7b4e33208bf6d1d4566509cdd6afe083c65e7baba4767addc9",
+      "bytes": 39588
+    },
+    {
+      "path": "media/memory-challenge/memory-challenge-preview.webp",
+      "sha256": "3377d21fc4e671c4123dce0031e32bd479026b564fd7c9cf8bfe7f72720f500e",
+      "bytes": 45656
+    },
+    {
+      "path": "media/memory-challenge/memory-challenge-thumbnail-small.webp",
+      "sha256": "b3d666752d1b413a25efed3bf6d2c10508a90f77ab194a3eb2f7b51ffccc0b28",
+      "bytes": 1446
+    },
+    {
+      "path": "media/memory-challenge/memory-challenge-thumbnail.webp",
+      "sha256": "2bb7829b2a7d81ca979146d40e2e693958fab92eedf82aa2e3a9b8225d1c87c4",
+      "bytes": 18534
+    },
+    {
+      "path": "media/memory-challenge/metadata.json",
+      "sha256": "d604a7bb3f6b5aa4e8e916aa224f4064222c0a6d1c7516e60a55ffc4425c573e",
+      "bytes": 1730
+    },
+    {
+      "path": "media/meteor-dodge/metadata.json",
+      "sha256": "206a56a2bd54b6a4217457c589db6e3a8929c49ea02225192cbeec030042252e",
+      "bytes": 1735
+    },
+    {
+      "path": "media/meteor-dodge/meteor-dodge-player-display-animation.webp",
+      "sha256": "95b7eeaddfbced691558cf38cf345f84bd07effd383e0c9c87b502fcc8b0ebeb",
+      "bytes": 64496
+    },
+    {
+      "path": "media/meteor-dodge/meteor-dodge-player-display.webp",
+      "sha256": "f187efe60cf3990076dfbb55dc922f4dccbc2d659a0825cd797d2672ee59452c",
+      "bytes": 38144
+    },
+    {
+      "path": "media/meteor-dodge/meteor-dodge-preview.webp",
+      "sha256": "6b6251be263ac8f42f90be0dbd200f82a2b81e27b99e1732b6887d29d040bdd5",
+      "bytes": 5494
+    },
+    {
+      "path": "media/meteor-dodge/meteor-dodge-thumbnail-small.webp",
+      "sha256": "6e42862768d97bef2297a30e24cb2753a3dabb315c2dd7316e5e4cc915af5716",
+      "bytes": 742
+    },
+    {
+      "path": "media/meteor-dodge/meteor-dodge-thumbnail.webp",
+      "sha256": "4c78cc6e4c5785c9bd0d9d7f8bf23eb5b9bad873582854016a322998f2ace85e",
+      "bytes": 2990
+    },
+    {
+      "path": "media/patrones/metadata.json",
+      "sha256": "980e2bda140d7ae4387a012890c8a08f06d0c60682f1806a4fc660fa273e22d7",
+      "bytes": 1608
+    },
+    {
+      "path": "media/patrones/patrones-player-display-animation.webp",
+      "sha256": "c5e9edde971609996ffe560b0718eccb6dc30a615e61ed7cf2cd5a534329c6f7",
+      "bytes": 16328
+    },
+    {
+      "path": "media/patrones/patrones-player-display.webp",
+      "sha256": "59f3708fe4fe4a9df04c2b1ce9642f98af0685a87b8eb0a96641f75743d74559",
+      "bytes": 35730
+    },
+    {
+      "path": "media/patrones/patrones-preview.webp",
+      "sha256": "79675a0018f7e46ca38a056d38ff8594c5247344db8db5dcbf2341427d5be85b",
+      "bytes": 666
+    },
+    {
+      "path": "media/patrones/patrones-thumbnail-small.webp",
+      "sha256": "c7c43fd973c69c5f4cce9e76edb901536df1abfcdaa42113e2326b249fd323c7",
+      "bytes": 758
+    },
+    {
+      "path": "media/patrones/patrones-thumbnail.webp",
+      "sha256": "5fd020a0bbc1ec5ffc2dd15d9abd45832ede3f633af4d6c70354e71ee4d6385a",
+      "bytes": 3970
+    },
+    {
+      "path": "media/ping-pong-v2/metadata.json",
+      "sha256": "a631621e888215fa235161b9030c486c2d9f66d7a918c0a2d4c940f7c0b713d7",
+      "bytes": 1783
+    },
+    {
+      "path": "media/ping-pong-v2/ping-pong-v2-player-display-animation.webp",
+      "sha256": "f4d99c3604bc44e44cd646deb4a1a78b3b24031baf4fb40d7fb4923d767d0da8",
+      "bytes": 133544
+    },
+    {
+      "path": "media/ping-pong-v2/ping-pong-v2-player-display.webp",
+      "sha256": "67dd68496b7c45e26a5ef844a1327a4c3cfa5212790d35d3fb22e8526da1f247",
+      "bytes": 43186
+    },
+    {
+      "path": "media/ping-pong-v2/ping-pong-v2-preview.webp",
+      "sha256": "b3c86a17b2a549a2b764c78412a59b2b6d67cfcaa65fd8591b898817095690b1",
+      "bytes": 29576
+    },
+    {
+      "path": "media/ping-pong-v2/ping-pong-v2-thumbnail-small.webp",
+      "sha256": "6e88f1f737e426786122df3c844c7dfcce7c012cf4abdf2faee0548bfffd7c13",
+      "bytes": 1034
+    },
+    {
+      "path": "media/ping-pong-v2/ping-pong-v2-thumbnail.webp",
+      "sha256": "4dc434ca85c438d1cee584e0a56d26a1e3913ec88fb96c30f4e86d379c332e5e",
+      "bytes": 8348
+    },
+    {
+      "path": "media/ping-pong/metadata.json",
+      "sha256": "1ed83cd0edbf23b8b66718dcd1276af33571d3cb33a9788892c0d5cff1174cd8",
+      "bytes": 1765
+    },
+    {
+      "path": "media/ping-pong/ping-pong-player-display-animation.webp",
+      "sha256": "54931109e2093983f5c040141d2cb5dd7e8ca892a6816aff4fac770e9c411031",
+      "bytes": 133464
+    },
+    {
+      "path": "media/ping-pong/ping-pong-player-display.webp",
+      "sha256": "d6177f3d6e5d22bf3d241088fa64b79fb9b2101536ace20908b80008abc6b8d2",
+      "bytes": 42700
+    },
+    {
+      "path": "media/ping-pong/ping-pong-preview.webp",
+      "sha256": "66cc06c2efdde7167e2c885c12651335d67ac5295766dd3be82b4070c514de44",
+      "bytes": 29406
+    },
+    {
+      "path": "media/ping-pong/ping-pong-thumbnail-small.webp",
+      "sha256": "dfd4880472611b0ec8c168507580e1df307df4a0df399b5aaf121ea5cad034d1",
+      "bytes": 1040
+    },
+    {
+      "path": "media/ping-pong/ping-pong-thumbnail.webp",
+      "sha256": "bce77da67d6be968e0c4169edec12452d0c1568496f2e5ea123333e5f0913706",
+      "bytes": 8436
+    },
+    {
+      "path": "media/saltos/metadata.json",
+      "sha256": "4e898a70d0266413fecd946de4d2927ae9d8aa1ce900f85e9c6f6a139edbb90f",
+      "bytes": 1572
+    },
+    {
+      "path": "media/saltos/saltos-player-display-animation.webp",
+      "sha256": "4f5ed37d08336bb7388bfbec80debf73cadfd6422ca0d30b8cb44a4c63f1bda0",
+      "bytes": 137764
+    },
+    {
+      "path": "media/saltos/saltos-player-display.webp",
+      "sha256": "eadcba1234397d37d0db9da917f6cda35caf79ccd2341c0497fc1afb6e24d1fa",
+      "bytes": 47700
+    },
+    {
+      "path": "media/saltos/saltos-preview.webp",
+      "sha256": "8246be097df9bfeadf9be278f48b6a976c1153e43a14691388cc839720329e29",
+      "bytes": 61926
+    },
+    {
+      "path": "media/saltos/saltos-thumbnail-small.webp",
+      "sha256": "3dfdf5b7d16954ac9a47586eadfd14c62dd0b1e4ca7f27e34663365dbd4fe5f7",
+      "bytes": 1164
+    },
+    {
+      "path": "media/saltos/saltos-thumbnail.webp",
+      "sha256": "7fd49941f078128b3342c0876c6c6f833a9029ce61c6b965b7e831db0d5b7b24",
+      "bytes": 26752
+    },
+    {
+      "path": "media/tetris/metadata.json",
+      "sha256": "fa073307d3c44aa7edfee2e54ca7d68582f2b6e108fa6b50f94c0dc02ab1685a",
+      "bytes": 1646
+    },
+    {
+      "path": "media/tetris/tetris-player-display-animation.webp",
+      "sha256": "e51d59dd7c6a35744be1185b5b91ef21e5f5430d32b7e89cf3998887b1a0ce3f",
+      "bytes": 38704
+    },
+    {
+      "path": "media/tetris/tetris-player-display.webp",
+      "sha256": "793c936b85165efc83b388d6c6234ac2bc85ee43e9839a94a9d6d714fba91af2",
+      "bytes": 33016
+    },
+    {
+      "path": "media/tetris/tetris-preview.webp",
+      "sha256": "810b2a60cca6151c9955b400b9a0d107830fc7b6c9e1dfc7c1c7531b35c3e419",
+      "bytes": 3286
+    },
+    {
+      "path": "media/tetris/tetris-thumbnail-small.webp",
+      "sha256": "4a91a68b3fb2005ed817d323aa8af716d448a2a79c7ed4b9860c0cb33e3c63ca",
+      "bytes": 802
+    },
+    {
+      "path": "media/tetris/tetris-thumbnail.webp",
+      "sha256": "78bd600e31c0c580eae5275179e2212607538f75877eb605d3e3b5bba2878575",
+      "bytes": 3232
+    },
+    {
+      "path": "media/tira-soga/metadata.json",
+      "sha256": "a0fd8e7d260384253d2e3f5965f9d10b7cea43a0ec22d233995c52cd284c0bc7",
+      "bytes": 1715
+    },
+    {
+      "path": "media/tira-soga/tira-soga-player-display-animation.webp",
+      "sha256": "bf229ac5f3eb8c314b9c5eb9db9ef98b44cf8da0c5820ae617e12fdd76c380d8",
+      "bytes": 13544
+    },
+    {
+      "path": "media/tira-soga/tira-soga-player-display.webp",
+      "sha256": "4500d351407b6b88f30a694959881cf8cebeefd374f53ea7a22cf22fc714f017",
+      "bytes": 48192
+    },
+    {
+      "path": "media/tira-soga/tira-soga-preview.webp",
+      "sha256": "f17d2402b2916df41440724b9084e68accb87be625bb197cec83f1237fbe622c",
+      "bytes": 4282
+    },
+    {
+      "path": "media/tira-soga/tira-soga-thumbnail-small.webp",
+      "sha256": "98ccad97751120388edf54f2c33d6a96ef9923f22156f22b41398fc70bb9db8e",
+      "bytes": 818
+    },
+    {
+      "path": "media/tira-soga/tira-soga-thumbnail.webp",
+      "sha256": "4947a7a2f401aaeb1616c1557f307ee2045b000ee798411d9f3fc720d35576ef",
+      "bytes": 21864
+    },
+    {
+      "path": "media/whack-a-mole/metadata.json",
+      "sha256": "033659671b7d189241a7ee3f1a9ccec2995b24c3ef4c738874686430960bafcf",
+      "bytes": 1930
+    },
+    {
+      "path": "media/whack-a-mole/whack-a-mole-player-display-animation.webp",
+      "sha256": "f79c7ff94d32f468fcbe75c7876ed5d054c96cdf6c62524aa4339e9f172d16f4",
+      "bytes": 21794
+    },
+    {
+      "path": "media/whack-a-mole/whack-a-mole-player-display.webp",
+      "sha256": "1544fe2c139ae34eb4dda36cb838517a72a40bb6813ec643c21eb8b22674a53b",
+      "bytes": 47220
+    },
+    {
+      "path": "media/whack-a-mole/whack-a-mole-preview.webp",
+      "sha256": "5ad81edde653ec83290ad43314197b31b0afacb2020eef1324efe231ee50bda7",
+      "bytes": 9530
+    },
+    {
+      "path": "media/whack-a-mole/whack-a-mole-thumbnail-small.webp",
+      "sha256": "b3e5e95521301fce4b57763af56ae02d4493aed7e7fd9b2bb023c2332088ae8c",
+      "bytes": 742
+    },
+    {
+      "path": "media/whack-a-mole/whack-a-mole-thumbnail.webp",
+      "sha256": "dcf9f9aa0dd608ca126706dd817b92871d831848360ad706fa28e9f97b38fd6f",
+      "bytes": 3514
+    },
+    {
+      "path": "runtime/runner.mjs",
+      "sha256": "9df7e4849a33f427c60521807adf3abcc4113b51af5b4f8d8463b73cc9ee22c8",
+      "bytes": 421203
+    }
+  ]
+}

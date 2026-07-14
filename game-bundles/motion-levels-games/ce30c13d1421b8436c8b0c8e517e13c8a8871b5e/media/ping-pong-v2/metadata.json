@@ -1,0 +1,70 @@
+{
+  "gameId": "ping-pong-v2",
+  "scenario": {
+    "seed": 202,
+    "playerCount": 2,
+    "difficulty": "medium",
+    "options": {
+      "points_to_win": 5
+    },
+    "actions": [
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 7,
+        "y": 3
+      },
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 7,
+        "y": 28
+      }
+    ],
+    "captureStartMillis": 2200,
+    "frameCount": 18,
+    "frameIntervalMillis": 120
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "ping-pong-v2-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1034,
+      "sha256": "6e88f1f737e426786122df3c844c7dfcce7c012cf4abdf2faee0548bfffd7c13"
+    },
+    "thumbnail": {
+      "file": "ping-pong-v2-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 8348,
+      "sha256": "4dc434ca85c438d1cee584e0a56d26a1e3913ec88fb96c30f4e86d379c332e5e"
+    },
+    "animation": {
+      "file": "ping-pong-v2-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 29576,
+      "sha256": "b3c86a17b2a549a2b764c78412a59b2b6d67cfcaa65fd8591b898817095690b1"
+    },
+    "playerDisplay": {
+      "file": "ping-pong-v2-player-display.webp",
+      "width": 1280,
+      "height": 720,
+      "mimeType": "image/webp",
+      "bytes": 43186,
+      "sha256": "67dd68496b7c45e26a5ef844a1327a4c3cfa5212790d35d3fb22e8526da1f247"
+    },
+    "playerDisplayAnimation": {
+      "file": "ping-pong-v2-player-display-animation.webp",
+      "width": 640,
+      "height": 360,
+      "mimeType": "image/webp",
+      "bytes": 133544,
+      "sha256": "f4d99c3604bc44e44cd646deb4a1a78b3b24031baf4fb40d7fb4923d767d0da8"
+    }
+  }
+}

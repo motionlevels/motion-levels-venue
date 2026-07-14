@@ -1,0 +1,79 @@
+{
+  "gameId": "whack-a-mole",
+  "scenario": {
+    "seed": 404,
+    "playerCount": 4,
+    "difficulty": "medium",
+    "actions": [
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 12,
+        "y": 28
+      },
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 0,
+        "y": 28
+      },
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 12,
+        "y": 0
+      }
+    ],
+    "captureStartMillis": 2300,
+    "frameCount": 18,
+    "frameIntervalMillis": 120
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "whack-a-mole-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 742,
+      "sha256": "b3e5e95521301fce4b57763af56ae02d4493aed7e7fd9b2bb023c2332088ae8c"
+    },
+    "thumbnail": {
+      "file": "whack-a-mole-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 3514,
+      "sha256": "dcf9f9aa0dd608ca126706dd817b92871d831848360ad706fa28e9f97b38fd6f"
+    },
+    "animation": {
+      "file": "whack-a-mole-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 9530,
+      "sha256": "5ad81edde653ec83290ad43314197b31b0afacb2020eef1324efe231ee50bda7"
+    },
+    "playerDisplay": {
+      "file": "whack-a-mole-player-display.webp",
+      "width": 1280,
+      "height": 720,
+      "mimeType": "image/webp",
+      "bytes": 47220,
+      "sha256": "1544fe2c139ae34eb4dda36cb838517a72a40bb6813ec643c21eb8b22674a53b"
+    },
+    "playerDisplayAnimation": {
+      "file": "whack-a-mole-player-display-animation.webp",
+      "width": 640,
+      "height": 360,
+      "mimeType": "image/webp",
+      "bytes": 21794,
+      "sha256": "f79c7ff94d32f468fcbe75c7876ed5d054c96cdf6c62524aa4339e9f172d16f4"
+    }
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "gameId": "memory-challenge",
+  "scenario": {
+    "seed": 137,
+    "playerCount": 2,
+    "actions": [
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 11,
+        "y": 0
+      }
+    ],
+    "captureStartMillis": 2200,
+    "frameCount": 18,
+    "frameIntervalMillis": 120
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "memory-challenge-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1446,
+      "sha256": "b3d666752d1b413a25efed3bf6d2c10508a90f77ab194a3eb2f7b51ffccc0b28"
+    },
+    "thumbnail": {
+      "file": "memory-challenge-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 18534,
+      "sha256": "2bb7829b2a7d81ca979146d40e2e693958fab92eedf82aa2e3a9b8225d1c87c4"
+    },
+    "animation": {
+      "file": "memory-challenge-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 45656,
+      "sha256": "3377d21fc4e671c4123dce0031e32bd479026b564fd7c9cf8bfe7f72720f500e"
+    },
+    "playerDisplay": {
+      "file": "memory-challenge-player-display.webp",
+      "width": 1280,
+      "height": 720,
+      "mimeType": "image/webp",
+      "bytes": 39588,
+      "sha256": "dcc9e56c30a64e7b4e33208bf6d1d4566509cdd6afe083c65e7baba4767addc9"
+    },
+    "playerDisplayAnimation": {
+      "file": "memory-challenge-player-display-animation.webp",
+      "width": 640,
+      "height": 360,
+      "mimeType": "image/webp",
+      "bytes": 31978,
+      "sha256": "e92faf5d11519824a36979558dba60255ae0abb32c902ea0c95eaaf469d18d63"
+    }
+  }
+}
