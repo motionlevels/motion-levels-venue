@@ -2,13 +2,14 @@
   "schema": "motion-levels-games-bundle-v1",
   "contractVersion": 1,
   "runnerProtocolVersion": 1,
-  "sourceRevision": "ce30c13d1421b8436c8b0c8e517e13c8a8871b5e",
+  "sourceRevision": "7c4731b6efc2408dfff4f0c8aa168a981db4c733",
   "sdkFps": 50,
-  "artifactDigest": "81719d52d97d1cc73a25ffdebabab312f3ab5513b5a1a28ccdca3b598f70364e",
+  "artifactDigest": "eb6cba3eaa2b88ed650e23346b0cdf183c45cbb416c24ecb792cc08d034d0a98",
   "runtime": {
     "entry": "runtime/runner.mjs",
     "games": [
       "arkanoid",
+      "cruce-galactico",
       "duelo",
       "lava",
       "memoria-v2",
@@ -25,6 +26,7 @@
     "entry": "display/display.js",
     "games": [
       "arkanoid",
+      "cruce-galactico",
       "duelo",
       "lava",
       "memoria-v2",
@@ -41,13 +43,13 @@
   "files": [
     {
       "path": "catalog.json",
-      "sha256": "ceda7335d84c086fb8eb1e36eb88f3ac5e74c5d86eaf42cf57dbe4e848dd44eb",
-      "bytes": 31842
+      "sha256": "7b566f747c3fa05a11fed3fb01e0a2cd22325cf72d2633adf2565d7a6613a1f0",
+      "bytes": 34081
     },
     {
       "path": "display/display.js",
-      "sha256": "5fae63c31fbb063afe9f43ce558f0530a9214673310f6b91bb54f27d82fa0553",
-      "bytes": 443612
+      "sha256": "ba36a2eb74a7450bc9abe4ae6d1feeef498392a4361c0737d5623ddc74e9a8f8",
+      "bytes": 453493
     },
     {
       "path": "media/arkanoid/arkanoid-player-display-animation.webp",
@@ -78,6 +80,36 @@
       "path": "media/arkanoid/metadata.json",
       "sha256": "cc270f20d648b7977b4b172fa2cc5df7d8eb8099741642cf91a231a311595863",
       "bytes": 1913
+    },
+    {
+      "path": "media/cruce-galactico/cruce-galactico-player-display-animation.webp",
+      "sha256": "9ce5ad81d6c97b7b0e49491bc31c06f80a21c76feaa67e539c2c6ffb3406a278",
+      "bytes": 49956
+    },
+    {
+      "path": "media/cruce-galactico/cruce-galactico-player-display.webp",
+      "sha256": "bb570cc06c52f23a94b2b383d0b1e3f2793d46ba0af012ee174f781eedbdd258",
+      "bytes": 43922
+    },
+    {
+      "path": "media/cruce-galactico/cruce-galactico-preview.webp",
+      "sha256": "a708de3e33e91ae1a10c8438cfeacb6f8711b09324ee193e2f5bebef0a400163",
+      "bytes": 17966
+    },
+    {
+      "path": "media/cruce-galactico/cruce-galactico-thumbnail-small.webp",
+      "sha256": "51889cc93c6302c53435089b76c85bd01eb7a2be02fab19ee95ab755f00ca80e",
+      "bytes": 1070
+    },
+    {
+      "path": "media/cruce-galactico/cruce-galactico-thumbnail.webp",
+      "sha256": "f10a7c5c27841ff66de63b0f4fbc42d28c187ec19ed26e166ba335ca6b808f93",
+      "bytes": 17034
+    },
+    {
+      "path": "media/cruce-galactico/metadata.json",
+      "sha256": "3c6e0dd2800b9a94ff1924cced4e1c505fc9c0eada6d83dfac8067f409560877",
+      "bytes": 1856
     },
     {
       "path": "media/duelo/duelo-player-display-animation.webp",
@@ -471,8 +503,8 @@
     },
     {
       "path": "runtime/runner.mjs",
-      "sha256": "9df7e4849a33f427c60521807adf3abcc4113b51af5b4f8d8463b73cc9ee22c8",
-      "bytes": 421203
+      "sha256": "af22fde0ad9d334a1743bf04b7ef9835a56fe69e020547973fcd5e1e2f9a36ad",
+      "bytes": 436291
     }
   ]
 }

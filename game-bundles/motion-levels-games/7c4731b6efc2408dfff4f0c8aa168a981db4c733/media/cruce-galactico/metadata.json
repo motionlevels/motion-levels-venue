@@ -1,0 +1,73 @@
+{
+  "gameId": "cruce-galactico",
+  "scenario": {
+    "seed": 137,
+    "playerCount": 0,
+    "difficulty": "medium",
+    "actions": [
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 8,
+        "y": 30
+      },
+      {
+        "atMillis": 2150,
+        "type": "release",
+        "x": 8,
+        "y": 30
+      },
+      {
+        "atMillis": 2500,
+        "type": "press",
+        "x": 8,
+        "y": 22
+      }
+    ],
+    "captureStartMillis": 2300,
+    "frameCount": 24,
+    "frameIntervalMillis": 120
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "cruce-galactico-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1070,
+      "sha256": "51889cc93c6302c53435089b76c85bd01eb7a2be02fab19ee95ab755f00ca80e"
+    },
+    "thumbnail": {
+      "file": "cruce-galactico-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 17034,
+      "sha256": "f10a7c5c27841ff66de63b0f4fbc42d28c187ec19ed26e166ba335ca6b808f93"
+    },
+    "animation": {
+      "file": "cruce-galactico-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 17966,
+      "sha256": "a708de3e33e91ae1a10c8438cfeacb6f8711b09324ee193e2f5bebef0a400163"
+    },
+    "playerDisplay": {
+      "file": "cruce-galactico-player-display.webp",
+      "width": 1280,
+      "height": 720,
+      "mimeType": "image/webp",
+      "bytes": 43922,
+      "sha256": "bb570cc06c52f23a94b2b383d0b1e3f2793d46ba0af012ee174f781eedbdd258"
+    },
+    "playerDisplayAnimation": {
+      "file": "cruce-galactico-player-display-animation.webp",
+      "width": 640,
+      "height": 360,
+      "mimeType": "image/webp",
+      "bytes": 49956,
+      "sha256": "9ce5ad81d6c97b7b0e49491bc31c06f80a21c76feaa67e539c2c6ffb3406a278"
+    }
+  }
+}

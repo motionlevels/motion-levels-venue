@@ -1828,48 +1828,48 @@ var DEFAULT_ENGINE_FRAME_MILLIS = 1e3 / DEFAULT_ENGINE_FPS;
 function inFloorBounds(x, y) {
   return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && x < FLOOR_COLS && y >= 0 && y < FLOOR_ROWS;
 }
-function normalizeGameConfig(config, manifest15) {
+function normalizeGameConfig(config, manifest16) {
   return {
     seed: normalizeGameSeed(config.seed),
-    playerCount: normalizePlayerCount(config.playerCount, manifest15),
+    playerCount: normalizePlayerCount(config.playerCount, manifest16),
     players: Array.isArray(config.players) ? config.players : [],
-    durationMillis: normalizeNonNegativeNumber(config.durationMillis, manifest15.defaultDurationMillis),
+    durationMillis: normalizeNonNegativeNumber(config.durationMillis, manifest16.defaultDurationMillis),
     nowMillis: normalizeNonNegativeNumber(config.nowMillis, 0),
-    difficulty: normalizeGameDifficulty(config.difficulty, manifest15),
-    options: normalizeGameConfigOptions(config.options, manifest15)
+    difficulty: normalizeGameDifficulty(config.difficulty, manifest16),
+    options: normalizeGameConfigOptions(config.options, manifest16)
   };
 }
 function normalizeGameSeed(value) {
   const candidate = typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : DEFAULT_GAME_SEED;
   return clamp(candidate, MIN_GAME_SEED, MAX_GAME_SEED);
 }
-function normalizePlayerCount(value, manifest15) {
-  const rounded = typeof value === "number" && Number.isFinite(value) ? Math.round(value) : defaultGamePlayerCount(manifest15);
-  if (manifest15.players.allowAny === true && rounded === 0) {
+function normalizePlayerCount(value, manifest16) {
+  const rounded = typeof value === "number" && Number.isFinite(value) ? Math.round(value) : defaultGamePlayerCount(manifest16);
+  if (manifest16.players.allowAny === true && rounded === 0) {
     return 0;
   }
-  return clamp(rounded, manifest15.players.min, manifest15.players.max);
+  return clamp(rounded, manifest16.players.min, manifest16.players.max);
 }
-function defaultGamePlayerCount(manifest15) {
-  return manifest15.players.allowAny ? 0 : manifest15.players.min;
+function defaultGamePlayerCount(manifest16) {
+  return manifest16.players.allowAny ? 0 : manifest16.players.min;
 }
 function normalizeNonNegativeNumber(value, fallback) {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : fallback;
 }
-function gameDifficultyOptions(manifest15) {
-  const configured = manifest15.config?.difficulty?.options;
+function gameDifficultyOptions(manifest16) {
+  const configured = manifest16.config?.difficulty?.options;
   return configured?.length ? [...configured] : [...DEFAULT_GAME_DIFFICULTIES];
 }
-function normalizeGameDifficulty(value, manifest15) {
-  const options = gameDifficultyOptions(manifest15);
-  const configuredDefault = manifest15.config?.difficulty?.default;
+function normalizeGameDifficulty(value, manifest16) {
+  const options = gameDifficultyOptions(manifest16);
+  const configuredDefault = manifest16.config?.difficulty?.default;
   const fallback = configuredDefault && options.includes(configuredDefault) ? configuredDefault : options.includes("medium") ? "medium" : options[0] ?? "medium";
   return value && options.includes(value) ? value : fallback;
 }
-function normalizeGameConfigOptions(options, manifest15) {
+function normalizeGameConfigOptions(options, manifest16) {
   const source = options ?? {};
   return Object.fromEntries(
-    (manifest15.config?.vars ?? []).map((configVar) => [
+    (manifest16.config?.vars ?? []).map((configVar) => [
       configVar.key,
       normalizeGameConfigValue(configVar, source[configVar.key])
     ])
@@ -2290,14 +2290,14 @@ var FloorInputPainter = class {
     return [{ ...tile, pressed }];
   }
 };
-function lineTiles(start, end) {
+function lineTiles(start2, end) {
   const tiles = [];
-  let x = start.x;
-  let y = start.y;
-  const deltaX = Math.abs(end.x - start.x);
-  const stepX = start.x < end.x ? 1 : -1;
-  const deltaY = -Math.abs(end.y - start.y);
-  const stepY = start.y < end.y ? 1 : -1;
+  let x = start2.x;
+  let y = start2.y;
+  const deltaX = Math.abs(end.x - start2.x);
+  const stepX = start2.x < end.x ? 1 : -1;
+  const deltaY = -Math.abs(end.y - start2.y);
+  const stepY = start2.y < end.y ? 1 : -1;
   let error = deltaX + deltaY;
   while (true) {
     tiles.push({ x, y });
@@ -3313,21 +3313,369 @@ function autoplay(game5) {
   }
 }
 
-// games/duelo/src/index.ts
+// games/cruce-galactico/src/index.ts
 var src_exports2 = {};
 __export(src_exports2, {
   PlayerDisplay: () => PlayerDisplay2,
+  checkpointTarget: () => checkpointTarget,
   createGame: () => createGame2,
+  damageImmunityMillis: () => damageImmunityMillis,
+  damagedSnapshot: () => damagedSnapshot,
+  finishedFrame: () => finishedFrame2,
+  finishedSnapshot: () => finishedSnapshot2,
+  gameWinAnimationMillis: () => gameWinAnimationMillis,
+  initEvents: () => initEvents2,
+  manifest: () => manifest2,
+  runningFrame: () => runningFrame2,
+  runningSnapshot: () => runningSnapshot2,
+  startingLives: () => startingLives2
+});
+
+// games/cruce-galactico/src/display.tsx
+var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
+function PlayerDisplay2({ snapshot, frame }) {
+  const message = snapshot.phase === "finished" ? snapshot.success ? "\xA1Portal alcanzado!" : "La misi\xF3n ha terminado" : snapshot.lastEventMessage || "Avanza hacia el control verde";
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: `ml-solo-display cruce-galactico-display${snapshot.celebrating ? " is-celebrating" : ""}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(PlayerReadyOverlay, { snapshot }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "ml-solo-summary", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(MetricPanel, { label: "Controles", tone: "green", value: `${snapshot.checkpoint}/${snapshot.checkpointTarget}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(MetricPanel, { label: "Vidas", tone: "neutral", value: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(MetricPanel, { label: "Tiempo", tone: "cyan", value: formatClock(snapshot.remainingMillis) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(MetricPanel, { className: "ml-solo-message", label: "Misi\xF3n", tone: snapshot.success ? "green" : snapshot.lives === 0 ? "red" : "blue", value: message })
+    ] }),
+    frame ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Corredores en el suelo" }) : null
+  ] }) });
+}
+
+// games/cruce-galactico/src/manifest.ts
+var manifest2 = {
+  id: "cruce-galactico",
+  label: "Cruce Gal\xE1ctico",
+  description: "Cruza cuatro corredores c\xF3smicos, esquiva el tr\xE1fico espacial y alcanza el portal de salida.",
+  availability: { development: true, production: true },
+  catalog: {
+    category: "individual",
+    color: "#7c5cff",
+    durationLabel: "75 s",
+    modeLabel: "Cruce espacial",
+    audioLabel: "M\xFAsica + efectos",
+    rules: [
+      "Empieza en la plataforma azul",
+      "Cruza cada corredor evitando los obst\xE1culos rojos",
+      "Alcanza los cuatro controles antes de que termine el tiempo"
+    ]
+  },
+  players: { allowAny: true, min: 1, max: 4 },
+  start: { mode: "player-ready", releaseGraceMillis: 1500 },
+  config: { difficulty: { default: "medium", options: ["easy", "medium", "hard", "expert"] } },
+  defaultDurationMillis: 75e3,
+  display: { entry: "./display" },
+  preview: {
+    seed: 137,
+    playerCount: 0,
+    difficulty: "medium",
+    actions: [
+      { atMillis: 100, type: "press", x: 8, y: 30 },
+      { atMillis: 2150, type: "release", x: 8, y: 30 },
+      { atMillis: 2500, type: "press", x: 8, y: 22 }
+    ],
+    captureStartMillis: 2300,
+    frameCount: 24,
+    frameIntervalMillis: 120
+  },
+  tags: ["arcade", "crossing", "survival", "typescript"]
+};
+
+// games/cruce-galactico/src/game.ts
+var startingLives2 = 3;
+var checkpointTarget = 4;
+var gameWinAnimationMillis = 3e3;
+var damageImmunityMillis = 1500;
+var backgroundColor2 = "#02030b";
+var laneColor = "#090d20";
+var checkpointColor = "#26d9ff";
+var nextCheckpointColor = "#66ff9a";
+var hazardColor = "#ff365c";
+var hazardCoreColor = "#fff0a6";
+var playerColor = "#ffffff";
+var winColors = ["#7c5cff", "#26d9ff", "#66ff9a", "#ffffff"];
+var startZone = { minX: 4, maxX: 11, minY: 29, maxY: 31 };
+var checkpointBands = [
+  { minY: 22, maxY: 23 },
+  { minY: 15, maxY: 16 },
+  { minY: 8, maxY: 9 },
+  { minY: 0, maxY: 2 }
+];
+var lanes = [
+  { minY: 24, maxY: 28, direction: 1, offset: 0 },
+  { minY: 17, maxY: 21, direction: -1, offset: 4 },
+  { minY: 10, maxY: 14, direction: 1, offset: 8 },
+  { minY: 3, maxY: 7, direction: -1, offset: 2 }
+];
+var difficultyStepMillis = { easy: 620, medium: 480, hard: 360, expert: 270 };
+function createGame2(config) {
+  return new GalacticCrossingGame(config);
+}
+var GalacticCrossingGame = class {
+  checkpoint = 0;
+  config;
+  finishedAtMillis;
+  lastDamageAtMillis = Number.NEGATIVE_INFINITY;
+  lastEvent = gameEvent("none", "Listo para despegar", 0);
+  lives = startingLives2;
+  nowMillis = 0;
+  occupiedTiles = /* @__PURE__ */ new Set();
+  phase = "ready";
+  players = [];
+  readyGate;
+  startedAtMillis = 0;
+  success = false;
+  constructor(config) {
+    this.config = normalizeGameConfig(config, manifest2);
+    this.readyGate = createPlayerReadyGate(manifest2.start, [startZone], this.config.nowMillis);
+    this.resetState(this.config.nowMillis);
+  }
+  init(nowMillis) {
+    this.resetState(nowMillis);
+    return [this.lastEvent];
+  }
+  press(event) {
+    this.nowMillis = event.atMillis;
+    this.updateOccupied(event.x, event.y, event.pressed);
+    if (this.phase === "waiting" || this.phase === "starting") {
+      return this.applyReadyTransition(this.readyGate.update(event), event.atMillis);
+    }
+    if (this.phase !== "running" || !event.pressed) return [];
+    const band = checkpointBands[this.checkpoint];
+    if (!band || event.y < band.minY || event.y > band.maxY) return [];
+    this.checkpoint += 1;
+    this.players = this.scoredPlayers();
+    if (this.checkpoint === checkpointTarget) {
+      return [this.finish(true, "Portal alcanzado", event.atMillis)];
+    }
+    this.lastEvent = gameEvent("hit", `Control ${this.checkpoint} activado`, event.atMillis);
+    return [this.lastEvent];
+  }
+  release(event) {
+    this.nowMillis = event.atMillis;
+    this.updateOccupied(event.x, event.y, false);
+    if (this.phase === "waiting" || this.phase === "starting") {
+      return this.applyReadyTransition(this.readyGate.update({ ...event, pressed: false }), event.atMillis);
+    }
+    return [];
+  }
+  tick(event) {
+    this.nowMillis = event.atMillis;
+    if (this.phase === "waiting" || this.phase === "starting") {
+      return this.applyReadyTransition(this.readyGate.tick(event.atMillis), event.atMillis);
+    }
+    if (this.phase !== "running") return [];
+    if (this.remainingMillis() === 0) return [this.finish(false, "Tiempo agotado", event.atMillis)];
+    if (event.atMillis - this.lastDamageAtMillis < damageImmunityMillis || !this.playerTouchesHazard()) return [];
+    this.lastDamageAtMillis = event.atMillis;
+    this.lives = Math.max(0, this.lives - 1);
+    this.players = this.scoredPlayers();
+    if (this.lives === 0) return [this.finish(false, "Nave destruida", event.atMillis)];
+    this.lastEvent = gameEvent("miss", `Impacto: quedan ${this.lives} vidas`, event.atMillis);
+    return [this.lastEvent];
+  }
+  render() {
+    const frame = createFrame(backgroundColor2);
+    for (const lane of lanes) fillFrameRect(frame, 0, lane.minY, FLOOR_COLS, lane.maxY - lane.minY + 1, laneColor);
+    if (this.phase === "waiting" || this.phase === "starting") {
+      const step = Math.floor(this.nowMillis / (this.phase === "starting" ? 100 : 180));
+      paintDiamondRing(frame, {
+        centerX: 8,
+        centerY: 30,
+        radius: 1 + step % 6,
+        color: this.phase === "starting" ? "#ffe176" : checkpointColor
+      });
+      return frame;
+    }
+    if (this.phase === "finished") {
+      if (this.success) {
+        const step = Math.floor((this.nowMillis - (this.finishedAtMillis ?? this.nowMillis)) / 120);
+        paintDiamondWave(frame, {
+          color: ({ distance }) => winColors[(distance + step) % winColors.length] ?? winColors[0],
+          step
+        });
+      } else {
+        const pulse = Math.floor((this.nowMillis - (this.finishedAtMillis ?? this.nowMillis)) / 180) % 2;
+        fillFrameRect(frame, 0, 0, FLOOR_COLS, FLOOR_ROWS, pulse === 0 ? "#5b0717" : "#18030a");
+      }
+      return frame;
+    }
+    checkpointBands.forEach((band, index) => {
+      const color = index < this.checkpoint ? checkpointColor : index === this.checkpoint ? nextCheckpointColor : "#15233d";
+      fillFrameRect(frame, 0, band.minY, FLOOR_COLS, band.maxY - band.minY + 1, color);
+    });
+    for (const hazard2 of this.currentHazards()) {
+      fillFrameRect(frame, hazard2.x, hazard2.y, hazard2.width, hazard2.height, hazardColor);
+      paintFrameCell(frame, hazard2.x + 1, hazard2.y + 1, hazardCoreColor);
+    }
+    for (const tile of this.occupiedTiles) {
+      const [x, y] = parseTile(tile);
+      paintFrameCell(frame, x, y, playerColor);
+    }
+    return frame;
+  }
+  snapshot() {
+    const ready = this.readyGate.state(this.nowMillis);
+    const celebrationMillis = this.phase === "finished" && this.success ? Math.min(gameWinAnimationMillis, Math.max(0, this.nowMillis - (this.finishedAtMillis ?? this.nowMillis))) : 0;
+    return {
+      currentGame: manifest2.id,
+      label: manifest2.label,
+      phase: this.phase,
+      playerCount: this.config.playerCount,
+      players: this.players,
+      score: this.checkpoint,
+      lives: this.lives,
+      maxLives: startingLives2,
+      elapsedMillis: this.elapsedMillis(),
+      remainingMillis: this.remainingMillis(),
+      activeTargets: this.phase === "running" ? 1 : 0,
+      success: this.success,
+      lastEventCue: this.lastEvent.cue,
+      lastEventMessage: this.lastEvent.message,
+      countdownMillis: this.phase === "starting" ? ready.countdownMillis : 0,
+      readyPlayers: ready.readyPlayers,
+      requiredPlayers: ready.requiredPlayers,
+      matchTarget: checkpointTarget,
+      checkpoint: this.checkpoint,
+      checkpointTarget,
+      hazards: this.phase === "running" ? this.currentHazards() : [],
+      celebrating: this.success && celebrationMillis < gameWinAnimationMillis,
+      celebrationMillis
+    };
+  }
+  reset(config = {}) {
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest2);
+    this.resetState(this.config.nowMillis);
+  }
+  applyReadyTransition(transition, nowMillis) {
+    if (transition === "players-ready") {
+      this.phase = "starting";
+      this.lastEvent = gameEvent("ready", "Tripulaci\xF3n lista", nowMillis);
+    } else if (transition === "players-left") {
+      this.phase = "waiting";
+      this.lastEvent = gameEvent("ready", "Vuelve a la plataforma azul", nowMillis);
+    } else if (transition === "started") {
+      this.phase = "running";
+      this.startedAtMillis = nowMillis;
+      this.lastEvent = gameEvent("start", "Avanza hacia el control verde", nowMillis);
+    } else return [];
+    return [this.lastEvent];
+  }
+  currentHazards() {
+    const stepMillis = difficultyStepMillis[this.config.difficulty] ?? difficultyStepMillis.medium;
+    const step = Math.floor(Math.max(0, this.nowMillis - this.startedAtMillis) / stepMillis);
+    return lanes.flatMap((lane, laneIndex) => [0, 7, 14].map((gap) => {
+      const raw = lane.offset + gap + step * lane.direction;
+      const x = (raw % 20 + 20) % 20 - 3;
+      return { x, y: lane.minY + laneIndex % 2, width: 3, height: 3 };
+    })).filter((hazard2) => hazard2.x < FLOOR_COLS && hazard2.x + hazard2.width > 0);
+  }
+  elapsedMillis() {
+    if (this.phase === "waiting" || this.phase === "starting" || this.phase === "ready") return 0;
+    return Math.max(0, (this.finishedAtMillis ?? this.nowMillis) - this.startedAtMillis);
+  }
+  finish(success, message, atMillis) {
+    this.phase = "finished";
+    this.success = success;
+    this.finishedAtMillis = atMillis;
+    this.lastEvent = gameEvent(success ? "win" : "fail", message, atMillis);
+    return this.lastEvent;
+  }
+  playerTouchesHazard() {
+    const hazards = this.currentHazards();
+    for (const tile of this.occupiedTiles) {
+      const [x, y] = parseTile(tile);
+      if (hazards.some((hazard2) => x >= hazard2.x && x < hazard2.x + hazard2.width && y >= hazard2.y && y < hazard2.y + hazard2.height)) return true;
+    }
+    return false;
+  }
+  remainingMillis() {
+    return Math.max(0, this.config.durationMillis - this.elapsedMillis());
+  }
+  resetState(nowMillis) {
+    this.readyGate.reset(nowMillis);
+    this.checkpoint = 0;
+    this.finishedAtMillis = void 0;
+    this.lastDamageAtMillis = Number.NEGATIVE_INFINITY;
+    this.lastEvent = gameEvent("ready", "Espera en la plataforma azul", nowMillis);
+    this.lives = startingLives2;
+    this.nowMillis = nowMillis;
+    this.occupiedTiles.clear();
+    this.phase = "waiting";
+    this.players = this.scoredPlayers();
+    this.startedAtMillis = nowMillis;
+    this.success = false;
+  }
+  scoredPlayers() {
+    return defaultPlayers(this.config.playerCount, this.config.players).map((player) => ({
+      ...player,
+      score: this.checkpoint,
+      lives: this.lives
+    }));
+  }
+  updateOccupied(x, y, pressed) {
+    if (x < 0 || x >= FLOOR_COLS || y < 0 || y >= FLOOR_ROWS) return;
+    const key = `${x},${y}`;
+    if (pressed) this.occupiedTiles.add(key);
+    else this.occupiedTiles.delete(key);
+  }
+};
+function parseTile(tile) {
+  const [x = "0", y = "0"] = tile.split(",");
+  return [Number(x), Number(y)];
+}
+
+// games/cruce-galactico/src/fixtures.ts
+var runningGame2 = createGame2({ playerCount: 1, difficulty: "medium", seed: 137 });
+var initEvents2 = runningGame2.init(0);
+start(runningGame2);
+runningGame2.release({ x: 8, y: 30, pressed: false, atMillis: 2150 });
+runningGame2.tick({ atMillis: 3e3 });
+var runningFrame2 = runningGame2.render();
+var runningSnapshot2 = runningGame2.snapshot();
+var damagedGame = createGame2({ playerCount: 1, difficulty: "medium", seed: 137 });
+damagedGame.init(0);
+start(damagedGame);
+damagedGame.release({ x: 8, y: 30, pressed: false, atMillis: 2150 });
+damagedGame.tick({ atMillis: 3e3 });
+var hazard = damagedGame.snapshot().hazards[0];
+damagedGame.press({ x: Math.max(0, hazard.x), y: hazard.y, pressed: true, atMillis: 3001 });
+damagedGame.tick({ atMillis: 3002 });
+var damagedSnapshot = damagedGame.snapshot();
+var finishedGame2 = createGame2({ playerCount: 1, difficulty: "medium", seed: 137 });
+finishedGame2.init(0);
+start(finishedGame2);
+for (const y of [22, 15, 8, 1]) finishedGame2.press({ x: 8, y, pressed: true, atMillis: 2200 + (22 - y) * 10 });
+finishedGame2.tick({ atMillis: 3100 });
+var finishedFrame2 = finishedGame2.render();
+var finishedSnapshot2 = finishedGame2.snapshot();
+function start(game5) {
+  game5.press({ x: 8, y: 30, pressed: true, atMillis: 100 });
+  game5.tick({ atMillis: 2100 });
+}
+
+// games/duelo/src/index.ts
+var src_exports3 = {};
+__export(src_exports3, {
+  PlayerDisplay: () => PlayerDisplay3,
+  createGame: () => createGame3,
   crowdedRunningFrame: () => crowdedRunningFrame,
   crowdedRunningSnapshot: () => crowdedRunningSnapshot,
   dueloConfigVars: () => dueloConfigVars,
   dueloPlayerPalette: () => dueloPlayerPalette,
   dueloReadyZones: () => dueloReadyZones,
-  finishedFrame: () => finishedFrame2,
-  finishedSnapshot: () => finishedSnapshot2,
-  manifest: () => manifest2,
-  runningFrame: () => runningFrame2,
-  runningSnapshot: () => runningSnapshot2,
+  finishedFrame: () => finishedFrame3,
+  finishedSnapshot: () => finishedSnapshot3,
+  manifest: () => manifest3,
+  runningFrame: () => runningFrame3,
+  runningSnapshot: () => runningSnapshot3,
   startingFrame: () => startingFrame,
   startingSnapshot: () => startingSnapshot,
   waitingFrame: () => waitingFrame,
@@ -3336,8 +3684,8 @@ __export(src_exports2, {
 });
 
 // games/duelo/src/display.tsx
-var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
-function PlayerDisplay2({
+var import_jsx_runtime5 = __toESM(require_jsx_runtime(), 1);
+function PlayerDisplay3({
   snapshot
 }) {
   const columns = snapshot.playerCount <= 4 ? 2 : snapshot.playerCount <= 6 ? 3 : 4;
@@ -3351,25 +3699,25 @@ function PlayerDisplay2({
     "--duelo-winner": snapshot.winnerIndex >= 0 ? snapshot.playerProgress[snapshot.winnerIndex]?.color ?? "#ffffff" : "#ffffff",
     "--duelo-winner-rgb": snapshot.winnerIndex >= 0 ? hexToRgb2(snapshot.playerProgress[snapshot.winnerIndex]?.color ?? "#ffffff") : "255, 255, 255"
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
     "div",
     {
       className: `duelo-display is-phase-${snapshot.phase} is-player-count-${snapshot.playerCount}`,
       style: rootStyle,
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "duelo-hero", "aria-label": hero.title, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "duelo-hero-copy", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: hero.eyebrow }),
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("strong", { children: hero.title }),
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("b", { children: hero.caption })
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "duelo-hero", "aria-label": hero.title, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "duelo-hero-copy", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: hero.eyebrow }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("strong", { children: hero.title }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("b", { children: hero.caption })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "duelo-hero-metrics", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(DueloMetric, { label: "Tiempo", value: formatClock(snapshot.elapsedMillis) }),
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(DueloMetric, { label: "Restantes", value: snapshot.remainingTargets }),
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(DueloMetric, { label: "Densidad", value: `${snapshot.fillPercent}%` })
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "duelo-hero-metrics", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DueloMetric, { label: "Tiempo", value: formatClock(snapshot.elapsedMillis) }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DueloMetric, { label: "Restantes", value: snapshot.remainingTargets }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DueloMetric, { label: "Densidad", value: `${snapshot.fillPercent}%` })
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("section", { className: "duelo-player-grid", "aria-label": "Progreso de jugadores", children: snapshot.playerProgress.map((player) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("section", { className: "duelo-player-grid", "aria-label": "Progreso de jugadores", children: snapshot.playerProgress.map((player) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
           DueloPlayerCard,
           {
             leader: snapshot.leaderIndex === player.index,
@@ -3381,10 +3729,10 @@ function PlayerDisplay2({
           },
           player.index
         )) }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("footer", { className: "duelo-event-rail", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: snapshot.phase === "waiting" ? "Preparaci\xF3n" : snapshot.phase === "finished" ? "Resultado" : "\xDAltimo evento" }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("strong", { children: snapshot.lastEventMessage || "Listo" }, snapshot.motionEventId),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("b", { children: snapshot.phase === "finished" ? `Nueva partida en ${restartCountdown}` : `${snapshot.claimedTargets}/${snapshot.totalTargets} reclamadas` })
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("footer", { className: "duelo-event-rail", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: snapshot.phase === "waiting" ? "Preparaci\xF3n" : snapshot.phase === "finished" ? "Resultado" : "\xDAltimo evento" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("strong", { children: snapshot.lastEventMessage || "Listo" }, snapshot.motionEventId),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("b", { children: snapshot.phase === "finished" ? `Nueva partida en ${restartCountdown}` : `${snapshot.claimedTargets}/${snapshot.totalTargets} reclamadas` })
         ] })
       ]
     }
@@ -3405,7 +3753,7 @@ function DueloPlayerCard({
     "--duelo-progress": player.progress
   };
   const nameClass = player.label.length > 28 ? " is-extra-long" : player.label.length > 18 ? " is-long" : "";
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
     "article",
     {
       className: [
@@ -3417,20 +3765,20 @@ function DueloPlayerCard({
       ].filter(Boolean).join(" "),
       style,
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("header", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("i", { "aria-hidden": "true" }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: `duelo-player-name${nameClass}`, children: player.label }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("b", { children: status })
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("header", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("i", { "aria-hidden": "true" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: `duelo-player-name${nameClass}`, children: player.label }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("b", { children: status })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "duelo-player-score", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("strong", { children: player.remaining }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: "baldosas restantes" }),
-          recent ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("em", { children: "+1" }, `${player.index}-${player.claimed}`) : null
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "duelo-player-score", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("strong", { children: player.remaining }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: "baldosas restantes" }),
+          recent ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("em", { children: "+1" }, `${player.index}-${player.claimed}`) : null
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "duelo-player-track", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("i", {}) }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("footer", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: "Reclamadas" }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("strong", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "duelo-player-track", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("i", {}) }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("footer", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: "Reclamadas" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("strong", { children: [
             player.claimed,
             "/",
             player.target
@@ -3441,9 +3789,9 @@ function DueloPlayerCard({
   );
 }
 function DueloMetric({ label, value }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("article", { className: "duelo-hero-metric", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: label }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("strong", { children: value })
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("article", { className: "duelo-hero-metric", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: label }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("strong", { children: value })
   ] });
 }
 function heroContent(snapshot, countdown, restartCountdown) {
@@ -3504,7 +3852,7 @@ var dueloConfigVars = {
     step: 0.05
   }
 };
-var manifest2 = {
+var manifest3 = {
   id: "duelo",
   label: "Duelo",
   description: "A fast 2\u20138 player race to claim every tile of your color before anyone else.",
@@ -3576,11 +3924,11 @@ var dueloPlayerPalette = [
   "#a66cff",
   "#ff8a3d"
 ];
-function createGame2(config) {
+function createGame3(config) {
   return new DueloGame(config);
 }
 function dueloReadyZones(playerCount) {
-  const count = clamp(Math.round(playerCount), manifest2.players.min, manifest2.players.max);
+  const count = clamp(Math.round(playerCount), manifest3.players.min, manifest3.players.max);
   const right = FLOOR_COLS - startPadSize;
   const bottom = FLOOR_ROWS - startPadSize;
   const centerX = Math.floor((FLOOR_COLS - startPadSize) / 2);
@@ -3623,10 +3971,10 @@ var DueloGame = class {
   targets = [];
   winnerIndex = -1;
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest2);
+    this.config = normalizeGameConfig(config, manifest3);
     this.rng = createSeededRng(this.config.seed);
     this.readyZones = dueloReadyZones(this.config.playerCount);
-    this.readyGate = createPlayerReadyGate(manifest2.start, this.readyZones, this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest3.start, this.readyZones, this.config.nowMillis);
     this.resetGame(this.config.nowMillis);
   }
   init(nowMillis) {
@@ -3695,8 +4043,8 @@ var DueloGame = class {
     const elapsedEnd = this.phase === "finished" ? this.finishAtMillis : this.nowMillis;
     const recentClaimAge = this.recentClaim ? this.nowMillis - this.recentClaim.atMillis : Number.POSITIVE_INFINITY;
     return {
-      currentGame: manifest2.id,
-      label: manifest2.label,
+      currentGame: manifest3.id,
+      label: manifest3.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players.map((player, index) => ({ ...player, score: this.claims[index] ?? 0 })),
@@ -3732,9 +4080,9 @@ var DueloGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest2);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest3);
     this.readyZones = dueloReadyZones(this.config.playerCount);
-    this.readyGate = createPlayerReadyGate(manifest2.start, this.readyZones, this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest3.start, this.readyZones, this.config.nowMillis);
     this.resetGame(this.config.nowMillis);
     this.lastEvent = gameEvent("ready", this.waitingMessage(), this.config.nowMillis);
   }
@@ -4056,24 +4404,24 @@ var twoPlayerRoster = [
   { name: "Rojo", color: "#ff3048" },
   { name: "Cian", color: "#24d9ff" }
 ];
-var waitingGame = createGame2({ playerCount: 2, players: twoPlayerRoster, seed: 137, difficulty: "medium" });
+var waitingGame = createGame3({ playerCount: 2, players: twoPlayerRoster, seed: 137, difficulty: "medium" });
 waitingGame.init(0);
 var waitingFrame = waitingGame.render();
 var waitingSnapshot = waitingGame.snapshot();
-var startingGame = createGame2({ playerCount: 2, players: twoPlayerRoster, seed: 137, difficulty: "hard" });
+var startingGame = createGame3({ playerCount: 2, players: twoPlayerRoster, seed: 137, difficulty: "hard" });
 startingGame.init(0);
 occupyReadyZones(startingGame, 100);
 startingGame.tick({ atMillis: 1100 });
 var startingFrame = startingGame.render();
 var startingSnapshot = startingGame.snapshot();
-var runningGame2 = createGame2({ playerCount: 2, players: twoPlayerRoster, seed: 137, difficulty: "hard" });
-runningGame2.init(0);
-startGame(runningGame2);
-claimTargets(runningGame2, 0, 8, 3200);
-claimTargets(runningGame2, 1, 5, 3400);
-runningGame2.tick({ atMillis: 18700 });
-var runningFrame2 = runningGame2.render();
-var runningSnapshot2 = runningGame2.snapshot();
+var runningGame3 = createGame3({ playerCount: 2, players: twoPlayerRoster, seed: 137, difficulty: "hard" });
+runningGame3.init(0);
+startGame(runningGame3);
+claimTargets(runningGame3, 0, 8, 3200);
+claimTargets(runningGame3, 1, 5, 3400);
+runningGame3.tick({ atMillis: 18700 });
+var runningFrame3 = runningGame3.render();
+var runningSnapshot3 = runningGame3.snapshot();
 var crowdedRoster = [
   { name: "Alejandra del Equipo Rel\xE1mpago", color: "#ff3048" },
   { name: "Bruno", color: "#24d9ff" },
@@ -4084,7 +4432,7 @@ var crowdedRoster = [
   { name: "Gabriela", color: "#a66cff" },
   { name: "Hugo", color: "#ff8a3d" }
 ];
-var crowdedGame = createGame2({ playerCount: 8, players: crowdedRoster, seed: 2026, difficulty: "medium" });
+var crowdedGame = createGame3({ playerCount: 8, players: crowdedRoster, seed: 2026, difficulty: "medium" });
 crowdedGame.init(0);
 startGame(crowdedGame);
 for (let player = 0; player < 8; player += 1) {
@@ -4093,19 +4441,19 @@ for (let player = 0; player < 8; player += 1) {
 crowdedGame.tick({ atMillis: 48230 });
 var crowdedRunningFrame = crowdedGame.render();
 var crowdedRunningSnapshot = crowdedGame.snapshot();
-var finishedGame2 = createGame2({
+var finishedGame3 = createGame3({
   playerCount: 2,
   players: twoPlayerRoster,
   seed: 137,
   difficulty: "medium",
   options: { base_fill_percent: 30 }
 });
-finishedGame2.init(0);
-startGame(finishedGame2);
-claimTargets(finishedGame2, 1, Number.POSITIVE_INFINITY, 3200);
-finishedGame2.tick({ atMillis: 4200 });
-var finishedFrame2 = finishedGame2.render();
-var finishedSnapshot2 = finishedGame2.snapshot();
+finishedGame3.init(0);
+startGame(finishedGame3);
+claimTargets(finishedGame3, 1, Number.POSITIVE_INFINITY, 3200);
+finishedGame3.tick({ atMillis: 4200 });
+var finishedFrame3 = finishedGame3.render();
+var finishedSnapshot3 = finishedGame3.snapshot();
 function occupyReadyZones(game5, atMillis) {
   game5.playerReadyZones().forEach((zone) => {
     game5.press({ x: zone.minX, y: zone.minY, pressed: true, atMillis });
@@ -4127,25 +4475,25 @@ function claimTargets(game5, owner, limit, atMillis) {
 }
 
 // games/hello-world/src/index.ts
-var src_exports3 = {};
-__export(src_exports3, {
-  PlayerDisplay: () => PlayerDisplay3,
-  createGame: () => createGame3,
+var src_exports4 = {};
+__export(src_exports4, {
+  PlayerDisplay: () => PlayerDisplay4,
+  createGame: () => createGame4,
   damagedFrame: () => damagedFrame,
-  damagedSnapshot: () => damagedSnapshot,
-  hazardColor: () => hazardColor,
+  damagedSnapshot: () => damagedSnapshot2,
+  hazardColor: () => hazardColor2,
   helloWorldCelebrationMillis: () => helloWorldCelebrationMillis,
   helloWorldHazards: () => helloWorldHazards,
   helloWorldStartingLives: () => helloWorldStartingLives,
   helloWorldTargetScore: () => helloWorldTargetScore,
   helloWorldTargets: () => helloWorldTargets,
   idleColor: () => idleColor2,
-  initEvents: () => initEvents2,
+  initEvents: () => initEvents3,
   losingFrame: () => losingFrame,
   losingSnapshot: () => losingSnapshot,
-  manifest: () => manifest3,
-  runningFrame: () => runningFrame3,
-  runningSnapshot: () => runningSnapshot3,
+  manifest: () => manifest4,
+  runningFrame: () => runningFrame4,
+  runningSnapshot: () => runningSnapshot4,
   startingFrame: () => startingFrame2,
   startingSnapshot: () => startingSnapshot2,
   targetColor: () => targetColor,
@@ -4157,8 +4505,8 @@ __export(src_exports3, {
 });
 
 // games/hello-world/src/display.tsx
-var import_jsx_runtime5 = __toESM(require_jsx_runtime(), 1);
-function PlayerDisplay3({
+var import_jsx_runtime6 = __toESM(require_jsx_runtime(), 1);
+function PlayerDisplay4({
   snapshot,
   frame
 }) {
@@ -4167,22 +4515,22 @@ function PlayerDisplay3({
   const resultClass = finished3 ? snapshot.success ? "is-result-win" : "is-result-lose" : "";
   const statusTone = snapshot.success ? "green" : snapshot.lastEventCue === "fail" ? "red" : "cyan";
   const restartSeconds = Math.max(1, Math.ceil(snapshot.celebrationMillis / 1e3));
-  const statusValue = finished3 ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { className: "hello-world-result-copy", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: snapshot.success ? "\xA1Ganaste!" : snapshot.lastEventMessage }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("small", { children: [
+  const statusValue = finished3 ? /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("span", { className: "hello-world-result-copy", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { children: snapshot.success ? "\xA1Ganaste!" : snapshot.lastEventMessage }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("small", { children: [
       "Reinicio en ",
       restartSeconds
     ] })
   ] }) : snapshot.lastEventMessage || "Verde suma, rojo resta una vida";
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: `ml-solo-display hello-world-display ${resultClass}`.trim(), children: [
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(PlayerReadyOverlay, { snapshot }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "ml-solo-summary", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(MetricPanel, { label: "Meta", tone: "green", value: `${snapshot.score}/${target3}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(MetricPanel, { label: "Vidas", tone: "red", value: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(MetricPanel, { label: "Tiempo", tone: "yellow", value: formatClock(snapshot.remainingMillis) })
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: `ml-solo-display hello-world-display ${resultClass}`.trim(), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(PlayerReadyOverlay, { snapshot }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "ml-solo-summary", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(MetricPanel, { label: "Meta", tone: "green", value: `${snapshot.score}/${target3}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(MetricPanel, { label: "Vidas", tone: "red", value: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(MetricPanel, { label: "Tiempo", tone: "yellow", value: formatClock(snapshot.remainingMillis) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
         MetricPanel,
         {
           className: "ml-solo-message",
@@ -4192,12 +4540,12 @@ function PlayerDisplay3({
         }
       )
     ] }),
-    frame ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Recorrido en el suelo" }) : null
+    frame ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Recorrido en el suelo" }) : null
   ] }) });
 }
 
 // games/hello-world/src/manifest.ts
-var manifest3 = {
+var manifest4 = {
   id: "hello-world",
   label: "Hola Mundo",
   description: "Sigue los objetivos verdes y evita las baldosas rojas.",
@@ -4238,7 +4586,7 @@ var manifest3 = {
 
 // games/hello-world/src/game.ts
 var targetColor = "#7ee787";
-var hazardColor = "#ff2036";
+var hazardColor2 = "#ff2036";
 var trailColor = "#1f6feb";
 var idleColor2 = "#05070a";
 var helloWorldTargetScore = 5;
@@ -4256,7 +4604,7 @@ var hazardPath = [
   { x: 4, y: 15 },
   { x: 8, y: 28 }
 ];
-function createGame3(config) {
+function createGame4(config) {
   return new HelloWorldGame(config);
 }
 var HelloWorldGame = class {
@@ -4272,8 +4620,8 @@ var HelloWorldGame = class {
   score = 0;
   startedAtMillis = 0;
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest3);
-    this.readyGate = createPlayerReadyGate(manifest3.start, createHorizontalPlayerReadyZones(1), this.config.nowMillis);
+    this.config = normalizeGameConfig(config, manifest4);
+    this.readyGate = createPlayerReadyGate(manifest4.start, createHorizontalPlayerReadyZones(1), this.config.nowMillis);
     this.players = this.scoredPlayers();
   }
   init(nowMillis) {
@@ -4288,8 +4636,8 @@ var HelloWorldGame = class {
     if (this.phase !== "running" || !event.pressed) {
       return [];
     }
-    const hazard = this.currentHazard();
-    if (hazard && event.x === hazard.x && event.y === hazard.y) {
+    const hazard2 = this.currentHazard();
+    if (hazard2 && event.x === hazard2.x && event.y === hazard2.y) {
       return this.loseLife(event.atMillis);
     }
     const target3 = this.currentTarget();
@@ -4347,17 +4695,17 @@ var HelloWorldGame = class {
       fillFrameRect(frame, target3.x - 1, target3.y - 1, 3, 3, targetColor);
       paintFrameCell(frame, target3.x, target3.y, "#ffffff");
     }
-    const hazard = this.currentHazard();
-    if (hazard) {
-      paintFrameCell(frame, hazard.x, hazard.y, hazardColor);
+    const hazard2 = this.currentHazard();
+    if (hazard2) {
+      paintFrameCell(frame, hazard2.x, hazard2.y, hazardColor2);
     }
     return frame;
   }
   snapshot() {
     const readyState = this.readyGate.state(this.nowMillis);
     return {
-      currentGame: manifest3.id,
-      label: manifest3.label,
+      currentGame: manifest4.id,
+      label: manifest4.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players,
@@ -4383,7 +4731,7 @@ var HelloWorldGame = class {
     this.config = normalizeGameConfig({
       ...this.config,
       ...config
-    }, manifest3);
+    }, manifest4);
     this.resetState(this.config.nowMillis);
   }
   applyReadyTransition(transition, nowMillis) {
@@ -4438,7 +4786,7 @@ var HelloWorldGame = class {
     for (let y = 0; y < FLOOR_ROWS; y += 1) {
       for (let x = 0; x < FLOOR_COLS; x += 1) {
         if ((x + y + animationStep) % 8 <= 1 || (x - y - animationStep + 64) % 11 === 0) {
-          paintFrameCell(frame, x, y, (x + animationStep) % 4 === 0 ? "#ff8090" : hazardColor);
+          paintFrameCell(frame, x, y, (x + animationStep) % 4 === 0 ? "#ff8090" : hazardColor2);
         }
       }
     }
@@ -4488,34 +4836,34 @@ var HelloWorldGame = class {
   }
 };
 function helloWorldHazards() {
-  return hazardPath.map((hazard) => ({ ...hazard }));
+  return hazardPath.map((hazard2) => ({ ...hazard2 }));
 }
 function helloWorldTargets() {
   return targetPath.map((target3) => ({ ...target3 }));
 }
 
 // games/hello-world/src/fixtures.ts
-var waitingGame2 = createGame3({ seed: 2024, playerCount: 1, durationMillis: 3e4 });
-var initEvents2 = waitingGame2.init(0);
+var waitingGame2 = createGame4({ seed: 2024, playerCount: 1, durationMillis: 3e4 });
+var initEvents3 = waitingGame2.init(0);
 var waitingFrame2 = waitingGame2.render();
 var waitingSnapshot2 = waitingGame2.snapshot();
-var startingGame2 = createGame3({ seed: 2024, playerCount: 1, durationMillis: 3e4 });
+var startingGame2 = createGame4({ seed: 2024, playerCount: 1, durationMillis: 3e4 });
 startingGame2.init(0);
 startingGame2.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
 startingGame2.tick({ atMillis: 1100 });
 var startingFrame2 = startingGame2.render();
 var startingSnapshot2 = startingGame2.snapshot();
-var runningGame3 = createStartedGame();
-var runningFrame3 = runningGame3.render();
-var runningSnapshot3 = runningGame3.snapshot();
-var damagedGame = createStartedGame();
+var runningGame4 = createStartedGame();
+var runningFrame4 = runningGame4.render();
+var runningSnapshot4 = runningGame4.snapshot();
+var damagedGame2 = createStartedGame();
 var firstHazard = helloWorldHazards()[0];
 if (!firstHazard) {
   throw new Error("Hola Mundo requires at least one hazard fixture.");
 }
-damagedGame.press({ ...firstHazard, pressed: true, atMillis: 2200 });
-var damagedFrame = damagedGame.render();
-var damagedSnapshot = damagedGame.snapshot();
+damagedGame2.press({ ...firstHazard, pressed: true, atMillis: 2200 });
+var damagedFrame = damagedGame2.render();
+var damagedSnapshot2 = damagedGame2.snapshot();
 var winningGame = createStartedGame();
 helloWorldTargets().forEach((target3, index) => {
   winningGame.press({ ...target3, pressed: true, atMillis: 2200 + index * 100 });
@@ -4524,14 +4872,14 @@ winningGame.tick({ atMillis: 4100 });
 var winningFrame = winningGame.render();
 var winningSnapshot = winningGame.snapshot();
 var losingGame = createStartedGame();
-helloWorldHazards().forEach((hazard, index) => {
-  losingGame.press({ ...hazard, pressed: true, atMillis: 2200 + index * 100 });
+helloWorldHazards().forEach((hazard2, index) => {
+  losingGame.press({ ...hazard2, pressed: true, atMillis: 2200 + index * 100 });
 });
 losingGame.tick({ atMillis: 4100 });
 var losingFrame = losingGame.render();
 var losingSnapshot = losingGame.snapshot();
 function createStartedGame() {
-  const game5 = createGame3({ seed: 2024, playerCount: 1, durationMillis: 3e4 });
+  const game5 = createGame4({ seed: 2024, playerCount: 1, durationMillis: 3e4 });
   game5.init(0);
   game5.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
   game5.tick({ atMillis: 2100 });
@@ -4539,42 +4887,42 @@ function createStartedGame() {
 }
 
 // games/lava/src/index.ts
-var src_exports4 = {};
-__export(src_exports4, {
-  PlayerDisplay: () => PlayerDisplay4,
-  createGame: () => createGame4,
+var src_exports5 = {};
+__export(src_exports5, {
+  PlayerDisplay: () => PlayerDisplay5,
+  createGame: () => createGame5,
   damagedFrame: () => damagedFrame2,
-  damagedSnapshot: () => damagedSnapshot2,
-  initEvents: () => initEvents3,
+  damagedSnapshot: () => damagedSnapshot3,
+  initEvents: () => initEvents4,
   lavaCelebrationMillis: () => lavaCelebrationMillis,
   lavaDamageImmunityMillis: () => lavaDamageImmunityMillis,
   lavaStartingLives: () => lavaStartingLives,
-  manifest: () => manifest4,
-  runningFrame: () => runningFrame4,
-  runningSnapshot: () => runningSnapshot4,
+  manifest: () => manifest5,
+  runningFrame: () => runningFrame5,
+  runningSnapshot: () => runningSnapshot5,
   startingSnapshot: () => startingSnapshot3,
   waitingSnapshot: () => waitingSnapshot3
 });
 
 // games/lava/src/display.tsx
-var import_jsx_runtime6 = __toESM(require_jsx_runtime(), 1);
-function PlayerDisplay4({ snapshot, frame }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "ml-solo-display", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(PlayerReadyOverlay, { snapshot }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "ml-solo-summary", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(MetricPanel, { label: "Plataformas", tone: "green", value: snapshot.score }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(MetricPanel, { label: "Tiempo", tone: "cyan", value: formatClock(snapshot.remainingMillis) }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(MetricPanel, { label: "Vidas", tone: "red", value: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives }) })
+var import_jsx_runtime7 = __toESM(require_jsx_runtime(), 1);
+function PlayerDisplay5({ snapshot, frame }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "ml-solo-display", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(PlayerReadyOverlay, { snapshot }),
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "ml-solo-summary", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(MetricPanel, { label: "Plataformas", tone: "green", value: snapshot.score }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(MetricPanel, { label: "Tiempo", tone: "cyan", value: formatClock(snapshot.remainingMillis) }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(MetricPanel, { label: "Vidas", tone: "red", value: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(MetricPanel, { className: "ml-solo-message", label: "Equipo", tone: snapshot.success ? "green" : snapshot.lives === 0 ? "red" : "yellow", value: snapshot.lastEventMessage || "Pisa solo las plataformas verdes" })
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(MetricPanel, { className: "ml-solo-message", label: "Equipo", tone: snapshot.success ? "green" : snapshot.lives === 0 ? "red" : "yellow", value: snapshot.lastEventMessage || "Pisa solo las plataformas verdes" })
     ] }),
-    frame ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Lava en el suelo" }) : null
+    frame ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Lava en el suelo" }) : null
   ] }) });
 }
 
 // games/lava/src/manifest.ts
-var manifest4 = {
+var manifest5 = {
   id: "lava",
   label: "El suelo es lava",
   description: "Moveos en equipo, evitad la lava y conquistad plataformas seguras durante un minuto.",
@@ -4599,7 +4947,7 @@ var difficultySettings = {
   hard: { speed: 3.2, width: 3, height: 2, spawnMillis: 1650 },
   expert: { speed: 4, width: 2, height: 2, spawnMillis: 1350 }
 };
-function createGame4(config) {
+function createGame5(config) {
   return new LavaGame(config);
 }
 var LavaGame = class {
@@ -4619,8 +4967,8 @@ var LavaGame = class {
   score = 0;
   startedAtMillis = 0;
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest4);
-    this.readyGate = createPlayerReadyGate(manifest4.start, [{ minX: 5, maxX: 10, minY: 13, maxY: 18 }], this.config.nowMillis);
+    this.config = normalizeGameConfig(config, manifest5);
+    this.readyGate = createPlayerReadyGate(manifest5.start, [{ minX: 5, maxX: 10, minY: 13, maxY: 18 }], this.config.nowMillis);
     this.rng = createSeededRng(this.config.seed);
     this.players = this.scoredPlayers();
   }
@@ -4688,8 +5036,8 @@ var LavaGame = class {
   snapshot() {
     const ready = this.readyGate.state(this.nowMillis);
     return {
-      currentGame: manifest4.id,
-      label: manifest4.label,
+      currentGame: manifest5.id,
+      label: manifest5.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players,
@@ -4710,7 +5058,7 @@ var LavaGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest4);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest5);
     this.resetState(this.config.nowMillis);
   }
   advancePlatforms(nowMillis) {
@@ -4783,30 +5131,30 @@ function inside(point, platform) {
 }
 
 // games/lava/src/fixtures.ts
-var game = createGame4({ playerCount: 0, seed: 137, difficulty: "medium" });
-var initEvents3 = game.init(0);
+var game = createGame5({ playerCount: 0, seed: 137, difficulty: "medium" });
+var initEvents4 = game.init(0);
 var waitingSnapshot3 = game.snapshot();
 game.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
 var startingSnapshot3 = game.snapshot();
 game.tick({ atMillis: 2100 });
 game.tick({ atMillis: 4e3 });
-var runningFrame4 = game.render();
-var runningSnapshot4 = game.snapshot();
+var runningFrame5 = game.render();
+var runningSnapshot5 = game.snapshot();
 game.press({ x: 0, y: 31, pressed: true, atMillis: 4100 });
 var damagedFrame2 = game.render();
-var damagedSnapshot2 = game.snapshot();
+var damagedSnapshot3 = game.snapshot();
 
 // games/memory-challenge/src/index.ts
-var src_exports5 = {};
-__export(src_exports5, {
-  PlayerDisplay: () => PlayerDisplay5,
-  createGame: () => createGame5,
+var src_exports6 = {};
+__export(src_exports6, {
+  PlayerDisplay: () => PlayerDisplay6,
+  createGame: () => createGame6,
   failedFrame: () => failedFrame,
   failedSnapshot: () => failedSnapshot,
-  finishedFrame: () => finishedFrame3,
-  finishedSnapshot: () => finishedSnapshot3,
+  finishedFrame: () => finishedFrame4,
+  finishedSnapshot: () => finishedSnapshot4,
   laneLayout: () => laneLayout,
-  manifest: () => manifest5,
+  manifest: () => manifest6,
   memorizingFrame: () => memorizingFrame,
   memorizingSnapshot: () => memorizingSnapshot,
   recallingFrame: () => recallingFrame,
@@ -4818,31 +5166,31 @@ __export(src_exports5, {
 });
 
 // games/memory-challenge/src/display.tsx
-var import_jsx_runtime7 = __toESM(require_jsx_runtime(), 1);
-function PlayerDisplay5({ snapshot }) {
+var import_jsx_runtime8 = __toESM(require_jsx_runtime(), 1);
+function PlayerDisplay6({ snapshot }) {
   const countdown = Math.max(1, Math.ceil((snapshot.countdownMillis ?? 0) / 1e3));
   const hero = heroContent2(snapshot, countdown);
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: `memory-challenge-display is-phase-${snapshot.phase} is-stage-${snapshot.memoryStage}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "memory-challenge-hero", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: hero.eyebrow }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: hero.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("b", { children: hero.caption })
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `memory-challenge-display is-phase-${snapshot.phase} is-stage-${snapshot.memoryStage}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "memory-challenge-hero", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: hero.eyebrow }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: hero.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("b", { children: hero.caption })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("article", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: "Tiempo" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: formatClock(snapshot.remainingMillis) })
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: "Tiempo" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: formatClock(snapshot.remainingMillis) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("article", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: "Mejor camino" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: snapshot.score })
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: "Mejor camino" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: snapshot.score })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("section", { className: "memory-challenge-players", style: { "--memory-columns": snapshot.playerCount }, children: snapshot.playerProgress.map((player) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(PlayerCard, { player, ready: snapshot.readyPlayerIndices.includes(player.index), winner: snapshot.winnerIndex === player.index }, player.index)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("footer", { className: "memory-challenge-event", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: snapshot.phase === "finished" ? "Resultado" : "\xDAltimo evento" }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: snapshot.lastEventMessage }, snapshot.motionEventId),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("b", { children: snapshot.phase === "running" ? stageLabel(snapshot) : `${snapshot.readyPlayers}/${snapshot.requiredPlayers} listos` })
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("section", { className: "memory-challenge-players", style: { "--memory-columns": snapshot.playerCount }, children: snapshot.playerProgress.map((player) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(PlayerCard, { player, ready: snapshot.readyPlayerIndices.includes(player.index), winner: snapshot.winnerIndex === player.index }, player.index)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("footer", { className: "memory-challenge-event", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: snapshot.phase === "finished" ? "Resultado" : "\xDAltimo evento" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: snapshot.lastEventMessage }, snapshot.motionEventId),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("b", { children: snapshot.phase === "running" ? stageLabel(snapshot) : `${snapshot.readyPlayers}/${snapshot.requiredPlayers} listos` })
     ] })
   ] }) });
 }
@@ -4850,24 +5198,24 @@ function PlayerCard({ player, ready, winner }) {
   const progress = player.pathLength === 0 ? 0 : player.bestProgress / player.pathLength;
   const style = { "--memory-player": player.color, "--memory-player-rgb": hexToRgb3(player.color), "--memory-progress": progress };
   const status = winner ? "Ganador" : player.status === "failed" ? "Vuelve al inicio" : player.status === "memorizing" ? "Memoriza" : ready ? "Listo" : "En carrera";
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("article", { className: `memory-challenge-player is-${player.status}${winner ? " is-winner" : ""}`, style, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("header", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("i", {}),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: player.label }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("b", { children: status })
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: `memory-challenge-player is-${player.status}${winner ? " is-winner" : ""}`, style, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", {}),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: player.label }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("b", { children: status })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "memory-challenge-score", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: player.bestProgress }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "memory-challenge-score", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: player.bestProgress }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { children: [
         "de ",
         player.pathLength,
         " baldosas"
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "memory-challenge-track", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("i", {}) }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("footer", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: "Avance actual" }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("strong", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "memory-challenge-track", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("footer", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: "Avance actual" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("strong", { children: [
         Math.round(progress * 100),
         "%"
       ] })
@@ -4890,7 +5238,7 @@ function hexToRgb3(color) {
 }
 
 // games/memory-challenge/src/manifest.ts
-var manifest5 = {
+var manifest6 = {
   id: "memory-challenge",
   label: "Reto de memoria",
   description: "Memoriza un camino oculto en tu calle y rec\xF3rrelo antes que los dem\xE1s sin pisar la lava.",
@@ -4934,7 +5282,7 @@ var lavaDark = "#120301";
 var lavaBright = "#8f1a08";
 var failColor = "#ff6b22";
 var white2 = "#ffffff";
-function createGame5(config) {
+function createGame6(config) {
   return new MemoryChallengeGame(config);
 }
 var MemoryChallengeGame = class {
@@ -4954,10 +5302,10 @@ var MemoryChallengeGame = class {
   motionEventId = 0;
   lastEvent = gameEvent("none", "Listo", 0);
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest5);
+    this.config = normalizeGameConfig(config, manifest6);
     this.rng = createSeededRng(this.config.seed);
     this.rebuildBoard();
-    this.readyGate = createPlayerReadyGate(manifest5.start, this.readyZones, this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest6.start, this.readyZones, this.config.nowMillis);
     this.resetState(this.config.nowMillis);
   }
   init(nowMillis) {
@@ -5063,8 +5411,8 @@ var MemoryChallengeGame = class {
     const readyPlayerIndices = this.readyZones.flatMap((_, index) => this.readyGate.zoneReady(index, this.nowMillis) ? [index] : []);
     const best = Math.max(0, ...this.players.map((player) => player.bestProgress));
     return {
-      currentGame: manifest5.id,
-      label: manifest5.label,
+      currentGame: manifest6.id,
+      label: manifest6.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players.map((player) => ({ index: player.index, label: player.label, color: player.color, score: player.bestProgress, lives: -1 })),
@@ -5091,10 +5439,10 @@ var MemoryChallengeGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest5);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest6);
     this.rng = createSeededRng(this.config.seed);
     this.rebuildBoard();
-    this.readyGate = createPlayerReadyGate(manifest5.start, this.readyZones, this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest6.start, this.readyZones, this.config.nowMillis);
     this.resetState(this.config.nowMillis);
   }
   pathForPlayer(index) {
@@ -5237,9 +5585,9 @@ function laneLayout(count) {
   if (safe === 3) return [{ x: 0, width: 4 }, { x: 6, width: 4 }, { x: 12, width: 4 }];
   return Array.from({ length: 4 }, (_, index) => ({ x: index * 4, width: 4 }));
 }
-function generatePath(rng, lane, start) {
+function generatePath(rng, lane, start2) {
   const path = [];
-  let x = start.minX + rng.int(start.maxX - start.minX + 1);
+  let x = start2.minX + rng.int(start2.maxX - start2.minX + 1);
   let segment = 3 + rng.int(4);
   for (let y = startRows; y < FLOOR_ROWS; y += 1) {
     path.push({ x, y });
@@ -5262,7 +5610,7 @@ var players = [
   { name: "Cian", color: "#24d9ff" }
 ];
 function gameAt(stage) {
-  const game5 = createGame5({ playerCount: 2, players, seed: 137 });
+  const game5 = createGame6({ playerCount: 2, players, seed: 137 });
   game5.init(0);
   if (stage !== "waiting") occupy(game5, 100);
   if (stage === "memorize" || stage === "recall") game5.tick({ atMillis: 2200 });
@@ -5288,8 +5636,8 @@ var failedFrame = failed.render();
 var failedSnapshot = failed.snapshot();
 var finished = gameAt("recall");
 playSteps(finished, 0, Number.POSITIVE_INFINITY, 5200);
-var finishedFrame3 = finished.render();
-var finishedSnapshot3 = finished.snapshot();
+var finishedFrame4 = finished.render();
+var finishedSnapshot4 = finished.snapshot();
 function occupy(game5, atMillis) {
   for (const zone of game5.playerReadyZones()) game5.press({ x: zone.minX, y: zone.minY, pressed: true, atMillis });
 }
@@ -5298,12 +5646,12 @@ function playSteps(game5, player, count, atMillis) {
 }
 
 // games/memoria-v2/src/index.ts
-var src_exports6 = {};
-__export(src_exports6, {
-  PlayerDisplay: () => PlayerDisplay6,
-  createGame: () => createGame6,
-  initEvents: () => initEvents4,
-  manifest: () => manifest6,
+var src_exports7 = {};
+__export(src_exports7, {
+  PlayerDisplay: () => PlayerDisplay7,
+  createGame: () => createGame7,
+  initEvents: () => initEvents5,
+  manifest: () => manifest7,
   memoriaV2GameWinMillis: () => memoriaV2GameWinMillis,
   memoriaV2MemorizeMillis: () => memoriaV2MemorizeMillis,
   memoriaV2RoundWinMillis: () => memoriaV2RoundWinMillis,
@@ -5314,32 +5662,32 @@ __export(src_exports6, {
   memoryTargetsForLevel: () => memoryTargetsForLevel,
   roundWinFrame: () => roundWinFrame,
   roundWinSnapshot: () => roundWinSnapshot,
-  runningFrame: () => runningFrame5,
-  runningSnapshot: () => runningSnapshot5,
+  runningFrame: () => runningFrame6,
+  runningSnapshot: () => runningSnapshot6,
   startingSnapshot: () => startingSnapshot5,
   waitingSnapshot: () => waitingSnapshot5
 });
 
 // games/memoria-v2/src/display.tsx
-var import_jsx_runtime8 = __toESM(require_jsx_runtime(), 1);
-function PlayerDisplay6({ snapshot, frame }) {
+var import_jsx_runtime9 = __toESM(require_jsx_runtime(), 1);
+function PlayerDisplay7({ snapshot, frame }) {
   const message = snapshot.memoryStage === "memorize" ? `Memoriza \xB7 ${formatClock(snapshot.stageMillis)}` : snapshot.lastEventMessage;
-  return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "ml-solo-display", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(PlayerReadyOverlay, { snapshot }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "ml-solo-summary", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(MetricPanel, { label: "Nivel", tone: "blue", value: `${snapshot.level}/${snapshot.totalLevels}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(MetricPanel, { label: "Aciertos", tone: "green", value: `${snapshot.claimedTargets}/${snapshot.totalTargets}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(MetricPanel, { label: "Vidas", tone: "red", value: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives }) })
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "ml-solo-display", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(PlayerReadyOverlay, { snapshot }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "ml-solo-summary", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(MetricPanel, { label: "Nivel", tone: "blue", value: `${snapshot.level}/${snapshot.totalLevels}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(MetricPanel, { label: "Aciertos", tone: "green", value: `${snapshot.claimedTargets}/${snapshot.totalTargets}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(MetricPanel, { label: "Vidas", tone: "red", value: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(MetricPanel, { className: "ml-solo-message", label: "Memoria", tone: snapshot.success ? "green" : snapshot.memoryStage === "game-loss" ? "red" : "yellow", value: message })
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(MetricPanel, { className: "ml-solo-message", label: "Memoria", tone: snapshot.success ? "green" : snapshot.memoryStage === "game-loss" ? "red" : "yellow", value: message })
     ] }),
-    frame ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Figura en el suelo" }) : null
+    frame ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Figura en el suelo" }) : null
   ] }) });
 }
 
 // games/memoria-v2/src/manifest.ts
-var manifest6 = {
+var manifest7 = {
   id: "memoria-v2",
   label: "Memoria v2",
   description: "Memoriza y reconstruye figuras cada vez m\xE1s complejas durante veinte niveles.",
@@ -5373,7 +5721,7 @@ var memoriaV2StartingLives = 3;
 var memoriaV2MemorizeMillis = 5e3;
 var memoriaV2RoundWinMillis = 2200;
 var memoriaV2GameWinMillis = 5e3;
-function createGame6(config) {
+function createGame7(config) {
   return new MemoriaV2Game(config);
 }
 function memoryTargetsForLevel(seed, level) {
@@ -5406,8 +5754,8 @@ var MemoriaV2Game = class {
   startedAtMillis = 0;
   targets = [];
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest6);
-    this.readyGate = createPlayerReadyGate(manifest6.start, [{ minX: 5, maxX: 10, minY: 13, maxY: 18 }], this.config.nowMillis);
+    this.config = normalizeGameConfig(config, manifest7);
+    this.readyGate = createPlayerReadyGate(manifest7.start, [{ minX: 5, maxX: 10, minY: 13, maxY: 18 }], this.config.nowMillis);
     this.targets = memoryTargetsForLevel(this.config.seed, this.level);
     this.players = this.scoredPlayers();
   }
@@ -5487,8 +5835,8 @@ var MemoriaV2Game = class {
   snapshot() {
     const ready = this.readyGate.state(this.nowMillis);
     return {
-      currentGame: manifest6.id,
-      label: manifest6.label,
+      currentGame: manifest7.id,
+      label: manifest7.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players,
@@ -5515,7 +5863,7 @@ var MemoriaV2Game = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest6);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest7);
     this.resetState(this.config.nowMillis);
   }
   applyReadyTransition(transition, nowMillis) {
@@ -5572,8 +5920,8 @@ var MemoriaV2Game = class {
 };
 
 // games/memoria-v2/src/fixtures.ts
-var game2 = createGame6({ playerCount: 0, seed: 137 });
-var initEvents4 = game2.init(0);
+var game2 = createGame7({ playerCount: 0, seed: 137 });
+var initEvents5 = game2.init(0);
 var waitingSnapshot5 = game2.snapshot();
 game2.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
 var startingSnapshot5 = game2.snapshot();
@@ -5581,68 +5929,68 @@ game2.tick({ atMillis: 2100 });
 var memorizeFrame = game2.render();
 var memorizeSnapshot = game2.snapshot();
 game2.tick({ atMillis: 7100 });
-var runningFrame5 = game2.render();
-var runningSnapshot5 = game2.snapshot();
+var runningFrame6 = game2.render();
+var runningSnapshot6 = game2.snapshot();
 for (const target3 of game2.snapshot().targets) game2.press({ ...target3, pressed: true, atMillis: 7200 });
 var roundWinFrame = game2.render();
 var roundWinSnapshot = game2.snapshot();
 
 // games/meteor-dodge/src/index.ts
-var src_exports7 = {};
-__export(src_exports7, {
-  PlayerDisplay: () => PlayerDisplay7,
-  createGame: () => createGame7,
+var src_exports8 = {};
+__export(src_exports8, {
+  PlayerDisplay: () => PlayerDisplay8,
+  createGame: () => createGame8,
   damagedFrame: () => damagedFrame3,
-  damagedSnapshot: () => damagedSnapshot3,
+  damagedSnapshot: () => damagedSnapshot4,
   failedFrame: () => failedFrame2,
   failedSnapshot: () => failedSnapshot2,
-  finishedFrame: () => finishedFrame4,
-  finishedSnapshot: () => finishedSnapshot4,
-  gameWinAnimationMillis: () => gameWinAnimationMillis,
-  initEvents: () => initEvents5,
-  manifest: () => manifest7,
+  finishedFrame: () => finishedFrame5,
+  finishedSnapshot: () => finishedSnapshot5,
+  gameWinAnimationMillis: () => gameWinAnimationMillis2,
+  initEvents: () => initEvents6,
+  manifest: () => manifest8,
   meteorCoreColor: () => meteorCoreColor,
   meteorDifficultyProfile: () => meteorDifficultyProfile,
   meteorImpactColor: () => meteorImpactColor,
   meteorImpactVisibleMillis: () => meteorImpactVisibleMillis,
   meteorWarningColor: () => meteorWarningColor,
   playerFootprintColor: () => playerFootprintColor,
-  runningFrame: () => runningFrame6,
-  runningSnapshot: () => runningSnapshot6,
-  startingLives: () => startingLives2
+  runningFrame: () => runningFrame7,
+  runningSnapshot: () => runningSnapshot7,
+  startingLives: () => startingLives3
 });
 
 // games/meteor-dodge/src/display.tsx
-var import_jsx_runtime9 = __toESM(require_jsx_runtime(), 1);
-function PlayerDisplay7({
+var import_jsx_runtime10 = __toESM(require_jsx_runtime(), 1);
+function PlayerDisplay8({
   snapshot,
   frame
 }) {
   const message = snapshot.phase === "finished" ? snapshot.success ? "\xA1Tormenta superada!" : "La tormenta te alcanz\xF3" : snapshot.lastEventMessage || "Esquiva las zonas rojas";
   const messageTone = snapshot.success ? "green" : snapshot.lives === 0 ? "red" : "cyan";
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "ml-solo-display meteor-dodge-display", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(PlayerReadyOverlay, { snapshot }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "ml-solo-summary", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(MetricPanel, { label: "Esquivados", tone: "cyan", value: snapshot.dodgedMeteors }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "ml-solo-display meteor-dodge-display", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(PlayerReadyOverlay, { snapshot }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "ml-solo-summary", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(MetricPanel, { label: "Esquivados", tone: "cyan", value: snapshot.dodgedMeteors }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
           MetricPanel,
           {
             label: "Vidas",
             tone: "neutral",
-            value: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives })
+            value: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives })
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(MetricPanel, { label: "Tiempo", tone: "yellow", value: formatClock(snapshot.remainingMillis) })
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(MetricPanel, { label: "Tiempo", tone: "yellow", value: formatClock(snapshot.remainingMillis) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(MetricPanel, { className: "ml-solo-message", label: "Estado", tone: messageTone, value: message })
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(MetricPanel, { className: "ml-solo-message", label: "Estado", tone: messageTone, value: message })
     ] }),
-    frame ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Tormenta en el suelo" }) : null
+    frame ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Tormenta en el suelo" }) : null
   ] }) });
 }
 
 // games/meteor-dodge/src/manifest.ts
-var manifest7 = {
+var manifest8 = {
   id: "meteor-dodge",
   label: "Lluvia de meteoritos",
   description: "Cooperative survival game: dodge telegraphed meteor impacts until the storm passes.",
@@ -5690,14 +6038,14 @@ var manifest7 = {
 };
 
 // games/meteor-dodge/src/game.ts
-var startingLives2 = 3;
-var gameWinAnimationMillis = 3e3;
+var startingLives3 = 3;
+var gameWinAnimationMillis2 = 3e3;
 var meteorImpactVisibleMillis = 450;
 var meteorWarningColor = "#ff5a36";
 var meteorCoreColor = "#ffe176";
 var meteorImpactColor = "#ffffff";
 var playerFootprintColor = "#35d7ff";
-var backgroundColor2 = "#02050b";
+var backgroundColor3 = "#02050b";
 var backgroundStripeColor = "#050d19";
 var readyZoneColor = "#145cff";
 var readyPulseColor = "#35d7ff";
@@ -5720,7 +6068,7 @@ var difficultyProfiles = {
   hard: { intervalMillis: 1200, largeMeteorEvery: 3, radius: 1, warningMillis: 1050 },
   expert: { intervalMillis: 900, largeMeteorEvery: 1, radius: 2, warningMillis: 800 }
 };
-function createGame7(config) {
+function createGame8(config) {
   return new MeteorDodgeGame(config);
 }
 var MeteorDodgeGame = class {
@@ -5729,7 +6077,7 @@ var MeteorDodgeGame = class {
   finishedAtMillis = 0;
   lastDamageMillis = Number.NEGATIVE_INFINITY;
   lastEvent = gameEvent("none", "Listos para la tormenta", 0);
-  lives = startingLives2;
+  lives = startingLives3;
   meteors = [];
   nextMeteorId = 1;
   nextMeteorMillis = 0;
@@ -5742,9 +6090,9 @@ var MeteorDodgeGame = class {
   startedAtMillis = 0;
   success = false;
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest7);
+    this.config = normalizeGameConfig(config, manifest8);
     this.rng = createSeededRng(this.config.seed);
-    this.readyGate = createPlayerReadyGate(manifest7.start, [readyZone], this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest8.start, [readyZone], this.config.nowMillis);
     this.resetState(this.config.nowMillis);
   }
   init(nowMillis) {
@@ -5809,7 +6157,7 @@ var MeteorDodgeGame = class {
     return this.recordEvents(events);
   }
   render() {
-    const frame = createFrame(backgroundColor2);
+    const frame = createFrame(backgroundColor3);
     this.drawBackground(frame);
     if (this.phase === "waiting" || this.phase === "starting") {
       this.drawPlayerStart(frame);
@@ -5834,16 +6182,16 @@ var MeteorDodgeGame = class {
   }
   snapshot() {
     const readyState = this.readyGate.state(this.nowMillis);
-    const celebrationMillis = this.success && this.phase === "finished" ? Math.max(0, Math.min(gameWinAnimationMillis, this.nowMillis - this.finishedAtMillis)) : 0;
+    const celebrationMillis = this.success && this.phase === "finished" ? Math.max(0, Math.min(gameWinAnimationMillis2, this.nowMillis - this.finishedAtMillis)) : 0;
     return {
-      currentGame: manifest7.id,
-      label: manifest7.label,
+      currentGame: manifest8.id,
+      label: manifest8.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players.map((player) => ({ ...player, lives: this.lives, score: this.dodgedMeteors })),
       score: this.dodgedMeteors,
       lives: this.lives,
-      maxLives: startingLives2,
+      maxLives: startingLives3,
       elapsedMillis: this.elapsedMillis(),
       remainingMillis: this.remainingMillis(),
       activeTargets: this.meteors.filter((meteor) => meteor.result === "pending").length,
@@ -5853,7 +6201,7 @@ var MeteorDodgeGame = class {
       countdownMillis: this.phase === "starting" ? readyState.countdownMillis : 0,
       readyPlayers: readyState.readyPlayers,
       requiredPlayers: readyState.requiredPlayers,
-      celebrating: this.success && this.phase === "finished" && celebrationMillis < gameWinAnimationMillis,
+      celebrating: this.success && this.phase === "finished" && celebrationMillis < gameWinAnimationMillis2,
       celebrationMillis,
       dodgedMeteors: this.dodgedMeteors,
       meteors: this.meteors.map((meteor) => ({ ...meteor })),
@@ -5861,7 +6209,7 @@ var MeteorDodgeGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest7);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest8);
     this.rng = createSeededRng(this.config.seed);
     this.resetState(this.config.nowMillis);
     this.phase = "waiting";
@@ -5910,7 +6258,7 @@ var MeteorDodgeGame = class {
       const warningColor = pulseOn ? meteorWarningColor : "#6c1b19";
       fillFrameRect(frame, meteor.x - meteor.radius, meteor.y - meteor.radius, size, size, warningColor);
       if (meteor.radius > 0) {
-        fillFrameRect(frame, meteor.x - meteor.radius + 1, meteor.y - meteor.radius + 1, size - 2, size - 2, backgroundColor2);
+        fillFrameRect(frame, meteor.x - meteor.radius + 1, meteor.y - meteor.radius + 1, size - 2, size - 2, backgroundColor3);
       }
       paintFrameCell(frame, meteor.x, meteor.y, meteorCoreColor);
       return;
@@ -5932,7 +6280,7 @@ var MeteorDodgeGame = class {
     const height = readyZone.maxY - readyZone.minY + 1 - inset * 2;
     fillFrameRect(frame, x, y, width, height, color);
     if (width > 2 && height > 2) {
-      fillFrameRect(frame, x + 1, y + 1, width - 2, height - 2, backgroundColor2);
+      fillFrameRect(frame, x + 1, y + 1, width - 2, height - 2, backgroundColor3);
     }
     paintFrameCell(frame, 7, 15, "#ffffff");
     paintFrameCell(frame, 8, 16, "#ffffff");
@@ -5984,7 +6332,7 @@ var MeteorDodgeGame = class {
     this.dodgedMeteors = 0;
     this.finishedAtMillis = 0;
     this.lastDamageMillis = Number.NEGATIVE_INFINITY;
-    this.lives = startingLives2;
+    this.lives = startingLives3;
     this.meteors = [];
     this.nextMeteorId = 1;
     this.nextMeteorMillis = 0;
@@ -6038,28 +6386,28 @@ function occupiedTileCoordinates(tile) {
 }
 
 // games/meteor-dodge/src/fixtures.ts
-var runningGame4 = createGame7({ playerCount: 1, difficulty: "medium", seed: 137 });
-var initEvents5 = runningGame4.init(0);
-startGame2(runningGame4);
-runningGame4.release({ x: 8, y: 16, pressed: false, atMillis: 2150 });
-runningGame4.tick({ atMillis: 4e3 });
-var runningFrame6 = runningGame4.render();
-var runningSnapshot6 = runningGame4.snapshot();
-var damagedGame2 = createGame7({ playerCount: 1, difficulty: "easy", seed: 137 });
-damagedGame2.init(0);
-startGame2(damagedGame2);
-damageOnce(damagedGame2, 2450);
-var damagedFrame3 = damagedGame2.render();
-var damagedSnapshot3 = damagedGame2.snapshot();
-var finishedGame3 = createGame7({ playerCount: 1, difficulty: "medium", durationMillis: 4e3, seed: 137 });
-finishedGame3.init(0);
-startGame2(finishedGame3);
-finishedGame3.release({ x: 8, y: 16, pressed: false, atMillis: 2150 });
-finishedGame3.tick({ atMillis: 6100 });
-finishedGame3.tick({ atMillis: 7e3 });
-var finishedFrame4 = finishedGame3.render();
-var finishedSnapshot4 = finishedGame3.snapshot();
-var failedGame = createGame7({ playerCount: 1, difficulty: "easy", seed: 137 });
+var runningGame5 = createGame8({ playerCount: 1, difficulty: "medium", seed: 137 });
+var initEvents6 = runningGame5.init(0);
+startGame2(runningGame5);
+runningGame5.release({ x: 8, y: 16, pressed: false, atMillis: 2150 });
+runningGame5.tick({ atMillis: 4e3 });
+var runningFrame7 = runningGame5.render();
+var runningSnapshot7 = runningGame5.snapshot();
+var damagedGame3 = createGame8({ playerCount: 1, difficulty: "easy", seed: 137 });
+damagedGame3.init(0);
+startGame2(damagedGame3);
+damageOnce(damagedGame3, 2450);
+var damagedFrame3 = damagedGame3.render();
+var damagedSnapshot4 = damagedGame3.snapshot();
+var finishedGame4 = createGame8({ playerCount: 1, difficulty: "medium", durationMillis: 4e3, seed: 137 });
+finishedGame4.init(0);
+startGame2(finishedGame4);
+finishedGame4.release({ x: 8, y: 16, pressed: false, atMillis: 2150 });
+finishedGame4.tick({ atMillis: 6100 });
+finishedGame4.tick({ atMillis: 7e3 });
+var finishedFrame5 = finishedGame4.render();
+var finishedSnapshot5 = finishedGame4.snapshot();
+var failedGame = createGame8({ playerCount: 1, difficulty: "easy", seed: 137 });
 failedGame.init(0);
 startGame2(failedGame);
 var failureClock = 2450;
@@ -6086,41 +6434,41 @@ function damageOnce(game5, nowMillis) {
 }
 
 // games/patrones/src/index.ts
-var src_exports8 = {};
-__export(src_exports8, {
-  PlayerDisplay: () => PlayerDisplay8,
-  createGame: () => createGame8,
-  finishedFrame: () => finishedFrame5,
-  finishedSnapshot: () => finishedSnapshot5,
-  initEvents: () => initEvents6,
-  manifest: () => manifest8,
+var src_exports9 = {};
+__export(src_exports9, {
+  PlayerDisplay: () => PlayerDisplay9,
+  createGame: () => createGame9,
+  finishedFrame: () => finishedFrame6,
+  finishedSnapshot: () => finishedSnapshot6,
+  initEvents: () => initEvents7,
+  manifest: () => manifest9,
   patronesCelebrationMillis: () => patronesCelebrationMillis,
   patternTargets: () => patternTargets,
-  runningFrame: () => runningFrame7,
-  runningSnapshot: () => runningSnapshot7,
+  runningFrame: () => runningFrame8,
+  runningSnapshot: () => runningSnapshot8,
   startingSnapshot: () => startingSnapshot6,
   waitingSnapshot: () => waitingSnapshot6
 });
 
 // games/patrones/src/display.tsx
-var import_jsx_runtime10 = __toESM(require_jsx_runtime(), 1);
-function PlayerDisplay8({ snapshot, frame }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "ml-solo-display", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(PlayerReadyOverlay, { snapshot }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "ml-solo-summary", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(MetricPanel, { label: "Aciertos", tone: "green", value: snapshot.claimedTargets }),
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(MetricPanel, { label: "Objetivos", tone: "blue", value: snapshot.totalTargets }),
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(MetricPanel, { label: "Tiempo", tone: "cyan", value: formatClock(snapshot.remainingMillis) })
+var import_jsx_runtime11 = __toESM(require_jsx_runtime(), 1);
+function PlayerDisplay9({ snapshot, frame }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "ml-solo-display", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(PlayerReadyOverlay, { snapshot }),
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "ml-solo-summary", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(MetricPanel, { label: "Aciertos", tone: "green", value: snapshot.claimedTargets }),
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(MetricPanel, { label: "Objetivos", tone: "blue", value: snapshot.totalTargets }),
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(MetricPanel, { label: "Tiempo", tone: "cyan", value: formatClock(snapshot.remainingMillis) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(MetricPanel, { className: "ml-solo-message", label: "Patr\xF3n", tone: snapshot.success ? "green" : "yellow", value: snapshot.lastEventMessage || "Reconstruye el patr\xF3n azul" })
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(MetricPanel, { className: "ml-solo-message", label: "Patr\xF3n", tone: snapshot.success ? "green" : "yellow", value: snapshot.lastEventMessage || "Reconstruye el patr\xF3n azul" })
     ] }),
-    frame ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Patr\xF3n en el suelo" }) : null
+    frame ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Patr\xF3n en el suelo" }) : null
   ] }) });
 }
 
 // games/patrones/src/manifest.ts
-var manifest8 = {
+var manifest9 = {
   id: "patrones",
   label: "Patrones",
   description: "Reconstruye patrones azules sin pisar baldosas incorrectas.",
@@ -6199,7 +6547,7 @@ var patterns = {
 function patternTargets(difficulty = "medium") {
   return (patterns[difficulty] ?? patterns.medium ?? []).map((point) => ({ ...point }));
 }
-function createGame8(config) {
+function createGame9(config) {
   return new PatronesGame(config);
 }
 var PatronesGame = class {
@@ -6215,8 +6563,8 @@ var PatronesGame = class {
   success = false;
   targets;
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest8);
-    this.readyGate = createPlayerReadyGate(manifest8.start, [{ minX: 5, maxX: 10, minY: 13, maxY: 18 }], this.config.nowMillis);
+    this.config = normalizeGameConfig(config, manifest9);
+    this.readyGate = createPlayerReadyGate(manifest9.start, [{ minX: 5, maxX: 10, minY: 13, maxY: 18 }], this.config.nowMillis);
     this.targets = patternTargets(this.config.difficulty);
     this.players = this.scoredPlayers();
   }
@@ -6275,8 +6623,8 @@ var PatronesGame = class {
   snapshot() {
     const ready = this.readyGate.state(this.nowMillis);
     return {
-      currentGame: manifest8.id,
-      label: manifest8.label,
+      currentGame: manifest9.id,
+      label: manifest9.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players,
@@ -6298,7 +6646,7 @@ var PatronesGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest8);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest9);
     this.targets = patternTargets(this.config.difficulty);
     this.resetState(this.config.nowMillis);
   }
@@ -6347,43 +6695,43 @@ var PatronesGame = class {
 };
 
 // games/patrones/src/fixtures.ts
-var game3 = createGame8({ playerCount: 0, difficulty: "medium", durationMillis: manifest8.defaultDurationMillis });
-var initEvents6 = game3.init(0);
+var game3 = createGame9({ playerCount: 0, difficulty: "medium", durationMillis: manifest9.defaultDurationMillis });
+var initEvents7 = game3.init(0);
 var waitingSnapshot6 = game3.snapshot();
 game3.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
 var startingSnapshot6 = game3.snapshot();
 game3.tick({ atMillis: 2100 });
-var runningFrame7 = game3.render();
-var runningSnapshot7 = game3.snapshot();
+var runningFrame8 = game3.render();
+var runningSnapshot8 = game3.snapshot();
 patternTargets("medium").forEach((target3, index) => game3.press({ ...target3, pressed: true, atMillis: 2200 + index * 10 }));
-var finishedFrame5 = game3.render();
-var finishedSnapshot5 = game3.snapshot();
+var finishedFrame6 = game3.render();
+var finishedSnapshot6 = game3.snapshot();
 
 // games/ping-pong/src/index.ts
-var src_exports9 = {};
-__export(src_exports9, {
-  PlayerDisplay: () => PlayerDisplay9,
+var src_exports10 = {};
+__export(src_exports10, {
+  PlayerDisplay: () => PlayerDisplay10,
   ballColor: () => ballColor2,
   blueColor: () => blueColor,
-  createGame: () => createGame9,
-  finishedSnapshot: () => finishedSnapshot6,
-  manifest: () => manifest9,
+  createGame: () => createGame10,
+  finishedSnapshot: () => finishedSnapshot7,
+  manifest: () => manifest10,
   pingPongConfigVars: () => pingPongConfigVars,
   redColor: () => redColor,
-  runningFrame: () => runningFrame8,
-  runningSnapshot: () => runningSnapshot8,
+  runningFrame: () => runningFrame9,
+  runningSnapshot: () => runningSnapshot9,
   waitingSnapshot: () => waitingSnapshot7
 });
 
 // games/ping-pong/src/display.tsx
-var import_jsx_runtime11 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime12 = __toESM(require_jsx_runtime(), 1);
 function positionStyle(position) {
   return {
     "--ping-pong-ball-x": `${3.5 + position.y / 31 * 93}%`,
     "--ping-pong-ball-y": `${18 + position.x / 15 * 64}%`
   };
 }
-function PlayerDisplay9({
+function PlayerDisplay10({
   snapshot
 }) {
   const [red, blue] = snapshot.players;
@@ -6420,13 +6768,13 @@ function PlayerDisplay9({
   const winnerLabel = snapshot.winnerIndex === 0 ? redPlayer.label : bluePlayer.label;
   const rallyCaption = snapshot.phase === "waiting" ? `${snapshot.activeTargets}/2 en posici\xF3n` : snapshot.phase === "starting" ? "Preparados" : snapshot.phase === "finished" ? `Victoria ${winnerLabel}` : snapshot.pointFlashMillis > 0 ? `Punto ${scorerLabel}` : snapshot.roundHits > 0 ? `${snapshot.roundHits} ${snapshot.roundHits === 1 ? "golpe" : "golpes"}` : "Saque";
   const impactStyle = snapshot.impact ? positionStyle(snapshot.impact) : void 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, variant: "versus", children: /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, variant: "versus", children: /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
     "div",
     {
       className: displayClassName,
       style: { "--ping-pong-rally-pace": snapshot.rallyPace },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
           VersusScoreboard,
           {
             className: "ping-pong-scoreboard",
@@ -6438,17 +6786,17 @@ function PlayerDisplay9({
             centerCaption
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
           "section",
           {
             "aria-label": `Trayectoria de la pelota: ${rallyCaption}`,
             className: "ping-pong-rally-lane",
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "ping-pong-rally-team is-red", children: "Rojo" }),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "ping-pong-rally-team is-blue", children: "Azul" }),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "ping-pong-rally-net", "aria-hidden": "true" }),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "ping-pong-rally-scan", "aria-hidden": "true" }),
-              snapshot.ballTrail.map((position, index) => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "ping-pong-rally-team is-red", children: "Rojo" }),
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "ping-pong-rally-team is-blue", children: "Azul" }),
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "ping-pong-rally-net", "aria-hidden": "true" }),
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "ping-pong-rally-scan", "aria-hidden": "true" }),
+              snapshot.ballTrail.map((position, index) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
                 "i",
                 {
                   "aria-hidden": "true",
@@ -6457,7 +6805,7 @@ function PlayerDisplay9({
                 },
                 `${index}-${position.x}-${position.y}`
               )),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
                 "i",
                 {
                   "aria-hidden": "true",
@@ -6465,7 +6813,7 @@ function PlayerDisplay9({
                   style: positionStyle(snapshot.ball)
                 }
               ),
-              snapshot.impact ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+              snapshot.impact ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
                 "i",
                 {
                   "aria-hidden": "true",
@@ -6474,17 +6822,17 @@ function PlayerDisplay9({
                 },
                 snapshot.motionEventId
               ) : null,
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { className: "ping-pong-rally-caption", children: rallyCaption }, `caption-${snapshot.motionEventId}`)
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("strong", { className: "ping-pong-rally-caption", children: rallyCaption }, `caption-${snapshot.motionEventId}`)
             ]
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(MetricRow, { columns: 4, className: "ping-pong-metrics", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(MetricPanel, { className: "ping-pong-rally-metric", label: rallyLabel, tone: "cyan", value: rallyValue }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(MetricPanel, { className: "ping-pong-progress-metric", label: progressLabel, tone: readyVisible ? "green" : "yellow", value: progressValue }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(MetricPanel, { className: "ping-pong-last-metric", label: "\xDAltimo", tone: lastTone, value: lastValue }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(MetricPanel, { className: "ping-pong-time-metric", label: "Tiempo", tone: "amber", value: formatClock(snapshot.elapsedMillis) })
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(MetricRow, { columns: 4, className: "ping-pong-metrics", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(MetricPanel, { className: "ping-pong-rally-metric", label: rallyLabel, tone: "cyan", value: rallyValue }),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(MetricPanel, { className: "ping-pong-progress-metric", label: progressLabel, tone: readyVisible ? "green" : "yellow", value: progressValue }),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(MetricPanel, { className: "ping-pong-last-metric", label: "\xDAltimo", tone: lastTone, value: lastValue }),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(MetricPanel, { className: "ping-pong-time-metric", label: "Tiempo", tone: "amber", value: formatClock(snapshot.elapsedMillis) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
           RoundStrip,
           {
             className: "ping-pong-rounds",
@@ -6547,7 +6895,7 @@ var pingPongConfigVars = {
     step: 0.05
   }
 };
-var manifest9 = {
+var manifest10 = {
   id: "ping-pong",
   label: "Ping Pong",
   description: "Two-player arcade ping pong for red and blue halves of the Motion Levels floor.",
@@ -6612,7 +6960,7 @@ var paddleWidth2 = 5;
 var serveX = Math.floor(FLOOR_COLS / 2);
 var serveY = Math.floor(FLOOR_ROWS / 2);
 var maximumSpeedRatio = 2.5;
-function createGame9(config) {
+function createGame10(config) {
   return new PingPongGame(config);
 }
 var PingPongGame = class {
@@ -6647,9 +6995,9 @@ var PingPongGame = class {
   motionEventId = 0;
   lastEvent = gameEvent("none", "Listo", 0);
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest9);
+    this.config = normalizeGameConfig(config, manifest10);
     this.rng = createSeededRng(this.config.seed);
-    this.readyGate = createPlayerReadyGate(manifest9.start, createHorizontalPlayerReadyZones(2), this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest10.start, createHorizontalPlayerReadyZones(2), this.config.nowMillis);
     this.winningScore = this.readWinningScore();
     this.players = this.createPlayers();
     this.speed = speedForConfig(this.config);
@@ -6729,8 +7077,8 @@ var PingPongGame = class {
     const countdownMillis = this.phase === "starting" ? readyState.countdownMillis : 0;
     const remainingMillis = this.phase === "finished" && this.nowMillis < this.finishAtMillis + winAnimationMillis3 ? this.finishAtMillis + winAnimationMillis3 - this.nowMillis : 0;
     return {
-      currentGame: manifest9.id,
-      label: manifest9.label,
+      currentGame: manifest10.id,
+      label: manifest10.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: [
@@ -6787,7 +7135,7 @@ var PingPongGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest9);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest10);
     this.rng = createSeededRng(this.config.seed);
     this.winningScore = this.readWinningScore();
     this.players = this.createPlayers();
@@ -6991,7 +7339,7 @@ var PingPongGame = class {
     }
   }
   drawReady(frame) {
-    const countdownDuration = gameStartCountdownMillis(manifest9.start);
+    const countdownDuration = gameStartCountdownMillis(manifest10.start);
     const elapsed = Math.max(0, countdownDuration - this.readyGate.state(this.nowMillis).countdownMillis);
     const progress = clamp(elapsed / countdownDuration, 0, 1);
     const radius = progress * (FLOOR_ROWS * 0.7);
@@ -7225,7 +7573,7 @@ function mix(color, colorPercent, whitePercent) {
 }
 
 // games/ping-pong/src/fixtures.ts
-var runningFrame8 = (() => {
+var runningFrame9 = (() => {
   const frame = createFrame("#05070a");
   fillFrameRect(frame, 5, 2, 5, 1, redColor);
   fillFrameRect(frame, 6, 29, 5, 1, blueColor);
@@ -7233,8 +7581,8 @@ var runningFrame8 = (() => {
   return frame;
 })();
 var waitingSnapshot7 = {
-  currentGame: manifest9.id,
-  label: manifest9.label,
+  currentGame: manifest10.id,
+  label: manifest10.label,
   phase: "waiting",
   playerCount: 2,
   players: [
@@ -7270,7 +7618,7 @@ var waitingSnapshot7 = {
   returnSpeedMultiplier: 1.042,
   difficultySpeedFactor: 1.2
 };
-var runningSnapshot8 = {
+var runningSnapshot9 = {
   ...waitingSnapshot7,
   phase: "running",
   readyPlayers: 2,
@@ -7290,8 +7638,8 @@ var runningSnapshot8 = {
   impact: { team: 1, x: 10, y: 29, remainingMillis: 180 },
   motionEventId: 4
 };
-var finishedSnapshot6 = {
-  ...runningSnapshot8,
+var finishedSnapshot7 = {
+  ...runningSnapshot9,
   phase: "finished",
   score: 5,
   remainingMillis: 2400,
@@ -7314,30 +7662,30 @@ var finishedSnapshot6 = {
 };
 
 // games/ping-pong-v2/src/index.ts
-var src_exports10 = {};
-__export(src_exports10, {
-  PlayerDisplay: () => PlayerDisplay10,
+var src_exports11 = {};
+__export(src_exports11, {
+  PlayerDisplay: () => PlayerDisplay11,
   ballColor: () => ballColor3,
   blueColor: () => blueColor2,
-  createGame: () => createGame10,
-  finishedSnapshot: () => finishedSnapshot7,
-  manifest: () => manifest10,
+  createGame: () => createGame11,
+  finishedSnapshot: () => finishedSnapshot8,
+  manifest: () => manifest11,
   pingPongV2ConfigVars: () => pingPongV2ConfigVars,
   redColor: () => redColor2,
-  runningFrame: () => runningFrame9,
-  runningSnapshot: () => runningSnapshot9,
+  runningFrame: () => runningFrame10,
+  runningSnapshot: () => runningSnapshot10,
   waitingSnapshot: () => waitingSnapshot8
 });
 
 // games/ping-pong-v2/src/display.tsx
-var import_jsx_runtime12 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime13 = __toESM(require_jsx_runtime(), 1);
 function positionStyle2(position) {
   return {
     "--ping-pong-ball-x": `${3.5 + position.y / 31 * 93}%`,
     "--ping-pong-ball-y": `${18 + position.x / 15 * 64}%`
   };
 }
-function PlayerDisplay10({
+function PlayerDisplay11({
   snapshot
 }) {
   const [red, blue] = snapshot.players;
@@ -7374,13 +7722,13 @@ function PlayerDisplay10({
   const winnerLabel = snapshot.winnerIndex === 0 ? redPlayer.label : bluePlayer.label;
   const rallyCaption = snapshot.phase === "waiting" ? `${snapshot.activeTargets}/2 en posici\xF3n` : snapshot.phase === "starting" ? "Preparados" : snapshot.phase === "finished" ? `Victoria ${winnerLabel}` : snapshot.pointFlashMillis > 0 ? `Punto ${scorerLabel}` : snapshot.roundHits > 0 ? `${snapshot.roundHits} ${snapshot.roundHits === 1 ? "golpe" : "golpes"}` : "Saque";
   const impactStyle = snapshot.impact ? positionStyle2(snapshot.impact) : void 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, variant: "versus", children: /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, variant: "versus", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
     "div",
     {
       className: displayClassName,
       style: { "--ping-pong-rally-pace": snapshot.rallyPace },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
           VersusScoreboard,
           {
             className: "ping-pong-scoreboard",
@@ -7392,17 +7740,17 @@ function PlayerDisplay10({
             centerCaption
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
           "section",
           {
             "aria-label": `Trayectoria de la pelota: ${rallyCaption}`,
             className: "ping-pong-rally-lane",
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "ping-pong-rally-team is-red", children: "Rojo" }),
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "ping-pong-rally-team is-blue", children: "Azul" }),
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "ping-pong-rally-net", "aria-hidden": "true" }),
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "ping-pong-rally-scan", "aria-hidden": "true" }),
-              snapshot.ballTrail.map((position, index) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "ping-pong-rally-team is-red", children: "Rojo" }),
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "ping-pong-rally-team is-blue", children: "Azul" }),
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "ping-pong-rally-net", "aria-hidden": "true" }),
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "ping-pong-rally-scan", "aria-hidden": "true" }),
+              snapshot.ballTrail.map((position, index) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
                 "i",
                 {
                   "aria-hidden": "true",
@@ -7411,7 +7759,7 @@ function PlayerDisplay10({
                 },
                 `${index}-${position.x}-${position.y}`
               )),
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
                 "i",
                 {
                   "aria-hidden": "true",
@@ -7419,7 +7767,7 @@ function PlayerDisplay10({
                   style: positionStyle2(snapshot.ball)
                 }
               ),
-              snapshot.impact ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+              snapshot.impact ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
                 "i",
                 {
                   "aria-hidden": "true",
@@ -7428,17 +7776,17 @@ function PlayerDisplay10({
                 },
                 snapshot.motionEventId
               ) : null,
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("strong", { className: "ping-pong-rally-caption", children: rallyCaption }, `caption-${snapshot.motionEventId}`)
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("strong", { className: "ping-pong-rally-caption", children: rallyCaption }, `caption-${snapshot.motionEventId}`)
             ]
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(MetricRow, { columns: 4, className: "ping-pong-metrics", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(MetricPanel, { className: "ping-pong-rally-metric", label: rallyLabel, tone: "cyan", value: rallyValue }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(MetricPanel, { className: "ping-pong-progress-metric", label: progressLabel, tone: readyVisible ? "green" : "yellow", value: progressValue }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(MetricPanel, { className: "ping-pong-last-metric", label: "\xDAltimo", tone: lastTone, value: lastValue }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(MetricPanel, { className: "ping-pong-time-metric", label: "Tiempo", tone: "amber", value: formatClock(snapshot.elapsedMillis) })
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(MetricRow, { columns: 4, className: "ping-pong-metrics", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(MetricPanel, { className: "ping-pong-rally-metric", label: rallyLabel, tone: "cyan", value: rallyValue }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(MetricPanel, { className: "ping-pong-progress-metric", label: progressLabel, tone: readyVisible ? "green" : "yellow", value: progressValue }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(MetricPanel, { className: "ping-pong-last-metric", label: "\xDAltimo", tone: lastTone, value: lastValue }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(MetricPanel, { className: "ping-pong-time-metric", label: "Tiempo", tone: "amber", value: formatClock(snapshot.elapsedMillis) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
           RoundStrip,
           {
             className: "ping-pong-rounds",
@@ -7501,7 +7849,7 @@ var pingPongV2ConfigVars = {
     step: 0.05
   }
 };
-var manifest10 = {
+var manifest11 = {
   id: "ping-pong-v2",
   label: "Ping Pong v2",
   description: "La versi\xF3n competitiva de Ping Pong: peloteos acelerados y partidas al mejor de cinco puntos.",
@@ -7551,7 +7899,7 @@ var paddleWidth3 = 5;
 var serveX2 = Math.floor(FLOOR_COLS / 2);
 var serveY2 = Math.floor(FLOOR_ROWS / 2);
 var maximumSpeedRatio2 = 2.5;
-function createGame10(config) {
+function createGame11(config) {
   return new PingPongGame2(config);
 }
 var PingPongGame2 = class {
@@ -7586,9 +7934,9 @@ var PingPongGame2 = class {
   motionEventId = 0;
   lastEvent = gameEvent("none", "Listo", 0);
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest10);
+    this.config = normalizeGameConfig(config, manifest11);
     this.rng = createSeededRng(this.config.seed);
-    this.readyGate = createPlayerReadyGate(manifest10.start, createHorizontalPlayerReadyZones(2), this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest11.start, createHorizontalPlayerReadyZones(2), this.config.nowMillis);
     this.winningScore = this.readWinningScore();
     this.players = this.createPlayers();
     this.speed = speedForConfig2(this.config);
@@ -7668,8 +8016,8 @@ var PingPongGame2 = class {
     const countdownMillis = this.phase === "starting" ? readyState.countdownMillis : 0;
     const remainingMillis = this.phase === "finished" && this.nowMillis < this.finishAtMillis + winAnimationMillis4 ? this.finishAtMillis + winAnimationMillis4 - this.nowMillis : 0;
     return {
-      currentGame: manifest10.id,
-      label: manifest10.label,
+      currentGame: manifest11.id,
+      label: manifest11.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: [
@@ -7726,7 +8074,7 @@ var PingPongGame2 = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest10);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest11);
     this.rng = createSeededRng(this.config.seed);
     this.winningScore = this.readWinningScore();
     this.players = this.createPlayers();
@@ -7930,7 +8278,7 @@ var PingPongGame2 = class {
     }
   }
   drawReady(frame) {
-    const countdownDuration = gameStartCountdownMillis(manifest10.start);
+    const countdownDuration = gameStartCountdownMillis(manifest11.start);
     const elapsed = Math.max(0, countdownDuration - this.readyGate.state(this.nowMillis).countdownMillis);
     const progress = clamp(elapsed / countdownDuration, 0, 1);
     const radius = progress * (FLOOR_ROWS * 0.7);
@@ -8164,7 +8512,7 @@ function mix2(color, colorPercent, whitePercent) {
 }
 
 // games/ping-pong-v2/src/fixtures.ts
-var runningFrame9 = (() => {
+var runningFrame10 = (() => {
   const frame = createFrame("#05070a");
   fillFrameRect(frame, 5, 2, 5, 1, redColor2);
   fillFrameRect(frame, 6, 29, 5, 1, blueColor2);
@@ -8172,8 +8520,8 @@ var runningFrame9 = (() => {
   return frame;
 })();
 var waitingSnapshot8 = {
-  currentGame: manifest10.id,
-  label: manifest10.label,
+  currentGame: manifest11.id,
+  label: manifest11.label,
   phase: "waiting",
   playerCount: 2,
   players: [
@@ -8209,7 +8557,7 @@ var waitingSnapshot8 = {
   returnSpeedMultiplier: 1.042,
   difficultySpeedFactor: 1.2
 };
-var runningSnapshot9 = {
+var runningSnapshot10 = {
   ...waitingSnapshot8,
   phase: "running",
   readyPlayers: 2,
@@ -8229,8 +8577,8 @@ var runningSnapshot9 = {
   impact: { team: 1, x: 10, y: 29, remainingMillis: 180 },
   motionEventId: 4
 };
-var finishedSnapshot7 = {
-  ...runningSnapshot9,
+var finishedSnapshot8 = {
+  ...runningSnapshot10,
   phase: "finished",
   score: 5,
   remainingMillis: 2400,
@@ -8253,16 +8601,16 @@ var finishedSnapshot7 = {
 };
 
 // games/saltos/src/index.ts
-var src_exports11 = {};
-__export(src_exports11, {
-  PlayerDisplay: () => PlayerDisplay11,
-  createGame: () => createGame11,
-  finishedFrame: () => finishedFrame6,
-  finishedSnapshot: () => finishedSnapshot8,
-  initEvents: () => initEvents7,
-  manifest: () => manifest11,
-  runningFrame: () => runningFrame10,
-  runningSnapshot: () => runningSnapshot10,
+var src_exports12 = {};
+__export(src_exports12, {
+  PlayerDisplay: () => PlayerDisplay12,
+  createGame: () => createGame12,
+  finishedFrame: () => finishedFrame7,
+  finishedSnapshot: () => finishedSnapshot9,
+  initEvents: () => initEvents8,
+  manifest: () => manifest12,
+  runningFrame: () => runningFrame11,
+  runningSnapshot: () => runningSnapshot11,
   saltosCelebrationMillis: () => saltosCelebrationMillis,
   saltosStartingLives: () => saltosStartingLives,
   startingSnapshot: () => startingSnapshot7,
@@ -8271,24 +8619,24 @@ __export(src_exports11, {
 });
 
 // games/saltos/src/display.tsx
-var import_jsx_runtime13 = __toESM(require_jsx_runtime(), 1);
-function PlayerDisplay11({ snapshot, frame }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "ml-solo-display", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(PlayerReadyOverlay, { snapshot }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "ml-solo-summary", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(MetricPanel, { label: "Saltos", tone: "green", value: snapshot.score }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(MetricPanel, { label: "Tiempo", tone: "cyan", value: formatClock(snapshot.remainingMillis) }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(MetricPanel, { label: "Vida", tone: "red", value: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives }) })
+var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
+function PlayerDisplay12({ snapshot, frame }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "ml-solo-display", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(PlayerReadyOverlay, { snapshot }),
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "ml-solo-summary", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MetricPanel, { label: "Saltos", tone: "green", value: snapshot.score }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MetricPanel, { label: "Tiempo", tone: "cyan", value: formatClock(snapshot.remainingMillis) }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MetricPanel, { label: "Vida", tone: "red", value: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(MetricPanel, { className: "ml-solo-message", label: "Objetivo", tone: snapshot.success ? "green" : "yellow", value: snapshot.lastEventMessage || "Salta del azul al verde" })
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MetricPanel, { className: "ml-solo-message", label: "Objetivo", tone: snapshot.success ? "green" : "yellow", value: snapshot.lastEventMessage || "Salta del azul al verde" })
     ] }),
-    frame ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Juego en el suelo" }) : null
+    frame ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Juego en el suelo" }) : null
   ] }) });
 }
 
 // games/saltos/src/manifest.ts
-var manifest11 = {
+var manifest12 = {
   id: "saltos",
   label: "Saltos",
   description: "Salta entre plataformas seguras sin tocar la lava durante un minuto.",
@@ -8322,7 +8670,7 @@ var saltosCelebrationMillis = 5e3;
 var saltosStartingLives = 1;
 var startPlatform = { x: 7, y: 3 };
 var platformSize = 3;
-function createGame11(config) {
+function createGame12(config) {
   return new SaltosGame(config);
 }
 var SaltosGame = class {
@@ -8340,8 +8688,8 @@ var SaltosGame = class {
   startedAtMillis = 0;
   target = startPlatform;
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest11);
-    this.readyGate = createPlayerReadyGate(manifest11.start, [{ minX: 5, maxX: 10, minY: 0, maxY: 7 }], this.config.nowMillis);
+    this.config = normalizeGameConfig(config, manifest12);
+    this.readyGate = createPlayerReadyGate(manifest12.start, [{ minX: 5, maxX: 10, minY: 0, maxY: 7 }], this.config.nowMillis);
     this.rng = createSeededRng(this.config.seed);
     this.players = this.scoredPlayers();
     this.target = this.nextTarget(this.current);
@@ -8412,8 +8760,8 @@ var SaltosGame = class {
   snapshot() {
     const ready = this.readyGate.state(this.nowMillis);
     return {
-      currentGame: manifest11.id,
-      label: manifest11.label,
+      currentGame: manifest12.id,
+      label: manifest12.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players,
@@ -8435,7 +8783,7 @@ var SaltosGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest11);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest12);
     this.resetState(this.config.nowMillis);
   }
   applyReadyTransition(transition, nowMillis) {
@@ -8507,36 +8855,36 @@ function insidePlatform(point, platform) {
 }
 
 // games/saltos/src/fixtures.ts
-var game4 = createGame11({ playerCount: 0, durationMillis: manifest11.defaultDurationMillis, seed: 137 });
-var initEvents7 = game4.init(0);
+var game4 = createGame12({ playerCount: 0, durationMillis: manifest12.defaultDurationMillis, seed: 137 });
+var initEvents8 = game4.init(0);
 var waitingFrame4 = game4.render();
 var waitingSnapshot9 = game4.snapshot();
 game4.press({ x: 8, y: 4, pressed: true, atMillis: 100 });
 var startingSnapshot7 = game4.snapshot();
 game4.tick({ atMillis: 2100 });
-var runningFrame10 = game4.render();
-var runningSnapshot10 = game4.snapshot();
+var runningFrame11 = game4.render();
+var runningSnapshot11 = game4.snapshot();
 var target = game4.snapshot().targetPlatform;
 if (target) game4.press({ ...target, pressed: true, atMillis: 2200 });
 game4.tick({ atMillis: 62100 });
-var finishedFrame6 = game4.render();
-var finishedSnapshot8 = game4.snapshot();
+var finishedFrame7 = game4.render();
+var finishedSnapshot9 = game4.snapshot();
 
 // games/tira-soga/src/index.ts
-var src_exports12 = {};
-__export(src_exports12, {
-  PlayerDisplay: () => PlayerDisplay12,
+var src_exports13 = {};
+__export(src_exports13, {
+  PlayerDisplay: () => PlayerDisplay13,
   blueColor: () => blueColor3,
   blueFieldColor: () => blueFieldColor,
   blueFieldFirstRow: () => blueFieldFirstRow,
   centerLineColor: () => centerLineColor,
-  createGame: () => createGame12,
-  finishedFrame: () => finishedFrame7,
-  finishedSnapshot: () => finishedSnapshot9,
-  gameWinAnimationMillis: () => gameWinAnimationMillis2,
-  initEvents: () => initEvents8,
+  createGame: () => createGame13,
+  finishedFrame: () => finishedFrame8,
+  finishedSnapshot: () => finishedSnapshot10,
+  gameWinAnimationMillis: () => gameWinAnimationMillis3,
+  initEvents: () => initEvents9,
   knotColor: () => knotColor,
-  manifest: () => manifest12,
+  manifest: () => manifest13,
   onBlueTilePressed: () => onBlueTilePressed,
   onRedTilePressed: () => onRedTilePressed,
   redColor: () => redColor3,
@@ -8549,8 +8897,8 @@ __export(src_exports12, {
   roundWinFrame: () => roundWinFrame2,
   roundWinSnapshot: () => roundWinSnapshot2,
   roundsToWin: () => roundsToWin,
-  runningFrame: () => runningFrame11,
-  runningSnapshot: () => runningSnapshot11,
+  runningFrame: () => runningFrame12,
+  runningSnapshot: () => runningSnapshot12,
   startingFrame: () => startingFrame4,
   startingSnapshot: () => startingSnapshot8,
   teamForTile: () => teamForTile,
@@ -8562,7 +8910,7 @@ __export(src_exports12, {
 });
 
 // games/tira-soga/src/display.tsx
-var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
 var tiraSogaStyles = `
 .tira-soga-display {
   display: grid;
@@ -8722,7 +9070,7 @@ var tiraSogaStyles = `
   white-space: normal;
 }
 `;
-function PlayerDisplay12({
+function PlayerDisplay13({
   snapshot
 }) {
   const [red, blue] = snapshot.players;
@@ -8743,15 +9091,15 @@ function PlayerDisplay12({
   const centerValue = snapshot.phase === "waiting" ? `${snapshot.readyPlayers ?? 0}/${snapshot.requiredPlayers ?? 2}` : snapshot.phase === "starting" ? formatClock(snapshot.countdownMillis ?? 0) : `${currentRound}/${totalRounds2}`;
   const centerCaption = readyVisible ? snapshot.phase === "waiting" ? "en posici\xF3n" : "preparados" : `${snapshot.difficultyLabel ?? "Medio"} \xB7 ${pressesPerAdvance} ${pressesPerAdvance === 1 ? "pisada" : "pisadas"} por avance`;
   const caption = snapshot.phase === "finished" ? `Victoria ${winnerLabel}` : hasRoundResult ? `Ronda para ${roundWinnerLabel.toLowerCase()}` : ropePosition === 0 ? "\xA1Pisad vuestro campo para tirar!" : ropePosition < 0 ? "Rojo toma ventaja" : "Azul toma ventaja";
-  return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, variant: "versus", children: /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, variant: "versus", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
     "div",
     {
       className: `tira-soga-display is-phase-${snapshot.phase}`,
       style: { "--tira-soga-rope-x": `${ropePercent}%` },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("style", { children: tiraSogaStyles }),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(PlayerReadyOverlay, { snapshot }),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("style", { children: tiraSogaStyles }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(PlayerReadyOverlay, { snapshot }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
           VersusScoreboard,
           {
             className: "tira-soga-scoreboard",
@@ -8763,42 +9111,42 @@ function PlayerDisplay12({
             centerCaption
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "tira-soga-arena", "aria-label": `Posici\xF3n de la soga: ${ropePosition}`, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "tira-soga-team is-red", children: "Rojo" }),
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "tira-soga-track", "aria-hidden": "true", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "tira-soga-rope" }),
-            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "tira-soga-center" }),
-            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "tira-soga-knot" })
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "tira-soga-arena", "aria-label": `Posici\xF3n de la soga: ${ropePosition}`, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "tira-soga-team is-red", children: "Rojo" }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "tira-soga-track", "aria-hidden": "true", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "tira-soga-rope" }),
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "tira-soga-center" }),
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "tira-soga-knot" })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "tira-soga-team is-blue", children: "Azul" }),
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("strong", { className: "tira-soga-caption", children: caption }),
-          snapshot.phase === "finished" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "tira-soga-result is-game-win", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("strong", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "tira-soga-team is-blue", children: "Azul" }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("strong", { className: "tira-soga-caption", children: caption }),
+          snapshot.phase === "finished" ? /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "tira-soga-result is-game-win", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("strong", { children: [
               "\xA1Gana ",
               winnerLabel,
               "!"
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { children: [
               "Resultado final ",
               redPlayer.score,
               " \u2013 ",
               bluePlayer.score
             ] })
-          ] }) : hasRoundResult ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "tira-soga-result is-round-win", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("strong", { children: [
+          ] }) : hasRoundResult ? /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "tira-soga-result is-round-win", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("strong", { children: [
               "Ronda para ",
               roundWinnerLabel
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { children: "Siguiente ronda en breve" })
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: "Siguiente ronda en breve" })
           ] }) : null
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(MetricRow, { columns: 4, className: "tira-soga-metrics", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MetricPanel, { label: "Pisadas rojas", tone: "red", value: snapshot.redPresses ?? 0 }),
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MetricPanel, { label: "Avance rojo", tone: "amber", value: `${snapshot.redProgress ?? 0}/${pressesPerAdvance}` }),
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MetricPanel, { label: "Avance azul", tone: "cyan", value: `${snapshot.blueProgress ?? 0}/${pressesPerAdvance}` }),
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MetricPanel, { label: "Pisadas azules", tone: "blue", value: snapshot.bluePresses ?? 0 })
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(MetricRow, { columns: 4, className: "tira-soga-metrics", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { label: "Pisadas rojas", tone: "red", value: snapshot.redPresses ?? 0 }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { label: "Avance rojo", tone: "amber", value: `${snapshot.redProgress ?? 0}/${pressesPerAdvance}` }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { label: "Avance azul", tone: "cyan", value: `${snapshot.blueProgress ?? 0}/${pressesPerAdvance}` }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { label: "Pisadas azules", tone: "blue", value: snapshot.bluePresses ?? 0 })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
           RoundStrip,
           {
             className: "tira-soga-rounds",
@@ -8815,7 +9163,7 @@ function PlayerDisplay12({
 }
 
 // games/tira-soga/src/manifest.ts
-var manifest12 = {
+var manifest13 = {
   id: "tira-soga",
   label: "Tira-Soga",
   description: "Five-round team tug of war driven by rapid presses on the red and blue floor halves.",
@@ -8879,7 +9227,7 @@ var totalRounds = 5;
 var roundsToWin = 3;
 var ropeLimit = 6;
 var roundWinAnimationMillis = 1800;
-var gameWinAnimationMillis2 = 5e3;
+var gameWinAnimationMillis3 = 5e3;
 var roundTransitionMillis = roundWinAnimationMillis;
 var redFieldLastRow = 14;
 var blueFieldFirstRow = 17;
@@ -8893,7 +9241,7 @@ var difficultyLabels = {
   medium: "Medio",
   hard: "Dif\xEDcil"
 };
-function createGame12(config) {
+function createGame13(config) {
   return new TiraSogaGame(config);
 }
 function tiraSogaReadyZones() {
@@ -8924,8 +9272,8 @@ var TiraSogaGame = class {
   flashUntil = Array.from({ length: FLOOR_COLS * FLOOR_ROWS }, () => 0);
   lastEvent = gameEvent("none", "Listos para tirar", 0);
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest12);
-    this.readyGate = createPlayerReadyGate(manifest12.start, this.readyZones, this.config.nowMillis);
+    this.config = normalizeGameConfig(config, manifest13);
+    this.readyGate = createPlayerReadyGate(manifest13.start, this.readyZones, this.config.nowMillis);
     this.resetMatch(this.config.nowMillis);
   }
   init(nowMillis) {
@@ -9015,10 +9363,10 @@ var TiraSogaGame = class {
     const readyState = this.readyGate.state(this.nowMillis);
     const players2 = this.scoredPlayers();
     const roundRemaining = Math.max(0, this.roundPauseUntilMillis - this.nowMillis);
-    const gameRemaining = this.phase === "finished" ? Math.max(0, this.finishAtMillis + gameWinAnimationMillis2 - this.nowMillis) : 0;
+    const gameRemaining = this.phase === "finished" ? Math.max(0, this.finishAtMillis + gameWinAnimationMillis3 - this.nowMillis) : 0;
     return {
-      currentGame: manifest12.id,
-      label: manifest12.label,
+      currentGame: manifest13.id,
+      label: manifest13.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: players2,
@@ -9062,10 +9410,10 @@ var TiraSogaGame = class {
         ...config,
         options: { ...this.config.options, ...config.options }
       },
-      manifest12
+      manifest13
     );
     this.readyZones = tiraSogaReadyZones();
-    this.readyGate = createPlayerReadyGate(manifest12.start, this.readyZones, this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest13.start, this.readyZones, this.config.nowMillis);
     this.resetMatch(this.config.nowMillis);
     this.lastEvent = gameEvent("ready", "Tira-Soga espera a rojo y azul", this.config.nowMillis);
   }
@@ -9074,7 +9422,7 @@ var TiraSogaGame = class {
   }
   updateLifecycle(nowMillis, readyTransition) {
     if (this.phase === "finished") {
-      if (nowMillis - this.finishAtMillis >= gameWinAnimationMillis2) {
+      if (nowMillis - this.finishAtMillis >= gameWinAnimationMillis3) {
         this.resetMatch(nowMillis);
         return [gameEvent("ready", "Nueva partida", nowMillis)];
       }
@@ -9316,29 +9664,29 @@ function onBlueTilePressed(game5, atMillis, x = 11, y = 24) {
 }
 
 // games/tira-soga/src/fixtures.ts
-var waitingGame3 = createGame12({ playerCount: 2, difficulty: "medium" });
-var initEvents8 = waitingGame3.init(0);
+var waitingGame3 = createGame13({ playerCount: 2, difficulty: "medium" });
+var initEvents9 = waitingGame3.init(0);
 var waitingFrame5 = waitingGame3.render();
 var waitingSnapshot10 = waitingGame3.snapshot();
-var startingGame3 = createGame12({ playerCount: 2, difficulty: "hard" });
+var startingGame3 = createGame13({ playerCount: 2, difficulty: "hard" });
 startingGame3.init(0);
 occupyReadyZones2(startingGame3, 100);
 startingGame3.tick({ atMillis: 1100 });
 var startingFrame4 = startingGame3.render();
 var startingSnapshot8 = startingGame3.snapshot();
-var runningGame5 = createGame12({ playerCount: 2, difficulty: "medium" });
-runningGame5.init(0);
-startGame3(runningGame5);
-onRedTilePressed(runningGame5, 3200);
-onRedTilePressed(runningGame5, 3300);
-onBlueTilePressed(runningGame5, 3400);
-onBlueTilePressed(runningGame5, 3500);
-onBlueTilePressed(runningGame5, 3600);
-onBlueTilePressed(runningGame5, 3700);
-onBlueTilePressed(runningGame5, 3800);
-var runningFrame11 = runningGame5.render();
-var runningSnapshot11 = runningGame5.snapshot();
-var roundWinGame = createGame12({ playerCount: 2, difficulty: "easy" });
+var runningGame6 = createGame13({ playerCount: 2, difficulty: "medium" });
+runningGame6.init(0);
+startGame3(runningGame6);
+onRedTilePressed(runningGame6, 3200);
+onRedTilePressed(runningGame6, 3300);
+onBlueTilePressed(runningGame6, 3400);
+onBlueTilePressed(runningGame6, 3500);
+onBlueTilePressed(runningGame6, 3600);
+onBlueTilePressed(runningGame6, 3700);
+onBlueTilePressed(runningGame6, 3800);
+var runningFrame12 = runningGame6.render();
+var runningSnapshot12 = runningGame6.snapshot();
+var roundWinGame = createGame13({ playerCount: 2, difficulty: "easy" });
 roundWinGame.init(0);
 startGame3(roundWinGame);
 var roundWinTime = 3200;
@@ -9349,9 +9697,9 @@ for (let index = 0; index < ropeLimit; index += 1) {
 roundWinGame.tick({ atMillis: roundWinTime + 500 });
 var roundWinFrame2 = roundWinGame.render();
 var roundWinSnapshot2 = roundWinGame.snapshot();
-var finishedGame4 = createGame12({ playerCount: 2, difficulty: "easy" });
-finishedGame4.init(0);
-startGame3(finishedGame4);
+var finishedGame5 = createGame13({ playerCount: 2, difficulty: "easy" });
+finishedGame5.init(0);
+startGame3(finishedGame5);
 var fixtureTime = 3200;
 function winFixtureRound(game5, team) {
   for (let index = 0; index < ropeLimit; index += 1) {
@@ -9368,11 +9716,11 @@ function winFixtureRound(game5, team) {
   }
 }
 for (const winner of [0, 1, 0, 1, 0]) {
-  winFixtureRound(finishedGame4, winner);
+  winFixtureRound(finishedGame5, winner);
 }
-finishedGame4.tick({ atMillis: fixtureTime + Math.floor(gameWinAnimationMillis2 / 3) });
-var finishedFrame7 = finishedGame4.render();
-var finishedSnapshot9 = finishedGame4.snapshot();
+finishedGame5.tick({ atMillis: fixtureTime + Math.floor(gameWinAnimationMillis3 / 3) });
+var finishedFrame8 = finishedGame5.render();
+var finishedSnapshot10 = finishedGame5.snapshot();
 function occupyReadyZones2(game5, atMillis) {
   for (const zone of game5.playerReadyZones()) {
     game5.press({ x: zone.minX + 2, y: zone.minY + 2, pressed: true, atMillis });
@@ -9387,13 +9735,13 @@ function startGame3(game5) {
 }
 
 // games/tetris/src/index.ts
-var src_exports13 = {};
-__export(src_exports13, {
-  PlayerDisplay: () => PlayerDisplay13,
-  createGame: () => createGame13,
-  manifest: () => manifest13,
-  runningFrame: () => runningFrame12,
-  runningSnapshot: () => runningSnapshot12,
+var src_exports14 = {};
+__export(src_exports14, {
+  PlayerDisplay: () => PlayerDisplay14,
+  createGame: () => createGame14,
+  manifest: () => manifest14,
+  runningFrame: () => runningFrame13,
+  runningSnapshot: () => runningSnapshot13,
   startingFrame: () => startingFrame5,
   startingSnapshot: () => startingSnapshot9,
   tetrisConfigVars: () => tetrisConfigVars,
@@ -9402,48 +9750,48 @@ __export(src_exports13, {
 });
 
 // games/tetris/src/display.tsx
-var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
-function PlayerDisplay13({ snapshot, frame }) {
+var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
+function PlayerDisplay14({ snapshot, frame }) {
   const result = resultCopy(snapshot);
-  return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: `tetris-display is-${snapshot.result}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(PlayerReadyOverlay, { snapshot }),
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "tetris-summary", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "tetris-callout", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: result.eyebrow }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("strong", { children: result.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("b", { children: result.caption })
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: `tetris-display is-${snapshot.result}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(PlayerReadyOverlay, { snapshot }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("section", { className: "tetris-summary", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "tetris-callout", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: result.eyebrow }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("strong", { children: result.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("b", { children: result.caption })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(MetricRow, { columns: 4, className: "tetris-metrics", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { label: "Puntos", tone: "cyan", value: snapshot.score }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { label: "L\xEDneas", tone: "yellow", value: `${snapshot.lines}/${snapshot.linesTarget}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { label: "Nivel", tone: "magenta", value: snapshot.level }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { label: "Tiempo", tone: "amber", value: formatClock(snapshot.elapsedMillis) })
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(MetricRow, { columns: 4, className: "tetris-metrics", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(MetricPanel, { label: "Puntos", tone: "cyan", value: snapshot.score }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(MetricPanel, { label: "L\xEDneas", tone: "yellow", value: `${snapshot.lines}/${snapshot.linesTarget}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(MetricPanel, { label: "Nivel", tone: "magenta", value: snapshot.level }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(MetricPanel, { label: "Tiempo", tone: "amber", value: formatClock(snapshot.elapsedMillis) })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "tetris-main", children: [
-      frame ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(FramePreviewPanel, { className: "tetris-floor", frame, label: "Pista de Tetris" }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("aside", { className: "tetris-side", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(PieceCard, { label: "Pieza activa", piece: snapshot.activePiece }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(PieceCard, { label: "Siguiente", piece: snapshot.nextPiece }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("article", { className: "tetris-controls", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: "Control f\xEDsico" }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("strong", { children: "\u2190 Rotar \xB7 Guiar \xB7 Rotar \u2192" }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("b", { children: "Baja al fondo para soltar" })
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("section", { className: "tetris-main", children: [
+      frame ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(FramePreviewPanel, { className: "tetris-floor", frame, label: "Pista de Tetris" }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("aside", { className: "tetris-side", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(PieceCard, { label: "Pieza activa", piece: snapshot.activePiece }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(PieceCard, { label: "Siguiente", piece: snapshot.nextPiece }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("article", { className: "tetris-controls", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: "Control f\xEDsico" }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("strong", { children: "\u2190 Rotar \xB7 Guiar \xB7 Rotar \u2192" }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("b", { children: "Baja al fondo para soltar" })
         ] })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("footer", { className: "tetris-event", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: snapshot.result === "line-clear" ? "\xA1L\xEDnea!" : "\xDAltimo evento" }),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("strong", { children: snapshot.lastEventMessage }, snapshot.motionEventId),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("b", { children: eventDetail(snapshot) })
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("footer", { className: "tetris-event", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: snapshot.result === "line-clear" ? "\xA1L\xEDnea!" : "\xDAltimo evento" }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("strong", { children: snapshot.lastEventMessage }, snapshot.motionEventId),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("b", { children: eventDetail(snapshot) })
     ] })
   ] }) });
 }
 function PieceCard({ label, piece }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("article", { className: "tetris-piece-card", style: { "--tetris-piece": piece.color }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: label }),
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { children: piece.cells.map(([x, y], index) => /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { style: { gridColumn: x + 1, gridRow: y + 1 } }, index)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("strong", { children: shapeNames[piece.shape] ?? "Pieza" })
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("article", { className: "tetris-piece-card", style: { "--tetris-piece": piece.color }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: label }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { children: piece.cells.map(([x, y], index) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("i", { style: { gridColumn: x + 1, gridRow: y + 1 } }, index)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("strong", { children: shapeNames[piece.shape] ?? "Pieza" })
   ] });
 }
 var shapeNames = ["I", "O", "T", "S", "Z", "J", "L"];
@@ -9463,7 +9811,7 @@ function eventDetail(snapshot) {
 var tetrisConfigVars = {
   linesToWin: { key: "lines_to_win", label: "L\xEDneas para ganar", playerFacing: true, description: "L\xEDneas que hay que eliminar para activar la celebraci\xF3n final.", type: "int", default: 10, min: 1, max: 40, step: 1 }
 };
-var manifest13 = {
+var manifest14 = {
   id: "tetris",
   label: "Tetris",
   description: "Gu\xEDa, rota y deja caer piezas f\xEDsicas en una pista cl\xE1sica de diez columnas.",
@@ -9494,7 +9842,7 @@ var shapes = [
   [[[0, 0], [0, 1], [1, 1], [2, 1]], [[0, 0], [1, 0], [0, 1], [0, 2]], [[0, 0], [1, 0], [2, 0], [2, 1]], [[1, 0], [1, 1], [0, 2], [1, 2]]],
   [[[2, 0], [0, 1], [1, 1], [2, 1]], [[0, 0], [0, 1], [0, 2], [1, 2]], [[0, 0], [1, 0], [2, 0], [0, 1]], [[0, 0], [1, 0], [1, 1], [1, 2]]]
 ];
-function createGame13(config) {
+function createGame14(config) {
   return new TetrisGame(config);
 }
 var TetrisGame = class {
@@ -9522,9 +9870,9 @@ var TetrisGame = class {
   players = defaultPlayers(1);
   lastEvent = gameEvent("none", "Listo", 0);
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest13);
+    this.config = normalizeGameConfig(config, manifest14);
     this.rng = createSeededRng(this.config.seed);
-    this.readyGate = createPlayerReadyGate(manifest13.start, [{ minX: 5, maxX: 10, minY: 28, maxY: 31 }], this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest14.start, [{ minX: 5, maxX: 10, minY: 28, maxY: 31 }], this.config.nowMillis);
     this.resetState(this.config.nowMillis);
   }
   init(nowMillis) {
@@ -9603,8 +9951,8 @@ var TetrisGame = class {
     const ready = this.readyGate.state(this.nowMillis);
     const player = this.players[0];
     return {
-      currentGame: manifest13.id,
-      label: manifest13.label,
+      currentGame: manifest14.id,
+      label: manifest14.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: [{ index: 0, label: player.label, color: player.color, score: this.score, lives: -1 }],
@@ -9635,7 +9983,7 @@ var TetrisGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest13);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest14);
     this.rng = createSeededRng(this.config.seed);
     this.readyGate.reset(this.config.nowMillis);
     this.resetState(this.config.nowMillis);
@@ -9804,7 +10152,7 @@ function gravityInterval(level, difficulty, fast) {
 
 // games/tetris/src/fixtures.ts
 function gameAt2(stage) {
-  const game5 = createGame13({ playerCount: 1, seed: 137 });
+  const game5 = createGame14({ playerCount: 1, seed: 137 });
   game5.init(0);
   if (stage !== "waiting") game5.press({ x: 8, y: 29, pressed: true, atMillis: 100 });
   if (stage === "running") game5.tick({ atMillis: 2200 });
@@ -9818,20 +10166,20 @@ var startingFrame5 = starting2.render();
 var startingSnapshot9 = starting2.snapshot();
 var running = gameAt2("running");
 running.press({ x: 5, y: 31, pressed: true, atMillis: 2300 });
-var runningFrame12 = running.render();
-var runningSnapshot12 = running.snapshot();
+var runningFrame13 = running.render();
+var runningSnapshot13 = running.snapshot();
 
 // games/whack-a-mole/src/index.ts
-var src_exports14 = {};
-__export(src_exports14, {
-  PlayerDisplay: () => PlayerDisplay14,
-  createGame: () => createGame14,
-  finishedFrame: () => finishedFrame8,
-  finishedSnapshot: () => finishedSnapshot10,
-  manifest: () => manifest14,
+var src_exports15 = {};
+__export(src_exports15, {
+  PlayerDisplay: () => PlayerDisplay15,
+  createGame: () => createGame15,
+  finishedFrame: () => finishedFrame9,
+  finishedSnapshot: () => finishedSnapshot11,
+  manifest: () => manifest15,
   readyZonesForPlayers: () => readyZonesForPlayers,
-  runningFrame: () => runningFrame13,
-  runningSnapshot: () => runningSnapshot13,
+  runningFrame: () => runningFrame14,
+  runningSnapshot: () => runningSnapshot14,
   startingFrame: () => startingFrame6,
   startingSnapshot: () => startingSnapshot10,
   waitingFrame: () => waitingFrame7,
@@ -9839,60 +10187,60 @@ __export(src_exports14, {
 });
 
 // games/whack-a-mole/src/display.tsx
-var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
-function PlayerDisplay14({ snapshot }) {
+var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
+function PlayerDisplay15({ snapshot }) {
   const columns = snapshot.playerCount <= 4 ? 2 : snapshot.playerCount <= 6 ? 3 : 4;
   const leader = snapshot.playerProgress.reduce((best, player) => player.score > (snapshot.playerProgress[best]?.score ?? -1) ? player.index : best, 0);
   const hero = heroContent3(snapshot);
-  return /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: `duelo-display whack-display is-phase-${snapshot.phase}`, style: { "--duelo-grid-columns": columns }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("section", { className: "duelo-hero", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "duelo-hero-copy", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: hero.eyebrow }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("strong", { children: hero.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("b", { children: hero.caption })
+  return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: `duelo-display whack-display is-phase-${snapshot.phase}`, style: { "--duelo-grid-columns": columns }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("section", { className: "duelo-hero", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "duelo-hero-copy", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { children: hero.eyebrow }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("strong", { children: hero.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("b", { children: hero.caption })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "duelo-hero-metrics", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Metric, { label: "Tiempo", value: formatClock(snapshot.remainingMillis) }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Metric, { label: "Topos", value: snapshot.activeTargets }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Metric, { label: "Puntos", value: snapshot.score })
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "duelo-hero-metrics", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Metric, { label: "Tiempo", value: formatClock(snapshot.remainingMillis) }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Metric, { label: "Topos", value: snapshot.activeTargets }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Metric, { label: "Puntos", value: snapshot.score })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("section", { className: "duelo-player-grid", "aria-label": "Puntuaci\xF3n de jugadores", children: snapshot.playerProgress.map((player) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(PlayerCard2, { player, leader: leader === player.index, ready: snapshot.readyPlayerIndices.includes(player.index), winner: snapshot.winnerIndex === player.index }, player.index)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("footer", { className: "duelo-event-rail", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: snapshot.phase === "finished" ? "Resultado" : "\xDAltimo evento" }),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("strong", { children: snapshot.lastEventMessage }, snapshot.motionEventId),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("b", { children: snapshot.phase === "running" ? `${snapshot.activeTargets} objetivos activos` : `${snapshot.readyPlayers}/${snapshot.requiredPlayers} listos` })
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("section", { className: "duelo-player-grid", "aria-label": "Puntuaci\xF3n de jugadores", children: snapshot.playerProgress.map((player) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(PlayerCard2, { player, leader: leader === player.index, ready: snapshot.readyPlayerIndices.includes(player.index), winner: snapshot.winnerIndex === player.index }, player.index)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("footer", { className: "duelo-event-rail", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { children: snapshot.phase === "finished" ? "Resultado" : "\xDAltimo evento" }),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("strong", { children: snapshot.lastEventMessage }, snapshot.motionEventId),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("b", { children: snapshot.phase === "running" ? `${snapshot.activeTargets} objetivos activos` : `${snapshot.readyPlayers}/${snapshot.requiredPlayers} listos` })
     ] })
   ] }) });
 }
 function PlayerCard2({ player, leader, ready, winner }) {
   const style = { "--duelo-player": player.color, "--duelo-player-rgb": hexToRgb4(player.color), "--duelo-progress": Math.min(1, player.score / 100) };
   const status = winner ? "Ganador" : leader && player.score > 0 ? "L\xEDder" : ready ? "Listo" : "Busca tu color";
-  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("article", { className: `duelo-player-card${winner ? " is-winner" : ""}${leader ? " is-leader" : ""}`, style, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("header", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("i", {}),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "duelo-player-name", children: player.label }),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("b", { children: status })
+  return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("article", { className: `duelo-player-card${winner ? " is-winner" : ""}${leader ? " is-leader" : ""}`, style, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("header", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("i", {}),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "duelo-player-name", children: player.label }),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("b", { children: status })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "duelo-player-score", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("strong", { children: player.score }),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: "puntos" }),
-      player.lastPoints > 0 ? /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("em", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "duelo-player-score", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("strong", { children: player.score }),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { children: "puntos" }),
+      player.lastPoints > 0 ? /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("em", { children: [
         "+",
         player.lastPoints
       ] }, `${player.index}-${player.hits}`) : null
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "duelo-player-track", children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("i", {}) }),
-    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("footer", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: "Topos atrapados" }),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("strong", { children: player.hits })
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "duelo-player-track", children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("i", {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("footer", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { children: "Topos atrapados" }),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("strong", { children: player.hits })
     ] })
   ] });
 }
 function Metric({ label, value }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("article", { className: "duelo-hero-metric", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: label }),
-    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("strong", { children: value })
+  return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("article", { className: "duelo-hero-metric", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { children: label }),
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("strong", { children: value })
   ] });
 }
 function heroContent3(snapshot) {
@@ -9906,7 +10254,7 @@ function hexToRgb4(color) {
 }
 
 // games/whack-a-mole/src/manifest.ts
-var manifest14 = {
+var manifest15 = {
   id: "whack-a-mole",
   label: "Atrapa al topo",
   description: "Persigue objetivos de colores por todo el suelo y atr\xE1palos antes de que se apaguen.",
@@ -9942,7 +10290,7 @@ var finishMillis2 = 4e3;
 var hitFlashMillis = 500;
 var baseLifeMillis = 3400;
 var minLifeMillis = 2300;
-function createGame14(config) {
+function createGame15(config) {
   return new WhackAMoleGame(config);
 }
 var WhackAMoleGame = class {
@@ -9963,10 +10311,10 @@ var WhackAMoleGame = class {
   motionEventId = 0;
   lastEvent = gameEvent("none", "Listo", 0);
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest14);
+    this.config = normalizeGameConfig(config, manifest15);
     this.rng = createSeededRng(this.config.seed);
     this.readyZones = readyZonesForPlayers(this.config.playerCount);
-    this.readyGate = createPlayerReadyGate(manifest14.start, this.readyZones, this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest15.start, this.readyZones, this.config.nowMillis);
     this.resetState(this.config.nowMillis);
   }
   init(nowMillis) {
@@ -10040,8 +10388,8 @@ var WhackAMoleGame = class {
   snapshot() {
     const ready = this.readyGate.state(this.nowMillis);
     return {
-      currentGame: manifest14.id,
-      label: manifest14.label,
+      currentGame: manifest15.id,
+      label: manifest15.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players.map((player) => ({ index: player.index, label: player.label, color: player.color, score: player.score, lives: -1 })),
@@ -10065,10 +10413,10 @@ var WhackAMoleGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest14);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest15);
     this.rng = createSeededRng(this.config.seed);
     this.readyZones = readyZonesForPlayers(this.config.playerCount);
-    this.readyGate = createPlayerReadyGate(manifest14.start, this.readyZones, this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest15.start, this.readyZones, this.config.nowMillis);
     this.resetState(this.config.nowMillis);
   }
   playerReadyZones() {
@@ -10187,7 +10535,7 @@ function scaleHex(color, factor) {
 
 // games/whack-a-mole/src/fixtures.ts
 function create(stage) {
-  const game5 = createGame14({ playerCount: 4, seed: 404, durationMillis: stage === "finished" ? 3e3 : 6e4 });
+  const game5 = createGame15({ playerCount: 4, seed: 404, durationMillis: stage === "finished" ? 3e3 : 6e4 });
   game5.init(0);
   if (stage !== "waiting") occupy2(game5);
   if (stage === "running" || stage === "finished") game5.tick({ atMillis: 2200 });
@@ -10203,11 +10551,11 @@ var startingSnapshot10 = starting3.snapshot();
 var running2 = create("running");
 var target2 = running2.snapshot().targets[1];
 running2.press({ x: target2.x, y: target2.y, pressed: true, atMillis: 2300 });
-var runningFrame13 = running2.render();
-var runningSnapshot13 = running2.snapshot();
+var runningFrame14 = running2.render();
+var runningSnapshot14 = running2.snapshot();
 var finished2 = create("finished");
-var finishedFrame8 = finished2.render();
-var finishedSnapshot10 = finished2.snapshot();
+var finishedFrame9 = finished2.render();
+var finishedSnapshot11 = finished2.snapshot();
 function occupy2(game5) {
   game5.playerReadyZones().forEach((zone) => game5.press({ x: zone.minX, y: zone.minY, pressed: true, atMillis: 100 }));
 }
@@ -10225,9 +10573,10 @@ var gameRegistry = /* @__PURE__ */ new Map([
   [manifest9.id, src_exports9],
   [manifest10.id, src_exports10],
   [manifest11.id, src_exports11],
-  [manifest13.id, src_exports13],
   [manifest12.id, src_exports12],
-  [manifest14.id, src_exports14]
+  [manifest14.id, src_exports14],
+  [manifest13.id, src_exports13],
+  [manifest15.id, src_exports15]
 ]);
 var gameCatalog = [...gameRegistry.values()].map((game5) => game5.manifest).sort((left, right) => left.id.localeCompare(right.id));
 
@@ -10340,7 +10689,7 @@ function finiteNumber(value, fallback) {
 }
 
 // packages/runner/src/runner.ts
-var sourceRevision = true ? "ce30c13d1421b8436c8b0c8e517e13c8a8871b5e" : "development";
+var sourceRevision = true ? "7c4731b6efc2408dfff4f0c8aa168a981db4c733" : "development";
 var session = new RunnerSession();
 var input = createInterface({ input: process.stdin, crlfDelay: Infinity });
 input.on("line", (line) => {
