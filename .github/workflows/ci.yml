@@ -43,8 +43,16 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Set up Node for the embedded games runner
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Install native audio headers
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev
+        run: >-
+          sudo apt-get update &&
+          sudo apt-get install -y --no-install-recommends
+          libasound2-dev pkg-config
 
       - name: Run tests
         run: go test ./...
