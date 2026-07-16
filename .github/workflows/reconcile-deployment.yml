@@ -16,7 +16,7 @@ concurrency:
 jobs:
   deploy:
     name: Reconcile motionlevels-1
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.DEPLOYMENT_RUNNER_LABEL }}
     timeout-minutes: 45
     environment: Production
     env:

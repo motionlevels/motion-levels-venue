@@ -23,7 +23,7 @@ concurrency:
 jobs:
   sync:
     name: Verify, pin, and publish games release
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABEL }}
     timeout-minutes: 15
     env:
       RELEASE_TAG: ${{ inputs.release_tag }}

@@ -24,7 +24,7 @@ jobs:
        github.event.workflow_run.event == 'workflow_dispatch') &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABEL }}
     env:
       RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
@@ -112,7 +112,7 @@ jobs:
   image-preflight:
     name: Check immutable image set
     needs: validate-venue
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABEL }}
     permissions:
       contents: read
       packages: read
@@ -180,7 +180,7 @@ jobs:
 
   publish:
     name: Publish ${{ matrix.name }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABEL }}
     needs:
       - validate-venue
       - image-preflight
