@@ -1,0 +1,61 @@
+{
+  "gameId": "patrones",
+  "scenario": {
+    "seed": 137,
+    "playerCount": 0,
+    "difficulty": "medium",
+    "actions": [
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 8,
+        "y": 16
+      }
+    ],
+    "captureStartMillis": 2300,
+    "frameCount": 24,
+    "frameIntervalMillis": 120
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "patrones-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 758,
+      "sha256": "c7c43fd973c69c5f4cce9e76edb901536df1abfcdaa42113e2326b249fd323c7"
+    },
+    "thumbnail": {
+      "file": "patrones-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 3970,
+      "sha256": "5fd020a0bbc1ec5ffc2dd15d9abd45832ede3f633af4d6c70354e71ee4d6385a"
+    },
+    "animation": {
+      "file": "patrones-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 666,
+      "sha256": "79675a0018f7e46ca38a056d38ff8594c5247344db8db5dcbf2341427d5be85b"
+    },
+    "playerDisplay": {
+      "file": "patrones-player-display.webp",
+      "width": 1280,
+      "height": 720,
+      "mimeType": "image/webp",
+      "bytes": 33454,
+      "sha256": "eab763cf4f4e539c61f217c9a6fd3aed1a063b9c0e7511d461668baaf2a7b881"
+    },
+    "playerDisplayAnimation": {
+      "file": "patrones-player-display-animation.webp",
+      "width": 640,
+      "height": 360,
+      "mimeType": "image/webp",
+      "bytes": 15558,
+      "sha256": "8d5e9d65230cce9f544e740231b8dab8cd3ab7a6a70fe13e4312d595c171fb15"
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "gameId": "memoria-v2",
+  "scenario": {
+    "seed": 137,
+    "playerCount": 0,
+    "actions": [
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 8,
+        "y": 16
+      }
+    ],
+    "captureStartMillis": 2300,
+    "frameCount": 24,
+    "frameIntervalMillis": 120
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "memoria-v2-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 696,
+      "sha256": "319631bbb9878620cc614c45a01a42c666c789e0a9df532988d61ad19c1bd37d"
+    },
+    "thumbnail": {
+      "file": "memoria-v2-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 3892,
+      "sha256": "f3a7c0a67c5885c6cbf9e6666bbf2be3e35c1a5ec871c956c849410e787591bb"
+    },
+    "animation": {
+      "file": "memoria-v2-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 634,
+      "sha256": "40a0af4aa9fc6de4b305bfebd50aef441405771f09774521bffd7cefd1f62119"
+    },
+    "playerDisplay": {
+      "file": "memoria-v2-player-display.webp",
+      "width": 1280,
+      "height": 720,
+      "mimeType": "image/webp",
+      "bytes": 32336,
+      "sha256": "b476ed4a6b71a06a0ee2fc6b5f6a4ef60f79a670e83cd726f16a86d8bdf69d1e"
+    },
+    "playerDisplayAnimation": {
+      "file": "memoria-v2-player-display-animation.webp",
+      "width": 640,
+      "height": 360,
+      "mimeType": "image/webp",
+      "bytes": 14080,
+      "sha256": "c23fef5054dc4c6ae0ade83694a0ffcf3e678927938ca2bd6d26671e2e75a941"
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "gameId": "lava",
+  "scenario": {
+    "seed": 137,
+    "playerCount": 0,
+    "difficulty": "medium",
+    "actions": [
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 8,
+        "y": 16
+      }
+    ],
+    "captureStartMillis": 4000,
+    "frameCount": 24,
+    "frameIntervalMillis": 120
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "lava-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1110,
+      "sha256": "5bed57e13ed9b2aaa6ebcb934f094dc5bdcc7fa6d56f4e113ea1dc630239792c"
+    },
+    "thumbnail": {
+      "file": "lava-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 26344,
+      "sha256": "5c6ffd51f0c2c201b453bd2805edbdc10d06c89bc8bc9acf7f9bbb884b660fc5"
+    },
+    "animation": {
+      "file": "lava-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 72778,
+      "sha256": "376cb928b654ba33b9befccdae91d1762123c32b90ec9bec36538a896a3db01a"
+    },
+    "playerDisplay": {
+      "file": "lava-player-display.webp",
+      "width": 1280,
+      "height": 720,
+      "mimeType": "image/webp",
+      "bytes": 53646,
+      "sha256": "eefcf476983dedf7bff331da74eed0ef54db3399a61184c99af1a0066db97874"
+    },
+    "playerDisplayAnimation": {
+      "file": "lava-player-display-animation.webp",
+      "width": 640,
+      "height": 360,
+      "mimeType": "image/webp",
+      "bytes": 176202,
+      "sha256": "f2f91fee6fdbc52aba1daa47e5615db86126d9d50a4219e13cab2532aec62702"
+    }
+  }
+}
