@@ -316,7 +316,9 @@ services:
     mem_limit: 1024m
     cpus: 1.25
     healthcheck:
-      test: [CMD-SHELL, "grep -aq chromium /proc/[0-9]*/comm && curl -fsS http://caddy-display:8080/display/ >/dev/null"]
+      # A disconnected venue display is a healthy standby state. Once Weston
+      # exposes its socket, Chromium must also be running.
+      test: [CMD-SHELL, "curl -fsS http://caddy-display:8080/display/ >/dev/null && { [ ! -S /run/motion-levels-display/wayland-0 ] || grep -aq chromium /proc/[0-9]*/comm; }"]
       interval: 10s
       timeout: 3s
       retries: 12
