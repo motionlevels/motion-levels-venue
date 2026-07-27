@@ -7,9 +7,27 @@ set -eu
 export XDG_RUNTIME_DIR=/run/motion-levels-display
 export WAYLAND_DISPLAY=wayland-0
 
+# Weston exits immediately when every DRM connector is disconnected. Keep this
+# service quiet and active until a display is present instead of filling /run
+# through a systemd restart loop.
+connector_connected() {
+  for status in /sys/class/drm/card0-*/status; do
+    [ -r "$status" ] || continue
+    [ "$(cat "$status")" = connected ] && return 0
+  done
+  return 1
+}
+
+if ! connector_connected; then
+  echo "No DRM display connector is active; waiting for one before starting Weston"
+  while ! connector_connected; do
+    sleep 5
+  done
+fi
+
 exec /usr/bin/weston \
   --config=/etc/motion-levels/weston.ini \
   --continue-without-input \
   --idle-time=0 \
   --socket=wayland-0 \
-  --log=/run/motion-levels-display/weston.log
+  --log=/dev/stderr

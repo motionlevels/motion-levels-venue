@@ -8,13 +8,11 @@ profile="${MOTION_LEVELS_PLAYER_PROFILE:-/var/lib/motion-levels/player-profile}"
 target="${MOTION_LEVELS_PLAYER_URL:-http://host.docker.internal/display/}"
 window_size="${MOTION_LEVELS_PLAYER_WINDOW_SIZE:-1920,1080}"
 
-for _attempt in $(seq 1 90); do
-  [ -S "$socket" ] && break
-  sleep 1
-done
 if [ ! -S "$socket" ]; then
-  echo "Wayland socket ${socket} did not appear" >&2
-  exit 1
+  echo "Wayland socket ${socket} is not available; waiting for the display"
+  while [ ! -S "$socket" ]; do
+    sleep 5
+  done
 fi
 
 mkdir -p "$profile"

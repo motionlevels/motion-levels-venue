@@ -61,8 +61,14 @@ test("venue core services are non-root, read-only, capability-dropped containers
     playerEntrypoint,
     /rm -f[\s\S]*?SingletonCookie[\s\S]*?SingletonLock[\s\S]*?SingletonSocket/,
   );
+  assert.match(playerEntrypoint, /while \[ ! -S "\$socket" \]/);
+  assert.doesNotMatch(playerEntrypoint, /Wayland socket .* did not appear|exit 1/);
   assert.ok(
     playerEntrypoint.indexOf("SingletonCookie") < playerEntrypoint.indexOf("exec /usr/bin/chromium"),
+  );
+  assert.match(
+    compose,
+    /\[ ! -S \/run\/motion-levels-display\/wayland-0 \] \|\| grep -aq chromium/,
   );
 });
 
@@ -213,7 +219,10 @@ test("host hardware is split across exact audio, display, and HDMI boundaries", 
   assert.match(display, /DeviceAllow=\/dev\/dri\/card0 rw/);
   assert.match(display, /DeviceAllow=\/dev\/dri\/renderD128 rw/);
   assert.match(display, /InaccessiblePaths=\/dev\/input/);
-  assert.match(displayAgent, /--log=\/run\/motion-levels-display\/weston\.log/);
+  assert.match(displayAgent, /connector_connected\(\)/);
+  assert.match(displayAgent, /while ! connector_connected/);
+  assert.match(displayAgent, /--log=\/dev\/stderr/);
+  assert.doesNotMatch(displayAgent, /--log=\/run\/motion-levels-display\/weston\.log/);
   assert.match(displayAgent, /--socket=wayland-0/);
   assert.match(displayAgent, /export XDG_RUNTIME_DIR=\/run\/motion-levels-display/);
   assert.match(display, /Requires=seatd\.service/);
