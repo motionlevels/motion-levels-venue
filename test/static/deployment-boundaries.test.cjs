@@ -129,7 +129,13 @@ test("venue release activation is automated, idle-gated, and rollback-aware", ()
   assert.match(productionWorkflow, /VENUE_DEPLOY_REVISION: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
   assert.match(productionWorkflow, /scripts\/request-venue-deployment\.sh/);
   assert.match(reconcileWorkflow, /cron: "\*\/15 \* \* \* \*"/);
-  assert.match(reconcileWorkflow, /gh run list[\s\S]*?--repo "\$GITHUB_REPOSITORY"[\s\S]*?--workflow images\.yml[\s\S]*?--commit "\$VENUE_DEPLOY_REVISION"/);
+  assert.match(
+    reconcileWorkflow,
+    /curl --fail[\s\S]*?\$\{GITHUB_API_URL\}\/repos\/\$\{GITHUB_REPOSITORY\}\/actions\/workflows\/images\.yml\/runs\?head_sha=\$\{VENUE_DEPLOY_REVISION\}/,
+  );
+  assert.match(reconcileWorkflow, /Authorization: Bearer \$GH_TOKEN/);
+  assert.match(reconcileWorkflow, /python3 -c .*workflow_runs/);
+  assert.doesNotMatch(reconcileWorkflow, /gh run list/);
   assert.match(reconcileWorkflow, /ready=false[\s\S]*?if: steps\.images\.outputs\.ready == 'true'/);
   assert.match(deployRequest, /if \[ "\$status" = 409 \]/);
   assert.match(deployRequest, /--connect-timeout 10[\s\S]*?--max-time 30/);
