@@ -126,14 +126,12 @@ rollback until those checks pass.
 
 ## X5 camera
 
-The X5 surface is disabled by default, not deleted. With
-`MOTION_LEVELS_X5_ENABLED=0`, the engine receives an empty recorder URL/token,
-the platform does not register a recorder, and both container and native Caddy
-return no `/camera-recorder/*` route. The implementation, token source, and
-separate `motionlevels/motion-levels-cameras` ownership remain intact. A venue
-deployment with the switch off removes any legacy `motion-levels-cameras`
-runtime container so its restart policy cannot resurrect USB or port access;
-the image, host state, configuration, credentials, and source are preserved.
+The X5 surface is disabled by default, not deleted. The production GoPro
+recorder remains independently configured through
+`MOTION_LEVELS_CAMERA_RECORDER_URL` while `MOTION_LEVELS_X5_ENABLED=0`.
+Container cleanup is only allowed when neither camera capability has an owner;
+venue deployments therefore preserve the host-owned
+`motion-levels/motion-levels-cameras` GoPro service.
 
 Restoration does not require redevelopment: recreate the preserved camera
 service from its Compose project, set `motion_levels_x5_enabled: true`, supply
