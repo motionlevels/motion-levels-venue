@@ -432,7 +432,10 @@ test("X5 implementation and credentials remain restorable behind one switch", ()
   assert.match(playbookSource, /MOTION_LEVELS_X5_UPSTREAM=\{\{[\s\S]*motion_levels_x5_caddy_upstream[\s\S]*else ''/);
   assert.match(playbookSource, /docker container inspect motion-levels-cameras/);
   assert.match(playbookSource, /docker container rm --force motion-levels-cameras/);
-  assert.match(playbookSource, /Remove the retired X5 recorder runtime[\s\S]*not \(motion_levels_x5_enabled/);
+  assert.match(
+    playbookSource,
+    /Remove an unassigned legacy camera runtime[\s\S]*not \(motion_levels_x5_enabled[\s\S]*motion_levels_camera_recorder_url \| default\(''\) \| length == 0/,
+  );
   assert.match(gatewayOverride, /camera-api:[\s\S]*172\.30\.53\.1:8040:8040/);
   assert.doesNotMatch(gatewayOverride, /network_mode:\s*host/);
   assert.match(playbookSource, /dest: "\{\{ motion_levels_venue_config_root \}\}\/x5-camera-gateway\.compose\.yml"/);
