@@ -276,13 +276,12 @@
           - motion_levels_existing_env.stat.exists
         fail_msg: /etc/motion-levels/motion-levels.env is required for container migration.
 
-    - name: Apply the explicitly requested camera segment policy
+    - name: Configure production camera segment policy
       ansible.builtin.lineinfile:
         path: /etc/motion-levels/motion-levels.env
         regexp: '^MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS='
-        line: "MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS={{ lookup('env', 'MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS') }}"
+        line: "MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS={{ motion_levels_camera_recorder_segment_seconds | default(300) | int }}"
         mode: "0644"
-      when: lookup('env', 'MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS') | length > 0
 
     - name: Build a secret-free runtime env and least-readable secret files
       ansible.builtin.shell: |
@@ -323,8 +322,10 @@
         x5_enabled = {{ (motion_levels_x5_enabled | default(false) | bool) | ternary('True', 'False') }}
         inventory_camera_recorder_url = {{ motion_levels_camera_recorder_url | default('') | to_json }}
         values["MOTION_LEVELS_X5_ENABLED"] = "1" if x5_enabled else "0"
-        # Always overwrite any stale value inherited from the legacy host env.
-        values["MOTION_LEVELS_CAMERA_RECORDER_URL"] = inventory_camera_recorder_url if x5_enabled else ""
+        values["MOTION_LEVELS_CAMERA_RECORDER_URL"] = inventory_camera_recorder_url
+        values["MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS"] = str(
+            {{ motion_levels_camera_recorder_segment_seconds | default(300) | int }}
+        )
 
         platform_token = values.get("MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_TOKEN") or values.get("MOTION_LEVELS_PLATFORM_TOKEN") or ""
         camera_password = (
@@ -335,7 +336,7 @@
         )
         camera_recorder_secret = Path("/etc/motion-levels/camera-recorder-token")
         camera_recorder_token = ""
-        if x5_enabled:
+        if inventory_camera_recorder_url:
             camera_recorder_token = values.get("MOTION_LEVELS_CAMERA_RECORDER_TOKEN") or ""
             if not camera_recorder_token and camera_recorder_secret.exists():
                 camera_recorder_token = camera_recorder_secret.read_text(encoding="utf-8").strip()

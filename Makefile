@@ -54,7 +54,7 @@ deploy-standard-venues:
 				policy_url="$${MOTION_LEVELS_DEPLOYMENT_POLICY_BASE_URL%/}/api/rooms/$$venue/deployment-policy"; \
 				segment="$$(curl -fsS --max-time 10 "$$policy_url" | python3 -c 'import json, sys; payload = json.load(sys.stdin); value = payload.get("cameraRecordingSegmentSeconds"); print(value if isinstance(value, int) else "")' || true)"; \
 			fi; \
-			segment="$${segment:-1200}"; \
+			segment="$${segment:-300}"; \
 			printf '==> %s camera video segment: %ss\n' "$$venue" "$$segment"; \
 			if GHCR_TOKEN="$$ghcr_token" GHCR_USERNAME="$$ghcr_username" MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS="$$segment" ansible-playbook ansible/playbooks/venue-containers.yml --limit "$$venue"; then \
 				deployed="$${deployed:+$$deployed,}$$venue"; \

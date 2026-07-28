@@ -4,8 +4,7 @@ all:
     ansible_python_interpreter: /usr/bin/python3
     motion_levels_remote_root: /opt/motion-levels/rebuild
     # The X5 implementation stays in the repo, but its runtime capabilities are
-    # disabled. Set this to true and deploy both platform and motionlevels-1 to
-    # restore the preserved recorder URL, token paths, proxy, and operator UI.
+    # disabled independently from the GoPro production session recorder.
     motion_levels_x5_enabled: false
   children:
     motion_levels_venues:
@@ -17,10 +16,10 @@ all:
           # The player is isolated behind the host Weston compositor and the
           # render-only device boundary; validate TV hotplug and HDMI audio live.
           motion_levels_display_backend: wayland
-          # Dormant while motion_levels_x5_enabled=false. The explicit egress
-          # gateway is deterministic from both core containers; use the camera
-          # host's Tailnet URL instead after a future dedicated-host cutover.
+          # The GoPro service is the production session recorder. The explicit
+          # egress gateway reaches the host-owned service from the engine.
           motion_levels_camera_recorder_url: http://172.30.53.1:8040
+          motion_levels_camera_recorder_segment_seconds: 300
           motion_levels_x5_caddy_upstream: http://172.30.53.1:8040
           motion_levels_lan_interface: enp2s0
           motion_levels_lan_ipv4: 192.168.1.142/24
