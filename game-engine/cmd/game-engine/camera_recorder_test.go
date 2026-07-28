@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -40,5 +41,30 @@ func TestHTTPCameraRecorderSendsBearerToken(t *testing.T) {
 	case <-received:
 	case <-time.After(time.Second):
 		t.Fatal("request was not received")
+	}
+}
+
+func TestHTTPCameraRecorderRetriesTransientSessionStart(t *testing.T) {
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if attempts.Add(1) < 3 {
+			http.Error(w, "camera starting", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	recorder := newHTTPCameraRecorder(server.URL, "camera-secret", time.Second)
+	if recorder == nil {
+		t.Fatal("expected recorder")
+	}
+	defer recorder.Close()
+
+	if err := recorder.postWithRetry("/sessions/start", map[string]any{"venueSessionId": "session-1"}); err != nil {
+		t.Fatalf("post with retry: %v", err)
+	}
+	if got := attempts.Load(); got != 3 {
+		t.Fatalf("attempts = %d, want 3", got)
 	}
 }

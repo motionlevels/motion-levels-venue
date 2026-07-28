@@ -93,10 +93,25 @@ func (r *httpCameraRecorder) enqueue(path string, body any) {
 
 func (r *httpCameraRecorder) run() {
 	for job := range r.jobs {
-		if err := r.post(job.path, job.body); err != nil {
+		if err := r.postWithRetry(job.path, job.body); err != nil {
 			log.Printf("camera recorder %s: %v", job.path, err)
 		}
 	}
+}
+
+func (r *httpCameraRecorder) postWithRetry(path string, body any) error {
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+		}
+		if err := r.post(path, body); err != nil {
+			lastErr = err
+			continue
+		}
+		return nil
+	}
+	return lastErr
 }
 
 func (r *httpCameraRecorder) post(path string, body any) error {

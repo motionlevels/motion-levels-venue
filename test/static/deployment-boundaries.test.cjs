@@ -360,7 +360,7 @@ test("venue game-engine carries the bounded external recording segment policy", 
     "deploy/motionlevels-pc/motion-levels-game-engine.service",
   );
 
-  assert.match(playbookSource, /default\('1200', true\)/);
+  assert.match(playbookSource, /default\('300', true\)/);
   assert.match(gameEngineServiceSource, /-camera-recorder-segment-seconds \$\{MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS\}/);
   assert.match(makefileSource, /deployment-policy/);
   assert.match(makefileSource, /MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS="\$\$segment"/);
@@ -423,10 +423,11 @@ test("X5 implementation and credentials remain restorable behind one switch", ()
 
   assert.match(inventorySource, /^    motion_levels_x5_enabled: false$/m);
   assert.match(inventorySource, /motion_levels_camera_recorder_url: http:\/\/172\.30\.53\.1:8040/);
+  assert.match(inventorySource, /motion_levels_camera_recorder_segment_seconds: 300/);
   assert.match(inventorySource, /motion_levels_x5_caddy_upstream: http:\/\/172\.30\.53\.1:8040/);
   assert.match(playbookSource, /values\["MOTION_LEVELS_X5_ENABLED"\] = "1" if x5_enabled else "0"/);
-  assert.match(playbookSource, /values\["MOTION_LEVELS_CAMERA_RECORDER_URL"\] = inventory_camera_recorder_url if x5_enabled else ""/);
-  assert.match(playbookSource, /camera_recorder_token = ""[\s\S]*if x5_enabled:[\s\S]*camera_recorder_secret\.read_text/);
+  assert.match(playbookSource, /values\["MOTION_LEVELS_CAMERA_RECORDER_URL"\] = inventory_camera_recorder_url/);
+  assert.match(playbookSource, /camera_recorder_token = ""[\s\S]*if inventory_camera_recorder_url:[\s\S]*camera_recorder_secret\.read_text/);
   assert.match(playbookSource, /MOTION_LEVELS_X5_ENABLED=\{\{[\s\S]*ternary\('1', '0'\)/);
   assert.match(playbookSource, /MOTION_LEVELS_X5_UPSTREAM=\{\{[\s\S]*motion_levels_x5_caddy_upstream[\s\S]*else ''/);
   assert.match(playbookSource, /docker container inspect motion-levels-cameras/);

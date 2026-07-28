@@ -136,7 +136,7 @@ func main() {
 	flag.StringVar(&cfg.CameraRecorderURL, "camera-recorder-url", os.Getenv("MOTION_LEVELS_CAMERA_RECORDER_URL"), "local camera recorder API base URL; empty disables external video recording")
 	flag.StringVar(&cfg.CameraRecorderToken, "camera-recorder-token", os.Getenv("MOTION_LEVELS_CAMERA_RECORDER_TOKEN"), "bearer token for camera recorder mutations; can also use MOTION_LEVELS_CAMERA_RECORDER_TOKEN")
 	flag.DurationVar(&cfg.CameraRecorderTimeout, "camera-recorder-timeout", durationEnv("MOTION_LEVELS_CAMERA_RECORDER_TIMEOUT", 2*time.Second), "HTTP timeout for camera recorder API calls")
-	flag.IntVar(&cfg.CameraRecorderSegmentSeconds, "camera-recorder-segment-seconds", intEnv("MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS", 0), "video segment seconds to request from the camera recorder for stitched venue recordings; 0 uses recorder default")
+	flag.IntVar(&cfg.CameraRecorderSegmentSeconds, "camera-recorder-segment-seconds", intEnv("MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS", 300), "video segment seconds to request from the production camera recorder")
 	flag.StringVar(&cfg.AuthoredRuntime, "authored-runtime", "auto", "runtime for motion-go-v1 games: auto, native, or wasm")
 	flag.StringVar(&cfg.PlatformURL, "platform-url", os.Getenv("MOTION_LEVELS_PLATFORM_URL"), "platform base URL for session ingest; empty disables")
 	flag.StringVar(&cfg.PlatformToken, "platform-token", os.Getenv("MOTION_LEVELS_PLATFORM_TOKEN"), "platform bearer token for session ingest; can also use MOTION_LEVELS_PLATFORM_TOKEN")
