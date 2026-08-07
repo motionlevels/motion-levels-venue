@@ -1,0 +1,76 @@
+#!/bin/sh
+set -eu
+
+config_root="${MOTION_LEVELS_VENUE_CONFIG_ROOT:-/etc/motion-levels/venue}"
+candidate="${MOTION_LEVELS_VENUE_CANDIDATE:-$config_root/candidate.env}"
+current="${MOTION_LEVELS_VENUE_CURRENT:-$config_root/current.env}"
+activator="${MOTION_LEVELS_VENUE_ACTIVATOR:-/usr/local/sbin/motion-levels-venue-containers}"
+drm_root="${MOTION_LEVELS_DRM_ROOT:-/sys/class/drm}"
+
+log() {
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
+}
+
+manifest_value() {
+  key=$1
+  manifest=$2
+  sed -n "s/^${key}=//p" "$manifest" | tail -n 1
+}
+
+if [ ! -s "$candidate" ]; then
+  log "no desired venue release is pending"
+  exit 0
+fi
+
+desired_revision="$(manifest_value VENUE_REVISION "$candidate")"
+case "$desired_revision" in
+  *[!0-9a-f]*|'')
+    log "desired venue manifest has an invalid revision"
+    exit 2
+    ;;
+esac
+if [ "${#desired_revision}" -ne 40 ]; then
+  log "desired venue manifest must contain a full 40-character revision"
+  exit 2
+fi
+
+if [ -s "$current" ] && [ "$(manifest_value VENUE_REVISION "$current")" = "$desired_revision" ]; then
+  rm -f "$candidate"
+  log "desired venue release $desired_revision is already active"
+  exit 0
+fi
+
+if [ "$(manifest_value VENUE_DISPLAY_BACKEND "$candidate")" = wayland ]; then
+  display_connected=0
+  for status in "$drm_root"/card0-*/status; do
+    if [ -f "$status" ] && [ "$(cat "$status")" = connected ]; then
+      display_connected=1
+      break
+    fi
+  done
+  if [ "$display_connected" -ne 1 ]; then
+    log "desired venue release $desired_revision remains queued until a physical display is connected"
+    exit 0
+  fi
+fi
+
+set +e
+"$activator" activate
+activation_rc=$?
+set -e
+
+case "$activation_rc" in
+  0)
+    log "desired venue release $desired_revision activated"
+    ;;
+  75)
+    log "desired venue release $desired_revision remains queued behind the idle/session gate"
+    ;;
+  73)
+    log "another venue mutation owns the activation lock; retry remains queued"
+    ;;
+  *)
+    log "desired venue release $desired_revision failed activation (exit $activation_rc); retry remains queued"
+    exit "$activation_rc"
+    ;;
+esac

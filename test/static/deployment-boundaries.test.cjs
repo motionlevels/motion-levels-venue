@@ -79,8 +79,10 @@ test("venue release activation is automated, idle-gated, and rollback-aware", ()
   const makefile = readRepoFile("Makefile");
   const imagesWorkflow = readRepoFile(".github/workflows/images.yml");
   const productionWorkflow = readRepoFile(".github/workflows/deploy-production.yml");
-  const reconcileWorkflow = readRepoFile(".github/workflows/reconcile-deployment.yml");
-  const deployRequest = readRepoFile("scripts/request-venue-deployment.sh");
+  const rollbackWorkflow = readRepoFile(".github/workflows/rollback-production.yml");
+  const reconciler = readRepoFile("deploy/motionlevels-pc/reconcile-venue-release");
+  const reconcileService = readRepoFile("deploy/motionlevels-pc/motion-levels-venue-reconcile.service");
+  const reconcileTimer = readRepoFile("deploy/motionlevels-pc/motion-levels-venue-reconcile.timer");
 
   assert.match(activation, /venue_is_idle/);
   assert.match(activation, /venue busy:/);
@@ -122,27 +124,42 @@ test("venue release activation is automated, idle-gated, and rollback-aware", ()
   assert.match(makefile, /venue-containers\.yml/);
   assert.doesNotMatch(makefile, /deploy-(?:frontends|runtime)-motionlevels-1/);
   assert.doesNotMatch(makefile, /deploy-motionlevels-1-legacy/);
-  assert.match(imagesWorkflow, /scripts\/request-venue-deployment\.sh/);
-  assert.doesNotMatch(imagesWorkflow, /deploy-production:|VENUE_AUTO_DEPLOY_TOKEN/);
+  assert.match(imagesWorkflow, /test_release_reconciliation\.sh/);
+  assert.doesNotMatch(imagesWorkflow, /deploy-production:|VENUE_AUTO_DEPLOY_TOKEN|request-venue-deployment/);
   assert.match(productionWorkflow, /workflows:[\s\S]*?- Container images[\s\S]*?types:[\s\S]*?- completed/);
   assert.match(productionWorkflow, /github\.event\.workflow_run\.conclusion == 'success'/);
   assert.match(productionWorkflow, /VENUE_DEPLOY_REVISION: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
-  assert.match(productionWorkflow, /scripts\/request-venue-deployment\.sh/);
-  assert.match(reconcileWorkflow, /cron: "\*\/15 \* \* \* \*"/);
-  assert.match(
-    reconcileWorkflow,
-    /curl --fail[\s\S]*?\$\{GITHUB_API_URL\}\/repos\/\$\{GITHUB_REPOSITORY\}\/actions\/workflows\/images\.yml\/runs\?head_sha=\$\{VENUE_DEPLOY_REVISION\}/,
+  assert.match(productionWorkflow, /tailscale\/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888/);
+  assert.match(productionWorkflow, /root@100\.76\.156\.89 true/);
+  assert.match(productionWorkflow, /ansible-playbook --limit motionlevels-1 ansible\/playbooks\/venue-containers\.yml/);
+  assert.match(productionWorkflow, /Neither active nor desired state owns \$EXPECTED_REVISION/);
+  assert.match(productionWorkflow, /if: always\(\)[\s\S]*?docker logout ghcr\.io/);
+  assert.doesNotMatch(productionWorkflow, /platform\.motionlevels\.obis\.dev\/api\/venue\/auto-deploy|VENUE_AUTO_DEPLOY/);
+  assert.equal(fs.existsSync(path.join(repoRoot, ".github/workflows/reconcile-deployment.yml")), false);
+  assert.equal(fs.existsSync(path.join(repoRoot, "scripts/request-venue-deployment.sh")), false);
+
+  assert.match(playbook, /Render immutable desired image manifest/);
+  assert.match(playbook, /flock --wait 300 \/run\/lock\/motion-levels-venue-containers\.lock/);
+  assert.match(playbook, /motion-levels-venue-reconcile\.timer/);
+  assert.doesNotMatch(playbook, /Return a non-success result for an idle-gated staged release/);
+  assert.match(reconciler, /remains queued behind the idle\/session gate/);
+  assert.match(reconciler, /remains queued until a physical display is connected/);
+  assert.match(reconciler, /desired venue release .* is already active/);
+  assert.match(reconcileService, /ExecStart=\/usr\/local\/sbin\/motion-levels-venue-reconcile/);
+  assert.match(reconcileTimer, /OnBootSec=45s/);
+  assert.match(reconcileTimer, /OnUnitInactiveSec=1min/);
+  assert.match(reconcileTimer, /Persistent=true/);
+
+  assert.match(rollbackWorkflow, /revision must be a full lowercase Git SHA/);
+  assert.match(rollbackWorkflow, /Previous manifest is not requested revision \$EXPECTED_REVISION/);
+  assert.match(rollbackWorkflow, /systemctl stop motion-levels-venue-reconcile\.timer/);
+  assert.match(rollbackWorkflow, /motion-levels-venue-containers rollback/);
+  const reconciliationTest = spawnSync(
+    "bash",
+    [path.join(repoRoot, "deploy/motionlevels-pc/tests/test_release_reconciliation.sh")],
+    { cwd: repoRoot, encoding: "utf8" },
   );
-  assert.match(reconcileWorkflow, /Authorization: Bearer \$GH_TOKEN/);
-  assert.match(reconcileWorkflow, /python3 -c .*workflow_runs/);
-  assert.doesNotMatch(reconcileWorkflow, /gh run list/);
-  assert.match(reconcileWorkflow, /ready=false[\s\S]*?if: steps\.images\.outputs\.ready == 'true'/);
-  assert.match(deployRequest, /if \[ "\$status" = 409 \]/);
-  assert.match(deployRequest, /--connect-timeout 10[\s\S]*?--max-time 30/);
-  assert.match(deployRequest, /deadline=\$\(\( \$\(date \+%s\) \+ 1800 \)\)/);
-  assert.match(deployRequest, /succeeded\)[\s\S]*?motionlevels-1 is active/);
-  assert.match(deployRequest, /deferred\)[\s\S]*?deployment deferred safely/);
-  assert.doesNotMatch(deployRequest, /--limit motionlevels-cloud-1|deploy-standard-venues/);
+  assert.equal(reconciliationTest.status, 0, `${reconciliationTest.stdout}${reconciliationTest.stderr}`);
 });
 
 test("controller releases are externally pinned and remain part of atomic venue rollback", () => {

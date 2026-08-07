@@ -2,11 +2,11 @@
 
 The production venue is deployed from images published for full component
 commit SHAs and then pinned to verified registry digests. After the immutable
-image workflow succeeds, an authenticated management-plane relay requests the
-exact venue revision; scheduled reconciliation retries only when a release was
-safely deferred. The venue release SHA and the independently published
-controller SHA are stored together in one candidate manifest. Nothing on the
-venue polls GitHub or changes image tags itself.
+image workflow succeeds, the deployment runner writes the exact desired venue
+revision over the production tailnet. A persistent host timer retries only that
+candidate when activation was safely deferred. The venue release SHA and the
+independently published controller SHA are stored together in one candidate
+manifest. Nothing on the venue polls GitHub or changes image tags itself.
 
 ## Runtime ownership
 

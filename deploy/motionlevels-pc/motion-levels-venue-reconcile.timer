@@ -1,0 +1,12 @@
+[Unit]
+Description=Retry a deferred Motion Levels venue release locally
+
+[Timer]
+OnBootSec=45s
+OnUnitInactiveSec=1min
+AccuracySec=10s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+

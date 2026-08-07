@@ -37,12 +37,13 @@ jobs:
         run: |
           bash -n \
             deploy/motionlevels-pc/activate-venue-containers \
+            deploy/motionlevels-pc/reconcile-venue-release \
             deploy/motionlevels-pc/motion-levels-container-firewall \
             deploy/motionlevels-pc/motion-levels-display-agent \
             deploy/motionlevels-pc/motion-levels-hdmi-agent \
             deploy/motionlevels-pc/motion-levels-player-container \
-            deploy/motionlevels-pc/venue-game-engine \
-            scripts/request-venue-deployment.sh
+            deploy/motionlevels-pc/venue-game-engine
+          bash deploy/motionlevels-pc/tests/test_release_reconciliation.sh
           python3 -m py_compile \
             deploy/motionlevels-pc/motion-levels-camera-helper.py \
             deploy/motionlevels-pc/motion-levels-security-recorder.py

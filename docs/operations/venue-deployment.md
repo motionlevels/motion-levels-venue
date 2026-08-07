@@ -34,17 +34,18 @@ silently start with older kiosk, Caddy, audio, environment, or service files.
 ## Automatic production deployment
 
 After CI publishes the complete immutable image set for a new `main` commit,
-the `Container images` workflow requests activation of that exact revision on
-`motionlevels-1`. A scheduled reconciliation workflow retries releases that
-were safely deferred while the physical display was disconnected. The relay
-rejects stale revisions, and an already-active revision is a no-op.
+the isolated deployment runner joins the production tailnet and runs the venue
+Ansible playbook directly against `motionlevels-1`. The playbook writes one
+digest-pinned `candidate.env` as the durable desired revision and attempts it
+immediately. A host systemd timer retries the same candidate locally when the
+venue is idle and its physical display is connected. A newer explicit request
+atomically supersedes the candidate under the venue deployment lock.
 
-Automatic activation uses the same idle, HDMI, image-contract, health, and
-rollback gates as an operator deployment. It never bypasses the venue release
-helper. The `Production` environment must contain
-`VENUE_AUTO_DEPLOY_TOKEN`; the authenticated relay URL defaults to
-`https://platform.motionlevels.obis.dev/api/venue/auto-deploy` and can be
-overridden with the `VENUE_AUTO_DEPLOY_URL` environment variable.
+Automatic activation uses the same idle/session, HDMI, image-contract, health,
+and rollback gates as an operator deployment. Deferred state survives host and
+process restarts because the desired manifest is on disk and the timer is
+persistent. The `Production` environment contains `TS_OAUTH_CLIENT_ID` and
+`TS_OAUTH_SECRET`; no platform API or perpetual GitHub schedule participates.
 
 ## Deploy `motionlevels-1` manually
 
@@ -82,6 +83,11 @@ Failed activation health checks roll back automatically. The manual rollback
 command restores the previously activated manifest; verify engine, controller,
 player menu, player display, floor output, and audio before declaring recovery
 complete.
+
+The **Roll back production venue** workflow additionally requires the exact
+full previous revision. It stops local reconciliation, clears any newer pending
+candidate, runs the idle-gated rollback, verifies the active manifest, and then
+re-enables local reconciliation.
 
 The X5 implementation remains dormant while `motion_levels_x5_enabled` is
 false. Restoring it requires a coordinated platform and venue configuration
