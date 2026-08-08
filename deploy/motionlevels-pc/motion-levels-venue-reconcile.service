@@ -1,0 +1,10 @@
+[Unit]
+Description=Activate the newest desired Motion Levels venue release when safe
+After=network-online.target docker.service motion-levels-venue-containers.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/motion-levels-venue-reconcile
+

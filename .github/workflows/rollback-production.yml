@@ -1,0 +1,84 @@
+name: Roll back production venue
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Exact previous venue revision to restore
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: venue-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Roll back motionlevels-1
+    runs-on: ${{ vars.DEPLOYMENT_RUNNER_LABEL }}
+    timeout-minutes: 20
+    environment: Production
+    env:
+      ROLLBACK_REVISION: ${{ inputs.revision }}
+    steps:
+      - name: Validate exact rollback revision
+        shell: bash
+        run: |
+          [[ "$ROLLBACK_REVISION" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "revision must be a full lowercase Git SHA" >&2
+            exit 1
+          }
+
+      - name: Join production tailnet
+        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:github-actions
+          hostname: motionlevels-venue-rollback-${{ github.run_id }}
+          args: --accept-dns=false
+
+      - name: Verify direct venue SSH access
+        run: |
+          tailscale ping --until-direct=false --timeout=10s --c=1 100.76.156.89
+          ssh \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=10 \
+            root@100.76.156.89 true
+
+      - name: Roll back to the requested exact revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh root@100.76.156.89 "EXPECTED_REVISION=$ROLLBACK_REVISION sh -s" <<'REMOTE'
+          set -eu
+          previous=/etc/motion-levels/venue/previous.env
+          current=/etc/motion-levels/venue/current.env
+          value() {
+            sed -n "s/^VENUE_REVISION=//p" "$1" | tail -n 1
+          }
+          if [ ! -s "$previous" ] || [ "$(value "$previous")" != "$EXPECTED_REVISION" ]; then
+            echo "Previous manifest is not requested revision $EXPECTED_REVISION" >&2
+            exit 1
+          fi
+          systemctl stop motion-levels-venue-reconcile.timer
+          trap 'systemctl start motion-levels-venue-reconcile.timer' EXIT
+          for attempt in $(seq 1 60); do
+            if ! systemctl is-active --quiet motion-levels-venue-reconcile.service; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              echo "Venue reconciliation did not become idle" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          rm -f /etc/motion-levels/venue/candidate.env
+          /usr/local/sbin/motion-levels-venue-containers rollback
+          test "$(value "$current")" = "$EXPECTED_REVISION"
+          /usr/local/sbin/motion-levels-venue-containers status
+          REMOTE

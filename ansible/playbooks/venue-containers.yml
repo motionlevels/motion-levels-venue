@@ -16,6 +16,8 @@
       - motion-levels-audio@.service
       - motion-levels-container-firewall.service
       - motion-levels-venue-containers.service
+      - motion-levels-venue-reconcile.service
+      - motion-levels-venue-reconcile.timer
       - motion-levels-display-wayland.service
       - motion-levels-hdmi-agent.service
       - motion-levels-player-container.service
@@ -409,6 +411,7 @@
         mode: "0755"
       loop:
         - { src: activate-venue-containers, dest: /usr/local/sbin/motion-levels-venue-containers }
+        - { src: reconcile-venue-release, dest: /usr/local/sbin/motion-levels-venue-reconcile }
         - { src: motion-levels-container-firewall, dest: /usr/local/sbin/motion-levels-container-firewall }
         - { src: motion-levels-display-agent, dest: /usr/local/bin/motion-levels-display-agent }
         - { src: motion-levels-hdmi-agent, dest: /usr/local/bin/motion-levels-hdmi-agent }
@@ -652,9 +655,9 @@
       loop: "{{ motion_levels_image_digests.results }}"
       when: not (item.skipped | default(false))
 
-    - name: Install immutable candidate image manifest
+    - name: Render immutable desired image manifest
       ansible.builtin.copy:
-        dest: "{{ motion_levels_venue_config_root }}/candidate.env"
+        dest: "{{ motion_levels_venue_release_root }}/desired.env"
         owner: root
         group: root
         mode: "0600"
@@ -692,10 +695,19 @@
       ansible.builtin.command:
         cmd: >-
           docker compose
-          --env-file {{ motion_levels_venue_config_root }}/candidate.env
+          --env-file {{ motion_levels_venue_release_root }}/desired.env
           --file {{ motion_levels_venue_release_root }}/docker-compose.yml
           config --quiet
       changed_when: false
+
+    - name: Persist the newest explicitly desired venue release
+      ansible.builtin.command:
+        cmd: >-
+          flock --wait 300 /run/lock/motion-levels-venue-containers.lock
+          install --mode 0600
+          {{ motion_levels_venue_release_root }}/desired.env
+          {{ motion_levels_venue_config_root }}/candidate.env
+      changed_when: true
 
     - name: Flush systemd unit changes before activation
       ansible.builtin.meta: flush_handlers
@@ -726,39 +738,30 @@
         fail_msg: The Wayland path remains staged because no HDMI display is connected.
       when: motion_levels_effective_display_backend == "wayland"
 
-    - name: Activate the idle-gated venue container release
+    - name: Attempt the desired release immediately
       ansible.builtin.command:
-        cmd: /usr/local/sbin/motion-levels-venue-containers activate
+        cmd: /usr/local/sbin/motion-levels-venue-reconcile
       register: motion_levels_container_activation
       changed_when: "'activation complete' in motion_levels_container_activation.stdout"
-      failed_when: motion_levels_container_activation.rc not in [0, 75]
 
-    - name: Report a release staged behind an active venue session
-      ansible.builtin.debug:
-        msg: >-
-          The immutable images and configuration were staged, but activation was
-          refused because the venue is running a session. Re-run this playbook
-          when the engine is ambient/idle; no background updater will activate it.
-      when: motion_levels_container_activation.rc == 75
-
-    - name: Return a non-success result for an idle-gated staged release
-      ansible.builtin.fail:
-        msg: >-
-          Release staged but not deployed because the venue is running a session.
-          Re-run the manual deployment when the venue is ambient/idle.
-      when: motion_levels_container_activation.rc == 75
+    - name: Enable durable local venue release reconciliation
+      ansible.builtin.systemd_service:
+        name: motion-levels-venue-reconcile.timer
+        daemon_reload: true
+        enabled: true
+        state: started
 
     - name: Read the currently committed display backend
       ansible.builtin.command:
         cmd: sed -n 's/^VENUE_DISPLAY_BACKEND=//p' /etc/motion-levels/venue/current.env
       register: motion_levels_active_display_backend
       changed_when: false
-      when: motion_levels_container_activation.rc == 0
+      when: "' activated' in motion_levels_container_activation.stdout"
 
     - name: Select X11 with rollback to an already-active Wayland path
       when:
         - motion_levels_effective_display_backend == "x11"
-        - motion_levels_container_activation.rc == 0
+        - "' activated' in motion_levels_container_activation.stdout"
       block:
         - name: Stop the Wayland display path
           ansible.builtin.systemd_service:
@@ -951,13 +954,13 @@
       args:
         executable: /bin/sh
       changed_when: false
-      when: motion_levels_container_activation.rc == 0
+      when: "' activated' in motion_levels_container_activation.stdout"
 
     - name: Verify final venue status
       ansible.builtin.command:
         cmd: /usr/local/sbin/motion-levels-venue-containers status
       changed_when: false
-      when: motion_levels_container_activation.rc == 0
+      when: "' activated' in motion_levels_container_activation.stdout"
 
   handlers:
     - name: Reload systemd
