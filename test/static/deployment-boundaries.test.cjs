@@ -77,6 +77,7 @@ test("venue release activation is automated, idle-gated, and rollback-aware", ()
   const service = readRepoFile("deploy/motionlevels-pc/motion-levels-venue-containers.service");
   const playbook = readRepoFile("ansible/playbooks/venue-containers.yml");
   const makefile = readRepoFile("Makefile");
+  const ciWorkflow = readRepoFile(".github/workflows/ci.yml");
   const imagesWorkflow = readRepoFile(".github/workflows/images.yml");
   const productionWorkflow = readRepoFile(".github/workflows/deploy-production.yml");
   const reconcileWorkflow = readRepoFile(".github/workflows/reconcile-deployment.yml");
@@ -124,9 +125,14 @@ test("venue release activation is automated, idle-gated, and rollback-aware", ()
   assert.doesNotMatch(makefile, /deploy-motionlevels-1-legacy/);
   assert.match(imagesWorkflow, /scripts\/request-venue-deployment\.sh/);
   assert.doesNotMatch(imagesWorkflow, /deploy-production:|VENUE_AUTO_DEPLOY_TOKEN/);
+  assert.match(ciWorkflow, /gh workflow run images\.yml --ref main -f release_sha="\$RELEASE_SHA"/);
+  assert.match(imagesWorkflow, /workflow_dispatch:[\s\S]*?release_sha:/);
+  assert.match(imagesWorkflow, /RELEASE_SHA: \$\{\{ inputs\.release_sha \|\| github\.event\.workflow_run\.head_sha \}\}/);
+  assert.match(imagesWorkflow, /gh workflow run deploy-production\.yml --ref main -f venue_revision="\$RELEASE_SHA"/);
   assert.match(productionWorkflow, /workflows:[\s\S]*?- Container images[\s\S]*?types:[\s\S]*?- completed/);
+  assert.match(productionWorkflow, /workflow_dispatch:[\s\S]*?venue_revision:/);
   assert.match(productionWorkflow, /github\.event\.workflow_run\.conclusion == 'success'/);
-  assert.match(productionWorkflow, /VENUE_DEPLOY_REVISION: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
+  assert.match(productionWorkflow, /VENUE_DEPLOY_REVISION: \$\{\{ inputs\.venue_revision \|\| github\.event\.workflow_run\.head_sha \}\}/);
   assert.match(productionWorkflow, /scripts\/request-venue-deployment\.sh/);
   assert.match(reconcileWorkflow, /cron: "\*\/15 \* \* \* \*"/);
   assert.match(

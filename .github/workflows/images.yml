@@ -8,25 +8,33 @@ on:
       - completed
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact CI-verified venue revision to publish
+        required: true
+        type: string
 
 permissions:
+  actions: write
   contents: read
 
 concurrency:
-  group: images-${{ github.event.workflow_run.head_sha }}
+  group: images-${{ inputs.release_sha || github.event.workflow_run.head_sha }}
   cancel-in-progress: false
 
 jobs:
   validate-venue:
     name: Validate venue confinement manifests
     if: >-
-      (github.event.workflow_run.event == 'push' ||
-       github.event.workflow_run.event == 'workflow_dispatch') &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main'
+      github.event_name == 'workflow_dispatch' ||
+      ((github.event.workflow_run.event == 'push' ||
+        github.event.workflow_run.event == 'workflow_dispatch') &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ${{ vars.CI_RUNNER_LABEL }}
     env:
-      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+      RELEASE_SHA: ${{ inputs.release_sha || github.event.workflow_run.head_sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -117,7 +125,7 @@ jobs:
       contents: read
       packages: read
     env:
-      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+      RELEASE_SHA: ${{ inputs.release_sha || github.event.workflow_run.head_sha }}
       RELEASE_IMAGES: |
         ghcr.io/motionlevels/motion-levels-venue-bundle
         ghcr.io/motionlevels/motion-levels-venue-engine
@@ -189,7 +197,7 @@ jobs:
       contents: read
       packages: write
     env:
-      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+      RELEASE_SHA: ${{ inputs.release_sha || github.event.workflow_run.head_sha }}
     strategy:
       fail-fast: false
       matrix:
@@ -254,3 +262,23 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
           provenance: mode=max
           sbom: true
+
+  trigger-deployment:
+    name: Continue dispatched release with production deployment
+    if: >-
+      always() &&
+      github.event_name == 'workflow_dispatch' &&
+      needs.validate-venue.result == 'success' &&
+      needs.image-preflight.result == 'success' &&
+      (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    needs:
+      - validate-venue
+      - image-preflight
+      - publish
+    runs-on: ${{ vars.CI_RUNNER_LABEL }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_SHA: ${{ inputs.release_sha }}
+    steps:
+      - name: Dispatch exact production deployment
+        run: gh workflow run deploy-production.yml --ref main -f venue_revision="$RELEASE_SHA"

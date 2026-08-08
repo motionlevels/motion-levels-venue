@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: read
 
 concurrency:
@@ -114,3 +115,18 @@ jobs:
       - name: Run checks
         working-directory: ${{ matrix.working-directory }}
         run: ${{ matrix.commands }}
+
+  trigger-images:
+    name: Continue dispatched release with immutable images
+    if: github.event_name == 'workflow_dispatch' && github.ref_name == 'main'
+    needs:
+      - static
+      - go
+      - node
+    runs-on: ${{ vars.CI_RUNNER_LABEL }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_SHA: ${{ github.sha }}
+    steps:
+      - name: Dispatch exact release images
+        run: gh workflow run images.yml --ref main -f release_sha="$RELEASE_SHA"
