@@ -12,7 +12,7 @@ test("new games load their revision-matched display while legacy games retain th
   assert.match(displaySource, /encodeURIComponent\(revision\)\}\/display\/display\.js/u);
   assert.match(displaySource, /pendingRuntime\?\.revision === revision/u);
   assert.match(displaySource, /pendingRuntime\?\.script\.remove\(\)/u);
-  assert.match(displaySource, /mountedRuntime\?\.unmount\(host\)/u);
+  assert.match(displaySource, /safelyUnmount\(mountedRuntime, host\)/u);
   assert.match(displaySource, /runtimeRetryDelayMillis\(attempt\)/u);
   assert.match(displaySource, /motion-levels-games-display-fallback/u);
 });
@@ -28,4 +28,5 @@ test("the kiosk reports the rendered revision, feed, paint, and viewport to the 
   assert.match(appSource, /feedTransport: feedTransport\.current/u);
   assert.match(appSource, /viewportWidth:/u);
   assert.match(clientSource, /\/api\/display-client/u);
+  assert.match(appSource, /!telemetryEnabled/u);
 });

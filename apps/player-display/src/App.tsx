@@ -4,7 +4,7 @@ import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./ap
 import { reportDisplayClient } from "./displayClient";
 import { createCoalescer, isFeedStalled } from "./displayFeed";
 import { challengeMode, heartMeterSlotCount, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeLabel, levelDisplayTimeMillis, levelHeartMeterModel } from "./displayMetrics";
-import type { GamesDisplayRenderState } from "./displayRuntime";
+import { shouldReportDisplayClient, type GamesDisplayRenderState } from "./displayRuntime";
 import { colorCSS, colorRGB, difficultyLabelES, formatClock, gameTitleES, levelLabelES, phaseLabel, playerLabelES } from "./utils";
 import { MotionLevelsGamesDisplay } from "./MotionLevelsGamesDisplay";
 
@@ -54,6 +54,7 @@ function isTeamScoreGame(status: Pick<DisplayStatus, "currentGame" | "label" | "
 export default function App() {
   const options = useMemo(() => displayOptions(), []);
   const demoStatus = useMemo(() => demoDisplayStatus(options), [options]);
+  const telemetryEnabled = useMemo(() => shouldReportDisplayClient(window.location.pathname), []);
   const [status, setStatus] = useState<DisplayStatus>(emptyStatus);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState("");
@@ -194,7 +195,7 @@ export default function App() {
   }, [effectiveRenderState.status, liveStatus]);
 
   useEffect(() => {
-    if (demoStatus) return;
+    if (demoStatus || !telemetryEnabled) return;
     let cancelled = false;
     const send = () => {
       if (cancelled) return;
@@ -224,7 +225,7 @@ export default function App() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [demoStatus, effectiveRenderState.attempt, effectiveRenderState.error, effectiveRenderState.expectedRevision, effectiveRenderState.loadedRevision, effectiveRenderState.status, liveConnected, liveError, liveStatus.currentGame]);
+  }, [demoStatus, effectiveRenderState.attempt, effectiveRenderState.error, effectiveRenderState.expectedRevision, effectiveRenderState.loadedRevision, effectiveRenderState.status, liveConnected, liveError, liveStatus.currentGame, telemetryEnabled]);
 
   if (gamesDisplayActive) {
     return (

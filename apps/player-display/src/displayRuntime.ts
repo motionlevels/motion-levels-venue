@@ -18,3 +18,7 @@ export function displayErrorMessage(reason: unknown): string {
   if (typeof reason === "string" && reason.trim()) return reason.trim();
   return "No se pudo cargar la pantalla del juego";
 }
+
+export function shouldReportDisplayClient(pathname: string): boolean {
+  return !/^\/gateways\/[^/]+\/display(?:\/|$)/u.test(pathname);
+}

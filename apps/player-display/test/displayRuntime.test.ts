@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { displayErrorMessage, runtimeRetryDelayMillis } from "../src/displayRuntime.ts";
+import { displayErrorMessage, runtimeRetryDelayMillis, shouldReportDisplayClient } from "../src/displayRuntime.ts";
 
 describe("runtimeRetryDelayMillis", () => {
   it("backs off quickly and caps retries at ten seconds", () => {
@@ -21,5 +21,14 @@ describe("displayErrorMessage", () => {
     assert.equal(displayErrorMessage(new Error("fallo de carga")), "fallo de carga");
     assert.equal(displayErrorMessage(" revisión incorrecta "), "revisión incorrecta");
     assert.equal(displayErrorMessage(null), "No se pudo cargar la pantalla del juego");
+  });
+});
+
+describe("shouldReportDisplayClient", () => {
+  it("keeps remote previews from overwriting the physical kiosk heartbeat", () => {
+    assert.equal(shouldReportDisplayClient("/display/"), true);
+    assert.equal(shouldReportDisplayClient("/"), true);
+    assert.equal(shouldReportDisplayClient("/gateways/venue-test/display"), false);
+    assert.equal(shouldReportDisplayClient("/gateways/venue-test/display/"), false);
   });
 });
