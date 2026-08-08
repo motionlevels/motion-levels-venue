@@ -2,16 +2,18 @@
   "schema": "motion-levels-games-bundle-v1",
   "contractVersion": 1,
   "runnerProtocolVersion": 1,
-  "sourceRevision": "fc0fd62e2b1240e6cd36d58c97df0615bcc90b12",
+  "sourceRevision": "7e70662c66883d6a03657859635cacd741741302",
   "sdkFps": 50,
-  "artifactDigest": "797462faac4f3c2f609ebcbb5093c4fecfa10f5d89624b884640bb6ffeef82ee",
+  "artifactDigest": "d3bb03a9aad26bf7e456fb1215bf7f14bffdfd3b186e222fb5147ff146bf0b9a",
   "runtime": {
     "entry": "runtime/runner.mjs",
     "games": [
       "arkanoid",
       "cruce-galactico",
       "duelo",
+      "equilibrio",
       "estela",
+      "guardianes",
       "lava",
       "memoria-v2",
       "memory-challenge",
@@ -30,7 +32,9 @@
       "arkanoid",
       "cruce-galactico",
       "duelo",
+      "equilibrio",
       "estela",
+      "guardianes",
       "lava",
       "memoria-v2",
       "memory-challenge",
@@ -47,13 +51,13 @@
   "files": [
     {
       "path": "catalog.json",
-      "sha256": "469bdb6756e257ab46a6bd53154009846e37697089717e156f7edccadf17bc5f",
-      "bytes": 38392
+      "sha256": "6e4546088ab994fb184e1ca6b615cad1913125a23259a8cbef80a129432cd3bf",
+      "bytes": 43275
     },
     {
       "path": "display/display.js",
-      "sha256": "1c1b1dff50eb9f480a39954ee795e7881a2ec22600e303751fab41b03123279a",
-      "bytes": 487570
+      "sha256": "d2a751745860d0bddb0a9c20c4402694697b719611a5581db2b24ce29f0700e7",
+      "bytes": 521356
     },
     {
       "path": "media/arkanoid/arkanoid-player-display-animation.webp",
@@ -146,6 +150,36 @@
       "bytes": 1892
     },
     {
+      "path": "media/equilibrio/equilibrio-player-display-animation.webp",
+      "sha256": "f3211a8789ec98595afba51dae2bda8228841a9ea80dd7293141f9d8b43092d2",
+      "bytes": 52866
+    },
+    {
+      "path": "media/equilibrio/equilibrio-player-display.webp",
+      "sha256": "e9ef3403b1c5ee4258e75bc146086269dc6865640170f97f44557ad2e56288ab",
+      "bytes": 20712
+    },
+    {
+      "path": "media/equilibrio/equilibrio-preview.webp",
+      "sha256": "3fd7d004429a32629ee06376593093a3797ffa5e3a7348a447ad3481b0ddaefd",
+      "bytes": 90862
+    },
+    {
+      "path": "media/equilibrio/equilibrio-thumbnail-small.webp",
+      "sha256": "c63c85b4802a95e5e6ba46c7c3d52e22ae4ab21f5fc03633915400e151709540",
+      "bytes": 892
+    },
+    {
+      "path": "media/equilibrio/equilibrio-thumbnail.webp",
+      "sha256": "6c28d813115c70b4aa634f32dfffcce71176e3dfbc73fc65d9bec68dee181e7b",
+      "bytes": 11302
+    },
+    {
+      "path": "media/equilibrio/metadata.json",
+      "sha256": "5a8110402e24bec87b1853f34a7b4c217ce44afddcb9b9b4d8212965ea136947",
+      "bytes": 2127
+    },
+    {
       "path": "media/estela/estela-player-display-animation.webp",
       "sha256": "5cc2e6da1deaeb842e38210593fb4c84371dae929cbdc77b085240f9e1f68e51",
       "bytes": 10908
@@ -174,6 +208,36 @@
       "path": "media/estela/metadata.json",
       "sha256": "ffee57b64517d328ddc08f5a872c0e099db3d1055b5a8cc2b864e24c258faaa1",
       "bytes": 1893
+    },
+    {
+      "path": "media/guardianes/guardianes-player-display-animation.webp",
+      "sha256": "1f6ae6a2993b9521189128bf67bceae09032f498f20be88d31d105ebea3eec06",
+      "bytes": 114202
+    },
+    {
+      "path": "media/guardianes/guardianes-player-display.webp",
+      "sha256": "cec81b653fc64a7f32bd36ebc738e741f90156c50eb9be5afaa6872626ae1074",
+      "bytes": 24272
+    },
+    {
+      "path": "media/guardianes/guardianes-preview.webp",
+      "sha256": "8eb2f1adee1fa31d2a90c238088953325c8c1a878a5fedeb0eb097352d4e72f8",
+      "bytes": 20852
+    },
+    {
+      "path": "media/guardianes/guardianes-thumbnail-small.webp",
+      "sha256": "fdddffb2d7202cff92a5ba87cebb315df8f230e79998ae3b2ef9c3c5dccf678a",
+      "bytes": 834
+    },
+    {
+      "path": "media/guardianes/guardianes-thumbnail.webp",
+      "sha256": "ffc883345b3fa3e2ef4ba1fc4ff44d441f88fd36887ed79d8717b3d5312d641b",
+      "bytes": 10040
+    },
+    {
+      "path": "media/guardianes/metadata.json",
+      "sha256": "45a944a7884edb7edd4f67f0117d000cf2848fec65a5cb3c9722e363824d64d7",
+      "bytes": 1826
     },
     {
       "path": "media/hello-world/hello-world-player-display-animation.webp",
@@ -567,8 +631,8 @@
     },
     {
       "path": "runtime/runner.mjs",
-      "sha256": "f05e7903c7ccb90beb773a6b7a075c1addc55cc2a40d42ae8df9017a0fb51d2f",
-      "bytes": 488881
+      "sha256": "2635551fc1feee21e04e533712c05633c910d1c3dca288b32f08c7e65faca7e1",
+      "bytes": 540161
     }
   ]
 }

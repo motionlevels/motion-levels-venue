@@ -305,6 +305,114 @@
     }
   },
   {
+    "id": "equilibrio",
+    "label": "Equilibrio",
+    "description": "Coordina dos lados del suelo, ocupa las plataformas simétricas y mantén la balanza estable.",
+    "availability": {
+      "development": true,
+      "production": true
+    },
+    "catalog": {
+      "category": "team",
+      "color": "#5fff9e",
+      "durationLabel": "70s",
+      "modeLabel": "Cooperativo",
+      "audioLabel": "Efectos",
+      "rules": [
+        "Entra en las dos zonas centrales para iniciar",
+        "Ocupa a la vez las dos plataformas iluminadas",
+        "Mantén el equilibrio hasta completar cada nivel",
+        "Evita las baldosas oscuras para conservar la estabilidad"
+      ]
+    },
+    "players": {
+      "allowAny": true,
+      "min": 2,
+      "max": 8
+    },
+    "start": {
+      "mode": "player-ready",
+      "countdownMillis": 2000,
+      "releaseGraceMillis": 1500
+    },
+    "config": {
+      "difficulty": {
+        "default": "medium",
+        "options": [
+          "easy",
+          "medium",
+          "hard",
+          "expert"
+        ]
+      }
+    },
+    "defaultDurationMillis": 70000,
+    "display": {
+      "entry": "./display"
+    },
+    "preview": {
+      "seed": 137,
+      "playerCount": 0,
+      "difficulty": "medium",
+      "actions": [
+        {
+          "atMillis": 100,
+          "type": "press",
+          "x": 4,
+          "y": 16
+        },
+        {
+          "atMillis": 180,
+          "type": "press",
+          "x": 11,
+          "y": 16
+        },
+        {
+          "atMillis": 2250,
+          "type": "release",
+          "x": 4,
+          "y": 16
+        },
+        {
+          "atMillis": 2260,
+          "type": "release",
+          "x": 11,
+          "y": 16
+        },
+        {
+          "atMillis": 2400,
+          "type": "press",
+          "x": 3,
+          "y": 6
+        },
+        {
+          "atMillis": 2480,
+          "type": "press",
+          "x": 12,
+          "y": 6
+        }
+      ],
+      "captureStartMillis": 2650,
+      "frameCount": 24,
+      "frameIntervalMillis": 100
+    },
+    "tags": [
+      "equilibrio",
+      "cooperativo",
+      "coordinacion",
+      "multijugador",
+      "typescript"
+    ],
+    "engineGame": "motion-levels-games:equilibrio",
+    "media": {
+      "thumbnailSmall": "media/equilibrio/equilibrio-thumbnail-small.webp",
+      "thumbnail": "media/equilibrio/equilibrio-thumbnail.webp",
+      "animation": "media/equilibrio/equilibrio-preview.webp",
+      "playerDisplay": "media/equilibrio/equilibrio-player-display.webp",
+      "playerDisplayAnimation": "media/equilibrio/equilibrio-player-display-animation.webp"
+    }
+  },
+  {
     "id": "estela",
     "label": "Estela",
     "description": "Dibuja una estela de luz, evita todos los rastros y sé el último jugador en pie.",
@@ -395,6 +503,96 @@
       "animation": "media/estela/estela-preview.webp",
       "playerDisplay": "media/estela/estela-player-display.webp",
       "playerDisplayAnimation": "media/estela/estela-player-display-animation.webp"
+    }
+  },
+  {
+    "id": "guardianes",
+    "label": "Guardianes",
+    "description": "Activa los cuatro escudos del suelo y protege el núcleo de una oleada de amenazas.",
+    "availability": {
+      "development": true,
+      "production": true
+    },
+    "catalog": {
+      "category": "arcade",
+      "color": "#35d7ff",
+      "durationLabel": "42s",
+      "modeLabel": "Defensa cooperativa",
+      "audioLabel": "Efectos",
+      "rules": [
+        "Entra en el núcleo central para iniciar",
+        "Observa por qué carril baja cada amenaza",
+        "Pisa el escudo del mismo color antes del impacto",
+        "Protege las cuatro vidas del núcleo hasta el final"
+      ]
+    },
+    "players": {
+      "allowAny": true,
+      "min": 1,
+      "max": 8
+    },
+    "start": {
+      "mode": "player-ready",
+      "countdownMillis": 2000,
+      "releaseGraceMillis": 1200
+    },
+    "config": {
+      "difficulty": {
+        "default": "medium",
+        "options": [
+          "easy",
+          "medium",
+          "hard",
+          "expert"
+        ]
+      }
+    },
+    "defaultDurationMillis": 42000,
+    "display": {
+      "entry": "./display"
+    },
+    "preview": {
+      "seed": 137,
+      "playerCount": 0,
+      "difficulty": "medium",
+      "actions": [
+        {
+          "atMillis": 100,
+          "type": "press",
+          "x": 8,
+          "y": 16
+        },
+        {
+          "atMillis": 2150,
+          "type": "release",
+          "x": 8,
+          "y": 16
+        },
+        {
+          "atMillis": 3100,
+          "type": "press",
+          "x": 2,
+          "y": 28
+        }
+      ],
+      "captureStartMillis": 3300,
+      "frameCount": 28,
+      "frameIntervalMillis": 100
+    },
+    "tags": [
+      "defensa",
+      "cooperativo",
+      "arcade",
+      "multijugador",
+      "typescript"
+    ],
+    "engineGame": "motion-levels-games:guardianes",
+    "media": {
+      "thumbnailSmall": "media/guardianes/guardianes-thumbnail-small.webp",
+      "thumbnail": "media/guardianes/guardianes-thumbnail.webp",
+      "animation": "media/guardianes/guardianes-preview.webp",
+      "playerDisplay": "media/guardianes/guardianes-player-display.webp",
+      "playerDisplayAnimation": "media/guardianes/guardianes-player-display-animation.webp"
     }
   },
   {
