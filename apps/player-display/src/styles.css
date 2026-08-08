@@ -39,14 +39,12 @@
   position: relative;
 }
 
-.motion-levels-games-display-error {
-  align-items: center;
-  background: #05070a;
-  color: #f8fafc;
-  display: flex;
-  font-size: 32px;
+.motion-levels-games-display-root.is-hidden {
+  visibility: hidden;
+}
+
+.motion-levels-games-display-fallback {
   inset: 0;
-  justify-content: center;
   position: absolute;
 }
 

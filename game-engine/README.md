@@ -62,6 +62,25 @@ the game-engine display stream:
 http://127.0.0.1:4102/api/display/events
 ```
 
+Every five seconds the browser also reports what it actually rendered to:
+
+```txt
+POST http://127.0.0.1:4102/api/display-client
+GET  http://127.0.0.1:4102/api/display-client
+```
+
+The report includes the current game, expected and loaded bundle revisions,
+render/fallback state, feed transport, last feed and paint timestamps, and the
+effective viewport. The engine marks a report healthy only while it is fresh,
+connected, rendering successfully, and matched to the current game and exact
+revision. The same `displayClient` object is exposed by `/api/status` and
+`/api/health` for venue monitoring. A missing or stale display is reported but
+does not make the engine healthcheck fail, because the engine must remain
+available while a physical display is intentionally disconnected.
+
+Successful heartbeats are deliberately excluded from replay API-interaction
+records; malformed heartbeat requests are still recorded.
+
 The display app is visual-only for now. Low-latency music and cue playback stay
 owned by the Go game-engine process and use the game-engine PC's default audio
 output, usually the HDMI TV.

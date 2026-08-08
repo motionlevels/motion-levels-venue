@@ -81,6 +81,9 @@ type gameRuntime struct {
 	menuStateVersion  uint64
 
 	framePerf framePerf
+
+	displayClient           displayClientReport
+	displayClientReceivedAt time.Time
 }
 
 type ambientTouch struct {
@@ -280,6 +283,7 @@ type runtimeStatus struct {
 	SourceKind               string                       `json:"sourceKind,omitempty"`
 	SourceRevision           string                       `json:"sourceRevision,omitempty"`
 	GamesRunner              any                          `json:"gamesRunner,omitempty"`
+	DisplayClient            displayClientStatus          `json:"displayClient"`
 	VenueSessionID           string                       `json:"venueSessionId"`
 	Label                    string                       `json:"label"`
 	Difficulty               string                       `json:"difficulty"`
@@ -1016,6 +1020,7 @@ func (r *gameRuntime) Status() runtimeStatus {
 		SourceKind:               display.SourceKind,
 		SourceRevision:           display.SourceRevision,
 		GamesRunner:              gamesRunner,
+		DisplayClient:            r.DisplayClientStatus(now),
 		VenueSessionID:           venueSessionID,
 		Label:                    display.Label,
 		Difficulty:               display.Difficulty,

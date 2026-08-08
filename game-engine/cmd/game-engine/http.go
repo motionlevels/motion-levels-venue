@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -113,6 +114,33 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			return
 		}
 		writeJSON(w, runtime.DisplayStatus(time.Now()))
+	})
+	mux.HandleFunc("/api/display-client", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, runtime.DisplayClientStatus(time.Now()))
+		case http.MethodPost:
+			r.Body = http.MaxBytesReader(w, r.Body, 16_384)
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			var report displayClientReport
+			if err := decoder.Decode(&report); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if err := decoder.Decode(&struct{}{}); err != io.EOF {
+				http.Error(w, "request body must contain one JSON object", http.StatusBadRequest)
+				return
+			}
+			status, err := runtime.UpdateDisplayClient(report, time.Now())
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			writeJSON(w, status)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	})
 	mux.HandleFunc("/api/animation-preview", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -503,7 +531,7 @@ func withAPILogging(runtime *gameRuntime, next http.Handler) http.Handler {
 		if status == 0 {
 			status = http.StatusOK
 		}
-		if runtime != nil {
+		if runtime != nil && (r.URL.Path != "/api/display-client" || status >= http.StatusBadRequest) {
 			runtime.RecordAPIInteraction(r.Method, r.URL.Path, r.RemoteAddr, status, started)
 		}
 	})
@@ -527,6 +555,7 @@ func writeHealth(w http.ResponseWriter, r *http.Request, runtime *gameRuntime) {
 	status := http.StatusOK
 	payload := map[string]any{"status": "ok"}
 	if runtime != nil {
+		payload["displayClient"] = runtime.DisplayClientStatus(time.Now())
 		runtime.mu.RLock()
 		game := runtime.game
 		runtime.mu.RUnlock()

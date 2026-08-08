@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { DisplayStatus } from "./api";
+import { displayErrorMessage, runtimeRetryDelayMillis, type GamesDisplayRenderState } from "./displayRuntime";
 
 type GamesDisplayRuntime = {
   revision: string;
@@ -13,6 +14,7 @@ type GamesDisplayInput = {
   snapshot: Record<string, unknown>;
   frame?: DisplayStatus["frame"];
   paused: boolean;
+  onError?: (reason: unknown) => void;
 };
 
 declare global {
@@ -21,9 +23,15 @@ declare global {
   }
 }
 
-export function MotionLevelsGamesDisplay({ status }: { status: DisplayStatus }) {
+type MotionLevelsGamesDisplayProps = {
+  status: DisplayStatus;
+  fallback: ReactNode;
+  onStateChange: (state: GamesDisplayRenderState) => void;
+};
+
+export function MotionLevelsGamesDisplay({ status, fallback, onStateChange }: MotionLevelsGamesDisplayProps) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const [error, setError] = useState("");
+  const [renderState, setRenderState] = useState<GamesDisplayRenderState>(() => renderLoadingState(status.sourceRevision || ""));
   const revision = status.sourceRevision || "";
   const gameId = gameID(status);
 
@@ -31,47 +39,122 @@ export function MotionLevelsGamesDisplay({ status }: { status: DisplayStatus }) 
     const host = hostRef.current;
     if (!host || !revision || !status.gameSnapshot) return;
     let cancelled = false;
-    const input: GamesDisplayInput = {
-      gameId,
-      snapshot: status.gameSnapshot,
-      frame: status.frame,
-      paused: status.phase === "paused"
-    };
+    let retryHandle: number | null = null;
+    let mountedRuntime: GamesDisplayRuntime | null = null;
 
-    loadRuntime(revision)
-      .then((runtime) => {
+    const publish = (next: GamesDisplayRenderState) => {
+      if (cancelled) return;
+      setRenderState(next);
+      onStateChange(next);
+    };
+    const runtimeInput = (): GamesDisplayInput => ({
+      gameId,
+      snapshot: status.gameSnapshot as Record<string, unknown>,
+      frame: status.frame,
+      paused: status.phase === "paused",
+      onError: (reason) => {
         if (cancelled) return;
-        runtime.mount(host, input);
-        setError("");
-      })
-      .catch((reason) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "No se pudo cargar la pantalla del juego");
+        safelyUnmount(mountedRuntime, host);
+        mountedRuntime = null;
+        publish({
+          status: "error",
+          expectedRevision: revision,
+          loadedRevision: revision,
+          attempt: 0,
+          error: displayErrorMessage(reason),
+        });
+      },
+    });
+    const connect = (attempt: number, error = "") => {
+      publish({
+        status: attempt === 0 ? "loading" : "fallback",
+        expectedRevision: revision,
+        loadedRevision: "",
+        attempt,
+        error,
       });
+      const delay = runtimeRetryDelayMillis(attempt);
+      retryHandle = window.setTimeout(() => {
+        retryHandle = null;
+        loadRuntime(revision)
+          .then((runtime) => {
+            if (cancelled) return;
+            mountedRuntime = runtime;
+            runtime.mount(host, runtimeInput());
+            if (mountedRuntime !== runtime) return;
+            publish({ status: "ready", expectedRevision: revision, loadedRevision: runtime.revision, attempt, error: "" });
+          })
+          .catch((reason) => {
+            if (cancelled) return;
+            mountedRuntime = null;
+            connect(attempt + 1, displayErrorMessage(reason));
+          });
+      }, delay);
+    };
+    connect(0);
 
     return () => {
       cancelled = true;
-      window.MotionLevelsGamesDisplay?.unmount(host);
+      if (retryHandle !== null) window.clearTimeout(retryHandle);
+      safelyUnmount(mountedRuntime, host);
     };
-  }, [gameId, revision]);
+  }, [gameId, revision, onStateChange]);
 
   useEffect(() => {
     const host = hostRef.current;
     const runtime = window.MotionLevelsGamesDisplay;
-    if (!host || runtime?.revision !== revision || !status.gameSnapshot) return;
-    runtime.update(host, {
-      gameId,
-      snapshot: status.gameSnapshot,
-      frame: status.frame,
-      paused: status.phase === "paused"
-    });
-  }, [gameId, revision, status.frame, status.gameSnapshot, status.phase]);
+    if (!host || renderState.status !== "ready" || runtime?.revision !== revision || !status.gameSnapshot) return;
+    try {
+      runtime.update(host, {
+        gameId,
+        snapshot: status.gameSnapshot,
+        frame: status.frame,
+        paused: status.phase === "paused",
+        onError: (reason) => {
+          safelyUnmount(runtime, host);
+          const next = {
+            status: "error",
+            expectedRevision: revision,
+            loadedRevision: revision,
+            attempt: renderState.attempt,
+            error: displayErrorMessage(reason),
+          } satisfies GamesDisplayRenderState;
+          setRenderState(next);
+          onStateChange(next);
+        },
+      });
+    } catch (reason) {
+      safelyUnmount(runtime, host);
+      const next = {
+        status: "error",
+        expectedRevision: revision,
+        loadedRevision: revision,
+        attempt: renderState.attempt,
+        error: displayErrorMessage(reason),
+      } satisfies GamesDisplayRenderState;
+      setRenderState(next);
+      onStateChange(next);
+    }
+  }, [gameId, onStateChange, renderState.attempt, renderState.status, revision, status.frame, status.gameSnapshot, status.phase]);
 
   return (
     <main className="motion-levels-games-display-host">
-      <div ref={hostRef} className="motion-levels-games-display-root" />
-      {error ? <div className="motion-levels-games-display-error">{error}</div> : null}
+      <div ref={hostRef} className={`motion-levels-games-display-root ${renderState.status === "ready" ? "is-ready" : "is-hidden"}`} />
+      {renderState.status === "ready" ? null : <div className="motion-levels-games-display-fallback">{fallback}</div>}
     </main>
   );
+}
+
+function renderLoadingState(revision: string): GamesDisplayRenderState {
+  return { status: "loading", expectedRevision: revision, loadedRevision: "", attempt: 0, error: "" };
+}
+
+function safelyUnmount(runtime: GamesDisplayRuntime | null, host: Element): void {
+  try {
+    runtime?.unmount(host);
+  } catch {
+    host.replaceChildren();
+  }
 }
 
 function gameID(status: DisplayStatus) {
@@ -107,7 +190,10 @@ function loadRuntime(revision: string): Promise<GamesDisplayRuntime> {
   const clearPending = () => {
     if (pendingRuntime?.promise === promise) pendingRuntime = null;
   };
-  void promise.then(clearPending, clearPending);
+  void promise.then(clearPending, () => {
+    script.remove();
+    clearPending();
+  });
   return promise;
 }
 
