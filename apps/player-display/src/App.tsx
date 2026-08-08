@@ -1,8 +1,10 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./api";
+import { reportDisplayClient } from "./displayClient";
 import { createCoalescer, isFeedStalled } from "./displayFeed";
 import { challengeMode, heartMeterSlotCount, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeLabel, levelDisplayTimeMillis, levelHeartMeterModel } from "./displayMetrics";
+import { shouldReportDisplayClient, type GamesDisplayRenderState } from "./displayRuntime";
 import { colorCSS, colorRGB, difficultyLabelES, formatClock, gameTitleES, levelLabelES, phaseLabel, playerLabelES } from "./utils";
 import { MotionLevelsGamesDisplay } from "./MotionLevelsGamesDisplay";
 
@@ -12,6 +14,7 @@ import { MotionLevelsGamesDisplay } from "./MotionLevelsGamesDisplay";
 const FALLBACK_UPDATE_MS = 250;
 const STALL_MS = 750;
 const STREAM_RECONNECT_MS = 3000;
+const DISPLAY_HEARTBEAT_MS = 5000;
 
 const emptyStatus: DisplayStatus = {
   currentGame: "salvapantallas",
@@ -51,9 +54,21 @@ function isTeamScoreGame(status: Pick<DisplayStatus, "currentGame" | "label" | "
 export default function App() {
   const options = useMemo(() => displayOptions(), []);
   const demoStatus = useMemo(() => demoDisplayStatus(options), [options]);
+  const telemetryEnabled = useMemo(() => shouldReportDisplayClient(window.location.pathname), []);
   const [status, setStatus] = useState<DisplayStatus>(emptyStatus);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState("");
+  const [gamesRenderState, setGamesRenderState] = useState<GamesDisplayRenderState>({
+    status: "loading",
+    expectedRevision: "",
+    loadedRevision: "",
+    attempt: 0,
+    error: "",
+  });
+  const pageLoadedAt = useRef(Date.now());
+  const lastFeedAt = useRef(0);
+  const lastPaintAt = useRef(0);
+  const feedTransport = useRef<"eventsource" | "poll" | "none">("none");
 
   useEffect(() => {
     if (demoStatus) return;
@@ -76,9 +91,11 @@ export default function App() {
       },
     );
 
-    const accept = (next: DisplayStatus) => {
+    const accept = (next: DisplayStatus, transport: "eventsource" | "poll") => {
       if (cancelled) return;
       lastEventAt = monoNow();
+      lastFeedAt.current = Date.now();
+      feedTransport.current = transport;
       setConnected(true);
       setError("");
       coalescer.push(next);
@@ -86,7 +103,7 @@ export default function App() {
 
     const pollOnce = () => {
       fetchDisplayStatus()
-        .then(accept)
+        .then((next) => accept(next, "poll"))
         .catch((err) => {
           if (cancelled) return;
           setConnected(false);
@@ -96,7 +113,7 @@ export default function App() {
 
     const onDisplay = (event: Event) => {
       try {
-        accept(JSON.parse((event as MessageEvent).data) as DisplayStatus);
+        accept(JSON.parse((event as MessageEvent).data) as DisplayStatus, "eventsource");
       } catch {
         /* ignore malformed frame */
       }
@@ -151,9 +168,73 @@ export default function App() {
   const liveStatus = demoStatus || status;
   const liveConnected = demoStatus ? true : connected;
   const liveError = demoStatus ? "" : error;
+  const gamesDisplayActive = liveStatus.sourceKind === "motion_levels_games" && Boolean(liveStatus.sourceRevision && liveStatus.gameSnapshot);
+  const effectiveRenderState: GamesDisplayRenderState = gamesDisplayActive
+    ? gamesRenderState.expectedRevision === liveStatus.sourceRevision
+      ? gamesRenderState
+      : {
+          status: "loading",
+          expectedRevision: liveStatus.sourceRevision || "",
+          loadedRevision: "",
+          attempt: 0,
+          error: "",
+        }
+    : {
+        status: "ready",
+        expectedRevision: "",
+        loadedRevision: "",
+        attempt: 0,
+        error: "",
+      };
 
-  if (liveStatus.sourceKind === "motion_levels_games" && liveStatus.sourceRevision && liveStatus.gameSnapshot) {
-    return <MotionLevelsGamesDisplay status={liveStatus} />;
+  useEffect(() => {
+    const handle = window.requestAnimationFrame(() => {
+      lastPaintAt.current = Date.now();
+    });
+    return () => window.cancelAnimationFrame(handle);
+  }, [effectiveRenderState.status, liveStatus]);
+
+  useEffect(() => {
+    if (demoStatus || !telemetryEnabled) return;
+    let cancelled = false;
+    const send = () => {
+      if (cancelled) return;
+      void reportDisplayClient({
+        clientId: "player-display",
+        currentGame: liveStatus.currentGame,
+        expectedRevision: effectiveRenderState.expectedRevision,
+        loadedRevision: effectiveRenderState.loadedRevision,
+        renderStatus: effectiveRenderState.status,
+        renderAttempt: effectiveRenderState.attempt,
+        connected: liveConnected,
+        feedTransport: feedTransport.current,
+        lastFeedUnixMillis: lastFeedAt.current,
+        lastPaintUnixMillis: lastPaintAt.current,
+        pageLoadedUnixMillis: pageLoadedAt.current,
+        viewportWidth: Math.round(window.visualViewport?.width || window.innerWidth || 0),
+        viewportHeight: Math.round(window.visualViewport?.height || window.innerHeight || 0),
+        devicePixelRatio: window.devicePixelRatio || 1,
+        error: effectiveRenderState.error || liveError,
+      }).catch(() => {
+        // Telemetry must never replace or disturb the player-facing display.
+      });
+    };
+    send();
+    const interval = window.setInterval(send, DISPLAY_HEARTBEAT_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [demoStatus, effectiveRenderState.attempt, effectiveRenderState.error, effectiveRenderState.expectedRevision, effectiveRenderState.loadedRevision, effectiveRenderState.status, liveConnected, liveError, liveStatus.currentGame, telemetryEnabled]);
+
+  if (gamesDisplayActive) {
+    return (
+      <MotionLevelsGamesDisplay
+        status={liveStatus}
+        fallback={<ArcadeDisplay status={liveStatus} connected={liveConnected} error={liveError} />}
+        onStateChange={setGamesRenderState}
+      />
+    );
   }
 
   if (isScreensaverDisplay(liveStatus)) {

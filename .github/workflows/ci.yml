@@ -73,7 +73,10 @@ jobs:
           - name: player-display
             working-directory: apps/player-display
             lockfile: apps/player-display/package-lock.json
-            commands: npm run build
+            commands: |
+              npm test
+              npm run build
+              npm run test:e2e
           - name: player-menu
             working-directory: apps/player-menu
             lockfile: apps/player-menu/package-lock.json
@@ -102,6 +105,11 @@ jobs:
 
       - name: Install shared floor-view dependencies
         run: npm ci --prefix packages/floor-view
+
+      - name: Install Chromium for player-display E2E tests
+        if: matrix.name == 'player-display'
+        working-directory: apps/player-display
+        run: npx playwright install --with-deps chromium
 
       - name: Run checks
         working-directory: ${{ matrix.working-directory }}
