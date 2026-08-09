@@ -1,0 +1,91 @@
+{
+  "gameId": "suelo-seguro",
+  "scenario": {
+    "seed": 137,
+    "playerCount": 4,
+    "difficulty": "medium",
+    "actions": [
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "atMillis": 180,
+        "type": "press",
+        "x": 13,
+        "y": 1
+      },
+      {
+        "atMillis": 260,
+        "type": "press",
+        "x": 13,
+        "y": 29
+      },
+      {
+        "atMillis": 340,
+        "type": "press",
+        "x": 1,
+        "y": 29
+      },
+      {
+        "atMillis": 2450,
+        "type": "release",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "atMillis": 2500,
+        "type": "press",
+        "x": 5,
+        "y": 19
+      }
+    ],
+    "captureStartMillis": 2700,
+    "frameCount": 30,
+    "frameIntervalMillis": 100
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "suelo-seguro-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1044,
+      "sha256": "89fac322713615ad6deec25afc07163611bc5f5a36ef863ffc2a0e60ff5c8c9d"
+    },
+    "thumbnail": {
+      "file": "suelo-seguro-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 8888,
+      "sha256": "4db1dcfc68d7ed0be933403abafe092466ca238ca5a557011e6f791621093562"
+    },
+    "animation": {
+      "file": "suelo-seguro-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 23856,
+      "sha256": "bccb9a46314547d6676e180662cceb52f0f4fd02f201a81f890990ca32752556"
+    },
+    "playerDisplay": {
+      "file": "suelo-seguro-player-display.webp",
+      "width": 1280,
+      "height": 720,
+      "mimeType": "image/webp",
+      "bytes": 36524,
+      "sha256": "5815b4b439260f0873ae5b29311ab5a3e894dd80b5a2b80dc72ac78a6ba98a69"
+    },
+    "playerDisplayAnimation": {
+      "file": "suelo-seguro-player-display-animation.webp",
+      "width": 640,
+      "height": 360,
+      "mimeType": "image/webp",
+      "bytes": 183754,
+      "sha256": "ac5148d76d94f6356d7248f0ca1cffb8d4f4cb1f21dbe13aa3f4f32ba0350f15"
+    }
+  }
+}
