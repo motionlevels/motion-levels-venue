@@ -2,9 +2,9 @@
   "schema": "motion-levels-games-bundle-v1",
   "contractVersion": 1,
   "runnerProtocolVersion": 1,
-  "sourceRevision": "7e70662c66883d6a03657859635cacd741741302",
+  "sourceRevision": "d3f9dcde942bbea53d6c6b1acf15b9bcc96a6a40",
   "sdkFps": 50,
-  "artifactDigest": "d3bb03a9aad26bf7e456fb1215bf7f14bffdfd3b186e222fb5147ff146bf0b9a",
+  "artifactDigest": "9a4043d12155e53aa06d440291b013805c828adf0ed190348c2f2d31e859db48",
   "runtime": {
     "entry": "runtime/runner.mjs",
     "games": [
@@ -22,6 +22,7 @@
       "ping-pong-v2",
       "pulso",
       "saltos",
+      "suelo-seguro",
       "tetris",
       "whack-a-mole"
     ]
@@ -43,6 +44,7 @@
       "ping-pong-v2",
       "pulso",
       "saltos",
+      "suelo-seguro",
       "tetris",
       "whack-a-mole"
     ]
@@ -51,13 +53,13 @@
   "files": [
     {
       "path": "catalog.json",
-      "sha256": "6e4546088ab994fb184e1ca6b615cad1913125a23259a8cbef80a129432cd3bf",
-      "bytes": 43275
+      "sha256": "96245dbb9c736f6b2f592aeafe72dd7966c9ed4d27fd3c2ec73cedbe7eb70194",
+      "bytes": 45887
     },
     {
       "path": "display/display.js",
-      "sha256": "d2a751745860d0bddb0a9c20c4402694697b719611a5581db2b24ce29f0700e7",
-      "bytes": 521356
+      "sha256": "b566a3597c4d4748b68159849fa7e106bf15823c55507fc98546db681b7f5650",
+      "bytes": 545785
     },
     {
       "path": "media/arkanoid/arkanoid-player-display-animation.webp",
@@ -540,6 +542,36 @@
       "bytes": 26752
     },
     {
+      "path": "media/suelo-seguro/metadata.json",
+      "sha256": "a47e75da280087a340e500edfd65a8b07b3416d6549c9f85f3840b4a84211d09",
+      "bytes": 2033
+    },
+    {
+      "path": "media/suelo-seguro/suelo-seguro-player-display-animation.webp",
+      "sha256": "03b16aae9cc6926c3efc8cad9c3a11855e134d1c80a81a9a4f33020e9f908a2b",
+      "bytes": 114004
+    },
+    {
+      "path": "media/suelo-seguro/suelo-seguro-player-display.webp",
+      "sha256": "522a01498a302a22f028695f7b6940575f5c5953702eff883c49f4c4c34c09cd",
+      "bytes": 33072
+    },
+    {
+      "path": "media/suelo-seguro/suelo-seguro-preview.webp",
+      "sha256": "531fa497f6ceaed8ee542242486202dbf8fc8d444c2f75b0d69773a6ea4d083b",
+      "bytes": 10786
+    },
+    {
+      "path": "media/suelo-seguro/suelo-seguro-thumbnail-small.webp",
+      "sha256": "7246c43c99a6fd51c8b394a41576e84c1f151f02670c20b82121afa579e1af1b",
+      "bytes": 748
+    },
+    {
+      "path": "media/suelo-seguro/suelo-seguro-thumbnail.webp",
+      "sha256": "000b90c9d61dacfddc977c1597cda4c95b49f6a74fb33350fbca0f8c70076f1e",
+      "bytes": 7150
+    },
+    {
       "path": "media/tetris/metadata.json",
       "sha256": "d1dbe7d962b23ec395202a07066831734d2553a8601bad0eb26756faf6f0263b",
       "bytes": 1646
@@ -631,8 +663,8 @@
     },
     {
       "path": "runtime/runner.mjs",
-      "sha256": "2635551fc1feee21e04e533712c05633c910d1c3dca288b32f08c7e65faca7e1",
-      "bytes": 540161
+      "sha256": "8fa74e230b94c696c1d66fe3e52c8098b4924e9151569b49cad69b71805d4427",
+      "bytes": 578528
     }
   ]
 }
