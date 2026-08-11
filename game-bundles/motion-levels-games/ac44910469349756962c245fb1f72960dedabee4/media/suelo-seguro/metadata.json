@@ -8,38 +8,32 @@
       {
         "atMillis": 100,
         "type": "press",
-        "x": 1,
-        "y": 1
+        "x": 0,
+        "y": 0
       },
       {
         "atMillis": 180,
         "type": "press",
-        "x": 13,
-        "y": 1
+        "x": 14,
+        "y": 0
       },
       {
         "atMillis": 260,
         "type": "press",
-        "x": 13,
-        "y": 29
+        "x": 14,
+        "y": 30
       },
       {
         "atMillis": 340,
         "type": "press",
-        "x": 1,
-        "y": 29
+        "x": 0,
+        "y": 30
       },
       {
         "atMillis": 2450,
         "type": "release",
-        "x": 1,
-        "y": 1
-      },
-      {
-        "atMillis": 2500,
-        "type": "press",
-        "x": 5,
-        "y": 19
+        "x": 0,
+        "y": 0
       }
     ],
     "captureStartMillis": 2700,
@@ -52,40 +46,40 @@
       "width": 256,
       "height": 128,
       "mimeType": "image/webp",
-      "bytes": 1044,
-      "sha256": "89fac322713615ad6deec25afc07163611bc5f5a36ef863ffc2a0e60ff5c8c9d"
+      "bytes": 748,
+      "sha256": "7246c43c99a6fd51c8b394a41576e84c1f151f02670c20b82121afa579e1af1b"
     },
     "thumbnail": {
       "file": "suelo-seguro-thumbnail.webp",
       "width": 1024,
       "height": 512,
       "mimeType": "image/webp",
-      "bytes": 8888,
-      "sha256": "4db1dcfc68d7ed0be933403abafe092466ca238ca5a557011e6f791621093562"
+      "bytes": 7150,
+      "sha256": "000b90c9d61dacfddc977c1597cda4c95b49f6a74fb33350fbca0f8c70076f1e"
     },
     "animation": {
       "file": "suelo-seguro-preview.webp",
       "width": 512,
       "height": 256,
       "mimeType": "image/webp",
-      "bytes": 23856,
-      "sha256": "bccb9a46314547d6676e180662cceb52f0f4fd02f201a81f890990ca32752556"
+      "bytes": 10786,
+      "sha256": "531fa497f6ceaed8ee542242486202dbf8fc8d444c2f75b0d69773a6ea4d083b"
     },
     "playerDisplay": {
       "file": "suelo-seguro-player-display.webp",
       "width": 1280,
       "height": 720,
       "mimeType": "image/webp",
-      "bytes": 36524,
-      "sha256": "5815b4b439260f0873ae5b29311ab5a3e894dd80b5a2b80dc72ac78a6ba98a69"
+      "bytes": 33072,
+      "sha256": "522a01498a302a22f028695f7b6940575f5c5953702eff883c49f4c4c34c09cd"
     },
     "playerDisplayAnimation": {
       "file": "suelo-seguro-player-display-animation.webp",
       "width": 640,
       "height": 360,
       "mimeType": "image/webp",
-      "bytes": 183754,
-      "sha256": "ac5148d76d94f6356d7248f0ca1cffb8d4f4cb1f21dbe13aa3f4f32ba0350f15"
+      "bytes": 114004,
+      "sha256": "03b16aae9cc6926c3efc8cad9c3a11855e134d1c80a81a9a4f33020e9f908a2b"
     }
   }
 }

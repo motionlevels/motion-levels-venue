@@ -1886,8 +1886,8 @@ function normalizeGameConfigValue(configVar, value) {
     return normalized2;
   }
   const numeric = typeof value === "number" && Number.isFinite(value) ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : Number.NaN;
-  const finite = Number.isFinite(numeric) ? numeric : configVar.default;
-  const rounded = configVar.type === "int" ? Math.round(finite) : finite;
+  const finite2 = Number.isFinite(numeric) ? numeric : configVar.default;
+  const rounded = configVar.type === "int" ? Math.round(finite2) : finite2;
   const normalized = clamp(rounded, configVar.min ?? -Infinity, configVar.max ?? Infinity);
   return normalized;
 }
@@ -2290,14 +2290,14 @@ var FloorInputPainter = class {
     return [{ ...tile, pressed }];
   }
 };
-function lineTiles(start3, end) {
+function lineTiles(start2, end) {
   const tiles = [];
-  let x = start3.x;
-  let y = start3.y;
-  const deltaX = Math.abs(end.x - start3.x);
-  const stepX = start3.x < end.x ? 1 : -1;
-  const deltaY = -Math.abs(end.y - start3.y);
-  const stepY = start3.y < end.y ? 1 : -1;
+  let x = start2.x;
+  let y = start2.y;
+  const deltaX = Math.abs(end.x - start2.x);
+  const stepX = start2.x < end.x ? 1 : -1;
+  const deltaY = -Math.abs(end.y - start2.y);
+  const stepY = start2.y < end.y ? 1 : -1;
   let error = deltaX + deltaY;
   while (true) {
     tiles.push({ x, y });
@@ -3320,14 +3320,8 @@ __export(src_exports2, {
   checkpointTarget: () => checkpointTarget,
   createGame: () => createGame2,
   damageImmunityMillis: () => damageImmunityMillis,
-  damagedSnapshot: () => damagedSnapshot,
-  finishedFrame: () => finishedFrame2,
-  finishedSnapshot: () => finishedSnapshot2,
   gameWinAnimationMillis: () => gameWinAnimationMillis,
-  initEvents: () => initEvents2,
   manifest: () => manifest2,
-  runningFrame: () => runningFrame2,
-  runningSnapshot: () => runningSnapshot2,
   startingLives: () => startingLives2
 });
 
@@ -3511,9 +3505,9 @@ var GalacticCrossingGame = class {
       const color = index < this.checkpoint ? checkpointColor : index === this.checkpoint ? nextCheckpointColor : "#15233d";
       fillFrameRect(frame, 0, band.minY, FLOOR_COLS, band.maxY - band.minY + 1, color);
     });
-    for (const hazard2 of this.currentHazards()) {
-      fillFrameRect(frame, hazard2.x, hazard2.y, hazard2.width, hazard2.height, hazardColor);
-      paintFrameCell(frame, hazard2.x + 1, hazard2.y + 1, hazardCoreColor);
+    for (const hazard of this.currentHazards()) {
+      fillFrameRect(frame, hazard.x, hazard.y, hazard.width, hazard.height, hazardColor);
+      paintFrameCell(frame, hazard.x + 1, hazard.y + 1, hazardCoreColor);
     }
     for (const tile of this.occupiedTiles) {
       const [x, y] = parseTile(tile);
@@ -3575,7 +3569,7 @@ var GalacticCrossingGame = class {
       const raw = lane.offset + gap + step * lane.direction;
       const x = (raw % 20 + 20) % 20 - 3;
       return { x, y: lane.minY + laneIndex % 2, width: 3, height: 3 };
-    })).filter((hazard2) => hazard2.x < FLOOR_COLS && hazard2.x + hazard2.width > 0);
+    })).filter((hazard) => hazard.x < FLOOR_COLS && hazard.x + hazard.width > 0);
   }
   elapsedMillis() {
     if (this.phase === "waiting" || this.phase === "starting" || this.phase === "ready") return 0;
@@ -3592,7 +3586,7 @@ var GalacticCrossingGame = class {
     const hazards = this.currentHazards();
     for (const tile of this.occupiedTiles) {
       const [x, y] = parseTile(tile);
-      if (hazards.some((hazard2) => x >= hazard2.x && x < hazard2.x + hazard2.width && y >= hazard2.y && y < hazard2.y + hazard2.height)) return true;
+      if (hazards.some((hazard) => x >= hazard.x && x < hazard.x + hazard.width && y >= hazard.y && y < hazard.y + hazard.height)) return true;
     }
     return false;
   }
@@ -3632,50 +3626,23 @@ function parseTile(tile) {
   return [Number(x), Number(y)];
 }
 
-// games/cruce-galactico/src/fixtures.ts
-var runningGame2 = createGame2({ playerCount: 1, difficulty: "medium", seed: 137 });
-var initEvents2 = runningGame2.init(0);
-start(runningGame2);
-runningGame2.release({ x: 8, y: 30, pressed: false, atMillis: 2150 });
-runningGame2.tick({ atMillis: 3e3 });
-var runningFrame2 = runningGame2.render();
-var runningSnapshot2 = runningGame2.snapshot();
-var damagedGame = createGame2({ playerCount: 1, difficulty: "medium", seed: 137 });
-damagedGame.init(0);
-start(damagedGame);
-damagedGame.release({ x: 8, y: 30, pressed: false, atMillis: 2150 });
-damagedGame.tick({ atMillis: 3e3 });
-var hazard = damagedGame.snapshot().hazards[0];
-damagedGame.press({ x: Math.max(0, hazard.x), y: hazard.y, pressed: true, atMillis: 3001 });
-damagedGame.tick({ atMillis: 3002 });
-var damagedSnapshot = damagedGame.snapshot();
-var finishedGame2 = createGame2({ playerCount: 1, difficulty: "medium", seed: 137 });
-finishedGame2.init(0);
-start(finishedGame2);
-for (const y of [22, 15, 8, 1]) finishedGame2.press({ x: 8, y, pressed: true, atMillis: 2200 + (22 - y) * 10 });
-finishedGame2.tick({ atMillis: 3100 });
-var finishedFrame2 = finishedGame2.render();
-var finishedSnapshot2 = finishedGame2.snapshot();
-function start(game5) {
-  game5.press({ x: 8, y: 30, pressed: true, atMillis: 100 });
-  game5.tick({ atMillis: 2100 });
-}
-
 // games/duelo/src/index.ts
 var src_exports3 = {};
 __export(src_exports3, {
   PlayerDisplay: () => PlayerDisplay3,
+  createDueloSessionController: () => createDueloSessionController,
   createGame: () => createGame3,
+  createSessionController: () => createSessionController,
   crowdedRunningFrame: () => crowdedRunningFrame,
   crowdedRunningSnapshot: () => crowdedRunningSnapshot,
   dueloConfigVars: () => dueloConfigVars,
   dueloPlayerPalette: () => dueloPlayerPalette,
   dueloReadyZones: () => dueloReadyZones,
-  finishedFrame: () => finishedFrame3,
-  finishedSnapshot: () => finishedSnapshot3,
+  finishedFrame: () => finishedFrame2,
+  finishedSnapshot: () => finishedSnapshot2,
   manifest: () => manifest3,
-  runningFrame: () => runningFrame3,
-  runningSnapshot: () => runningSnapshot3,
+  runningFrame: () => runningFrame2,
+  runningSnapshot: () => runningSnapshot2,
   startingFrame: () => startingFrame,
   startingSnapshot: () => startingSnapshot,
   waitingFrame: () => waitingFrame,
@@ -3825,6 +3792,1746 @@ function heroContent(snapshot, countdown, restartCountdown) {
 function hexToRgb2(color) {
   if (!/^#[0-9a-f]{6}$/i.test(color)) return "255, 255, 255";
   return [1, 3, 5].map((offset) => Number.parseInt(color.slice(offset, offset + 2), 16)).join(", ");
+}
+
+// packages/agent-runtime/src/contracts.ts
+var AGENT_CONTRACT_VERSION = 1;
+function createAgentAction(action) {
+  return immutableAgentData({ version: AGENT_CONTRACT_VERSION, ...action });
+}
+function createAgentObservation(observation) {
+  return immutableAgentData({ version: AGENT_CONTRACT_VERSION, ...observation });
+}
+function createAgentDefinition(definition) {
+  if (definition.id.length === 0 || definition.brainId.length === 0 || definition.profileId.length === 0) {
+    throw new Error("Agent definition ids must not be empty");
+  }
+  return immutableAgentData({ version: AGENT_CONTRACT_VERSION, ...definition });
+}
+function createAgentSnapshot(snapshot) {
+  return immutableAgentData({ version: AGENT_CONTRACT_VERSION, ...snapshot });
+}
+function assertAgentContractVersion(contract) {
+  if (contract.version !== AGENT_CONTRACT_VERSION) {
+    throw new Error(
+      `Unsupported agent contract version ${contract.version}; expected ${AGENT_CONTRACT_VERSION}`
+    );
+  }
+}
+function immutableAgentData(value) {
+  return immutableCopy(value, /* @__PURE__ */ new WeakMap());
+}
+function immutableCopy(value, seen) {
+  if (typeof value !== "object" && typeof value !== "function" || value === null) {
+    return value;
+  }
+  if (typeof value === "function") {
+    return value;
+  }
+  const object = value;
+  const existing = seen.get(object);
+  if (existing !== void 0) {
+    return existing;
+  }
+  if (Array.isArray(value)) {
+    const copy2 = [];
+    seen.set(object, copy2);
+    for (const entry of value) copy2.push(immutableCopy(entry, seen));
+    return Object.freeze(copy2);
+  }
+  if (value instanceof Map) {
+    const copy2 = /* @__PURE__ */ new Map();
+    const readonly = readonlyCollectionProxy(copy2, ["clear", "delete", "set"]);
+    seen.set(object, readonly);
+    for (const [key, entry] of value) {
+      copy2.set(immutableCopy(key, seen), immutableCopy(entry, seen));
+    }
+    Object.freeze(copy2);
+    return readonly;
+  }
+  if (value instanceof Set) {
+    const copy2 = /* @__PURE__ */ new Set();
+    const readonly = readonlyCollectionProxy(copy2, ["add", "clear", "delete"]);
+    seen.set(object, readonly);
+    for (const entry of value) copy2.add(immutableCopy(entry, seen));
+    Object.freeze(copy2);
+    return readonly;
+  }
+  if (value instanceof Date) {
+    const copy2 = new Date(value.getTime());
+    seen.set(object, copy2);
+    return Object.freeze(copy2);
+  }
+  if (value instanceof RegExp) {
+    const copy2 = new RegExp(value.source, value.flags);
+    copy2.lastIndex = value.lastIndex;
+    seen.set(object, copy2);
+    return Object.freeze(copy2);
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return value;
+  }
+  const copy = Object.create(prototype);
+  seen.set(object, copy);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === void 0) continue;
+    if ("value" in descriptor) descriptor.value = immutableCopy(descriptor.value, seen);
+    Object.defineProperty(copy, key, descriptor);
+  }
+  return Object.freeze(copy);
+}
+function readonlyCollectionProxy(collection, mutators) {
+  const blocked = new Set(mutators);
+  const proxy = new Proxy(collection, {
+    get(target3, property) {
+      if (blocked.has(property)) {
+        return () => {
+          throw new TypeError("Agent contract collections are immutable");
+        };
+      }
+      const member = Reflect.get(target3, property, target3);
+      return typeof member === "function" ? member.bind(target3) : member;
+    },
+    set() {
+      throw new TypeError("Agent contract collections are immutable");
+    },
+    deleteProperty() {
+      throw new TypeError("Agent contract collections are immutable");
+    },
+    defineProperty() {
+      throw new TypeError("Agent contract collections are immutable");
+    }
+  });
+  return proxy;
+}
+
+// packages/agent-runtime/src/grid.ts
+var ORTHOGONAL_OFFSETS = Object.freeze([
+  Object.freeze({ x: 0, y: -1 }),
+  Object.freeze({ x: -1, y: 0 }),
+  Object.freeze({ x: 1, y: 0 }),
+  Object.freeze({ x: 0, y: 1 })
+]);
+var DIAGONAL_OFFSETS = Object.freeze([
+  Object.freeze({ x: -1, y: -1 }),
+  Object.freeze({ x: 1, y: -1 }),
+  Object.freeze({ x: -1, y: 1 }),
+  Object.freeze({ x: 1, y: 1 })
+]);
+function gridPointKey(point) {
+  return `${point.x},${point.y}`;
+}
+function sameGridPoint(first, second) {
+  return first.x === second.x && first.y === second.y;
+}
+function manhattanDistance2(first, second) {
+  return Math.abs(first.x - second.x) + Math.abs(first.y - second.y);
+}
+function euclideanDistance(first, second) {
+  return Math.hypot(first.x - second.x, first.y - second.y);
+}
+function createGrid(options) {
+  if (!Number.isInteger(options.width) || options.width <= 0) {
+    throw new Error("Grid width must be a positive integer");
+  }
+  if (!Number.isInteger(options.height) || options.height <= 0) {
+    throw new Error("Grid height must be a positive integer");
+  }
+  const blocked = new Set((options.blocked ?? []).map(gridPointKey));
+  const fixedCosts = /* @__PURE__ */ new Map();
+  for (const entry of options.tileCosts ?? []) {
+    validateNonNegativeCost(entry.cost, "fixed tile cost");
+    fixedCosts.set(gridPointKey(entry.point), entry.cost);
+  }
+  const dynamicCosts = [...options.dynamicTileCosts ?? []];
+  const preventCornerCutting = options.preventDiagonalCornerCutting ?? true;
+  let grid;
+  const isInside = (point) => Number.isInteger(point.x) && Number.isInteger(point.y) && point.x >= 0 && point.x < options.width && point.y >= 0 && point.y < options.height;
+  const isBlocked = (point) => !isInside(point) || blocked.has(gridPointKey(point));
+  grid = Object.freeze({
+    width: options.width,
+    height: options.height,
+    isInside,
+    isBlocked,
+    tileCost(context) {
+      if (isBlocked(context.point)) {
+        return Number.POSITIVE_INFINITY;
+      }
+      let cost = 1 + (fixedCosts.get(gridPointKey(context.point)) ?? 0);
+      for (const provider of dynamicCosts) {
+        const extra = provider(context);
+        validateNonNegativeCost(extra, "dynamic tile cost");
+        cost += extra;
+      }
+      return cost;
+    },
+    neighbors(point, allowDiagonal = false) {
+      const result = [];
+      for (const offset of ORTHOGONAL_OFFSETS) {
+        const candidate = Object.freeze({ x: point.x + offset.x, y: point.y + offset.y });
+        if (!isBlocked(candidate)) {
+          result.push(candidate);
+        }
+      }
+      if (allowDiagonal) {
+        for (const offset of DIAGONAL_OFFSETS) {
+          const candidate = Object.freeze({ x: point.x + offset.x, y: point.y + offset.y });
+          if (isBlocked(candidate)) {
+            continue;
+          }
+          if (preventCornerCutting) {
+            const horizontal = { x: point.x + offset.x, y: point.y };
+            const vertical = { x: point.x, y: point.y + offset.y };
+            if (isBlocked(horizontal) || isBlocked(vertical)) {
+              continue;
+            }
+          }
+          result.push(candidate);
+        }
+      }
+      return result;
+    }
+  });
+  return grid;
+}
+function compareSearchNodes(first, second) {
+  return first.f - second.f || first.h - second.h || first.g - second.g || first.point.y - second.point.y || first.point.x - second.point.x || first.order - second.order;
+}
+var SearchHeap = class {
+  #nodes = [];
+  get size() {
+    return this.#nodes.length;
+  }
+  push(node) {
+    this.#nodes.push(node);
+    let index = this.#nodes.length - 1;
+    while (index > 0) {
+      const parent = Math.floor((index - 1) / 2);
+      const parentNode = this.#nodes[parent];
+      if (compareSearchNodes(parentNode, node) <= 0) {
+        break;
+      }
+      this.#nodes[index] = parentNode;
+      index = parent;
+    }
+    this.#nodes[index] = node;
+  }
+  pop() {
+    const root = this.#nodes[0];
+    const tail = this.#nodes.pop();
+    if (root === void 0 || tail === void 0 || this.#nodes.length === 0) {
+      return root;
+    }
+    let index = 0;
+    this.#nodes[0] = tail;
+    while (true) {
+      const left = index * 2 + 1;
+      const right = left + 1;
+      let smallest = index;
+      const smallestNode = this.#nodes[smallest];
+      const leftNode = this.#nodes[left];
+      const rightNode = this.#nodes[right];
+      if (leftNode !== void 0 && compareSearchNodes(leftNode, smallestNode) < 0) {
+        smallest = left;
+      }
+      const candidateNode = this.#nodes[smallest];
+      if (rightNode !== void 0 && compareSearchNodes(rightNode, candidateNode) < 0) {
+        smallest = right;
+      }
+      if (smallest === index) {
+        break;
+      }
+      const current = this.#nodes[index];
+      this.#nodes[index] = this.#nodes[smallest];
+      this.#nodes[smallest] = current;
+      index = smallest;
+    }
+    return root;
+  }
+};
+function defaultHeuristic(point, goal, diagonal) {
+  const deltaX = Math.abs(point.x - goal.x);
+  const deltaY = Math.abs(point.y - goal.y);
+  return diagonal ? Math.max(deltaX, deltaY) + (Math.SQRT2 - 1) * Math.min(deltaX, deltaY) : deltaX + deltaY;
+}
+function reconstructPath(node) {
+  const reverse = [];
+  let current = node;
+  while (current !== void 0) {
+    reverse.push(current.point);
+    current = current.parent;
+  }
+  return Object.freeze(reverse.reverse());
+}
+function failedPath(reason, visited, atMillis) {
+  return Object.freeze({
+    reached: false,
+    path: Object.freeze([]),
+    cost: Number.POSITIVE_INFINITY,
+    visited,
+    arrivalMillis: atMillis,
+    reason
+  });
+}
+function findPath(grid, start2, goal, options = {}) {
+  const atMillis = options.atMillis ?? 0;
+  const stepMillis = options.stepMillis ?? 100;
+  if (!Number.isFinite(atMillis) || !Number.isFinite(stepMillis) || stepMillis < 0) {
+    throw new Error("A* time values must be finite and stepMillis must be non-negative");
+  }
+  if (!grid.isInside(start2) || grid.isBlocked(start2)) {
+    return failedPath("invalid-start", 0, atMillis);
+  }
+  if (!grid.isInside(goal) || grid.isBlocked(goal)) {
+    return failedPath("invalid-goal", 0, atMillis);
+  }
+  if (sameGridPoint(start2, goal)) {
+    return Object.freeze({
+      reached: true,
+      path: Object.freeze([Object.freeze({ ...start2 })]),
+      cost: 0,
+      visited: 0,
+      arrivalMillis: atMillis,
+      reason: "reached"
+    });
+  }
+  const allowDiagonal = options.allowDiagonal ?? false;
+  const heuristic = options.heuristic ?? ((point, destination) => defaultHeuristic(point, destination, allowDiagonal));
+  const maxIterations = options.maxIterations ?? grid.width * grid.height * 8;
+  const maxCost = options.maxCost ?? Number.POSITIVE_INFINITY;
+  const extraCosts = [
+    options.timeCost,
+    options.crowdingCost,
+    options.reservationCost,
+    ...options.additionalCosts ?? []
+  ].filter((provider) => provider !== void 0);
+  const open = new SearchHeap();
+  const bestCosts = /* @__PURE__ */ new Map();
+  const startH = heuristic(start2, goal);
+  validateHeuristic(startH);
+  let order = 0;
+  open.push({
+    point: Object.freeze({ ...start2 }),
+    key: gridPointKey(start2),
+    g: 0,
+    h: startH,
+    f: startH,
+    steps: 0,
+    order,
+    parent: void 0
+  });
+  bestCosts.set(gridPointKey(start2), 0);
+  let visited = 0;
+  while (open.size > 0 && visited < maxIterations) {
+    const current = open.pop();
+    if (current.g !== bestCosts.get(current.key)) {
+      continue;
+    }
+    visited += 1;
+    if (sameGridPoint(current.point, goal)) {
+      return Object.freeze({
+        reached: true,
+        path: reconstructPath(current),
+        cost: current.g,
+        visited,
+        arrivalMillis: atMillis + current.steps * stepMillis,
+        reason: "reached"
+      });
+    }
+    for (const point of grid.neighbors(current.point, allowDiagonal)) {
+      const steps = current.steps + 1;
+      const context = Object.freeze({
+        grid,
+        from: current.point,
+        point,
+        step: steps,
+        atMillis: atMillis + steps * stepMillis
+      });
+      let movementCost = grid.tileCost(context);
+      if (point.x !== current.point.x && point.y !== current.point.y) {
+        movementCost *= Math.SQRT2;
+      }
+      for (const provider of extraCosts) {
+        const extra = provider(context);
+        validateNonNegativeCost(extra, "A* additional cost");
+        movementCost += extra;
+      }
+      const nextCost = current.g + movementCost;
+      if (!Number.isFinite(nextCost) || nextCost > maxCost) {
+        continue;
+      }
+      const key = gridPointKey(point);
+      const knownCost = bestCosts.get(key);
+      if (knownCost !== void 0 && nextCost >= knownCost) {
+        continue;
+      }
+      const h = heuristic(point, goal);
+      validateHeuristic(h);
+      bestCosts.set(key, nextCost);
+      order += 1;
+      open.push({
+        point,
+        key,
+        g: nextCost,
+        h,
+        f: nextCost + h,
+        steps,
+        order,
+        parent: current
+      });
+    }
+  }
+  return failedPath(open.size > 0 ? "iteration-limit" : "unreachable", visited, atMillis);
+}
+function validateNonNegativeCost(cost, label) {
+  if (Number.isNaN(cost) || cost < 0) {
+    throw new Error(`${label} must be non-negative`);
+  }
+}
+function validateHeuristic(value) {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error("A* heuristic must return a finite non-negative value");
+  }
+}
+
+// packages/agent-runtime/src/arcade.ts
+var BALANCED_TETRIS_WEIGHTS = Object.freeze({
+  lines: 0.76,
+  aggregateHeight: -0.51,
+  holes: -0.86,
+  bumpiness: -0.18
+});
+
+// packages/agent-runtime/src/behavior.ts
+function applyControlledMistake(action, profile2, random, options = {}) {
+  const { mistakeRate, mistakeSeverity } = profile2.parameters;
+  if (mistakeRate <= 0 || mistakeSeverity <= 0 || !random.chance(mistakeRate)) {
+    return Object.freeze({ action, mistakeApplied: false, intendedAction: action });
+  }
+  if (action.kind === "move" && action.target !== void 0) {
+    const maximum = Math.max(1, Math.trunc(options.maxOffset ?? 3));
+    const radius = Math.max(1, Math.ceil(mistakeSeverity * maximum));
+    const directions = [
+      { x: -1, y: -1 },
+      { x: 0, y: -1 },
+      { x: 1, y: -1 },
+      { x: -1, y: 0 },
+      { x: 1, y: 0 },
+      { x: -1, y: 1 },
+      { x: 0, y: 1 },
+      { x: 1, y: 1 }
+    ];
+    const direction = directions[random.int(directions.length)];
+    const target3 = Object.freeze({
+      x: clampCoordinate(action.target.x + direction.x * radius, options.width),
+      y: clampCoordinate(action.target.y + direction.y * radius, options.height)
+    });
+    const mistaken = Object.freeze({
+      ...action,
+      target: target3,
+      explanation: appendExplanation(action.explanation, `Seeded movement error (${radius} tile offset)`)
+    });
+    return Object.freeze({ action: mistaken, mistakeApplied: true, intendedAction: action });
+  }
+  const idle = Object.freeze({
+    version: AGENT_CONTRACT_VERSION,
+    actorId: action.actorId,
+    kind: "idle",
+    atMillis: action.atMillis,
+    explanation: appendExplanation(action.explanation, "Seeded hesitation")
+  });
+  return Object.freeze({ action: idle, mistakeApplied: true, intendedAction: action });
+}
+var StuckDetector = class {
+  #windowMillis;
+  #distanceThreshold;
+  #samples = [];
+  #wasStuck = false;
+  #lastMillis = Number.NEGATIVE_INFINITY;
+  constructor(windowMillis, distanceThreshold) {
+    if (!Number.isFinite(windowMillis) || windowMillis <= 0) {
+      throw new Error("Stuck detection window must be positive");
+    }
+    if (!Number.isFinite(distanceThreshold) || distanceThreshold < 0) {
+      throw new Error("Stuck distance threshold must be non-negative");
+    }
+    this.#windowMillis = windowMillis;
+    this.#distanceThreshold = distanceThreshold;
+  }
+  update(nowMillis, position, intendsMovement) {
+    if (nowMillis < this.#lastMillis) {
+      throw new Error("Stuck detector observations must be monotonic");
+    }
+    this.#lastMillis = nowMillis;
+    if (!intendsMovement) {
+      this.reset();
+      this.#lastMillis = nowMillis;
+      return Object.freeze({ stuck: false, newlyStuck: false, observedMillis: 0, displacement: 0 });
+    }
+    this.#samples.push(Object.freeze({ atMillis: nowMillis, position: Object.freeze({ ...position }) }));
+    const cutoff = nowMillis - this.#windowMillis;
+    while (this.#samples.length > 1 && (this.#samples[1]?.atMillis ?? nowMillis) <= cutoff) {
+      this.#samples.shift();
+    }
+    const first = this.#samples[0];
+    const observedMillis = nowMillis - first.atMillis;
+    const displacement = this.#samples.reduce(
+      (maximum, sample) => Math.max(maximum, euclideanDistance(first.position, sample.position)),
+      0
+    );
+    const stuck = observedMillis >= this.#windowMillis && displacement <= this.#distanceThreshold;
+    const newlyStuck = stuck && !this.#wasStuck;
+    this.#wasStuck = stuck;
+    return Object.freeze({ stuck, newlyStuck, observedMillis, displacement });
+  }
+  snapshot() {
+    return Object.freeze({
+      windowMillis: this.#windowMillis,
+      distanceThreshold: this.#distanceThreshold,
+      samples: Object.freeze(this.#samples.map((sample) => Object.freeze({
+        atMillis: sample.atMillis,
+        position: Object.freeze({ ...sample.position })
+      }))),
+      wasStuck: this.#wasStuck,
+      lastMillis: Number.isFinite(this.#lastMillis) ? this.#lastMillis : null
+    });
+  }
+  restore(snapshot) {
+    if (snapshot.windowMillis !== this.#windowMillis || snapshot.distanceThreshold !== this.#distanceThreshold) {
+      throw new Error("Stuck detector snapshot configuration does not match");
+    }
+    if (snapshot.lastMillis !== null && !Number.isFinite(snapshot.lastMillis)) {
+      throw new Error("Stuck detector snapshot time must be finite or null");
+    }
+    let previousMillis = Number.NEGATIVE_INFINITY;
+    const samples = snapshot.samples.map((sample) => {
+      if (!Number.isFinite(sample.atMillis) || sample.atMillis < previousMillis) {
+        throw new Error("Stuck detector snapshot samples must have monotonic finite times");
+      }
+      if (!Number.isInteger(sample.position.x) || !Number.isInteger(sample.position.y)) {
+        throw new Error("Stuck detector snapshot positions require integer coordinates");
+      }
+      previousMillis = sample.atMillis;
+      return Object.freeze({
+        atMillis: sample.atMillis,
+        position: Object.freeze({ ...sample.position })
+      });
+    });
+    if (snapshot.lastMillis !== null && previousMillis > snapshot.lastMillis) {
+      throw new Error("Stuck detector snapshot samples cannot be newer than its clock");
+    }
+    if (snapshot.lastMillis === null && samples.length > 0) {
+      throw new Error("Stuck detector snapshot with samples requires a clock");
+    }
+    this.#samples.length = 0;
+    this.#samples.push(...samples);
+    this.#wasStuck = snapshot.wasStuck;
+    this.#lastMillis = snapshot.lastMillis ?? Number.NEGATIVE_INFINITY;
+  }
+  reset() {
+    this.#samples.length = 0;
+    this.#wasStuck = false;
+    this.#lastMillis = Number.NEGATIVE_INFINITY;
+  }
+};
+function clampCoordinate(value, size) {
+  const integer = Math.round(value);
+  return size === void 0 ? integer : Math.max(0, Math.min(size - 1, integer));
+}
+function appendExplanation(current, addition) {
+  return current === void 0 || current.length === 0 ? addition : `${current}; ${addition}`;
+}
+
+// packages/agent-runtime/src/utility.ts
+function scoreIntentions(intentions, context, options = {}) {
+  const stickiness = clamp01(options.stickiness ?? 0);
+  const stickinessScale = finite(options.stickinessScale ?? 1, "stickinessScale");
+  const scores = intentions.map((intention) => {
+    const available = intention.available?.(context) ?? true;
+    let score = finite(intention.baseUtility ?? 0, "baseUtility");
+    let vetoed = !available;
+    const factors = [];
+    for (const consideration of intention.considerations) {
+      const input2 = finite(consideration.evaluate(context), `utility input ${consideration.id}`);
+      const normalizedInput = clamp01(input2);
+      const normalized = applyCurve(consideration.curve ?? "linear", normalizedInput);
+      const weight = finite(consideration.weight, `utility weight ${consideration.id}`);
+      const factorVetoed = consideration.vetoBelow !== void 0 && normalizedInput < clamp01(consideration.vetoBelow);
+      const contribution = normalized * weight;
+      score += contribution;
+      vetoed ||= factorVetoed;
+      factors.push(Object.freeze({
+        id: consideration.id,
+        label: consideration.label ?? consideration.id,
+        input: input2,
+        normalized,
+        weight,
+        contribution,
+        vetoed: factorVetoed
+      }));
+    }
+    if (intention.id === options.currentIntentionId && stickiness > 0) {
+      const contribution = stickiness * stickinessScale;
+      score += contribution;
+      factors.push(Object.freeze({
+        id: "target-stickiness",
+        label: "Target stickiness",
+        input: stickiness,
+        normalized: stickiness,
+        weight: stickinessScale,
+        contribution,
+        vetoed: false
+      }));
+    }
+    return Object.freeze({
+      intention,
+      score: vetoed ? Number.NEGATIVE_INFINITY : score,
+      vetoed,
+      factors: Object.freeze(factors)
+    });
+  });
+  return Object.freeze(scores.sort(compareUtilityScores));
+}
+function selectIntention(intentions, context, options = {}) {
+  const rankings = scoreIntentions(intentions, context, options);
+  const winner = rankings.find((ranking) => !ranking.vetoed);
+  if (winner === void 0) {
+    return Object.freeze({
+      selected: void 0,
+      selectedScore: void 0,
+      rankings,
+      explanation: "No intention was available"
+    });
+  }
+  const strongest = [...winner.factors].filter((factor) => factor.contribution !== 0).sort(
+    (first, second) => Math.abs(second.contribution) - Math.abs(first.contribution) || first.id.localeCompare(second.id)
+  )[0];
+  const reason = strongest === void 0 ? `Selected ${winner.intention.label} from base utility and deterministic tie-breaking` : `Selected ${winner.intention.label}; strongest factor: ${strongest.label} (${formatSigned(strongest.contribution)})`;
+  return Object.freeze({
+    selected: winner.intention,
+    selectedScore: winner.score,
+    rankings,
+    explanation: reason
+  });
+}
+function compareUtilityScores(first, second) {
+  return Number(first.vetoed) - Number(second.vetoed) || second.score - first.score || (second.intention.priority ?? 0) - (first.intention.priority ?? 0) || first.intention.id.localeCompare(second.intention.id);
+}
+function applyCurve(curve, value) {
+  if (typeof curve === "function") {
+    return clamp01(finite(curve(value), "utility curve result"));
+  }
+  switch (curve) {
+    case "linear":
+      return value;
+    case "quadratic":
+      return value * value;
+    case "sqrt":
+      return Math.sqrt(value);
+    case "inverse":
+      return 1 - value;
+  }
+}
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value));
+}
+function finite(value, label) {
+  if (!Number.isFinite(value)) {
+    throw new Error(`${label} must be finite`);
+  }
+  return value;
+}
+function formatSigned(value) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
+}
+
+// packages/agent-runtime/src/profiles.ts
+var AGENT_PROFILE_LIMITS = Object.freeze({
+  reactionDelayMillis: Object.freeze([0, 2e3]),
+  mistakeRate: Object.freeze([0, 0.5]),
+  mistakeSeverity: Object.freeze([0, 1]),
+  targetStickiness: Object.freeze([0, 1]),
+  caution: Object.freeze([0, 1]),
+  exploration: Object.freeze([0, 1]),
+  teamwork: Object.freeze([0, 1]),
+  prediction: Object.freeze([0, 1]),
+  memoryDecayPerSecond: Object.freeze([0, 1]),
+  replanIntervalMillis: Object.freeze([50, 5e3]),
+  stuckWindowMillis: Object.freeze([100, 5e3]),
+  stuckDistance: Object.freeze([0, 4]),
+  reservationHorizonMillis: Object.freeze([100, 15e3])
+});
+var BALANCED_PARAMETERS = Object.freeze({
+  reactionDelayMillis: 180,
+  mistakeRate: 0.06,
+  mistakeSeverity: 0.25,
+  targetStickiness: 0.55,
+  caution: 0.5,
+  exploration: 0.45,
+  teamwork: 0.5,
+  prediction: 0.55,
+  memoryDecayPerSecond: 0.12,
+  replanIntervalMillis: 350,
+  stuckWindowMillis: 900,
+  stuckDistance: 0.5,
+  reservationHorizonMillis: 2e3
+});
+function clampParameter(name, value) {
+  const [minimum, maximum] = AGENT_PROFILE_LIMITS[name];
+  const finiteValue = Number.isFinite(value) ? value : BALANCED_PARAMETERS[name];
+  return Math.max(minimum, Math.min(maximum, finiteValue));
+}
+function defineAgentProfile(id, label, parameters = {}) {
+  if (id.length === 0 || label.length === 0) {
+    throw new Error("Profile id and label must not be empty");
+  }
+  const bounded = {};
+  for (const name of Object.keys(BALANCED_PARAMETERS)) {
+    bounded[name] = clampParameter(name, parameters[name] ?? BALANCED_PARAMETERS[name]);
+  }
+  return Object.freeze({
+    id,
+    label,
+    parameters: Object.freeze(bounded)
+  });
+}
+var CAUTIOUS_AGENT_PROFILE = defineAgentProfile("cautious", "Cautious", {
+  reactionDelayMillis: 260,
+  mistakeRate: 0.035,
+  mistakeSeverity: 0.15,
+  targetStickiness: 0.72,
+  caution: 0.92,
+  exploration: 0.18,
+  teamwork: 0.62,
+  prediction: 0.64
+});
+var BALANCED_AGENT_PROFILE = defineAgentProfile("balanced", "Balanced");
+var BOLD_AGENT_PROFILE = defineAgentProfile("bold", "Bold", {
+  reactionDelayMillis: 125,
+  mistakeRate: 0.08,
+  mistakeSeverity: 0.32,
+  targetStickiness: 0.44,
+  caution: 0.18,
+  exploration: 0.62,
+  prediction: 0.62
+});
+var HELPER_AGENT_PROFILE = defineAgentProfile("helper", "Helper", {
+  reactionDelayMillis: 210,
+  mistakeRate: 0.04,
+  targetStickiness: 0.68,
+  caution: 0.67,
+  exploration: 0.28,
+  teamwork: 0.96,
+  prediction: 0.58
+});
+var EXPLORER_AGENT_PROFILE = defineAgentProfile("explorer", "Explorer", {
+  reactionDelayMillis: 190,
+  mistakeRate: 0.075,
+  mistakeSeverity: 0.3,
+  targetStickiness: 0.25,
+  caution: 0.36,
+  exploration: 0.96,
+  teamwork: 0.42,
+  prediction: 0.48
+});
+var CHAOTIC_AGENT_PROFILE = defineAgentProfile("chaotic", "Chaotic", {
+  reactionDelayMillis: 85,
+  mistakeRate: 0.32,
+  mistakeSeverity: 0.88,
+  targetStickiness: 0.12,
+  caution: 0.1,
+  exploration: 1,
+  teamwork: 0.16,
+  prediction: 0.2,
+  replanIntervalMillis: 140
+});
+var EXPERT_AGENT_PROFILE = defineAgentProfile("expert", "Expert", {
+  reactionDelayMillis: 45,
+  mistakeRate: 8e-3,
+  mistakeSeverity: 0.05,
+  targetStickiness: 0.78,
+  caution: 0.74,
+  exploration: 0.52,
+  teamwork: 0.86,
+  prediction: 0.98,
+  memoryDecayPerSecond: 0.025,
+  replanIntervalMillis: 110,
+  stuckWindowMillis: 450,
+  reservationHorizonMillis: 3500
+});
+var AGENT_PROFILES = Object.freeze({
+  cautious: CAUTIOUS_AGENT_PROFILE,
+  balanced: BALANCED_AGENT_PROFILE,
+  bold: BOLD_AGENT_PROFILE,
+  helper: HELPER_AGENT_PROFILE,
+  explorer: EXPLORER_AGENT_PROFILE,
+  chaotic: CHAOTIC_AGENT_PROFILE,
+  expert: EXPERT_AGENT_PROFILE
+});
+function getAgentProfile(id) {
+  const profile2 = AGENT_PROFILES[id];
+  if (profile2 === void 0) {
+    throw new Error(`Unknown agent profile: ${id}`);
+  }
+  return profile2;
+}
+
+// packages/agent-runtime/src/random.ts
+var UINT32_RANGE = 4294967296;
+function normalizeSeed(seed) {
+  return Number.isFinite(seed) ? Math.trunc(seed) >>> 0 : 0;
+}
+var SeededRandom = class _SeededRandom {
+  #state;
+  constructor(seed) {
+    this.#state = normalizeSeed(seed);
+  }
+  get state() {
+    return this.#state;
+  }
+  restore(state) {
+    this.#state = normalizeSeed(state);
+  }
+  next() {
+    this.#state = this.#state + 1831565813 >>> 0;
+    let value = this.#state;
+    value = Math.imul(value ^ value >>> 15, value | 1);
+    value ^= value + Math.imul(value ^ value >>> 7, value | 61);
+    return ((value ^ value >>> 14) >>> 0) / UINT32_RANGE;
+  }
+  int(maxExclusive) {
+    if (!Number.isInteger(maxExclusive) || maxExclusive <= 0) {
+      throw new Error("maxExclusive must be a positive integer");
+    }
+    return Math.floor(this.next() * maxExclusive);
+  }
+  chance(probability) {
+    const bounded = Math.max(0, Math.min(1, probability));
+    if (bounded <= 0) {
+      return false;
+    }
+    if (bounded >= 1) {
+      return true;
+    }
+    return this.next() < bounded;
+  }
+  pick(values) {
+    if (values.length === 0) {
+      throw new Error("Cannot pick from an empty collection");
+    }
+    return values[this.int(values.length)];
+  }
+  fork(salt) {
+    const saltText = String(salt);
+    let hash = this.#state ^ 2166136261;
+    for (let index = 0; index < saltText.length; index += 1) {
+      hash ^= saltText.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return new _SeededRandom(hash >>> 0);
+  }
+};
+
+// packages/agent-runtime/src/runtime.ts
+var AgentRuntime = class {
+  #definition;
+  #profile;
+  #brain;
+  #services;
+  #random;
+  #stuckDetector;
+  #gridBounds;
+  #state;
+  #intention;
+  #lastAction;
+  #pending;
+  #nextPlanAtMillis = Number.NEGATIVE_INFINITY;
+  #lastNowMillis = Number.NEGATIVE_INFINITY;
+  #lastTick = -1;
+  #sequence = 0;
+  #replans = 0;
+  #forceReplan = false;
+  #lastSnapshot;
+  constructor(options) {
+    assertAgentContractVersion(options.definition);
+    assertAgentContractVersion(options.brain);
+    if (options.definition.brainId !== options.brain.id) {
+      throw new Error(`Definition brain ${options.definition.brainId} does not match ${options.brain.id}`);
+    }
+    if (options.definition.profileId !== options.profile.id) {
+      throw new Error(`Definition profile ${options.definition.profileId} does not match ${options.profile.id}`);
+    }
+    this.#definition = immutableAgentData(options.definition);
+    this.#profile = options.profile;
+    this.#brain = options.brain;
+    this.#services = options.services;
+    this.#random = new SeededRandom(options.seed);
+    this.#gridBounds = options.gridBounds;
+    this.#stuckDetector = new StuckDetector(
+      options.profile.parameters.stuckWindowMillis,
+      options.profile.parameters.stuckDistance
+    );
+  }
+  forceReplan() {
+    this.#forceReplan = true;
+    if (this.#lastSnapshot !== void 0) {
+      this.#lastSnapshot = immutableAgentData({ ...this.#lastSnapshot, forceReplan: true });
+    }
+  }
+  snapshot() {
+    if (this.#lastSnapshot === void 0) {
+      throw new Error("The runtime has no snapshot before its first observation");
+    }
+    return this.#lastSnapshot;
+  }
+  restore(snapshot) {
+    assertAgentContractVersion(snapshot);
+    if (snapshot.definitionId !== this.#definition.id || snapshot.brainId !== this.#brain.id) {
+      throw new Error("Snapshot belongs to a different agent or brain");
+    }
+    if (!Number.isFinite(snapshot.nextPlanAtMillis)) {
+      throw new Error("Snapshot next plan time must be finite");
+    }
+    const restored = immutableAgentData(snapshot);
+    this.#state = restored.brainState;
+    this.#intention = restored.intention;
+    this.#lastAction = restored.lastAction;
+    this.#pending = restored.pendingAction === void 0 || restored.pendingActionAtMillis === void 0 ? void 0 : Object.freeze({
+      decision: Object.freeze({
+        state: restored.brainState,
+        action: restored.pendingAction,
+        intention: restored.pendingIntention,
+        explanation: "Restored pending decision"
+      }),
+      executeAtMillis: restored.pendingActionAtMillis
+    });
+    this.#random.restore(restored.randomState);
+    this.#sequence = restored.sequence;
+    this.#replans = restored.replans;
+    this.#lastNowMillis = restored.atMillis;
+    this.#lastTick = restored.tick;
+    this.#nextPlanAtMillis = restored.nextPlanAtMillis;
+    this.#forceReplan = restored.forceReplan;
+    this.#stuckDetector.restore(restored.stuckDetector);
+    this.#lastSnapshot = restored;
+  }
+  step(observation) {
+    assertAgentContractVersion(observation);
+    if (observation.agentId !== this.#definition.id) {
+      throw new Error(`Observation for ${observation.agentId} cannot drive ${this.#definition.id}`);
+    }
+    if (observation.nowMillis < this.#lastNowMillis || observation.tick <= this.#lastTick) {
+      throw new Error("Agent observations must have increasing ticks and monotonic time");
+    }
+    this.#lastNowMillis = observation.nowMillis;
+    this.#lastTick = observation.tick;
+    let action;
+    let intendedAction;
+    let mistakeApplied = false;
+    let planned = false;
+    let replanReason;
+    const explanations = [];
+    const matured = this.#executePending(observation.nowMillis);
+    if (matured !== void 0) {
+      ({ action, intendedAction, mistakeApplied } = matured);
+      explanations.push(matured.explanation);
+    }
+    if (this.#state === void 0) {
+      this.#state = immutableAgentData(this.#brain.initialState(this.#definition, observation));
+      replanReason = "initial";
+    } else {
+      const stuck = this.#stuckDetector.update(
+        observation.nowMillis,
+        observation.position,
+        this.#lastAction?.kind === "move"
+      );
+      if (stuck.newlyStuck) {
+        replanReason = "stuck";
+        this.#pending = void 0;
+        this.#stuckDetector.reset();
+      } else if (this.#intention?.expiresAtMillis !== void 0 && this.#intention.expiresAtMillis <= observation.nowMillis) {
+        replanReason = "intention-expired";
+        this.#pending = void 0;
+      } else if (this.#forceReplan) {
+        replanReason = "forced";
+        this.#pending = void 0;
+      } else if (this.#pending === void 0 && observation.nowMillis >= this.#nextPlanAtMillis) {
+        replanReason = "interval";
+      }
+    }
+    if (replanReason !== void 0) {
+      const decision = this.#plan(observation, replanReason);
+      planned = true;
+      explanations.push(decision.explanation);
+      this.#forceReplan = false;
+      const immediate = this.#executePending(observation.nowMillis);
+      if (immediate !== void 0) {
+        ({ action, intendedAction, mistakeApplied } = immediate);
+        explanations.push(immediate.explanation);
+      }
+    }
+    this.#sequence += 1;
+    const snapshot = this.#makeSnapshot(observation);
+    this.#lastSnapshot = snapshot;
+    return Object.freeze({
+      action,
+      intendedAction,
+      mistakeApplied,
+      planned,
+      replanReason,
+      pendingUntilMillis: this.#pending?.executeAtMillis,
+      snapshot,
+      explanation: explanations.join("; ") || "No decision was due"
+    });
+  }
+  #plan(observation, reason) {
+    const state = this.#state;
+    let decision = immutableAgentData(this.#brain.decide(Object.freeze({
+      definition: this.#definition,
+      observation,
+      profile: this.#profile,
+      state,
+      previousIntention: this.#intention,
+      replanReason: reason,
+      random: this.#random,
+      services: this.#services
+    })));
+    const previous = this.#intention;
+    const switching = previous !== void 0 && decision.intention !== void 0 && previous.id !== decision.intention.id && (previous.expiresAtMillis === void 0 || previous.expiresAtMillis > observation.nowMillis);
+    if (switching && this.#lastAction !== void 0 && this.#random.chance(this.#profile.parameters.targetStickiness)) {
+      decision = immutableAgentData({
+        ...decision,
+        action: { ...this.#lastAction, atMillis: observation.nowMillis },
+        intention: previous,
+        explanation: `${decision.explanation}; retained ${previous.label} through target stickiness`
+      });
+    }
+    this.#state = decision.state;
+    this.#intention = decision.intention;
+    this.#replans += 1;
+    const interval = this.#profile.parameters.replanIntervalMillis;
+    this.#nextPlanAtMillis = Math.max(
+      observation.nowMillis,
+      decision.reconsiderAtMillis ?? observation.nowMillis + interval
+    );
+    if (decision.action !== void 0) {
+      this.#pending = Object.freeze({
+        decision,
+        executeAtMillis: observation.nowMillis + this.#profile.parameters.reactionDelayMillis
+      });
+    } else {
+      this.#pending = void 0;
+    }
+    return decision;
+  }
+  #executePending(nowMillis) {
+    if (this.#pending === void 0 || this.#pending.executeAtMillis > nowMillis) {
+      return void 0;
+    }
+    const pending = this.#pending;
+    this.#pending = void 0;
+    if (pending.decision.action === void 0) {
+      return void 0;
+    }
+    const intendedAction = immutableAgentData({ ...pending.decision.action, atMillis: nowMillis });
+    const outcome = applyControlledMistake(
+      intendedAction,
+      this.#profile,
+      this.#random,
+      this.#gridBounds
+    );
+    this.#lastAction = immutableAgentData(outcome.action);
+    return Object.freeze({
+      action: outcome.action,
+      intendedAction: outcome.intendedAction,
+      mistakeApplied: outcome.mistakeApplied,
+      explanation: outcome.mistakeApplied ? "Executed with a controlled seeded mistake" : "Executed planned action"
+    });
+  }
+  #makeSnapshot(observation) {
+    const pendingAction = this.#pending?.decision.action;
+    return createAgentSnapshot({
+      definitionId: this.#definition.id,
+      brainId: this.#brain.id,
+      tick: observation.tick,
+      sequence: this.#sequence,
+      atMillis: observation.nowMillis,
+      position: observation.position,
+      brainState: this.#state,
+      randomState: this.#random.state,
+      intention: this.#intention,
+      lastAction: this.#lastAction,
+      pendingAction,
+      pendingIntention: this.#pending?.decision.intention,
+      pendingActionAtMillis: this.#pending?.executeAtMillis,
+      nextPlanAtMillis: this.#nextPlanAtMillis,
+      forceReplan: this.#forceReplan,
+      stuckDetector: this.#stuckDetector.snapshot(),
+      replans: this.#replans
+    });
+  }
+};
+function createAgentRuntime(options) {
+  return new AgentRuntime(options);
+}
+
+// games/duelo/src/agents.ts
+var DUELO_AGENT_BRAIN_ID = "duelo-semantic-targets";
+var DUELO_RIVAL_TILE_PATH_COST = 8;
+var DUELO_REFERENCE_AGENT_PROFILE = defineAgentProfile(
+  "duelo-reference",
+  "Duelo reference",
+  {
+    reactionDelayMillis: 60,
+    mistakeRate: 0,
+    mistakeSeverity: 0,
+    targetStickiness: 0,
+    caution: 0.55,
+    exploration: 0.45,
+    teamwork: 0.5,
+    prediction: 0.6,
+    memoryDecayPerSecond: 0,
+    replanIntervalMillis: 80,
+    stuckWindowMillis: 1e3,
+    stuckDistance: 0,
+    reservationHorizonMillis: 1e3
+  }
+);
+var FLOOR_GRID = createGrid({ width: FLOOR_COLS, height: FLOOR_ROWS });
+var MAX_MANHATTAN_DISTANCE = FLOOR_COLS + FLOOR_ROWS - 2;
+function createDueloAgentBrain() {
+  return Object.freeze({
+    version: AGENT_CONTRACT_VERSION,
+    id: DUELO_AGENT_BRAIN_ID,
+    initialState: () => Object.freeze({
+      decisions: 0,
+      lastExplanation: "Awaiting the first semantic Duelo observation"
+    }),
+    decide(context) {
+      const { observation, profile: profile2, previousIntention, random } = context;
+      if (observation.world.phase !== "running") {
+        return Object.freeze({
+          state: Object.freeze({
+            ...context.state,
+            lastExplanation: `Waiting while Duelo is ${observation.world.phase}`
+          }),
+          explanation: `Player ${observation.world.playerIndex + 1} waits for the running phase`,
+          reconsiderAtMillis: observation.nowMillis + 20
+        });
+      }
+      const objectives = [...observation.objectives].sort(
+        (first, second) => first.id.localeCompare(second.id)
+      );
+      if (objectives.length === 0) {
+        const explanation2 = `Player ${observation.world.playerIndex + 1} has no owned targets left`;
+        return Object.freeze({
+          state: Object.freeze({
+            decisions: context.state.decisions + 1,
+            lastExplanation: explanation2,
+            lastTargetId: void 0,
+            lastUtility: 1
+          }),
+          intention: Object.freeze({
+            id: `duelo-complete:${observation.world.playerIndex}`,
+            label: "owned targets complete",
+            selectedAtMillis: observation.nowMillis,
+            utility: 1
+          }),
+          explanation: explanation2,
+          reconsiderAtMillis: observation.nowMillis + profile2.parameters.replanIntervalMillis
+        });
+      }
+      const intentions = objectives.map((objective) => {
+        const distance = manhattanDistance2(observation.position, objective.position);
+        const nearbyTargets = objectives.filter(
+          (other) => other.id !== objective.id && manhattanDistance2(objective.position, other.position) <= 2
+        ).length;
+        const proximity = 1 - distance / MAX_MANHATTAN_DISTANCE;
+        const clusterDensity = Math.min(1, nearbyTargets / 6);
+        const seededExploration = random.next() * profile2.parameters.exploration;
+        return Object.freeze({
+          id: `claim:${objective.id}`,
+          label: `claim ${objective.id}`,
+          targetId: objective.id,
+          target: objective.position,
+          baseUtility: seededExploration * 0.08,
+          considerations: Object.freeze([
+            Object.freeze({
+              id: "proximity",
+              label: "short travel",
+              weight: 1.1 + profile2.parameters.caution * 0.7,
+              evaluate: () => proximity
+            }),
+            Object.freeze({
+              id: "cluster",
+              label: "nearby owned targets",
+              weight: 0.25 + profile2.parameters.exploration * 0.4,
+              evaluate: () => clusterDensity
+            })
+          ])
+        });
+      });
+      const selection = selectIntention(intentions, observation, {
+        currentIntentionId: previousIntention?.id,
+        stickiness: profile2.parameters.targetStickiness,
+        stickinessScale: 0.12
+      });
+      const selected = selection.selected;
+      if (selected?.target === void 0 || selected.targetId === void 0) {
+        const explanation2 = "No remaining Duelo target was available";
+        return Object.freeze({
+          state: Object.freeze({
+            decisions: context.state.decisions + 1,
+            lastExplanation: explanation2
+          }),
+          explanation: explanation2,
+          reconsiderAtMillis: observation.nowMillis + 20
+        });
+      }
+      const expiresAtMillis = observation.nowMillis + profile2.parameters.reactionDelayMillis + 20;
+      const explanation = `Player ${observation.world.playerIndex + 1}: ${selection.explanation}`;
+      return Object.freeze({
+        state: Object.freeze({
+          decisions: context.state.decisions + 1,
+          lastExplanation: explanation,
+          lastTargetId: selected.targetId,
+          lastUtility: selection.selectedScore
+        }),
+        action: createAgentAction({
+          actorId: observation.agentId,
+          kind: "move",
+          atMillis: observation.nowMillis,
+          target: selected.target,
+          targetId: selected.targetId,
+          explanation
+        }),
+        intention: Object.freeze({
+          id: selected.id,
+          label: selected.label,
+          selectedAtMillis: observation.nowMillis,
+          targetId: selected.targetId,
+          target: selected.target,
+          expiresAtMillis,
+          utility: selection.selectedScore
+        }),
+        explanation,
+        reconsiderAtMillis: expiresAtMillis
+      });
+    }
+  });
+}
+var DueloAgentController = class {
+  id;
+  playerIndex;
+  profile;
+  definition;
+  #runtime;
+  constructor(options) {
+    validatePlayerIndex(options.playerIndex);
+    this.playerIndex = options.playerIndex;
+    this.id = options.id ?? `duelo-player-${options.playerIndex + 1}`;
+    this.profile = resolveDueloProfile(options.profile ?? DUELO_REFERENCE_AGENT_PROFILE);
+    this.definition = createAgentDefinition({
+      id: this.id,
+      brainId: DUELO_AGENT_BRAIN_ID,
+      profileId: this.profile.id,
+      role: "duelo-player",
+      tags: Object.freeze(["duelo", "semantic", "player"]),
+      config: Object.freeze({ playerIndex: options.playerIndex })
+    });
+    this.#runtime = createAgentRuntime({
+      definition: this.definition,
+      profile: this.profile,
+      brain: createDueloAgentBrain(),
+      seed: options.seed,
+      gridBounds: Object.freeze({ width: FLOOR_COLS, height: FLOOR_ROWS })
+    });
+  }
+  step(observation) {
+    return this.#runtime.step(observation);
+  }
+  forceReplan() {
+    this.#runtime.forceReplan();
+  }
+  snapshot() {
+    return this.#runtime.snapshot();
+  }
+};
+function createDueloAgentController(options) {
+  return new DueloAgentController(options);
+}
+var DueloAgentDirector = class {
+  #game;
+  #playerCount = 0;
+  #seed = 0;
+  #profiles = [];
+  #board;
+  #remainingTargets = /* @__PURE__ */ new Map();
+  #controllers = /* @__PURE__ */ new Map();
+  #lastDecisions = /* @__PURE__ */ new Map();
+  #lastClaimedTargets = 0;
+  #lastTick = -1;
+  #lastAtMillis = Number.NEGATIVE_INFINITY;
+  constructor(options) {
+    this.reset(options);
+  }
+  get board() {
+    return this.#board;
+  }
+  get remainingTargets() {
+    return Object.freeze([...this.#remainingTargets.values()].sort(compareTargets));
+  }
+  reset(options) {
+    if (!Number.isInteger(options.playerCount) || options.playerCount < 2 || options.playerCount > 8) {
+      throw new Error("Duelo directors require an integer player count from 2 through 8");
+    }
+    this.#game = options.game;
+    this.#playerCount = options.playerCount;
+    this.#seed = normalizeSeed2(options.seed);
+    this.#profiles = resolveDirectorProfiles(options.profile, options.playerCount);
+    this.#board = inspectDueloSemanticBoard(options.game, options.playerCount);
+    this.#remainingTargets = new Map(this.#board.targets.map((target3) => [target3.id, target3]));
+    this.#controllers.clear();
+    this.#lastDecisions.clear();
+    this.#lastClaimedTargets = 0;
+    this.#lastTick = -1;
+    this.#lastAtMillis = Number.NEGATIVE_INFINITY;
+  }
+  step(input2) {
+    if (!Number.isInteger(input2.tick) || input2.tick <= this.#lastTick) {
+      throw new Error("Duelo director ticks must be strictly increasing integers");
+    }
+    if (!Number.isFinite(input2.atMillis) || input2.atMillis < this.#lastAtMillis) {
+      throw new Error("Duelo director time must be finite and monotonic");
+    }
+    validateDirectorAgents(input2.agents, this.#playerCount);
+    this.#reconcileTargets(input2.snapshot);
+    const semanticAgents = input2.agents.map((agent) => Object.freeze({
+      id: agent.id,
+      playerIndex: agent.playerIndex,
+      position: agent.position
+    }));
+    const remainingTargets = this.remainingTargets;
+    const decisions = [...input2.agents].sort((first, second) => first.playerIndex - second.playerIndex || first.id.localeCompare(second.id)).map((agent) => {
+      const controller = this.#controllerFor(agent);
+      const targetInvalidated = agent.targetId !== void 0 && !this.#remainingTargets.has(agent.targetId);
+      if (targetInvalidated) controller.forceReplan();
+      const shouldDecide = (agent.requestDecision ?? true) || targetInvalidated;
+      if (!shouldDecide) {
+        const previous = this.#lastDecisions.get(agent.id);
+        const activeTarget = agent.targetId === void 0 ? void 0 : this.#remainingTargets.get(agent.targetId);
+        return Object.freeze({
+          id: agent.id,
+          playerIndex: agent.playerIndex,
+          action: void 0,
+          intendedAction: void 0,
+          intention: previous?.intention,
+          path: activeTarget === void 0 ? Object.freeze([]) : planDueloAgentPath(agent.position, activeTarget.position, {
+            playerIndex: agent.playerIndex,
+            remainingTargets
+          }),
+          explanation: "External avatar is following its current Duelo route",
+          planned: false,
+          mistakeApplied: false,
+          targetInvalidated,
+          replanReason: void 0,
+          pendingUntilMillis: previous?.pendingUntilMillis,
+          runtime: previous?.runtime
+        });
+      }
+      const observation = createDueloSemanticObservation({
+        agentId: agent.id,
+        playerIndex: agent.playerIndex,
+        tick: input2.tick,
+        atMillis: input2.atMillis,
+        position: agent.position,
+        agents: semanticAgents,
+        remainingTargets,
+        snapshot: input2.snapshot,
+        boardSignature: this.#board.signature
+      });
+      const result = controller.step(observation);
+      const path = result.action?.target === void 0 ? Object.freeze([]) : planDueloAgentPath(agent.position, result.action.target, {
+        playerIndex: agent.playerIndex,
+        remainingTargets
+      });
+      const explanation = result.action?.explanation ?? result.explanation;
+      const directed = Object.freeze({
+        id: agent.id,
+        playerIndex: agent.playerIndex,
+        action: result.action,
+        intendedAction: result.intendedAction,
+        intention: result.snapshot.intention,
+        path,
+        explanation,
+        planned: result.planned,
+        mistakeApplied: result.mistakeApplied,
+        targetInvalidated,
+        replanReason: result.replanReason,
+        pendingUntilMillis: result.pendingUntilMillis,
+        runtime: result.snapshot
+      });
+      this.#lastDecisions.set(agent.id, directed);
+      return directed;
+    });
+    this.#lastTick = input2.tick;
+    this.#lastAtMillis = input2.atMillis;
+    return Object.freeze({
+      tick: input2.tick,
+      atMillis: input2.atMillis,
+      boardSignature: this.#board.signature,
+      remainingTargets,
+      decisions: Object.freeze(decisions)
+    });
+  }
+  #controllerFor(agent) {
+    const existing = this.#controllers.get(agent.id);
+    if (existing !== void 0) {
+      if (existing.playerIndex !== agent.playerIndex) {
+        throw new Error(`Duelo agent ${agent.id} changed playerIndex`);
+      }
+      return existing;
+    }
+    const controller = createDueloAgentController({
+      id: agent.id,
+      playerIndex: agent.playerIndex,
+      profile: this.#profiles[agent.playerIndex],
+      seed: mixDirectorSeed(this.#seed, agent.playerIndex)
+    });
+    this.#controllers.set(agent.id, controller);
+    return controller;
+  }
+  #reconcileTargets(snapshot) {
+    const recent = snapshot.recentClaim;
+    if (recent !== null) {
+      const id = dueloTargetId(recent.playerIndex, Object.freeze({ x: recent.x, y: recent.y }));
+      this.#remainingTargets.delete(id);
+    }
+    if (snapshot.claimedTargets !== this.#lastClaimedTargets) {
+      for (const target3 of this.#board.targets) {
+        if (this.#game.targetClaimed(target3.position.x, target3.position.y)) {
+          this.#remainingTargets.delete(target3.id);
+        } else {
+          this.#remainingTargets.set(target3.id, target3);
+        }
+      }
+      this.#lastClaimedTargets = snapshot.claimedTargets;
+    }
+  }
+};
+function createDueloAgentDirector(options) {
+  return new DueloAgentDirector(options);
+}
+function createDueloSemanticObservation(options) {
+  validatePlayerIndex(options.playerIndex);
+  const ownedTargets = options.remainingTargets.filter((target3) => target3.owner === options.playerIndex).sort(compareTargets);
+  return createAgentObservation({
+    agentId: options.agentId,
+    tick: options.tick,
+    nowMillis: options.atMillis,
+    position: options.position,
+    entities: options.agents.filter((agent) => agent.id !== options.agentId).sort((first, second) => first.playerIndex - second.playerIndex).map((agent) => Object.freeze({
+      id: agent.id,
+      kind: "duelo-player",
+      position: agent.position,
+      attributes: Object.freeze({ playerIndex: agent.playerIndex })
+    })),
+    objectives: ownedTargets.map((target3) => Object.freeze({
+      id: target3.id,
+      kind: "owned-color-tile",
+      position: target3.position,
+      value: 1,
+      attributes: Object.freeze({ owner: target3.owner })
+    })),
+    hazards: Object.freeze([]),
+    world: Object.freeze({
+      boardSignature: options.boardSignature,
+      phase: options.snapshot.phase,
+      playerIndex: options.playerIndex,
+      progress: Object.freeze(options.snapshot.playerProgress.map((entry) => Object.freeze({
+        playerIndex: entry.index,
+        claimed: entry.claimed,
+        remaining: entry.remaining,
+        target: entry.target
+      }))),
+      remainingTargetCount: options.snapshot.remainingTargets,
+      totalTargetCount: options.snapshot.totalTargets
+    })
+  });
+}
+function inspectDueloSemanticBoard(game5, playerCount) {
+  if (!Number.isInteger(playerCount) || playerCount < 2 || playerCount > 8) {
+    throw new Error("Duelo semantic boards require an integer player count from 2 through 8");
+  }
+  const targets = [];
+  const ownerCells = [];
+  for (let y = 0; y < FLOOR_ROWS; y += 1) {
+    for (let x = 0; x < FLOOR_COLS; x += 1) {
+      const owner = game5.targetOwner(x, y);
+      ownerCells.push(owner);
+      if (owner < 0) continue;
+      const position = Object.freeze({ x, y });
+      targets.push(Object.freeze({
+        id: dueloTargetId(owner, position),
+        owner,
+        position
+      }));
+    }
+  }
+  const sortedTargets = Object.freeze(targets.sort(compareTargets));
+  const targetsByPlayer = Object.freeze(Array.from(
+    { length: playerCount },
+    (_, playerIndex) => Object.freeze(sortedTargets.filter((target3) => target3.owner === playerIndex))
+  ));
+  return Object.freeze({
+    signature: checksumText(ownerCells.join(",")),
+    targets: sortedTargets,
+    targetsByPlayer
+  });
+}
+function planDueloAgentPath(start2, target3, options = {}) {
+  const rivalTileCost = options.rivalTileCost ?? DUELO_RIVAL_TILE_PATH_COST;
+  if (!Number.isFinite(rivalTileCost) || rivalTileCost < 0) {
+    throw new Error("Duelo rival tile path cost must be finite and non-negative");
+  }
+  const playerIndex = options.playerIndex;
+  const remainingByPoint = new Map((options.remainingTargets ?? []).map((entry) => [
+    pointKey(entry.position),
+    entry
+  ]));
+  return findPath(FLOOR_GRID, start2, target3, {
+    allowDiagonal: false,
+    additionalCosts: playerIndex === void 0 || remainingByPoint.size === 0 ? void 0 : [({ point }) => {
+      const remaining = remainingByPoint.get(pointKey(point));
+      return remaining !== void 0 && remaining.owner !== playerIndex ? rivalTileCost : 0;
+    }]
+  }).path;
+}
+function dueloTargetId(owner, point) {
+  return `duelo-target:${owner}:${point.x},${point.y}`;
+}
+function resolveDueloProfile(profile2) {
+  if (typeof profile2 !== "string") return profile2;
+  return profile2 === DUELO_REFERENCE_AGENT_PROFILE.id ? DUELO_REFERENCE_AGENT_PROFILE : getAgentProfile(profile2);
+}
+function compareTargets(first, second) {
+  return first.owner - second.owner || first.position.y - second.position.y || first.position.x - second.position.x;
+}
+function pointKey(point) {
+  return `${point.x},${point.y}`;
+}
+function resolveDirectorProfiles(selection, playerCount) {
+  const selected = selection ?? DUELO_REFERENCE_AGENT_PROFILE;
+  const values = Array.isArray(selected) ? selected : [selected];
+  if (values.length === 0) throw new Error("Duelo director profile selection must not be empty");
+  return Object.freeze(Array.from(
+    { length: playerCount },
+    (_, playerIndex) => resolveDueloProfile(values[playerIndex % values.length])
+  ));
+}
+function validateDirectorAgents(agents, playerCount) {
+  const ids = /* @__PURE__ */ new Set();
+  const playerIndices = /* @__PURE__ */ new Set();
+  for (const agent of agents) {
+    if (agent.id.length === 0 || ids.has(agent.id)) throw new Error("Duelo director agent ids must be unique");
+    if (!Number.isInteger(agent.playerIndex) || agent.playerIndex < 0 || agent.playerIndex >= playerCount || playerIndices.has(agent.playerIndex)) {
+      throw new Error("Duelo director player indices must be unique and in the configured range");
+    }
+    ids.add(agent.id);
+    playerIndices.add(agent.playerIndex);
+  }
+}
+function normalizeSeed2(seed) {
+  return Number.isFinite(seed) ? Math.trunc(seed) >>> 0 : 137;
+}
+function mixDirectorSeed(seed, playerIndex) {
+  let value = (seed ^ Math.imul(playerIndex + 1, 2654435761)) >>> 0;
+  value ^= value >>> 16;
+  value = Math.imul(value, 2246822507) >>> 0;
+  value ^= value >>> 13;
+  return value >>> 0;
+}
+function validatePlayerIndex(playerIndex) {
+  if (!Number.isInteger(playerIndex) || playerIndex < 0 || playerIndex >= 8) {
+    throw new Error("Duelo playerIndex must be an integer from 0 through 7");
+  }
+}
+function checksumText(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+// games/duelo/src/session-controller.ts
+var SESSION_DIRECTORS = /* @__PURE__ */ new WeakMap();
+function createDueloSessionController(options) {
+  if (options.manifest.id !== "duelo") {
+    throw new Error(`Duelo session controller cannot drive ${options.manifest.id}`);
+  }
+  if (!Number.isInteger(options.playerIndex) || options.playerIndex < 0 || options.playerIndex >= 8) {
+    throw new Error("Duelo session controller playerIndex must be 0 through 7");
+  }
+  const initialGame = assertDueloGame(options.game);
+  const profile2 = normalizeSessionProfile(options.profile);
+  let shared = sharedDirector(initialGame, options.seed, profile2);
+  shared.references += 1;
+  let disposed = false;
+  return Object.freeze({
+    id: options.id,
+    step(observation) {
+      if (disposed) return void 0;
+      if (observation.gameId !== "duelo") return void 0;
+      const game5 = assertDueloGame(observation.game);
+      if (game5 !== shared.game) {
+        releaseShared(shared);
+        shared = sharedDirector(game5, options.seed, profile2);
+        shared.references += 1;
+      }
+      const snapshot = observation.snapshot;
+      if (snapshot.phase !== "running") {
+        return Object.freeze({ explanation: `Duelo is ${snapshot.phase}; readiness stays with GameSession` });
+      }
+      const frame = stepSharedDirector(shared, observation, snapshot);
+      const decision = frame.decisions.find((entry) => entry.playerIndex === options.playerIndex);
+      return sessionResult(decision);
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      releaseShared(shared);
+    }
+  });
+}
+var createSessionController = createDueloSessionController;
+function sharedDirector(game5, seed, sessionProfile) {
+  const existing = SESSION_DIRECTORS.get(game5);
+  const profileKey = sessionProfile ?? "duelo-reference";
+  if (existing !== void 0) {
+    if (existing.seed !== seed || existing.profileKey !== profileKey) {
+      throw new Error("Duelo controllers sharing one game must use the same seed and profile");
+    }
+    return existing;
+  }
+  const playerCount = game5.snapshot().playerCount;
+  if (!Number.isInteger(playerCount) || playerCount < 2 || playerCount > 8) {
+    throw new Error("Duelo session controller requires the game's strict 2\u20138 player configuration");
+  }
+  const profile2 = directorProfile(sessionProfile);
+  const shared = {
+    game: game5,
+    director: createDueloAgentDirector({ game: game5, playerCount, seed, profile: profile2 }),
+    seed,
+    profile: profile2,
+    profileKey,
+    playerCount,
+    activeTargetIds: /* @__PURE__ */ new Map(),
+    cachedTick: -1,
+    cachedFrame: void 0,
+    references: 0
+  };
+  SESSION_DIRECTORS.set(game5, shared);
+  return shared;
+}
+function stepSharedDirector(shared, observation, snapshot) {
+  if (shared.cachedTick === observation.tick && shared.cachedFrame !== void 0) {
+    return shared.cachedFrame;
+  }
+  if (observation.tick <= shared.cachedTick) {
+    shared.director.reset({
+      game: shared.game,
+      playerCount: shared.playerCount,
+      seed: shared.seed,
+      profile: shared.profile
+    });
+    shared.activeTargetIds.clear();
+  }
+  const bots = observation.avatars.filter((avatar) => avatar.isBot).sort((first, second) => first.playerIndex - second.playerIndex || first.id - second.id);
+  const frame = shared.director.step({
+    tick: observation.tick,
+    atMillis: observation.atMillis,
+    snapshot,
+    agents: bots.map((avatar) => {
+      const requesting = avatar.target === null;
+      if (requesting) shared.activeTargetIds.delete(avatar.playerIndex);
+      return Object.freeze({
+        id: directorAgentId(avatar.playerIndex),
+        playerIndex: avatar.playerIndex,
+        position: Object.freeze({ x: avatar.tile.x, y: avatar.tile.y }),
+        requestDecision: requesting,
+        targetId: requesting ? void 0 : shared.activeTargetIds.get(avatar.playerIndex)
+      });
+    })
+  });
+  for (const decision of frame.decisions) {
+    if (decision.targetInvalidated) shared.activeTargetIds.delete(decision.playerIndex);
+    if (decision.action?.targetId !== void 0) {
+      shared.activeTargetIds.set(decision.playerIndex, decision.action.targetId);
+    }
+  }
+  shared.cachedTick = observation.tick;
+  shared.cachedFrame = frame;
+  return frame;
+}
+var MIXED_SESSION_PROFILES = Object.freeze([
+  "cautious",
+  "balanced",
+  "bold",
+  "helper",
+  "explorer",
+  "expert"
+]);
+var SESSION_PROFILE_IDS = Object.freeze([
+  "mixed",
+  "cautious",
+  "balanced",
+  "bold",
+  "helper",
+  "explorer",
+  "chaotic",
+  "expert",
+  "duelo-reference"
+]);
+function normalizeSessionProfile(profile2) {
+  if (profile2 === void 0) return void 0;
+  if (!SESSION_PROFILE_IDS.includes(profile2)) {
+    throw new Error(`Unknown Duelo session profile: ${profile2}`);
+  }
+  return profile2;
+}
+function directorProfile(profile2) {
+  return profile2 === "mixed" ? MIXED_SESSION_PROFILES : profile2;
+}
+function sessionResult(decision) {
+  if (decision === void 0) return void 0;
+  const action = decision.action;
+  return Object.freeze({
+    action: action === void 0 ? void 0 : Object.freeze({
+      kind: action.kind,
+      target: action.target,
+      path: decision.path,
+      explanation: action.explanation
+    }),
+    explanation: decision.explanation
+  });
+}
+function directorAgentId(playerIndex) {
+  return `duelo-session-player-${playerIndex + 1}`;
+}
+function assertDueloGame(game5) {
+  const candidate = game5;
+  if (typeof candidate.targetOwner !== "function" || typeof candidate.targetClaimed !== "function" || typeof candidate.playerReadyZones !== "function") {
+    throw new Error("Duelo session controller requires a semantic DueloGameInstance");
+  }
+  return candidate;
+}
+function releaseShared(shared) {
+  shared.references = Math.max(0, shared.references - 1);
+  if (shared.references === 0) SESSION_DIRECTORS.delete(shared.game);
 }
 
 // games/duelo/src/manifest.ts
@@ -4091,6 +5798,9 @@ var DueloGame = class {
   }
   targetOwner(x, y) {
     return inFloorBounds(x, y) ? this.owners[y * FLOOR_COLS + x] ?? -1 : -1;
+  }
+  targetClaimed(x, y) {
+    return inFloorBounds(x, y) && this.claimed[y * FLOOR_COLS + x] === 1;
   }
   resetGame(nowMillis) {
     this.nowMillis = nowMillis;
@@ -4414,14 +6124,14 @@ occupyReadyZones(startingGame, 100);
 startingGame.tick({ atMillis: 1100 });
 var startingFrame = startingGame.render();
 var startingSnapshot = startingGame.snapshot();
-var runningGame3 = createGame3({ playerCount: 2, players: twoPlayerRoster, seed: 137, difficulty: "hard" });
-runningGame3.init(0);
-startGame(runningGame3);
-claimTargets(runningGame3, 0, 8, 3200);
-claimTargets(runningGame3, 1, 5, 3400);
-runningGame3.tick({ atMillis: 18700 });
-var runningFrame3 = runningGame3.render();
-var runningSnapshot3 = runningGame3.snapshot();
+var runningGame2 = createGame3({ playerCount: 2, players: twoPlayerRoster, seed: 137, difficulty: "hard" });
+runningGame2.init(0);
+startGame(runningGame2);
+claimTargets(runningGame2, 0, 8, 3200);
+claimTargets(runningGame2, 1, 5, 3400);
+runningGame2.tick({ atMillis: 18700 });
+var runningFrame2 = runningGame2.render();
+var runningSnapshot2 = runningGame2.snapshot();
 var crowdedRoster = [
   { name: "Alejandra del Equipo Rel\xE1mpago", color: "#ff3048" },
   { name: "Bruno", color: "#24d9ff" },
@@ -4441,19 +6151,19 @@ for (let player = 0; player < 8; player += 1) {
 crowdedGame.tick({ atMillis: 48230 });
 var crowdedRunningFrame = crowdedGame.render();
 var crowdedRunningSnapshot = crowdedGame.snapshot();
-var finishedGame3 = createGame3({
+var finishedGame2 = createGame3({
   playerCount: 2,
   players: twoPlayerRoster,
   seed: 137,
   difficulty: "medium",
   options: { base_fill_percent: 30 }
 });
-finishedGame3.init(0);
-startGame(finishedGame3);
-claimTargets(finishedGame3, 1, Number.POSITIVE_INFINITY, 3200);
-finishedGame3.tick({ atMillis: 4200 });
-var finishedFrame3 = finishedGame3.render();
-var finishedSnapshot3 = finishedGame3.snapshot();
+finishedGame2.init(0);
+startGame(finishedGame2);
+claimTargets(finishedGame2, 1, Number.POSITIVE_INFINITY, 3200);
+finishedGame2.tick({ atMillis: 4200 });
+var finishedFrame2 = finishedGame2.render();
+var finishedSnapshot2 = finishedGame2.snapshot();
 function occupyReadyZones(game5, atMillis) {
   game5.playerReadyZones().forEach((zone) => {
     game5.press({ x: zone.minX, y: zone.minY, pressed: true, atMillis });
@@ -4485,15 +6195,15 @@ __export(src_exports4, {
   equilibrioGameWinMillis: () => equilibrioGameWinMillis,
   equilibrioMaxStability: () => equilibrioMaxStability,
   equilibrioRoundWinMillis: () => equilibrioRoundWinMillis,
-  finishedFrame: () => finishedFrame4,
-  finishedSnapshot: () => finishedSnapshot4,
+  finishedFrame: () => finishedFrame3,
+  finishedSnapshot: () => finishedSnapshot3,
   holdingFrame: () => holdingFrame,
   holdingSnapshot: () => holdingSnapshot,
   manifest: () => manifest4,
   roundWinFrame: () => roundWinFrame,
   roundWinSnapshot: () => roundWinSnapshot,
-  runningFrame: () => runningFrame4,
-  runningSnapshot: () => runningSnapshot4
+  runningFrame: () => runningFrame3,
+  runningSnapshot: () => runningSnapshot3
 });
 
 // games/equilibrio/src/display.tsx
@@ -5004,9 +6714,9 @@ function startedGame() {
   game5.release({ x: 11, y: 16, pressed: false, atMillis: 2210 });
   return game5;
 }
-var runningGame4 = startedGame();
-var runningFrame4 = runningGame4.render();
-var runningSnapshot4 = runningGame4.snapshot();
+var runningGame3 = startedGame();
+var runningFrame3 = runningGame3.render();
+var runningSnapshot3 = runningGame3.snapshot();
 var holdingGame = startedGame();
 holdingGame.press({ x: 3, y: 6, pressed: true, atMillis: 2300 });
 holdingGame.press({ x: 12, y: 6, pressed: true, atMillis: 2350 });
@@ -5019,23 +6729,23 @@ roundWinGame.press({ x: 12, y: 6, pressed: true, atMillis: 2350 });
 roundWinGame.tick({ atMillis: 2350 + equilibrioDifficultyProfile("medium").holdMillis });
 var roundWinFrame = roundWinGame.render();
 var roundWinSnapshot = roundWinGame.snapshot();
-var finishedGame4 = startedGame();
+var finishedGame3 = startedGame();
 var clock = 2300;
 for (const challenge of equilibrioChallenges) {
   const left = { x: challenge.left.minX, y: challenge.left.minY };
   const right = { x: challenge.right.minX, y: challenge.right.minY };
-  finishedGame4.press({ ...left, pressed: true, atMillis: clock });
-  finishedGame4.press({ ...right, pressed: true, atMillis: clock + 50 });
+  finishedGame3.press({ ...left, pressed: true, atMillis: clock });
+  finishedGame3.press({ ...right, pressed: true, atMillis: clock + 50 });
   clock += equilibrioDifficultyProfile("medium").holdMillis + 50;
-  finishedGame4.tick({ atMillis: clock });
-  if (finishedGame4.snapshot().phase === "round-win") {
+  finishedGame3.tick({ atMillis: clock });
+  if (finishedGame3.snapshot().phase === "round-win") {
     clock += equilibrioRoundWinMillis;
-    finishedGame4.tick({ atMillis: clock });
+    finishedGame3.tick({ atMillis: clock });
   }
   clock += 50;
 }
-var finishedFrame4 = finishedGame4.render();
-var finishedSnapshot4 = finishedGame4.snapshot();
+var finishedFrame3 = finishedGame3.render();
+var finishedSnapshot3 = finishedGame3.snapshot();
 
 // games/estela/src/index.ts
 var src_exports5 = {};
@@ -5043,17 +6753,17 @@ __export(src_exports5, {
   PlayerDisplay: () => PlayerDisplay5,
   createGame: () => createGame5,
   estelaStartPositions: () => estelaStartPositions,
-  finishedFrame: () => finishedFrame5,
-  finishedSnapshot: () => finishedSnapshot5,
+  finishedFrame: () => finishedFrame4,
+  finishedSnapshot: () => finishedSnapshot4,
   gameWinAnimationMillis: () => gameWinAnimationMillis2,
-  initEvents: () => initEvents3,
+  initEvents: () => initEvents2,
   manifest: () => manifest5,
   roundWinAnimationMillis: () => roundWinAnimationMillis,
   roundWinFrame: () => roundWinFrame2,
   roundWinSnapshot: () => roundWinSnapshot2,
   roundsToWin: () => roundsToWin,
-  runningFrame: () => runningFrame5,
-  runningSnapshot: () => runningSnapshot5
+  runningFrame: () => runningFrame4,
+  runningSnapshot: () => runningSnapshot4
 });
 
 // games/estela/src/display.tsx
@@ -5500,15 +7210,15 @@ function parseTile2(key) {
 }
 
 // games/estela/src/fixtures.ts
-var runningGame5 = createGame5({ playerCount: 4, difficulty: "medium" });
-var initEvents3 = runningGame5.init(0);
-start2(runningGame5);
-runningGame5.press({ x: 3, y: 2, pressed: true, atMillis: 3200 });
-var runningFrame5 = runningGame5.render();
-var runningSnapshot5 = runningGame5.snapshot();
+var runningGame4 = createGame5({ playerCount: 4, difficulty: "medium" });
+var initEvents2 = runningGame4.init(0);
+start(runningGame4);
+runningGame4.press({ x: 3, y: 2, pressed: true, atMillis: 3200 });
+var runningFrame4 = runningGame4.render();
+var runningSnapshot4 = runningGame4.snapshot();
 var roundWinGame2 = createGame5({ playerCount: 2 });
 roundWinGame2.init(0);
-start2(roundWinGame2);
+start(roundWinGame2);
 eliminateFirst(roundWinGame2, 3200);
 var roundWinFrame2 = roundWinGame2.render();
 var roundWinSnapshot2 = roundWinGame2.snapshot();
@@ -5516,9 +7226,9 @@ roundWinGame2.tick({ atMillis: 3201 + roundWinAnimationMillis });
 eliminateFirst(roundWinGame2, 5200);
 roundWinGame2.tick({ atMillis: 5201 + roundWinAnimationMillis });
 roundWinGame2.tick({ atMillis: 7500 });
-var finishedFrame5 = roundWinGame2.render();
-var finishedSnapshot5 = roundWinGame2.snapshot();
-function start2(game5) {
+var finishedFrame4 = roundWinGame2.render();
+var finishedSnapshot4 = roundWinGame2.snapshot();
+function start(game5) {
   game5.snapshot().startPositions.forEach((position) => game5.press({ ...position, pressed: true, atMillis: 100 }));
   game5.tick({ atMillis: 3100 });
 }
@@ -5533,13 +7243,13 @@ __export(src_exports6, {
   PlayerDisplay: () => PlayerDisplay6,
   createGame: () => createGame6,
   damagedFrame: () => damagedFrame,
-  damagedSnapshot: () => damagedSnapshot2,
+  damagedSnapshot: () => damagedSnapshot,
   defendedFrame: () => defendedFrame,
   defendedSnapshot: () => defendedSnapshot,
   failedFrame: () => failedFrame,
   failedSnapshot: () => failedSnapshot,
-  finishedFrame: () => finishedFrame6,
-  finishedSnapshot: () => finishedSnapshot6,
+  finishedFrame: () => finishedFrame5,
+  finishedSnapshot: () => finishedSnapshot5,
   guardianLanes: () => guardianLanes,
   guardianesDifficultyProfile: () => guardianesDifficultyProfile,
   guardianesGameFailMillis: () => guardianesGameFailMillis,
@@ -5547,8 +7257,8 @@ __export(src_exports6, {
   guardianesMaxLives: () => guardianesMaxLives,
   guardianesThreatChart: () => guardianesThreatChart,
   manifest: () => manifest6,
-  runningFrame: () => runningFrame6,
-  runningSnapshot: () => runningSnapshot6
+  runningFrame: () => runningFrame5,
+  runningSnapshot: () => runningSnapshot5
 });
 
 // games/guardianes/src/manifest.ts
@@ -5965,10 +7675,10 @@ function startedGame2() {
   game5.release({ x: 8, y: 16, pressed: false, atMillis: 2120 });
   return game5;
 }
-var runningGame6 = startedGame2();
-runningGame6.tick({ atMillis: 4500 });
-var runningFrame6 = runningGame6.render();
-var runningSnapshot6 = runningGame6.snapshot();
+var runningGame5 = startedGame2();
+runningGame5.tick({ atMillis: 4500 });
+var runningFrame5 = runningGame5.render();
+var runningSnapshot5 = runningGame5.snapshot();
 var defendedGame = startedGame2();
 var firstThreat = guardianesThreatChart()[0];
 var firstLane = guardianLanes[firstThreat.lane];
@@ -5976,23 +7686,23 @@ defendedGame.press({ x: firstLane.shieldX, y: 28, pressed: true, atMillis: 2500 
 defendedGame.tick({ atMillis: 2100 + firstThreat.impactMillis });
 var defendedFrame = defendedGame.render();
 var defendedSnapshot = defendedGame.snapshot();
-var damagedGame2 = startedGame2();
-for (const threat of guardianesThreatChart().slice(0, 2)) damagedGame2.tick({ atMillis: 2100 + threat.impactMillis });
-var damagedFrame = damagedGame2.render();
-var damagedSnapshot2 = damagedGame2.snapshot();
+var damagedGame = startedGame2();
+for (const threat of guardianesThreatChart().slice(0, 2)) damagedGame.tick({ atMillis: 2100 + threat.impactMillis });
+var damagedFrame = damagedGame.render();
+var damagedSnapshot = damagedGame.snapshot();
 var failedGame = startedGame2();
 for (const threat of guardianesThreatChart().slice(0, 4)) failedGame.tick({ atMillis: 2100 + threat.impactMillis });
 var failedFrame = failedGame.render();
 var failedSnapshot = failedGame.snapshot();
-var finishedGame5 = startedGame2();
+var finishedGame4 = startedGame2();
 for (const threat of guardianesThreatChart()) {
   const lane = guardianLanes[threat.lane];
-  finishedGame5.press({ x: lane.shieldX, y: 28, pressed: true, atMillis: 2100 + threat.impactMillis - 100 });
-  finishedGame5.tick({ atMillis: 2100 + threat.impactMillis });
-  finishedGame5.release({ x: lane.shieldX, y: 28, pressed: false, atMillis: 2100 + threat.impactMillis + 10 });
+  finishedGame4.press({ x: lane.shieldX, y: 28, pressed: true, atMillis: 2100 + threat.impactMillis - 100 });
+  finishedGame4.tick({ atMillis: 2100 + threat.impactMillis });
+  finishedGame4.release({ x: lane.shieldX, y: 28, pressed: false, atMillis: 2100 + threat.impactMillis + 10 });
 }
-var finishedFrame6 = finishedGame5.render();
-var finishedSnapshot6 = finishedGame5.snapshot();
+var finishedFrame5 = finishedGame4.render();
+var finishedSnapshot5 = finishedGame4.snapshot();
 
 // games/hello-world/src/index.ts
 var src_exports7 = {};
@@ -6000,7 +7710,7 @@ __export(src_exports7, {
   PlayerDisplay: () => PlayerDisplay7,
   createGame: () => createGame7,
   damagedFrame: () => damagedFrame2,
-  damagedSnapshot: () => damagedSnapshot3,
+  damagedSnapshot: () => damagedSnapshot2,
   hazardColor: () => hazardColor2,
   helloWorldCelebrationMillis: () => helloWorldCelebrationMillis,
   helloWorldHazards: () => helloWorldHazards,
@@ -6008,12 +7718,12 @@ __export(src_exports7, {
   helloWorldTargetScore: () => helloWorldTargetScore,
   helloWorldTargets: () => helloWorldTargets,
   idleColor: () => idleColor2,
-  initEvents: () => initEvents4,
+  initEvents: () => initEvents3,
   losingFrame: () => losingFrame,
   losingSnapshot: () => losingSnapshot,
   manifest: () => manifest7,
-  runningFrame: () => runningFrame7,
-  runningSnapshot: () => runningSnapshot7,
+  runningFrame: () => runningFrame6,
+  runningSnapshot: () => runningSnapshot6,
   startingFrame: () => startingFrame2,
   startingSnapshot: () => startingSnapshot2,
   targetColor: () => targetColor,
@@ -6156,8 +7866,8 @@ var HelloWorldGame = class {
     if (this.phase !== "running" || !event.pressed) {
       return [];
     }
-    const hazard2 = this.currentHazard();
-    if (hazard2 && event.x === hazard2.x && event.y === hazard2.y) {
+    const hazard = this.currentHazard();
+    if (hazard && event.x === hazard.x && event.y === hazard.y) {
       return this.loseLife(event.atMillis);
     }
     const target3 = this.currentTarget();
@@ -6215,9 +7925,9 @@ var HelloWorldGame = class {
       fillFrameRect(frame, target3.x - 1, target3.y - 1, 3, 3, targetColor);
       paintFrameCell(frame, target3.x, target3.y, "#ffffff");
     }
-    const hazard2 = this.currentHazard();
-    if (hazard2) {
-      paintFrameCell(frame, hazard2.x, hazard2.y, hazardColor2);
+    const hazard = this.currentHazard();
+    if (hazard) {
+      paintFrameCell(frame, hazard.x, hazard.y, hazardColor2);
     }
     return frame;
   }
@@ -6356,7 +8066,7 @@ var HelloWorldGame = class {
   }
 };
 function helloWorldHazards() {
-  return hazardPath.map((hazard2) => ({ ...hazard2 }));
+  return hazardPath.map((hazard) => ({ ...hazard }));
 }
 function helloWorldTargets() {
   return targetPath.map((target3) => ({ ...target3 }));
@@ -6364,7 +8074,7 @@ function helloWorldTargets() {
 
 // games/hello-world/src/fixtures.ts
 var waitingGame2 = createGame7({ seed: 2024, playerCount: 1, durationMillis: 3e4 });
-var initEvents4 = waitingGame2.init(0);
+var initEvents3 = waitingGame2.init(0);
 var waitingFrame2 = waitingGame2.render();
 var waitingSnapshot2 = waitingGame2.snapshot();
 var startingGame2 = createGame7({ seed: 2024, playerCount: 1, durationMillis: 3e4 });
@@ -6373,17 +8083,17 @@ startingGame2.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
 startingGame2.tick({ atMillis: 1100 });
 var startingFrame2 = startingGame2.render();
 var startingSnapshot2 = startingGame2.snapshot();
-var runningGame7 = createStartedGame();
-var runningFrame7 = runningGame7.render();
-var runningSnapshot7 = runningGame7.snapshot();
-var damagedGame3 = createStartedGame();
+var runningGame6 = createStartedGame();
+var runningFrame6 = runningGame6.render();
+var runningSnapshot6 = runningGame6.snapshot();
+var damagedGame2 = createStartedGame();
 var firstHazard = helloWorldHazards()[0];
 if (!firstHazard) {
   throw new Error("Hola Mundo requires at least one hazard fixture.");
 }
-damagedGame3.press({ ...firstHazard, pressed: true, atMillis: 2200 });
-var damagedFrame2 = damagedGame3.render();
-var damagedSnapshot3 = damagedGame3.snapshot();
+damagedGame2.press({ ...firstHazard, pressed: true, atMillis: 2200 });
+var damagedFrame2 = damagedGame2.render();
+var damagedSnapshot2 = damagedGame2.snapshot();
 var winningGame = createStartedGame();
 helloWorldTargets().forEach((target3, index) => {
   winningGame.press({ ...target3, pressed: true, atMillis: 2200 + index * 100 });
@@ -6392,8 +8102,8 @@ winningGame.tick({ atMillis: 4100 });
 var winningFrame = winningGame.render();
 var winningSnapshot = winningGame.snapshot();
 var losingGame = createStartedGame();
-helloWorldHazards().forEach((hazard2, index) => {
-  losingGame.press({ ...hazard2, pressed: true, atMillis: 2200 + index * 100 });
+helloWorldHazards().forEach((hazard, index) => {
+  losingGame.press({ ...hazard, pressed: true, atMillis: 2200 + index * 100 });
 });
 losingGame.tick({ atMillis: 4100 });
 var losingFrame = losingGame.render();
@@ -6412,14 +8122,14 @@ __export(src_exports8, {
   PlayerDisplay: () => PlayerDisplay8,
   createGame: () => createGame8,
   damagedFrame: () => damagedFrame3,
-  damagedSnapshot: () => damagedSnapshot4,
-  initEvents: () => initEvents5,
+  damagedSnapshot: () => damagedSnapshot3,
+  initEvents: () => initEvents4,
   lavaCelebrationMillis: () => lavaCelebrationMillis,
   lavaDamageImmunityMillis: () => lavaDamageImmunityMillis,
   lavaStartingLives: () => lavaStartingLives,
   manifest: () => manifest8,
-  runningFrame: () => runningFrame8,
-  runningSnapshot: () => runningSnapshot8,
+  runningFrame: () => runningFrame7,
+  runningSnapshot: () => runningSnapshot7,
   startingSnapshot: () => startingSnapshot3,
   waitingSnapshot: () => waitingSnapshot3
 });
@@ -6652,17 +8362,17 @@ function inside(point, platform) {
 
 // games/lava/src/fixtures.ts
 var game = createGame8({ playerCount: 0, seed: 137, difficulty: "medium" });
-var initEvents5 = game.init(0);
+var initEvents4 = game.init(0);
 var waitingSnapshot3 = game.snapshot();
 game.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
 var startingSnapshot3 = game.snapshot();
 game.tick({ atMillis: 2100 });
 game.tick({ atMillis: 4e3 });
-var runningFrame8 = game.render();
-var runningSnapshot8 = game.snapshot();
+var runningFrame7 = game.render();
+var runningSnapshot7 = game.snapshot();
 game.press({ x: 0, y: 31, pressed: true, atMillis: 4100 });
 var damagedFrame3 = game.render();
-var damagedSnapshot4 = game.snapshot();
+var damagedSnapshot3 = game.snapshot();
 
 // games/memory-challenge/src/index.ts
 var src_exports9 = {};
@@ -6671,8 +8381,8 @@ __export(src_exports9, {
   createGame: () => createGame9,
   failedFrame: () => failedFrame2,
   failedSnapshot: () => failedSnapshot2,
-  finishedFrame: () => finishedFrame7,
-  finishedSnapshot: () => finishedSnapshot7,
+  finishedFrame: () => finishedFrame6,
+  finishedSnapshot: () => finishedSnapshot6,
   laneLayout: () => laneLayout,
   manifest: () => manifest9,
   memorizingFrame: () => memorizingFrame,
@@ -7105,9 +8815,9 @@ function laneLayout(count) {
   if (safe === 3) return [{ x: 0, width: 4 }, { x: 6, width: 4 }, { x: 12, width: 4 }];
   return Array.from({ length: 4 }, (_, index) => ({ x: index * 4, width: 4 }));
 }
-function generatePath(rng, lane, start3) {
+function generatePath(rng, lane, start2) {
   const path = [];
-  let x = start3.minX + rng.int(start3.maxX - start3.minX + 1);
+  let x = start2.minX + rng.int(start2.maxX - start2.minX + 1);
   let segment = 3 + rng.int(4);
   for (let y = startRows; y < FLOOR_ROWS; y += 1) {
     path.push({ x, y });
@@ -7156,8 +8866,8 @@ var failedFrame2 = failed.render();
 var failedSnapshot2 = failed.snapshot();
 var finished = gameAt("recall");
 playSteps(finished, 0, Number.POSITIVE_INFINITY, 5200);
-var finishedFrame7 = finished.render();
-var finishedSnapshot7 = finished.snapshot();
+var finishedFrame6 = finished.render();
+var finishedSnapshot6 = finished.snapshot();
 function occupy(game5, atMillis) {
   for (const zone of game5.playerReadyZones()) game5.press({ x: zone.minX, y: zone.minY, pressed: true, atMillis });
 }
@@ -7170,7 +8880,7 @@ var src_exports10 = {};
 __export(src_exports10, {
   PlayerDisplay: () => PlayerDisplay10,
   createGame: () => createGame10,
-  initEvents: () => initEvents6,
+  initEvents: () => initEvents5,
   manifest: () => manifest10,
   memoriaV2GameWinMillis: () => memoriaV2GameWinMillis,
   memoriaV2MemorizeMillis: () => memoriaV2MemorizeMillis,
@@ -7182,8 +8892,8 @@ __export(src_exports10, {
   memoryTargetsForLevel: () => memoryTargetsForLevel,
   roundWinFrame: () => roundWinFrame3,
   roundWinSnapshot: () => roundWinSnapshot3,
-  runningFrame: () => runningFrame9,
-  runningSnapshot: () => runningSnapshot9,
+  runningFrame: () => runningFrame8,
+  runningSnapshot: () => runningSnapshot8,
   startingSnapshot: () => startingSnapshot5,
   waitingSnapshot: () => waitingSnapshot5
 });
@@ -7441,7 +9151,7 @@ var MemoriaV2Game = class {
 
 // games/memoria-v2/src/fixtures.ts
 var game2 = createGame10({ playerCount: 0, seed: 137 });
-var initEvents6 = game2.init(0);
+var initEvents5 = game2.init(0);
 var waitingSnapshot5 = game2.snapshot();
 game2.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
 var startingSnapshot5 = game2.snapshot();
@@ -7449,8 +9159,8 @@ game2.tick({ atMillis: 2100 });
 var memorizeFrame = game2.render();
 var memorizeSnapshot = game2.snapshot();
 game2.tick({ atMillis: 7100 });
-var runningFrame9 = game2.render();
-var runningSnapshot9 = game2.snapshot();
+var runningFrame8 = game2.render();
+var runningSnapshot8 = game2.snapshot();
 for (const target3 of game2.snapshot().targets) game2.press({ ...target3, pressed: true, atMillis: 7200 });
 var roundWinFrame3 = game2.render();
 var roundWinSnapshot3 = game2.snapshot();
@@ -7461,13 +9171,13 @@ __export(src_exports11, {
   PlayerDisplay: () => PlayerDisplay11,
   createGame: () => createGame11,
   damagedFrame: () => damagedFrame4,
-  damagedSnapshot: () => damagedSnapshot5,
+  damagedSnapshot: () => damagedSnapshot4,
   failedFrame: () => failedFrame3,
   failedSnapshot: () => failedSnapshot3,
-  finishedFrame: () => finishedFrame8,
-  finishedSnapshot: () => finishedSnapshot8,
+  finishedFrame: () => finishedFrame7,
+  finishedSnapshot: () => finishedSnapshot7,
   gameWinAnimationMillis: () => gameWinAnimationMillis3,
-  initEvents: () => initEvents7,
+  initEvents: () => initEvents6,
   manifest: () => manifest11,
   meteorCoreColor: () => meteorCoreColor,
   meteorDifficultyProfile: () => meteorDifficultyProfile,
@@ -7475,8 +9185,8 @@ __export(src_exports11, {
   meteorImpactVisibleMillis: () => meteorImpactVisibleMillis,
   meteorWarningColor: () => meteorWarningColor,
   playerFootprintColor: () => playerFootprintColor,
-  runningFrame: () => runningFrame10,
-  runningSnapshot: () => runningSnapshot10,
+  runningFrame: () => runningFrame9,
+  runningSnapshot: () => runningSnapshot9,
   startingLives: () => startingLives3
 });
 
@@ -7906,27 +9616,27 @@ function occupiedTileCoordinates(tile) {
 }
 
 // games/meteor-dodge/src/fixtures.ts
-var runningGame8 = createGame11({ playerCount: 1, difficulty: "medium", seed: 137 });
-var initEvents7 = runningGame8.init(0);
-startGame2(runningGame8);
-runningGame8.release({ x: 8, y: 16, pressed: false, atMillis: 2150 });
-runningGame8.tick({ atMillis: 4e3 });
-var runningFrame10 = runningGame8.render();
-var runningSnapshot10 = runningGame8.snapshot();
-var damagedGame4 = createGame11({ playerCount: 1, difficulty: "easy", seed: 137 });
-damagedGame4.init(0);
-startGame2(damagedGame4);
-damageOnce(damagedGame4, 2450);
-var damagedFrame4 = damagedGame4.render();
-var damagedSnapshot5 = damagedGame4.snapshot();
-var finishedGame6 = createGame11({ playerCount: 1, difficulty: "medium", durationMillis: 4e3, seed: 137 });
-finishedGame6.init(0);
-startGame2(finishedGame6);
-finishedGame6.release({ x: 8, y: 16, pressed: false, atMillis: 2150 });
-finishedGame6.tick({ atMillis: 6100 });
-finishedGame6.tick({ atMillis: 7e3 });
-var finishedFrame8 = finishedGame6.render();
-var finishedSnapshot8 = finishedGame6.snapshot();
+var runningGame7 = createGame11({ playerCount: 1, difficulty: "medium", seed: 137 });
+var initEvents6 = runningGame7.init(0);
+startGame2(runningGame7);
+runningGame7.release({ x: 8, y: 16, pressed: false, atMillis: 2150 });
+runningGame7.tick({ atMillis: 4e3 });
+var runningFrame9 = runningGame7.render();
+var runningSnapshot9 = runningGame7.snapshot();
+var damagedGame3 = createGame11({ playerCount: 1, difficulty: "easy", seed: 137 });
+damagedGame3.init(0);
+startGame2(damagedGame3);
+damageOnce(damagedGame3, 2450);
+var damagedFrame4 = damagedGame3.render();
+var damagedSnapshot4 = damagedGame3.snapshot();
+var finishedGame5 = createGame11({ playerCount: 1, difficulty: "medium", durationMillis: 4e3, seed: 137 });
+finishedGame5.init(0);
+startGame2(finishedGame5);
+finishedGame5.release({ x: 8, y: 16, pressed: false, atMillis: 2150 });
+finishedGame5.tick({ atMillis: 6100 });
+finishedGame5.tick({ atMillis: 7e3 });
+var finishedFrame7 = finishedGame5.render();
+var finishedSnapshot7 = finishedGame5.snapshot();
 var failedGame2 = createGame11({ playerCount: 1, difficulty: "easy", seed: 137 });
 failedGame2.init(0);
 startGame2(failedGame2);
@@ -7958,14 +9668,14 @@ var src_exports12 = {};
 __export(src_exports12, {
   PlayerDisplay: () => PlayerDisplay12,
   createGame: () => createGame12,
-  finishedFrame: () => finishedFrame9,
-  finishedSnapshot: () => finishedSnapshot9,
-  initEvents: () => initEvents8,
+  finishedFrame: () => finishedFrame8,
+  finishedSnapshot: () => finishedSnapshot8,
+  initEvents: () => initEvents7,
   manifest: () => manifest12,
   patronesCelebrationMillis: () => patronesCelebrationMillis,
   patternTargets: () => patternTargets,
-  runningFrame: () => runningFrame11,
-  runningSnapshot: () => runningSnapshot11,
+  runningFrame: () => runningFrame10,
+  runningSnapshot: () => runningSnapshot10,
   startingSnapshot: () => startingSnapshot6,
   waitingSnapshot: () => waitingSnapshot6
 });
@@ -8216,16 +9926,16 @@ var PatronesGame = class {
 
 // games/patrones/src/fixtures.ts
 var game3 = createGame12({ playerCount: 0, difficulty: "medium", durationMillis: manifest12.defaultDurationMillis });
-var initEvents8 = game3.init(0);
+var initEvents7 = game3.init(0);
 var waitingSnapshot6 = game3.snapshot();
 game3.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
 var startingSnapshot6 = game3.snapshot();
 game3.tick({ atMillis: 2100 });
-var runningFrame11 = game3.render();
-var runningSnapshot11 = game3.snapshot();
+var runningFrame10 = game3.render();
+var runningSnapshot10 = game3.snapshot();
 patternTargets("medium").forEach((target3, index) => game3.press({ ...target3, pressed: true, atMillis: 2200 + index * 10 }));
-var finishedFrame9 = game3.render();
-var finishedSnapshot9 = game3.snapshot();
+var finishedFrame8 = game3.render();
+var finishedSnapshot8 = game3.snapshot();
 
 // games/ping-pong/src/index.ts
 var src_exports13 = {};
@@ -8234,12 +9944,12 @@ __export(src_exports13, {
   ballColor: () => ballColor2,
   blueColor: () => blueColor,
   createGame: () => createGame13,
-  finishedSnapshot: () => finishedSnapshot10,
+  finishedSnapshot: () => finishedSnapshot9,
   manifest: () => manifest13,
   pingPongConfigVars: () => pingPongConfigVars,
   redColor: () => redColor,
-  runningFrame: () => runningFrame12,
-  runningSnapshot: () => runningSnapshot12,
+  runningFrame: () => runningFrame11,
+  runningSnapshot: () => runningSnapshot11,
   waitingSnapshot: () => waitingSnapshot7
 });
 
@@ -9093,7 +10803,7 @@ function mix(color, colorPercent, whitePercent) {
 }
 
 // games/ping-pong/src/fixtures.ts
-var runningFrame12 = (() => {
+var runningFrame11 = (() => {
   const frame = createFrame("#05070a");
   fillFrameRect(frame, 5, 2, 5, 1, redColor);
   fillFrameRect(frame, 6, 29, 5, 1, blueColor);
@@ -9138,7 +10848,7 @@ var waitingSnapshot7 = {
   returnSpeedMultiplier: 1.042,
   difficultySpeedFactor: 1.2
 };
-var runningSnapshot12 = {
+var runningSnapshot11 = {
   ...waitingSnapshot7,
   phase: "running",
   readyPlayers: 2,
@@ -9158,8 +10868,8 @@ var runningSnapshot12 = {
   impact: { team: 1, x: 10, y: 29, remainingMillis: 180 },
   motionEventId: 4
 };
-var finishedSnapshot10 = {
-  ...runningSnapshot12,
+var finishedSnapshot9 = {
+  ...runningSnapshot11,
   phase: "finished",
   score: 5,
   remainingMillis: 2400,
@@ -9188,12 +10898,12 @@ __export(src_exports14, {
   ballColor: () => ballColor3,
   blueColor: () => blueColor2,
   createGame: () => createGame14,
-  finishedSnapshot: () => finishedSnapshot11,
+  finishedSnapshot: () => finishedSnapshot10,
   manifest: () => manifest14,
   pingPongV2ConfigVars: () => pingPongV2ConfigVars,
   redColor: () => redColor2,
-  runningFrame: () => runningFrame13,
-  runningSnapshot: () => runningSnapshot13,
+  runningFrame: () => runningFrame12,
+  runningSnapshot: () => runningSnapshot12,
   waitingSnapshot: () => waitingSnapshot8
 });
 
@@ -10032,7 +11742,7 @@ function mix2(color, colorPercent, whitePercent) {
 }
 
 // games/ping-pong-v2/src/fixtures.ts
-var runningFrame13 = (() => {
+var runningFrame12 = (() => {
   const frame = createFrame("#05070a");
   fillFrameRect(frame, 5, 2, 5, 1, redColor2);
   fillFrameRect(frame, 6, 29, 5, 1, blueColor2);
@@ -10077,7 +11787,7 @@ var waitingSnapshot8 = {
   returnSpeedMultiplier: 1.042,
   difficultySpeedFactor: 1.2
 };
-var runningSnapshot13 = {
+var runningSnapshot12 = {
   ...waitingSnapshot8,
   phase: "running",
   readyPlayers: 2,
@@ -10097,8 +11807,8 @@ var runningSnapshot13 = {
   impact: { team: 1, x: 10, y: 29, remainingMillis: 180 },
   motionEventId: 4
 };
-var finishedSnapshot11 = {
-  ...runningSnapshot13,
+var finishedSnapshot10 = {
+  ...runningSnapshot12,
   phase: "finished",
   score: 5,
   remainingMillis: 2400,
@@ -10129,16 +11839,16 @@ __export(src_exports15, {
   createGame: () => createGame15,
   failedFrame: () => failedFrame4,
   failedSnapshot: () => failedSnapshot4,
-  finishedFrame: () => finishedFrame10,
-  finishedSnapshot: () => finishedSnapshot12,
+  finishedFrame: () => finishedFrame9,
+  finishedSnapshot: () => finishedSnapshot11,
   gameFailAnimationMillis: () => gameFailAnimationMillis,
   gameWinAnimationMillis: () => gameWinAnimationMillis4,
   manifest: () => manifest15,
   pulseChart: () => pulseChart,
   pulseDifficultyProfile: () => pulseDifficultyProfile,
   pulsePads: () => pulsePads,
-  runningFrame: () => runningFrame14,
-  runningSnapshot: () => runningSnapshot14,
+  runningFrame: () => runningFrame13,
+  runningSnapshot: () => runningSnapshot13,
   startingEnergy: () => startingEnergy
 });
 
@@ -10709,10 +12419,10 @@ function startedGame3() {
   game5.tick({ atMillis: 2100 });
   return game5;
 }
-var runningGame9 = startedGame3();
-runningGame9.tick({ atMillis: 2100 + 1200 });
-var runningFrame14 = runningGame9.render();
-var runningSnapshot14 = runningGame9.snapshot();
+var runningGame8 = startedGame3();
+runningGame8.tick({ atMillis: 2100 + 1200 });
+var runningFrame13 = runningGame8.render();
+var runningSnapshot13 = runningGame8.snapshot();
 var comboGame = startedGame3();
 var comboChart = pulseChart();
 for (const note of comboChart.slice(0, 7)) {
@@ -10733,30 +12443,30 @@ for (const note of pulseChart().slice(0, 6)) {
 }
 var failedFrame4 = failedGame3.render();
 var failedSnapshot4 = failedGame3.snapshot();
-var finishedGame7 = startedGame3();
+var finishedGame6 = startedGame3();
 for (const note of pulseChart()) {
   for (const zone of note.zones) {
     const pad = pulsePads[zone];
-    finishedGame7.press({ x: pad.x, y: pad.y, pressed: true, atMillis: 2100 + note.atMillis });
+    finishedGame6.press({ x: pad.x, y: pad.y, pressed: true, atMillis: 2100 + note.atMillis });
   }
   if (note.holdMillis > 0) {
-    finishedGame7.tick({ atMillis: 2100 + note.atMillis + note.holdMillis });
+    finishedGame6.tick({ atMillis: 2100 + note.atMillis + note.holdMillis });
   }
 }
-var finishedFrame10 = finishedGame7.render();
-var finishedSnapshot12 = finishedGame7.snapshot();
+var finishedFrame9 = finishedGame6.render();
+var finishedSnapshot11 = finishedGame6.snapshot();
 
 // games/saltos/src/index.ts
 var src_exports16 = {};
 __export(src_exports16, {
   PlayerDisplay: () => PlayerDisplay16,
   createGame: () => createGame16,
-  finishedFrame: () => finishedFrame11,
-  finishedSnapshot: () => finishedSnapshot13,
-  initEvents: () => initEvents9,
+  finishedFrame: () => finishedFrame10,
+  finishedSnapshot: () => finishedSnapshot12,
+  initEvents: () => initEvents8,
   manifest: () => manifest16,
-  runningFrame: () => runningFrame15,
-  runningSnapshot: () => runningSnapshot15,
+  runningFrame: () => runningFrame14,
+  runningSnapshot: () => runningSnapshot14,
   saltosCelebrationMillis: () => saltosCelebrationMillis,
   saltosStartingLives: () => saltosStartingLives,
   startingSnapshot: () => startingSnapshot7,
@@ -11002,19 +12712,19 @@ function insidePlatform(point, platform) {
 
 // games/saltos/src/fixtures.ts
 var game4 = createGame16({ playerCount: 0, durationMillis: manifest16.defaultDurationMillis, seed: 137 });
-var initEvents9 = game4.init(0);
+var initEvents8 = game4.init(0);
 var waitingFrame4 = game4.render();
 var waitingSnapshot9 = game4.snapshot();
 game4.press({ x: 8, y: 4, pressed: true, atMillis: 100 });
 var startingSnapshot7 = game4.snapshot();
 game4.tick({ atMillis: 2100 });
-var runningFrame15 = game4.render();
-var runningSnapshot15 = game4.snapshot();
+var runningFrame14 = game4.render();
+var runningSnapshot14 = game4.snapshot();
 var target = game4.snapshot().targetPlatform;
 if (target) game4.press({ ...target, pressed: true, atMillis: 2200 });
 game4.tick({ atMillis: 62100 });
-var finishedFrame11 = game4.render();
-var finishedSnapshot13 = game4.snapshot();
+var finishedFrame10 = game4.render();
+var finishedSnapshot12 = game4.snapshot();
 
 // games/suelo-seguro/src/index.ts
 var src_exports17 = {};
@@ -11022,21 +12732,23 @@ __export(src_exports17, {
   PlayerDisplay: () => PlayerDisplay17,
   createGame: () => createGame17,
   damagedFrame: () => damagedFrame5,
-  damagedSnapshot: () => damagedSnapshot6,
+  damagedSnapshot: () => damagedSnapshot5,
   failedFrame: () => failedFrame5,
   failedSnapshot: () => failedSnapshot5,
-  finishedFrame: () => finishedFrame12,
-  finishedSnapshot: () => finishedSnapshot14,
+  finishedFrame: () => finishedFrame11,
+  finishedSnapshot: () => finishedSnapshot13,
   manifest: () => manifest17,
   resetSnapshot: () => resetSnapshot,
   roundWinFrame: () => roundWinFrame4,
   roundWinSnapshot: () => roundWinSnapshot4,
-  runningFrame: () => runningFrame16,
-  runningSnapshot: () => runningSnapshot16,
+  runningFrame: () => runningFrame15,
+  runningSnapshot: () => runningSnapshot15,
   sueloSeguroDamageImmunityMillis: () => sueloSeguroDamageImmunityMillis,
   sueloSeguroDepartureGraceMillis: () => sueloSeguroDepartureGraceMillis,
   sueloSeguroDifficultyProfile: () => sueloSeguroDifficultyProfile,
   sueloSeguroGameResultMillis: () => sueloSeguroGameResultMillis,
+  sueloSeguroHazardOrigin: () => sueloSeguroHazardOrigin,
+  sueloSeguroHazardSize: () => sueloSeguroHazardSize,
   sueloSeguroPlatformAnchors: () => sueloSeguroPlatformAnchors,
   sueloSeguroPlatformSize: () => sueloSeguroPlatformSize,
   sueloSeguroRequiredTransfers: () => sueloSeguroRequiredTransfers,
@@ -11052,10 +12764,11 @@ var sueloSeguroStyles = `
 .suelo-seguro-floor{align-content:center;background:rgba(2,8,12,.82);border:1px solid rgba(255,255,255,.11);border-radius:28px;display:grid;justify-items:center;padding:22px}.suelo-seguro-floor>span{color:#9bb1bc;font-size:19px;font-weight:900;letter-spacing:.11em;text-transform:uppercase}.suelo-seguro-floor .ml-floor-preview{height:720px;width:360px}
 .suelo-seguro-main{align-content:center;display:grid;gap:24px;min-width:0}.suelo-seguro-turn{background:linear-gradient(145deg,rgba(8,18,26,.96),color-mix(in srgb,var(--active-color) 15%,#071017));border:4px solid var(--active-color);border-radius:30px;box-shadow:0 0 58px color-mix(in srgb,var(--active-color) 28%,transparent);display:grid;gap:15px;justify-items:center;min-height:270px;padding:32px;text-align:center}.suelo-seguro-turn span{color:#b8c8d0;font-size:22px;font-weight:900;letter-spacing:.11em;text-transform:uppercase}.suelo-seguro-turn strong{color:#fff;font-size:clamp(52px,4.1vw,78px);line-height:1;white-space:normal}.suelo-seguro-turn b{color:var(--active-color);font-size:30px;line-height:1.15;white-space:normal}
 .suelo-seguro-turn-clock{background:#111d22;border-radius:999px;height:18px;overflow:hidden;width:100%}.suelo-seguro-turn-clock i{background:linear-gradient(90deg,#ff183d,#ffe176,var(--active-color));display:block;height:100%;transition:width .1s linear;width:var(--turn-progress)}
-.suelo-seguro-players{display:grid;gap:12px;grid-template-columns:repeat(var(--player-columns),minmax(0,1fr))}.suelo-seguro-player{align-items:center;background:rgba(7,16,23,.9);border:2px solid color-mix(in srgb,var(--player-color) 35%,transparent);border-radius:18px;display:grid;gap:4px;grid-template-columns:13px minmax(0,1fr) auto;padding:14px 16px}.suelo-seguro-player.is-active{background:color-mix(in srgb,var(--player-color) 18%,#071017);border-color:var(--player-color);box-shadow:0 0 24px color-mix(in srgb,var(--player-color) 25%,transparent)}.suelo-seguro-player i{background:var(--player-color);border-radius:5px;box-shadow:0 0 13px var(--player-color);height:34px}.suelo-seguro-player span{color:#fff;font-size:20px;font-weight:900;line-height:1.05;min-width:0;white-space:normal}.suelo-seguro-player strong{color:var(--player-color);font-size:38px;line-height:1}
-.suelo-seguro-sidebar{align-content:center;display:grid;gap:18px}.suelo-seguro-card{background:rgba(5,14,20,.92);border:1px solid rgba(255,255,255,.12);border-radius:23px;display:grid;gap:10px;padding:22px 25px}.suelo-seguro-card span{color:#9fb2bc;font-size:19px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.suelo-seguro-card strong{color:#fff;font-size:60px;line-height:1}.suelo-seguro-lives .ml-lives-meter{justify-content:flex-start}.suelo-seguro-lives .ml-life-heart-glyph{font-size:50px}.suelo-seguro-progress{background:#142229;border-radius:999px;height:14px;overflow:hidden}.suelo-seguro-progress i{background:linear-gradient(90deg,#35d7ff,#5fff9e,#ffe176);display:block;height:100%;width:var(--relay-progress)}.suelo-seguro-event{background:rgba(255,24,61,.09);border:1px solid rgba(255,75,103,.32);border-radius:21px;color:#fff;font-size:25px;font-weight:900;line-height:1.15;min-height:92px;padding:23px;white-space:normal}
-.suelo-seguro-result{align-content:center;background:rgba(2,7,11,.95);display:grid;inset:0;justify-items:center;padding:70px;position:absolute;text-align:center;z-index:6}.suelo-seguro-result strong{color:#fff;font-size:clamp(76px,7vw,132px);line-height:.95;white-space:normal}.suelo-seguro-result span{color:#c8dae2;font-size:32px;font-weight:900;margin-top:26px;white-space:normal}.suelo-seguro-result.is-round{animation:sueloRound .7s ease-in-out infinite alternate;background:linear-gradient(120deg,#062135,color-mix(in srgb,var(--active-color) 38%,#07131b),#0a3a29)}.suelo-seguro-result.is-fail-turn strong,.suelo-seguro-result.is-game-fail strong{color:#ff526e}.suelo-seguro-result.is-fail-turn{background:rgba(39,4,13,.94)}.suelo-seguro-result.is-game-win{animation:sueloWin 1.1s linear infinite;background:linear-gradient(110deg,#06304a,#501448,#6c5c0e,#15573b,#06304a);background-size:260% 100%}
-@keyframes sueloRound{from{filter:saturate(.85);transform:scale(1)}to{filter:saturate(1.35);transform:scale(1.012)}}@keyframes sueloWin{from{background-position:0 0}to{background-position:100% 0}}@media(prefers-reduced-motion:reduce){.suelo-seguro-display *{animation:none!important;transition:none!important}}
+.suelo-seguro-players{display:grid;gap:12px;grid-template-columns:repeat(var(--player-columns),minmax(0,1fr))}.suelo-seguro-player{align-items:center;background:rgba(7,16,23,.9);border:2px solid color-mix(in srgb,var(--player-color) 35%,transparent);border-radius:18px;display:grid;gap:7px;grid-template-columns:13px minmax(0,1fr);padding:12px 16px}.suelo-seguro-player.is-active{background:color-mix(in srgb,var(--player-color) 18%,#071017);border-color:var(--player-color);box-shadow:0 0 24px color-mix(in srgb,var(--player-color) 25%,transparent)}.suelo-seguro-player i{background:var(--player-color);border-radius:5px;box-shadow:0 0 13px var(--player-color);grid-row:1/3;height:38px}.suelo-seguro-player span{color:#fff;font-size:19px;font-weight:900;line-height:1.05;min-width:0;white-space:normal}.suelo-seguro-player strong{color:var(--player-color);font-size:27px;line-height:1;white-space:normal}
+.suelo-seguro-sidebar{align-content:center;display:grid;gap:18px}.suelo-seguro-card{background:rgba(5,14,20,.92);border:1px solid rgba(255,255,255,.12);border-radius:23px;display:grid;gap:10px;padding:22px 25px}.suelo-seguro-card>span{color:#9fb2bc;font-size:19px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.suelo-seguro-card strong{color:#fff;font-size:60px;line-height:1}.suelo-seguro-card small{color:#9fb2bc;font-size:18px;font-weight:800;line-height:1.25;white-space:normal}.suelo-seguro-lives .ml-lives-meter{justify-content:flex-start}.suelo-seguro-lives .ml-life-heart-glyph{font-size:50px}.suelo-seguro-progress{background:#142229;border-radius:999px;height:14px;overflow:hidden}.suelo-seguro-progress i{background:linear-gradient(90deg,#35d7ff,#5fff9e,#ffe176);display:block;height:100%;width:var(--relay-progress)}.suelo-seguro-event{background:rgba(53,215,255,.08);border:1px solid rgba(53,215,255,.26);border-radius:21px;color:#fff;font-size:25px;font-weight:900;line-height:1.15;min-height:92px;padding:23px;white-space:normal}
+.suelo-seguro-result{align-content:center;background:rgba(2,7,11,.95);display:grid;inset:0;justify-items:center;padding:70px;position:absolute;text-align:center;z-index:6}.suelo-seguro-result strong{color:#fff;font-size:clamp(76px,7vw,132px);line-height:.95;white-space:normal}.suelo-seguro-result span{color:#c8dae2;font-size:32px;font-weight:900;margin-top:26px;white-space:normal}.suelo-seguro-result.is-round{animation:sueloRound .7s ease-in-out infinite alternate;background:linear-gradient(120deg,#062135,color-mix(in srgb,var(--active-color) 38%,#07131b),#0a3a29)}.suelo-seguro-result.is-game-fail strong{color:#ff526e}.suelo-seguro-result.is-game-win{animation:sueloWin 1.1s linear infinite;background:linear-gradient(110deg,#06304a,#501448,#6c5c0e,#15573b,#06304a);background-size:260% 100%}
+.suelo-seguro-life-lost{align-items:center;animation:sueloLifeLost 1.2s ease-out both;background:rgba(31,8,14,.92);border:1px solid rgba(255,82,110,.55);border-radius:18px;bottom:36px;box-shadow:0 18px 45px rgba(0,0,0,.38);display:flex;gap:14px;left:50%;padding:16px 24px;position:absolute;transform:translateX(-50%);z-index:7}.suelo-seguro-life-lost strong{color:#ff8297;font-size:26px;white-space:normal}.suelo-seguro-life-lost span{color:#d8c2c7;font-size:20px;font-weight:800;white-space:normal}
+@keyframes sueloRound{from{filter:saturate(.85);transform:scale(1)}to{filter:saturate(1.35);transform:scale(1.012)}}@keyframes sueloWin{from{background-position:0 0}to{background-position:100% 0}}@keyframes sueloLifeLost{0%{opacity:0;transform:translate(-50%,10px)}16%,78%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,-4px)}}@media(prefers-reduced-motion:reduce){.suelo-seguro-display *{animation:none!important;transition:none!important}}
 `;
 function PlayerDisplay17({ snapshot, frame }) {
   const active = snapshot.players[snapshot.activePlayerIndex];
@@ -11082,7 +12795,7 @@ function PlayerDisplay17({ snapshot, frame }) {
       /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("section", { className: "suelo-seguro-players", "aria-label": "Jugadores", children: snapshot.players.map((player) => /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("article", { className: `suelo-seguro-player${player.index === snapshot.activePlayerIndex ? " is-active" : ""}`, style: { "--player-color": player.color }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("i", {}),
         /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { children: player.label }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("strong", { children: player.score })
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("strong", { children: player.score > 0 ? formatRelayTime(player.score) : "\u2014" })
       ] }, player.index)) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("aside", { className: "suelo-seguro-sidebar", children: [
@@ -11091,24 +12804,42 @@ function PlayerDisplay17({ snapshot, frame }) {
         /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("article", { className: "suelo-seguro-card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { children: "Tiempo del equipo" }),
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("strong", { children: formatRelayTime(snapshot.teamTransferMillis) }),
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("small", { children: [
+          "Menos es mejor \xB7 quedan ",
+          formatClock(snapshot.remainingMillis)
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("article", { className: "suelo-seguro-card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { children: "Relevos seguros" }),
         /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("strong", { children: [
           snapshot.completedTransfers,
           "/",
           snapshot.requiredTransfers
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { className: "suelo-seguro-progress", children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("i", {}) })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("article", { className: "suelo-seguro-card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { children: "Tiempo de partida" }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("strong", { children: formatClock(snapshot.remainingMillis) })
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { className: "suelo-seguro-progress", children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("i", {}) }),
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("small", { children: [
+          "Mejor relevo: ",
+          snapshot.bestTransferMillis === null ? "\u2014" : formatRelayTime(snapshot.bestTransferMillis)
+        ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { className: "suelo-seguro-event", children: snapshot.lastEventMessage || "El suelo est\xE1 preparado" })
     ] }),
-    snapshot.phase === "round-win" ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Result2, { className: "is-round", title: `\xA1${snapshot.activePlayerLabel} est\xE1 a salvo!`, caption: `${snapshot.completedTransfers} de ${snapshot.requiredTransfers} relevos completados` }) : null,
-    snapshot.phase === "turn-fail" ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Result2, { className: "is-fail-turn", title: "Turno perdido", caption: "La siguiente plataforma ya est\xE1 activa" }) : null,
-    snapshot.phase === "finished" ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Result2, { className: snapshot.success ? "is-game-win" : "is-game-fail", title: snapshot.success ? "\xA1Equipo a salvo!" : "El rojo os alcanz\xF3", caption: snapshot.success ? `${snapshot.completedTransfers} relevos sin rendirse` : "Busca tu color y esquiva el patr\xF3n" }) : null
+    snapshot.phase === "round-win" ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Result2, { className: "is-round", title: `\xA1${snapshot.activePlayerLabel} est\xE1 a salvo!`, caption: `Relevo en ${formatRelayTime(snapshot.lastTransferMillis ?? 0)} \xB7 equipo ${formatRelayTime(snapshot.teamTransferMillis)}` }) : null,
+    snapshot.lastEventCue === "damage" ? /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "suelo-seguro-life-lost", role: "status", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("strong", { children: "Una vida menos" }),
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("span", { children: [
+        "Quedan ",
+        snapshot.lives,
+        " para todo el equipo"
+      ] })
+    ] }, snapshot.lastEventMessage) : null,
+    snapshot.phase === "finished" ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Result2, { className: snapshot.success ? "is-game-win" : "is-game-fail", title: snapshot.success ? "\xA1Equipo a salvo!" : "El rojo os alcanz\xF3", caption: snapshot.success ? `${snapshot.completedTransfers} relevos en ${formatRelayTime(snapshot.teamTransferMillis)}` : `${snapshot.completedTransfers} relevos \xB7 ${formatRelayTime(snapshot.teamTransferMillis)}` }) : null
   ] }) });
+}
+function formatRelayTime(millis) {
+  return `${(Math.max(0, millis) / 1e3).toFixed(2).replace(".", ",")} s`;
 }
 function Result2({ className, title, caption }) {
   return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: `suelo-seguro-result ${className}`, children: [
@@ -11121,19 +12852,19 @@ function Result2({ className, title, caption }) {
 var manifest17 = {
   id: "suelo-seguro",
   label: "Suelo Seguro",
-  description: "Cada jugador protege una plataforma de 2\xD72, se desplaza por turnos y esquiva un patr\xF3n rojo en movimiento.",
+  description: "El equipo enlaza refugios de 2\xD72 en el per\xEDmetro, comparte vidas y compite por completar los relevos en el menor tiempo.",
   availability: { development: true, production: true },
   catalog: {
     category: "team",
     color: "#5fff9e",
     durationLabel: "90s",
-    modeLabel: "Cooperativo por turnos",
+    modeLabel: "Relevos cooperativos",
     audioLabel: "Efectos",
     rules: [
-      "Cada jugador empieza sobre su plataforma de 2\xD72",
-      "Cuando desaparezca tu plataforma, busca la nueva de tu color",
-      "Mu\xE9vete antes de que termine el turno",
-      "No pises el patr\xF3n rojo en movimiento"
+      "Cada jugador empieza en un refugio de 2\xD72 del per\xEDmetro",
+      "Los refugios aparecen separados y siempre en el borde",
+      "El tiempo de cada relevo se suma al equipo: menos es mejor",
+      "Evitad el bloque rojo de 8\xD78; las vidas son compartidas"
     ]
   },
   players: {
@@ -11157,12 +12888,11 @@ var manifest17 = {
     playerCount: 4,
     difficulty: "medium",
     actions: [
-      { atMillis: 100, type: "press", x: 1, y: 1 },
-      { atMillis: 180, type: "press", x: 13, y: 1 },
-      { atMillis: 260, type: "press", x: 13, y: 29 },
-      { atMillis: 340, type: "press", x: 1, y: 29 },
-      { atMillis: 2450, type: "release", x: 1, y: 1 },
-      { atMillis: 2500, type: "press", x: 5, y: 19 }
+      { atMillis: 100, type: "press", x: 0, y: 0 },
+      { atMillis: 180, type: "press", x: 14, y: 0 },
+      { atMillis: 260, type: "press", x: 14, y: 30 },
+      { atMillis: 340, type: "press", x: 0, y: 30 },
+      { atMillis: 2450, type: "release", x: 0, y: 0 }
     ],
     captureStartMillis: 2700,
     frameCount: 30,
@@ -11173,20 +12903,20 @@ var manifest17 = {
 
 // games/suelo-seguro/src/game.ts
 var sueloSeguroPlatformSize = 2;
+var sueloSeguroHazardSize = 8;
 var sueloSeguroRoundWinMillis = 1400;
 var sueloSeguroTurnFailMillis = 1200;
 var sueloSeguroGameResultMillis = 5e3;
 var sueloSeguroDamageImmunityMillis = 1100;
 var sueloSeguroDepartureGraceMillis = 650;
 var difficultyProfiles4 = {
-  easy: { hazardPeriod: 12, hazardStepMillis: 380, hazardWidth: 1, lives: 5, turnMillis: 5400 },
-  medium: { hazardPeriod: 11, hazardStepMillis: 310, hazardWidth: 2, lives: 4, turnMillis: 4800 },
-  hard: { hazardPeriod: 10, hazardStepMillis: 250, hazardWidth: 2, lives: 3, turnMillis: 4200 },
-  expert: { hazardPeriod: 9, hazardStepMillis: 190, hazardWidth: 2, lives: 2, turnMillis: 3600 }
+  easy: { hazardStepMillis: 380, lives: 5, turnMillis: 5400 },
+  medium: { hazardStepMillis: 310, lives: 4, turnMillis: 4800 },
+  hard: { hazardStepMillis: 250, lives: 3, turnMillis: 4200 },
+  expert: { hazardStepMillis: 190, lives: 2, turnMillis: 3600 }
 };
 var backgroundColor7 = "#05080b";
 var dangerColor = "#ff183d";
-var dangerEdgeColor = "#8f0925";
 var playerColors2 = [
   "#35d7ff",
   "#ff3bd7",
@@ -11198,18 +12928,37 @@ var playerColors2 = [
   "#f5f7ff"
 ];
 var perimeterStarts = [
-  { x: 1, y: 1 },
-  { x: 7, y: 1 },
-  { x: 13, y: 1 },
-  { x: 13, y: 10 },
-  { x: 13, y: 29 },
-  { x: 7, y: 29 },
-  { x: 1, y: 29 },
-  { x: 1, y: 20 }
+  { x: 0, y: 0 },
+  { x: 7, y: 0 },
+  { x: 14, y: 0 },
+  { x: 14, y: 15 },
+  { x: 14, y: 30 },
+  { x: 7, y: 30 },
+  { x: 0, y: 30 },
+  { x: 0, y: 15 }
 ];
-var sueloSeguroPlatformAnchors = [1, 7, 13, 19, 25, 29].flatMap(
-  (y) => [1, 5, 9, 13].map((x) => ({ x, y }))
-);
+var horizontalPlatformXs = [0, 3, 6, 9, 12, 14];
+var verticalPlatformYs = [3, 6, 9, 12, 15, 18, 21, 24, 27];
+var sueloSeguroPlatformAnchors = [
+  ...horizontalPlatformXs.map((x) => ({ x, y: 0 })),
+  ...verticalPlatformYs.map((y) => ({ x: FLOOR_COLS - sueloSeguroPlatformSize, y })),
+  ...[...horizontalPlatformXs].reverse().map((x) => ({ x, y: FLOOR_ROWS - sueloSeguroPlatformSize })),
+  ...[...verticalPlatformYs].reverse().map((y) => ({ x: 0, y }))
+];
+var hazardMaxX = FLOOR_COLS - sueloSeguroHazardSize;
+var hazardMaxY = FLOOR_ROWS - sueloSeguroHazardSize;
+var sueloSeguroHazardOrbit = [
+  ...Array.from({ length: hazardMaxX + 1 }, (_, x) => ({ x, y: 0 })),
+  ...Array.from({ length: hazardMaxY }, (_, index) => ({ x: hazardMaxX, y: index + 1 })),
+  ...Array.from({ length: hazardMaxX }, (_, index) => ({ x: hazardMaxX - index - 1, y: hazardMaxY })),
+  ...Array.from({ length: hazardMaxY - 1 }, (_, index) => ({ x: 0, y: hazardMaxY - index - 1 }))
+];
+var floorPerimeter = [
+  ...Array.from({ length: FLOOR_COLS }, (_, x) => ({ x, y: 0 })),
+  ...Array.from({ length: FLOOR_ROWS - 1 }, (_, index) => ({ x: FLOOR_COLS - 1, y: index + 1 })),
+  ...Array.from({ length: FLOOR_COLS - 1 }, (_, index) => ({ x: FLOOR_COLS - index - 2, y: FLOOR_ROWS - 1 })),
+  ...Array.from({ length: FLOOR_ROWS - 2 }, (_, index) => ({ x: 0, y: FLOOR_ROWS - index - 2 }))
+];
 function sueloSeguroDifficultyProfile(difficulty) {
   return { ...difficultyProfiles4[difficulty] ?? difficultyProfiles4.medium };
 }
@@ -11222,11 +12971,15 @@ function sueloSeguroStartingPlatforms(playerCount) {
     return { ...perimeterStarts[perimeterIndex] };
   });
 }
+function sueloSeguroHazardOrigin(step) {
+  return { ...sueloSeguroHazardOrbit[positiveModulo2(step, sueloSeguroHazardOrbit.length)] };
+}
 function createGame17(config) {
   return new SueloSeguroGame(config);
 }
 var SueloSeguroGame = class {
   activePlayerIndex = 0;
+  bestTransferMillis = null;
   completedTransfers = 0;
   config;
   failedTurns = 0;
@@ -11234,6 +12987,7 @@ var SueloSeguroGame = class {
   heldTiles = /* @__PURE__ */ new Set();
   lastDamageAtMillis = Number.NEGATIVE_INFINITY;
   lastEvent = gameEvent("none", "Busca tu plataforma", 0);
+  lastTransferMillis = null;
   lives = 0;
   nowMillis = 0;
   phase = "ready";
@@ -11246,6 +13000,7 @@ var SueloSeguroGame = class {
   startedAtMillis = 0;
   success = false;
   targetPlatform = null;
+  teamTransferMillis = 0;
   turnDeadlineMillis = 0;
   turnStartedAtMillis = 0;
   constructor(config) {
@@ -11351,7 +13106,7 @@ var SueloSeguroGame = class {
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players,
-      score: this.completedTransfers,
+      score: this.teamTransferMillis,
       lives: this.lives,
       maxLives: profile2.lives,
       elapsedMillis: this.elapsedMillis(),
@@ -11365,13 +13120,16 @@ var SueloSeguroGame = class {
       requiredPlayers: ready.requiredPlayers,
       activePlayerIndex: this.activePlayerIndex,
       activePlayerLabel: active?.label ?? "Jugador 1",
+      bestTransferMillis: this.bestTransferMillis,
       completedTransfers: this.completedTransfers,
       failedTurns: this.failedTurns,
       hazardStep: this.hazardStep(this.nowMillis),
+      lastTransferMillis: this.lastTransferMillis,
       platforms: visiblePlatforms,
       requiredTransfers: sueloSeguroRequiredTransfers(this.config.playerCount),
       stage: this.stage(),
       targetPlatform: visiblePlatforms.find((platform) => platform.target) ?? null,
+      teamTransferMillis: this.teamTransferMillis,
       turnDurationMillis: profile2.turnMillis,
       turnRemainingMillis: this.phase === "running" ? Math.max(0, this.turnDeadlineMillis - this.nowMillis) : 0
     };
@@ -11407,18 +13165,22 @@ var SueloSeguroGame = class {
   }
   completeTransfer(atMillis) {
     if (!this.targetPlatform || this.phase !== "running") return [];
+    const transferMillis = Math.max(0, atMillis - this.turnStartedAtMillis);
     this.platforms[this.activePlayerIndex] = { ...this.targetPlatform };
     this.targetPlatform = null;
     this.completedTransfers += 1;
-    this.playerScores[this.activePlayerIndex] = (this.playerScores[this.activePlayerIndex] ?? 0) + 1;
+    this.lastTransferMillis = transferMillis;
+    this.bestTransferMillis = this.bestTransferMillis === null ? transferMillis : Math.min(this.bestTransferMillis, transferMillis);
+    this.teamTransferMillis += transferMillis;
+    this.playerScores[this.activePlayerIndex] = (this.playerScores[this.activePlayerIndex] ?? 0) + transferMillis;
     this.updatePlayers();
     if (this.completedTransfers >= sueloSeguroRequiredTransfers(this.config.playerCount)) {
-      return this.finish(true, "Todos los relevos completados", atMillis);
+      return this.finish(true, `Todos los relevos en ${formatTransferTime(this.teamTransferMillis)}`, atMillis);
     }
     this.phase = "round-win";
     this.resultAtMillis = atMillis;
     const active = this.players[this.activePlayerIndex];
-    this.lastEvent = gameEvent("round-win", `${active?.label ?? "Jugador"} est\xE1 a salvo`, atMillis);
+    this.lastEvent = gameEvent("round-win", `${active?.label ?? "Jugador"} lleg\xF3 en ${formatTransferTime(transferMillis)}`, atMillis);
     return [this.lastEvent];
   }
   failTurn(atMillis) {
@@ -11455,24 +13217,41 @@ var SueloSeguroGame = class {
     const origin = this.platforms[this.activePlayerIndex];
     const occupied = this.platforms.filter((_platform, index) => index !== this.activePlayerIndex);
     const candidates = sueloSeguroPlatformAnchors.filter(
-      (candidate) => !occupied.some((platform) => overlaps(platform, candidate)) && manhattan(origin, candidate) >= 8
+      (candidate) => !samePlatform(origin, candidate) && !occupied.some((platform) => touchesOrAdjacent(platform, candidate)) && manhattan(origin, candidate) >= 8
     );
     const fallback = sueloSeguroPlatformAnchors.filter(
-      (candidate) => !occupied.some((platform) => overlaps(platform, candidate)) && !samePlatform(origin, candidate)
+      (candidate) => !samePlatform(origin, candidate) && !occupied.some((platform) => touchesOrAdjacent(platform, candidate))
     );
     const pool = candidates.length > 0 ? candidates : fallback;
-    return { ...pool[this.rng.int(pool.length)] ?? origin };
+    const selected = pool[this.rng.int(pool.length)];
+    if (!selected) throw new Error("Suelo Seguro could not place a separated perimeter platform");
+    return { ...selected };
   }
   paintWaiting(frame) {
-    const step = Math.floor(this.nowMillis / (this.phase === "starting" ? 120 : 220));
+    const step = Math.floor(this.nowMillis / (this.phase === "starting" ? 100 : 150));
     for (let y = 0; y < FLOOR_ROWS; y += 1) {
       for (let x = 0; x < FLOOR_COLS; x += 1) {
-        if (positiveModulo2(x + Math.floor(y / 2) - step, 13) === 0) paintFrameCell(frame, x, y, "#3a0a17");
+        if (positiveModulo2(x * 7 + y * 3 + step, 47) === 0) paintFrameCell(frame, x, y, "#0a2630");
       }
     }
+    floorPerimeter.forEach((cell, index) => {
+      const trail = positiveModulo2(index - step, 23);
+      if (trail === 0) paintFrameCell(frame, cell.x, cell.y, this.phase === "starting" ? "#ffe176" : "#7feaff");
+      else if (trail === 1 || trail === 22) paintFrameCell(frame, cell.x, cell.y, "#164a5a");
+    });
     this.platforms.forEach((platform, index) => {
-      const color = this.readyGate.zoneReady(index, this.nowMillis) ? "#ffffff" : this.players[index]?.color ?? playerColors2[index];
+      const ready = this.readyGate.zoneReady(index, this.nowMillis);
+      const color = ready ? "#ffffff" : this.players[index]?.color ?? playerColors2[index];
       fillFrameRect(frame, platform.x, platform.y, sueloSeguroPlatformSize, sueloSeguroPlatformSize, color);
+      if (!ready) {
+        const shimmer = positiveModulo2(step + index, sueloSeguroPlatformSize * sueloSeguroPlatformSize);
+        paintFrameCell(
+          frame,
+          platform.x + shimmer % sueloSeguroPlatformSize,
+          platform.y + Math.floor(shimmer / sueloSeguroPlatformSize),
+          "#ffffff"
+        );
+      }
     });
     paintDiamondRing(frame, {
       centerX: 7.5,
@@ -11482,14 +13261,8 @@ var SueloSeguroGame = class {
     });
   }
   paintHazard(frame) {
-    const profile2 = this.profile();
-    const step = this.hazardStep(this.nowMillis);
-    for (let y = 0; y < FLOOR_ROWS; y += 1) {
-      for (let x = 0; x < FLOOR_COLS; x += 1) {
-        const phase = positiveModulo2(x + Math.floor(y / 2) - step, profile2.hazardPeriod);
-        if (phase < profile2.hazardWidth) paintFrameCell(frame, x, y, phase === 0 ? dangerColor : dangerEdgeColor);
-      }
-    }
+    const origin = sueloSeguroHazardOrigin(this.hazardStep(this.nowMillis));
+    fillFrameRect(frame, origin.x, origin.y, sueloSeguroHazardSize, sueloSeguroHazardSize, dangerColor);
   }
   paintPlatform(frame, platform) {
     const pulse = platform.target && Math.floor(this.nowMillis / 180) % 2 === 0 ? "#ffffff" : platform.color;
@@ -11537,9 +13310,8 @@ var SueloSeguroGame = class {
   }
   isDangerousContact(x, y, atMillis) {
     if (this.visiblePlatforms().some((platform) => insidePlatform2(x, y, platform))) return false;
-    const profile2 = this.profile();
-    const phase = positiveModulo2(x + Math.floor(y / 2) - this.hazardStep(atMillis), profile2.hazardPeriod);
-    return phase < profile2.hazardWidth;
+    const origin = sueloSeguroHazardOrigin(this.hazardStep(atMillis));
+    return x >= origin.x && x < origin.x + sueloSeguroHazardSize && y >= origin.y && y < origin.y + sueloSeguroHazardSize;
   }
   hazardStep(atMillis) {
     return Math.floor(Math.max(0, atMillis - this.startedAtMillis) / this.profile().hazardStepMillis);
@@ -11572,11 +13344,13 @@ var SueloSeguroGame = class {
   }
   resetState(nowMillis) {
     this.activePlayerIndex = 0;
+    this.bestTransferMillis = null;
     this.completedTransfers = 0;
     this.failedTurns = 0;
     this.finishedAtMillis = null;
     this.heldTiles.clear();
     this.lastDamageAtMillis = Number.NEGATIVE_INFINITY;
+    this.lastTransferMillis = null;
     this.lives = this.profile().lives;
     this.nowMillis = nowMillis;
     this.phase = "waiting";
@@ -11588,6 +13362,7 @@ var SueloSeguroGame = class {
     this.startedAtMillis = nowMillis;
     this.success = false;
     this.targetPlatform = null;
+    this.teamTransferMillis = 0;
     this.turnDeadlineMillis = 0;
     this.turnStartedAtMillis = 0;
     this.updatePlayers();
@@ -11609,14 +13384,17 @@ function tileKey5(x, y) {
 function insidePlatform2(x, y, platform) {
   return x >= platform.x && x < platform.x + sueloSeguroPlatformSize && y >= platform.y && y < platform.y + sueloSeguroPlatformSize;
 }
-function overlaps(left, right) {
-  return left.x < right.x + sueloSeguroPlatformSize && left.x + sueloSeguroPlatformSize > right.x && left.y < right.y + sueloSeguroPlatformSize && left.y + sueloSeguroPlatformSize > right.y;
+function touchesOrAdjacent(left, right) {
+  return left.x <= right.x + sueloSeguroPlatformSize && left.x + sueloSeguroPlatformSize >= right.x && left.y <= right.y + sueloSeguroPlatformSize && left.y + sueloSeguroPlatformSize >= right.y;
 }
 function samePlatform(left, right) {
   return left.x === right.x && left.y === right.y;
 }
 function manhattan(left, right) {
   return Math.abs(left.x - right.x) + Math.abs(left.y - right.y);
+}
+function formatTransferTime(millis) {
+  return `${(Math.max(0, millis) / 1e3).toFixed(2).replace(".", ",")} s`;
 }
 function positiveModulo2(value, divisor) {
   return (value % divisor + divisor) % divisor;
@@ -11632,21 +13410,21 @@ function startedGame4() {
   game5.tick({ atMillis: 2400 });
   return game5;
 }
-var runningGame10 = startedGame4();
-runningGame10.tick({ atMillis: 2700 });
-var runningFrame16 = runningGame10.render();
-var runningSnapshot16 = runningGame10.snapshot();
+var runningGame9 = startedGame4();
+runningGame9.tick({ atMillis: 2700 });
+var runningFrame15 = runningGame9.render();
+var runningSnapshot15 = runningGame9.snapshot();
 var roundWinGame3 = startedGame4();
 var firstTarget = roundWinGame3.snapshot().targetPlatform;
 roundWinGame3.press({ x: firstTarget.x, y: firstTarget.y, pressed: true, atMillis: 2650 });
 var roundWinFrame4 = roundWinGame3.render();
 var roundWinSnapshot4 = roundWinGame3.snapshot();
-var damagedGame5 = startedGame4();
-damagedGame5.tick({ atMillis: 3100 });
-var danger = damagedGame5.render().cells.find((cell) => cell.color === "#ff183d");
-damagedGame5.press({ x: danger.x, y: danger.y, pressed: true, atMillis: 3100 });
-var damagedFrame5 = damagedGame5.render();
-var damagedSnapshot6 = damagedGame5.snapshot();
+var damagedGame4 = startedGame4();
+damagedGame4.tick({ atMillis: 3100 });
+var danger = damagedGame4.render().cells.find((cell) => cell.color === "#ff183d");
+damagedGame4.press({ x: danger.x, y: danger.y, pressed: true, atMillis: 3100 });
+var damagedFrame5 = damagedGame4.render();
+var damagedSnapshot5 = damagedGame4.snapshot();
 var failedGame4 = startedGame4();
 var failedClock = 2400;
 while (failedGame4.snapshot().phase !== "finished") {
@@ -11655,21 +13433,21 @@ while (failedGame4.snapshot().phase !== "finished") {
 }
 var failedFrame5 = failedGame4.render();
 var failedSnapshot5 = failedGame4.snapshot();
-var finishedGame8 = startedGame4();
+var finishedGame7 = startedGame4();
 var clock2 = 2650;
-while (finishedGame8.snapshot().phase !== "finished") {
-  const target3 = finishedGame8.snapshot().targetPlatform;
+while (finishedGame7.snapshot().phase !== "finished") {
+  const target3 = finishedGame7.snapshot().targetPlatform;
   if (!target3) throw new Error("fixture expected an active target platform");
-  finishedGame8.press({ x: target3.x, y: target3.y, pressed: true, atMillis: clock2 });
-  finishedGame8.release({ x: target3.x, y: target3.y, pressed: false, atMillis: clock2 + 20 });
-  if (finishedGame8.snapshot().phase !== "finished") {
+  finishedGame7.press({ x: target3.x, y: target3.y, pressed: true, atMillis: clock2 });
+  finishedGame7.release({ x: target3.x, y: target3.y, pressed: false, atMillis: clock2 + 20 });
+  if (finishedGame7.snapshot().phase !== "finished") {
     clock2 += sueloSeguroRoundWinMillis + 40;
-    finishedGame8.tick({ atMillis: clock2 });
+    finishedGame7.tick({ atMillis: clock2 });
     clock2 += 40;
   }
 }
-var finishedFrame12 = finishedGame8.render();
-var finishedSnapshot14 = finishedGame8.snapshot();
+var finishedFrame11 = finishedGame7.render();
+var finishedSnapshot13 = finishedGame7.snapshot();
 var resetGame = startedGame4();
 resetGame.tick({ atMillis: manifest17.defaultDurationMillis + 2400 });
 resetGame.tick({ atMillis: manifest17.defaultDurationMillis + 2400 + sueloSeguroGameResultMillis });
@@ -11684,10 +13462,10 @@ __export(src_exports18, {
   blueFieldFirstRow: () => blueFieldFirstRow,
   centerLineColor: () => centerLineColor,
   createGame: () => createGame18,
-  finishedFrame: () => finishedFrame13,
-  finishedSnapshot: () => finishedSnapshot15,
+  finishedFrame: () => finishedFrame12,
+  finishedSnapshot: () => finishedSnapshot14,
   gameWinAnimationMillis: () => gameWinAnimationMillis5,
-  initEvents: () => initEvents10,
+  initEvents: () => initEvents9,
   knotColor: () => knotColor,
   manifest: () => manifest18,
   onBlueTilePressed: () => onBlueTilePressed,
@@ -11702,8 +13480,8 @@ __export(src_exports18, {
   roundWinFrame: () => roundWinFrame5,
   roundWinSnapshot: () => roundWinSnapshot5,
   roundsToWin: () => roundsToWin2,
-  runningFrame: () => runningFrame17,
-  runningSnapshot: () => runningSnapshot17,
+  runningFrame: () => runningFrame16,
+  runningSnapshot: () => runningSnapshot16,
   startingFrame: () => startingFrame4,
   startingSnapshot: () => startingSnapshot8,
   teamForTile: () => teamForTile,
@@ -12470,7 +14248,7 @@ function onBlueTilePressed(game5, atMillis, x = 11, y = 24) {
 
 // games/tira-soga/src/fixtures.ts
 var waitingGame3 = createGame18({ playerCount: 2, difficulty: "medium" });
-var initEvents10 = waitingGame3.init(0);
+var initEvents9 = waitingGame3.init(0);
 var waitingFrame5 = waitingGame3.render();
 var waitingSnapshot10 = waitingGame3.snapshot();
 var startingGame3 = createGame18({ playerCount: 2, difficulty: "hard" });
@@ -12479,18 +14257,18 @@ occupyReadyZones2(startingGame3, 100);
 startingGame3.tick({ atMillis: 1100 });
 var startingFrame4 = startingGame3.render();
 var startingSnapshot8 = startingGame3.snapshot();
-var runningGame11 = createGame18({ playerCount: 2, difficulty: "medium" });
-runningGame11.init(0);
-startGame3(runningGame11);
-onRedTilePressed(runningGame11, 3200);
-onRedTilePressed(runningGame11, 3300);
-onBlueTilePressed(runningGame11, 3400);
-onBlueTilePressed(runningGame11, 3500);
-onBlueTilePressed(runningGame11, 3600);
-onBlueTilePressed(runningGame11, 3700);
-onBlueTilePressed(runningGame11, 3800);
-var runningFrame17 = runningGame11.render();
-var runningSnapshot17 = runningGame11.snapshot();
+var runningGame10 = createGame18({ playerCount: 2, difficulty: "medium" });
+runningGame10.init(0);
+startGame3(runningGame10);
+onRedTilePressed(runningGame10, 3200);
+onRedTilePressed(runningGame10, 3300);
+onBlueTilePressed(runningGame10, 3400);
+onBlueTilePressed(runningGame10, 3500);
+onBlueTilePressed(runningGame10, 3600);
+onBlueTilePressed(runningGame10, 3700);
+onBlueTilePressed(runningGame10, 3800);
+var runningFrame16 = runningGame10.render();
+var runningSnapshot16 = runningGame10.snapshot();
 var roundWinGame4 = createGame18({ playerCount: 2, difficulty: "easy" });
 roundWinGame4.init(0);
 startGame3(roundWinGame4);
@@ -12502,9 +14280,9 @@ for (let index = 0; index < ropeLimit; index += 1) {
 roundWinGame4.tick({ atMillis: roundWinTime + 500 });
 var roundWinFrame5 = roundWinGame4.render();
 var roundWinSnapshot5 = roundWinGame4.snapshot();
-var finishedGame9 = createGame18({ playerCount: 2, difficulty: "easy" });
-finishedGame9.init(0);
-startGame3(finishedGame9);
+var finishedGame8 = createGame18({ playerCount: 2, difficulty: "easy" });
+finishedGame8.init(0);
+startGame3(finishedGame8);
 var fixtureTime = 3200;
 function winFixtureRound(game5, team) {
   for (let index = 0; index < ropeLimit; index += 1) {
@@ -12521,11 +14299,11 @@ function winFixtureRound(game5, team) {
   }
 }
 for (const winner of [0, 1, 0, 1, 0]) {
-  winFixtureRound(finishedGame9, winner);
+  winFixtureRound(finishedGame8, winner);
 }
-finishedGame9.tick({ atMillis: fixtureTime + Math.floor(gameWinAnimationMillis5 / 3) });
-var finishedFrame13 = finishedGame9.render();
-var finishedSnapshot15 = finishedGame9.snapshot();
+finishedGame8.tick({ atMillis: fixtureTime + Math.floor(gameWinAnimationMillis5 / 3) });
+var finishedFrame12 = finishedGame8.render();
+var finishedSnapshot14 = finishedGame8.snapshot();
 function occupyReadyZones2(game5, atMillis) {
   for (const zone of game5.playerReadyZones()) {
     game5.press({ x: zone.minX + 2, y: zone.minY + 2, pressed: true, atMillis });
@@ -12545,8 +14323,8 @@ __export(src_exports19, {
   PlayerDisplay: () => PlayerDisplay19,
   createGame: () => createGame19,
   manifest: () => manifest19,
-  runningFrame: () => runningFrame18,
-  runningSnapshot: () => runningSnapshot18,
+  runningFrame: () => runningFrame17,
+  runningSnapshot: () => runningSnapshot17,
   startingFrame: () => startingFrame5,
   startingSnapshot: () => startingSnapshot9,
   tetrisConfigVars: () => tetrisConfigVars,
@@ -12971,20 +14749,20 @@ var startingFrame5 = starting2.render();
 var startingSnapshot9 = starting2.snapshot();
 var running = gameAt2("running");
 running.press({ x: 5, y: 31, pressed: true, atMillis: 2300 });
-var runningFrame18 = running.render();
-var runningSnapshot18 = running.snapshot();
+var runningFrame17 = running.render();
+var runningSnapshot17 = running.snapshot();
 
 // games/whack-a-mole/src/index.ts
 var src_exports20 = {};
 __export(src_exports20, {
   PlayerDisplay: () => PlayerDisplay20,
   createGame: () => createGame20,
-  finishedFrame: () => finishedFrame14,
-  finishedSnapshot: () => finishedSnapshot16,
+  finishedFrame: () => finishedFrame13,
+  finishedSnapshot: () => finishedSnapshot15,
   manifest: () => manifest20,
   readyZonesForPlayers: () => readyZonesForPlayers,
-  runningFrame: () => runningFrame19,
-  runningSnapshot: () => runningSnapshot19,
+  runningFrame: () => runningFrame18,
+  runningSnapshot: () => runningSnapshot18,
   startingFrame: () => startingFrame6,
   startingSnapshot: () => startingSnapshot10,
   waitingFrame: () => waitingFrame7,
@@ -13356,11 +15134,11 @@ var startingSnapshot10 = starting3.snapshot();
 var running2 = create("running");
 var target2 = running2.snapshot().targets[1];
 running2.press({ x: target2.x, y: target2.y, pressed: true, atMillis: 2300 });
-var runningFrame19 = running2.render();
-var runningSnapshot19 = running2.snapshot();
+var runningFrame18 = running2.render();
+var runningSnapshot18 = running2.snapshot();
 var finished2 = create("finished");
-var finishedFrame14 = finished2.render();
-var finishedSnapshot16 = finished2.snapshot();
+var finishedFrame13 = finished2.render();
+var finishedSnapshot15 = finished2.snapshot();
 function occupy2(game5) {
   game5.playerReadyZones().forEach((zone) => game5.press({ x: zone.minX, y: zone.minY, pressed: true, atMillis: 100 }));
 }
@@ -13499,7 +15277,7 @@ function finiteNumber(value, fallback) {
 }
 
 // packages/runner/src/runner.ts
-var sourceRevision = true ? "ad56581ac7421fb00ac834ab0d63bfe2e8fead77" : "development";
+var sourceRevision = true ? "ac44910469349756962c245fb1f72960dedabee4" : "development";
 var session = new RunnerSession();
 var input = createInterface({ input: process.stdin, crlfDelay: Infinity });
 input.on("line", (line) => {
