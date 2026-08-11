@@ -2,13 +2,15 @@
   "schema": "motion-levels-games-bundle-v1",
   "contractVersion": 1,
   "runnerProtocolVersion": 1,
-  "sourceRevision": "1f2196886fba3cdbebb360dc6bacdf1863d44c69",
+  "sourceRevision": "2ead60349c56a3f8d2ce8aafb0915ffbeb8b0eca",
   "sdkFps": 50,
-  "artifactDigest": "3aa6e88f213a537dbd53963728beca6b9488b44d162cc442ab65f6dce334b5a4",
+  "artifactDigest": "8099a72ed80d584bf578ea0991d78838b8682732ffe65ae9808300b0720fd62b",
   "runtime": {
     "entry": "runtime/runner.mjs",
     "games": [
+      "4773837e-3565-49d7-8953-3b40f59fca7b",
       "arkanoid",
+      "c1daea4f-e586-4116-8cbe-871cde887a81",
       "cruce-galactico",
       "duelo",
       "equilibrio",
@@ -30,7 +32,9 @@
   "playerDisplay": {
     "entry": "display/display.js",
     "games": [
+      "4773837e-3565-49d7-8953-3b40f59fca7b",
       "arkanoid",
+      "c1daea4f-e586-4116-8cbe-871cde887a81",
       "cruce-galactico",
       "duelo",
       "equilibrio",
@@ -49,17 +53,55 @@
       "whack-a-mole"
     ]
   },
+  "playerMenu": {
+    "entry": "menu/index.html",
+    "adapterProtocolVersion": 1
+  },
+  "playground": {
+    "entry": "playground/index.html",
+    "basePath": "/games/play/"
+  },
   "catalog": "catalog.json",
   "files": [
     {
       "path": "catalog.json",
-      "sha256": "96245dbb9c736f6b2f592aeafe72dd7966c9ed4d27fd3c2ec73cedbe7eb70194",
-      "bytes": 45887
+      "sha256": "25c9737f3a295281768e0222974dcbcf4dd4a53e485a270042dc5ae39547e0e6",
+      "bytes": 50453
     },
     {
       "path": "display/display.js",
-      "sha256": "bcc8ff6cf65ae5cb70b351dd9163eb23bd7ab0cd814f0c98a4b0bca7e149a953",
-      "bytes": 577182
+      "sha256": "466bc434613e440bfb3e9d616e456d06f505cb24eb857fef5ae2e8ab64cdc719",
+      "bytes": 622222
+    },
+    {
+      "path": "media/4773837e-3565-49d7-8953-3b40f59fca7b/4773837e-3565-49d7-8953-3b40f59fca7b-player-display-animation.webp",
+      "sha256": "88d7441b7ca1ac1eb47a12a3e7a00d3b024f142ff79b256f8092b5b8dd9bd83a",
+      "bytes": 24934
+    },
+    {
+      "path": "media/4773837e-3565-49d7-8953-3b40f59fca7b/4773837e-3565-49d7-8953-3b40f59fca7b-player-display.webp",
+      "sha256": "adede0c3f8a7f6ef35d3918215760b01c22c494aca0c00f1fea68707c58cf591",
+      "bytes": 36668
+    },
+    {
+      "path": "media/4773837e-3565-49d7-8953-3b40f59fca7b/4773837e-3565-49d7-8953-3b40f59fca7b-preview.webp",
+      "sha256": "44fea8b9060417701ffc72fb790b6b1aaaf931fa8ffca43e2c7bacedc0a473f4",
+      "bytes": 4614
+    },
+    {
+      "path": "media/4773837e-3565-49d7-8953-3b40f59fca7b/4773837e-3565-49d7-8953-3b40f59fca7b-thumbnail-small.webp",
+      "sha256": "4207292eda05ad97fbe4e9bdc16d3e1d4e5220cea1a7b1fc50d8b3f1c301f504",
+      "bytes": 806
+    },
+    {
+      "path": "media/4773837e-3565-49d7-8953-3b40f59fca7b/4773837e-3565-49d7-8953-3b40f59fca7b-thumbnail.webp",
+      "sha256": "ba15b470b389e4bd55f3b6d3e7d1bb7f244c5ed10982b418af7b0d8afa4ebb05",
+      "bytes": 8554
+    },
+    {
+      "path": "media/4773837e-3565-49d7-8953-3b40f59fca7b/metadata.json",
+      "sha256": "decd12857edfe7e221ec44bce69e10cb273d477c71a9d59743b33ca9bde61e98",
+      "bytes": 1778
     },
     {
       "path": "media/arkanoid/arkanoid-player-display-animation.webp",
@@ -90,6 +132,36 @@
       "path": "media/arkanoid/metadata.json",
       "sha256": "bd154c8002d74b914915b0d5b9fd33d1cde6b8570dbe410ec063744cabdd669c",
       "bytes": 1913
+    },
+    {
+      "path": "media/c1daea4f-e586-4116-8cbe-871cde887a81/c1daea4f-e586-4116-8cbe-871cde887a81-player-display-animation.webp",
+      "sha256": "3483175cf767e8b1012cab1876d6c1fdf49d97607ebf2e1c8637f71c75b06ce4",
+      "bytes": 146132
+    },
+    {
+      "path": "media/c1daea4f-e586-4116-8cbe-871cde887a81/c1daea4f-e586-4116-8cbe-871cde887a81-player-display.webp",
+      "sha256": "f0e4c6cec5552f7acea8175024d5d3a81f2a628aeeca4b7f3939c4d60628b394",
+      "bytes": 48850
+    },
+    {
+      "path": "media/c1daea4f-e586-4116-8cbe-871cde887a81/c1daea4f-e586-4116-8cbe-871cde887a81-preview.webp",
+      "sha256": "f65e60ee140c92bf542bdc75337b4d607c7ab765ec526874c873821b1f78bf7b",
+      "bytes": 125666
+    },
+    {
+      "path": "media/c1daea4f-e586-4116-8cbe-871cde887a81/c1daea4f-e586-4116-8cbe-871cde887a81-thumbnail-small.webp",
+      "sha256": "20e39902c1fdb515888cc67501352e7296d04bd4729a63446142e508ccdd099f",
+      "bytes": 1338
+    },
+    {
+      "path": "media/c1daea4f-e586-4116-8cbe-871cde887a81/c1daea4f-e586-4116-8cbe-871cde887a81-thumbnail.webp",
+      "sha256": "eb06e07cffcccf6bb57b25d281eb43d74eb6cfd0ae3be6fc7de29eaac2649ca0",
+      "bytes": 32818
+    },
+    {
+      "path": "media/c1daea4f-e586-4116-8cbe-871cde887a81/metadata.json",
+      "sha256": "63e5dfcb42c2ea09b5bcf9a111a8fa71218f9cf6195cb9a034171fd45b3728e4",
+      "bytes": 1783
     },
     {
       "path": "media/cruce-galactico/cruce-galactico-player-display-animation.webp",
@@ -662,9 +734,214 @@
       "bytes": 3514
     },
     {
+      "path": "menu/apple-icon.png",
+      "sha256": "15c73b71872fed4ad06cfc0d8a3e46a0ab0255ea6eafc7915dcff7b5f829a230",
+      "bytes": 31981
+    },
+    {
+      "path": "menu/assets/index-B9eu46vI.js",
+      "sha256": "de244623704c4d47338818f59b9e8dc4cb216b684eb97a8a62be7b58f992d3c2",
+      "bytes": 572870
+    },
+    {
+      "path": "menu/assets/index-Cqm521m-.css",
+      "sha256": "fc3bbcee795d5b9b186cfac17924f0e58861469577f8390959bc4c42ab587aa2",
+      "bytes": 89208
+    },
+    {
+      "path": "menu/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2",
+      "sha256": "ca157063339ac4ad418f214f3abfed119b0798ab4d377386ce5c9e5a7a435ebd",
+      "bytes": 25960
+    },
+    {
+      "path": "menu/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2",
+      "sha256": "71d5ee93cc1e9f1d520a3a8b66456de18c7879d8df09d57fcd2eaff75fef0075",
+      "bytes": 18748
+    },
+    {
+      "path": "menu/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2",
+      "sha256": "6e9e020a25f9b56d418f2c085b1d3c09725a4da23fe693a5b463064606732190",
+      "bytes": 11232
+    },
+    {
+      "path": "menu/assets/inter-greek-wght-normal-CkhJZR-_.woff2",
+      "sha256": "1be3448e292fbf05ffe176fe1e43f135013d50b1e7d324ad1a558f623d3bb6f6",
+      "bytes": 18996
+    },
+    {
+      "path": "menu/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2",
+      "sha256": "34b9c504cab7a73e37b746343a449132e56cf7b5481af2cb81dc74dcff25c956",
+      "bytes": 85068
+    },
+    {
+      "path": "menu/assets/inter-latin-wght-normal-Dx4kXJAl.woff2",
+      "sha256": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
+      "bytes": 48256
+    },
+    {
+      "path": "menu/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2",
+      "sha256": "5c66f9e07e90c6d4ac4922cc68d60de26c17b1858e677fb5e603fce3952b3ff2",
+      "bytes": 10252
+    },
+    {
+      "path": "menu/assets/localCatalog-D80d2BK8.js",
+      "sha256": "aaa6266cf857287a1541838d9acfc571b014d9ae28ab915c91514b2509bd4c56",
+      "bytes": 26380
+    },
+    {
+      "path": "menu/favicon.ico",
+      "sha256": "5643f5be58682ea9174ce9e33edad8f6b344011fd62d85612527cc1d90dad821",
+      "bytes": 85449
+    },
+    {
+      "path": "menu/icon.png",
+      "sha256": "f4c527f76d4be60bb12ae7d138c2dcb6bf31d6edf79e795890697baad7f37c34",
+      "bytes": 657337
+    },
+    {
+      "path": "menu/index.html",
+      "sha256": "5d38395b661f0057d32e3c5adc6fa541826d4778c639403caecf7d75d0a98a03",
+      "bytes": 619
+    },
+    {
+      "path": "menu/motion-levels-icon.png",
+      "sha256": "261b7706ce53fbf009da4e41a221b2222c5e68f3d10bb30c28633c488bfe912e",
+      "bytes": 251542
+    },
+    {
+      "path": "menu/motion-levels-icon.webp",
+      "sha256": "b8a3988e0e31be41259e815e934686802dfeda754368fe11203f79a96364ed05",
+      "bytes": 189758
+    },
+    {
+      "path": "playground/a.out.wasm",
+      "sha256": "fe90545a516c513f09654acc252b3dd37615791717b16c40ccb417a48fc7ca1c",
+      "bytes": 2313506
+    },
+    {
+      "path": "playground/apple-icon.png",
+      "sha256": "15c73b71872fed4ad06cfc0d8a3e46a0ab0255ea6eafc7915dcff7b5f829a230",
+      "bytes": 31981
+    },
+    {
+      "path": "playground/assets/adapter-YF718EXP.js",
+      "sha256": "3863cd80753d39f933f433df7bdd7fb5dda8a909fe44b1303c636f08dc35fbdc",
+      "bytes": 41928
+    },
+    {
+      "path": "playground/assets/index-CY_rAdXk.css",
+      "sha256": "3d673100b0ce41be5e978a9d247b6dd34d1dfd87793ed06205f945b6bcb75544",
+      "bytes": 89345
+    },
+    {
+      "path": "playground/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2",
+      "sha256": "ca157063339ac4ad418f214f3abfed119b0798ab4d377386ce5c9e5a7a435ebd",
+      "bytes": 25960
+    },
+    {
+      "path": "playground/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2",
+      "sha256": "71d5ee93cc1e9f1d520a3a8b66456de18c7879d8df09d57fcd2eaff75fef0075",
+      "bytes": 18748
+    },
+    {
+      "path": "playground/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2",
+      "sha256": "6e9e020a25f9b56d418f2c085b1d3c09725a4da23fe693a5b463064606732190",
+      "bytes": 11232
+    },
+    {
+      "path": "playground/assets/inter-greek-wght-normal-CkhJZR-_.woff2",
+      "sha256": "1be3448e292fbf05ffe176fe1e43f135013d50b1e7d324ad1a558f623d3bb6f6",
+      "bytes": 18996
+    },
+    {
+      "path": "playground/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2",
+      "sha256": "34b9c504cab7a73e37b746343a449132e56cf7b5481af2cb81dc74dcff25c956",
+      "bytes": 85068
+    },
+    {
+      "path": "playground/assets/inter-latin-wght-normal-Dx4kXJAl.woff2",
+      "sha256": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
+      "bytes": 48256
+    },
+    {
+      "path": "playground/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2",
+      "sha256": "5c66f9e07e90c6d4ac4922cc68d60de26c17b1858e677fb5e603fce3952b3ff2",
+      "bytes": 10252
+    },
+    {
+      "path": "playground/assets/localCatalog-BxVmmeuX.js",
+      "sha256": "e7056ceff4d250db144a70fda93e7d1356aada43a9bf8dee10727b9283af6c8a",
+      "bytes": 2402
+    },
+    {
+      "path": "playground/assets/main-CxzrBwGB.css",
+      "sha256": "aa63a0172d6cb2d24d0a9252835ffd4e4afeaf1e4b225dca165b283d3101d1e6",
+      "bytes": 84300
+    },
+    {
+      "path": "playground/assets/main-ywtzEezE.js",
+      "sha256": "4e751be744688e57adaee2a8d3d49769acddbcd6ef2edf738cb658a712e13207",
+      "bytes": 1472778
+    },
+    {
+      "path": "playground/assets/manifest-BHmeRlXL.js",
+      "sha256": "d1d50ae9d7750d24efd30ffe6177d9d0990926c6362e95afe537b57c507f696c",
+      "bytes": 24554
+    },
+    {
+      "path": "playground/assets/motion-levels-icon-2vb_FDl3.webp",
+      "sha256": "b8a3988e0e31be41259e815e934686802dfeda754368fe11203f79a96364ed05",
+      "bytes": 189758
+    },
+    {
+      "path": "playground/assets/motion-levels-icon-BqLXvRIH.png",
+      "sha256": "261b7706ce53fbf009da4e41a221b2222c5e68f3d10bb30c28633c488bfe912e",
+      "bytes": 251542
+    },
+    {
+      "path": "playground/assets/player-menu/index-DclUWHcm.js",
+      "sha256": "0192fa3da22f52b0c061baa6925bad7159133174de7ad3643507c1b7fdbdbd46",
+      "bytes": 380963
+    },
+    {
+      "path": "playground/assets/preload-helper-B-jX6QEx.js",
+      "sha256": "243b17a006d6ae644df9cef2a537f36045fddacd3d115c87c00d46943b905214",
+      "bytes": 192241
+    },
+    {
+      "path": "playground/favicon.ico",
+      "sha256": "5643f5be58682ea9174ce9e33edad8f6b344011fd62d85612527cc1d90dad821",
+      "bytes": 85449
+    },
+    {
+      "path": "playground/icon.png",
+      "sha256": "f4c527f76d4be60bb12ae7d138c2dcb6bf31d6edf79e795890697baad7f37c34",
+      "bytes": 657337
+    },
+    {
+      "path": "playground/index.html",
+      "sha256": "7fa77da42703f47ef9108e616afe4b1fbe1bdcb8a1c0dd572adee9e2a5566732",
+      "bytes": 3998
+    },
+    {
+      "path": "playground/motion-levels-icon.png",
+      "sha256": "261b7706ce53fbf009da4e41a221b2222c5e68f3d10bb30c28633c488bfe912e",
+      "bytes": 251542
+    },
+    {
+      "path": "playground/motion-levels-icon.webp",
+      "sha256": "b8a3988e0e31be41259e815e934686802dfeda754368fe11203f79a96364ed05",
+      "bytes": 189758
+    },
+    {
+      "path": "playground/player-menu/index.html",
+      "sha256": "c22164952ee3cde5afb1dbeefdc0a5ac2665bb3ce4bf3fd8905861f729401c99",
+      "bytes": 767
+    },
+    {
       "path": "runtime/runner.mjs",
-      "sha256": "15565b179ad0eadef5cf3a35470da15000b675092ccf57d1f62d9e186c9285e5",
-      "bytes": 639020
+      "sha256": "73b7a59a6d34d2d0cce8392041d7de1488931c2468ffa2a1bfa326d45598c694",
+      "bytes": 719649
     }
   ]
 }

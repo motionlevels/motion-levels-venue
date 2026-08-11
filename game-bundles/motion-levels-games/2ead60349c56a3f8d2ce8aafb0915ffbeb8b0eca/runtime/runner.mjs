@@ -1822,54 +1822,115 @@ var MAX_GAME_SEED = 4294967295;
 var FRAME_SIZE = FLOOR_COLS * FLOOR_ROWS;
 var DEFAULT_START_COUNTDOWN_MILLIS = 2e3;
 var DEFAULT_PLAYER_RELEASE_GRACE_MILLIS = 650;
+function gameManifestSlug(manifest23) {
+  const slug = String(manifest23.slug ?? "").trim();
+  return slug || manifest23.id;
+}
+function gameManifestLookupKeys(manifest23) {
+  const keys = [manifest23.id, gameManifestSlug(manifest23), ...manifest23.aliases ?? []].map(normalizeGameLookupKey).filter(Boolean);
+  return Object.freeze([...new Set(keys)]);
+}
+function normalizeGameLookupKey(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
 var DEFAULT_GAME_DIFFICULTIES = ["easy", "medium", "hard", "expert"];
 var DEFAULT_ENGINE_FPS = 50;
 var DEFAULT_ENGINE_FRAME_MILLIS = 1e3 / DEFAULT_ENGINE_FPS;
 function inFloorBounds(x, y) {
   return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && x < FLOOR_COLS && y >= 0 && y < FLOOR_ROWS;
 }
-function normalizeGameConfig(config, manifest21) {
+function normalizeGameConfig(config, manifest23) {
+  const content = normalizeGameContent(config.content);
   return {
     seed: normalizeGameSeed(config.seed),
-    playerCount: normalizePlayerCount(config.playerCount, manifest21),
+    playerCount: normalizePlayerCount(config.playerCount, manifest23),
     players: Array.isArray(config.players) ? config.players : [],
-    durationMillis: normalizeNonNegativeNumber(config.durationMillis, manifest21.defaultDurationMillis),
+    durationMillis: normalizeNonNegativeNumber(config.durationMillis, manifest23.defaultDurationMillis),
     nowMillis: normalizeNonNegativeNumber(config.nowMillis, 0),
-    difficulty: normalizeGameDifficulty(config.difficulty, manifest21),
-    options: normalizeGameConfigOptions(config.options, manifest21)
+    difficulty: normalizeGameDifficulty(config.difficulty, manifest23),
+    options: normalizeGameConfigOptions(config.options, manifest23),
+    ...content ? { content } : {}
   };
+}
+function normalizeGameContent(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return void 0;
+  const schema = String(value.schema ?? "").trim();
+  if (!schema || schema.length > 120) return void 0;
+  const clone = cloneGameContentValue(value, /* @__PURE__ */ new WeakSet());
+  if (!clone || typeof clone !== "object" || Array.isArray(clone)) return void 0;
+  return Object.freeze({ ...clone, schema });
+}
+function cloneGameContentValue(value, ancestors) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : void 0;
+  if (typeof value !== "object") return void 0;
+  if (ancestors.has(value)) return void 0;
+  ancestors.add(value);
+  if (Array.isArray(value)) {
+    const cloned2 = [];
+    for (const child of value) {
+      const normalized = cloneGameContentValue(child, ancestors);
+      if (normalized === void 0) {
+        ancestors.delete(value);
+        return void 0;
+      }
+      cloned2.push(normalized);
+    }
+    ancestors.delete(value);
+    return Object.freeze(cloned2);
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    ancestors.delete(value);
+    return void 0;
+  }
+  const cloned = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (key === "__proto__" || key === "prototype" || key === "constructor") {
+      ancestors.delete(value);
+      return void 0;
+    }
+    const normalized = cloneGameContentValue(child, ancestors);
+    if (normalized === void 0) {
+      ancestors.delete(value);
+      return void 0;
+    }
+    cloned[key] = normalized;
+  }
+  ancestors.delete(value);
+  return Object.freeze(cloned);
 }
 function normalizeGameSeed(value) {
   const candidate = typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : DEFAULT_GAME_SEED;
   return clamp(candidate, MIN_GAME_SEED, MAX_GAME_SEED);
 }
-function normalizePlayerCount(value, manifest21) {
-  const rounded = typeof value === "number" && Number.isFinite(value) ? Math.round(value) : defaultGamePlayerCount(manifest21);
-  if (manifest21.players.allowAny === true && rounded === 0) {
+function normalizePlayerCount(value, manifest23) {
+  const rounded = typeof value === "number" && Number.isFinite(value) ? Math.round(value) : defaultGamePlayerCount(manifest23);
+  if (manifest23.players.allowAny === true && rounded === 0) {
     return 0;
   }
-  return clamp(rounded, manifest21.players.min, manifest21.players.max);
+  return clamp(rounded, manifest23.players.min, manifest23.players.max);
 }
-function defaultGamePlayerCount(manifest21) {
-  return manifest21.players.allowAny ? 0 : manifest21.players.min;
+function defaultGamePlayerCount(manifest23) {
+  return manifest23.players.allowAny ? 0 : manifest23.players.min;
 }
 function normalizeNonNegativeNumber(value, fallback) {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : fallback;
 }
-function gameDifficultyOptions(manifest21) {
-  const configured = manifest21.config?.difficulty?.options;
+function gameDifficultyOptions(manifest23) {
+  const configured = manifest23.config?.difficulty?.options;
   return configured?.length ? [...configured] : [...DEFAULT_GAME_DIFFICULTIES];
 }
-function normalizeGameDifficulty(value, manifest21) {
-  const options = gameDifficultyOptions(manifest21);
-  const configuredDefault = manifest21.config?.difficulty?.default;
+function normalizeGameDifficulty(value, manifest23) {
+  const options = gameDifficultyOptions(manifest23);
+  const configuredDefault = manifest23.config?.difficulty?.default;
   const fallback = configuredDefault && options.includes(configuredDefault) ? configuredDefault : options.includes("medium") ? "medium" : options[0] ?? "medium";
   return value && options.includes(value) ? value : fallback;
 }
-function normalizeGameConfigOptions(options, manifest21) {
+function normalizeGameConfigOptions(options, manifest23) {
   const source = options ?? {};
   return Object.fromEntries(
-    (manifest21.config?.vars ?? []).map((configVar) => [
+    (manifest23.config?.vars ?? []).map((configVar) => [
       configVar.key,
       normalizeGameConfigValue(configVar, source[configVar.key])
     ])
@@ -1988,8 +2049,8 @@ function gameStartCountdownMillis(policy) {
     DEFAULT_START_COUNTDOWN_MILLIS
   );
 }
-function createGameEngine(game5, options = {}) {
-  return new DefaultGameEngine(game5, options);
+function createGameEngine(game7, options = {}) {
+  return new DefaultGameEngine(game7, options);
 }
 function normalizeEngineFps(fps) {
   if (fps === void 0 || !Number.isFinite(fps) || fps <= 0) {
@@ -2112,8 +2173,8 @@ var DefaultGameEngine = class {
   currentFrameMillis;
   currentGame;
   currentState;
-  constructor(game5, options) {
-    this.currentGame = game5;
+  constructor(game7, options) {
+    this.currentGame = game7;
     this.currentClockMillis = options.nowMillis ?? 0;
     this.currentFps = normalizeEngineFps(options.fps);
     this.currentFrameMillis = 1e3 / this.currentFps;
@@ -2153,8 +2214,8 @@ var DefaultGameEngine = class {
       atMillis: this.currentClockMillis
     }));
   }
-  replaceGame(game5, options = {}) {
-    this.currentGame = game5;
+  replaceGame(game7, options = {}) {
+    this.currentGame = game7;
     this.currentClockMillis = options.nowMillis ?? 0;
     this.currentFps = normalizeEngineFps(options.fps ?? this.currentFps);
     this.currentFrameMillis = 1e3 / this.currentFps;
@@ -3301,14 +3362,14 @@ finishedGame.init(0);
 autoplay(finishedGame);
 var finishedFrame = finishedGame.render();
 var finishedSnapshot = finishedGame.snapshot();
-function autoplay(game5) {
-  game5.press({ x: 7, y: 30, pressed: true, atMillis: 50 });
-  game5.tick({ atMillis: 2050 });
+function autoplay(game7) {
+  game7.press({ x: 7, y: 30, pressed: true, atMillis: 50 });
+  game7.tick({ atMillis: 2050 });
   let nowMillis = 2100;
-  for (let step = 0; step < 24e3 && game5.snapshot().phase !== "finished"; step += 1) {
-    const snapshot = game5.snapshot();
-    game5.press({ x: snapshot.ball.x, y: 30, pressed: true, atMillis: nowMillis });
-    game5.tick({ atMillis: nowMillis });
+  for (let step = 0; step < 24e3 && game7.snapshot().phase !== "finished"; step += 1) {
+    const snapshot = game7.snapshot();
+    game7.press({ x: snapshot.ball.x, y: 30, pressed: true, atMillis: nowMillis });
+    game7.tick({ atMillis: nowMillis });
     nowMillis += 50;
   }
 }
@@ -5261,7 +5322,7 @@ function createDueloSemanticObservation(options) {
     })
   });
 }
-function inspectDueloSemanticBoard(game5, playerCount) {
+function inspectDueloSemanticBoard(game7, playerCount) {
   if (!Number.isInteger(playerCount) || playerCount < 2 || playerCount > 8) {
     throw new Error("Duelo semantic boards require an integer player count from 2 through 8");
   }
@@ -5269,7 +5330,7 @@ function inspectDueloSemanticBoard(game5, playerCount) {
   const ownerCells = [];
   for (let y = 0; y < FLOOR_ROWS; y += 1) {
     for (let x = 0; x < FLOOR_COLS; x += 1) {
-      const owner = game5.targetOwner(x, y);
+      const owner = game7.targetOwner(x, y);
       ownerCells.push(owner);
       if (owner < 0) continue;
       const position = Object.freeze({ x, y });
@@ -5386,10 +5447,10 @@ function createDueloSessionController(options) {
     step(observation) {
       if (disposed) return void 0;
       if (observation.gameId !== "duelo") return void 0;
-      const game5 = assertDueloGame(observation.game);
-      if (game5 !== shared.game) {
+      const game7 = assertDueloGame(observation.game);
+      if (game7 !== shared.game) {
         releaseShared(shared);
-        shared = sharedDirector(game5, options.seed, profile2);
+        shared = sharedDirector(game7, options.seed, profile2);
         shared.references += 1;
       }
       const snapshot = observation.snapshot;
@@ -5408,8 +5469,8 @@ function createDueloSessionController(options) {
   });
 }
 var createSessionController = createDueloSessionController;
-function sharedDirector(game5, seed, sessionProfile) {
-  const existing = SESSION_DIRECTORS.get(game5);
+function sharedDirector(game7, seed, sessionProfile) {
+  const existing = SESSION_DIRECTORS.get(game7);
   const profileKey = sessionProfile ?? "duelo-reference";
   if (existing !== void 0) {
     if (existing.seed !== seed || existing.profileKey !== profileKey) {
@@ -5417,14 +5478,14 @@ function sharedDirector(game5, seed, sessionProfile) {
     }
     return existing;
   }
-  const playerCount = game5.snapshot().playerCount;
+  const playerCount = game7.snapshot().playerCount;
   if (!Number.isInteger(playerCount) || playerCount < 2 || playerCount > 8) {
     throw new Error("Duelo session controller requires the game's strict 2\u20138 player configuration");
   }
   const profile2 = directorProfile(sessionProfile);
   const shared = {
-    game: game5,
-    director: createDueloAgentDirector({ game: game5, playerCount, seed, profile: profile2 }),
+    game: game7,
+    director: createDueloAgentDirector({ game: game7, playerCount, seed, profile: profile2 }),
     seed,
     profile: profile2,
     profileKey,
@@ -5434,7 +5495,7 @@ function sharedDirector(game5, seed, sessionProfile) {
     cachedFrame: void 0,
     references: 0
   };
-  SESSION_DIRECTORS.set(game5, shared);
+  SESSION_DIRECTORS.set(game7, shared);
   return shared;
 }
 function stepSharedDirector(shared, observation, snapshot) {
@@ -5522,8 +5583,8 @@ function sessionResult(decision) {
 function directorAgentId(playerIndex) {
   return `duelo-session-player-${playerIndex + 1}`;
 }
-function assertDueloGame(game5) {
-  const candidate = game5;
+function assertDueloGame(game7) {
+  const candidate = game7;
   if (typeof candidate.targetOwner !== "function" || typeof candidate.targetClaimed !== "function" || typeof candidate.playerReadyZones !== "function") {
     throw new Error("Duelo session controller requires a semantic DueloGameInstance");
   }
@@ -6164,21 +6225,21 @@ claimTargets(finishedGame2, 1, Number.POSITIVE_INFINITY, 3200);
 finishedGame2.tick({ atMillis: 4200 });
 var finishedFrame2 = finishedGame2.render();
 var finishedSnapshot2 = finishedGame2.snapshot();
-function occupyReadyZones(game5, atMillis) {
-  game5.playerReadyZones().forEach((zone) => {
-    game5.press({ x: zone.minX, y: zone.minY, pressed: true, atMillis });
+function occupyReadyZones(game7, atMillis) {
+  game7.playerReadyZones().forEach((zone) => {
+    game7.press({ x: zone.minX, y: zone.minY, pressed: true, atMillis });
   });
 }
-function startGame(game5) {
-  occupyReadyZones(game5, 100);
-  game5.tick({ atMillis: 3100 });
+function startGame(game7) {
+  occupyReadyZones(game7, 100);
+  game7.tick({ atMillis: 3100 });
 }
-function claimTargets(game5, owner, limit, atMillis) {
+function claimTargets(game7, owner, limit, atMillis) {
   let claimed = 0;
   for (let y = 0; y < 32 && claimed < limit; y += 1) {
     for (let x = 0; x < 16 && claimed < limit; x += 1) {
-      if (game5.targetOwner(x, y) !== owner) continue;
-      game5.press({ x, y, pressed: true, atMillis: atMillis + claimed });
+      if (game7.targetOwner(x, y) !== owner) continue;
+      game7.press({ x, y, pressed: true, atMillis: atMillis + claimed });
       claimed += 1;
     }
   }
@@ -6705,14 +6766,14 @@ function insideZone(x, y, zone) {
 
 // games/equilibrio/src/fixtures.ts
 function startedGame() {
-  const game5 = createGame4({ playerCount: 0, durationMillis: manifest4.defaultDurationMillis, difficulty: "medium" });
-  game5.init(0);
-  game5.press({ x: 4, y: 16, pressed: true, atMillis: 100 });
-  game5.press({ x: 11, y: 16, pressed: true, atMillis: 180 });
-  game5.tick({ atMillis: 2180 });
-  game5.release({ x: 4, y: 16, pressed: false, atMillis: 2200 });
-  game5.release({ x: 11, y: 16, pressed: false, atMillis: 2210 });
-  return game5;
+  const game7 = createGame4({ playerCount: 0, durationMillis: manifest4.defaultDurationMillis, difficulty: "medium" });
+  game7.init(0);
+  game7.press({ x: 4, y: 16, pressed: true, atMillis: 100 });
+  game7.press({ x: 11, y: 16, pressed: true, atMillis: 180 });
+  game7.tick({ atMillis: 2180 });
+  game7.release({ x: 4, y: 16, pressed: false, atMillis: 2200 });
+  game7.release({ x: 11, y: 16, pressed: false, atMillis: 2210 });
+  return game7;
 }
 var runningGame3 = startedGame();
 var runningFrame3 = runningGame3.render();
@@ -7228,13 +7289,13 @@ roundWinGame2.tick({ atMillis: 5201 + roundWinAnimationMillis });
 roundWinGame2.tick({ atMillis: 7500 });
 var finishedFrame4 = roundWinGame2.render();
 var finishedSnapshot4 = roundWinGame2.snapshot();
-function start(game5) {
-  game5.snapshot().startPositions.forEach((position) => game5.press({ ...position, pressed: true, atMillis: 100 }));
-  game5.tick({ atMillis: 3100 });
+function start(game7) {
+  game7.snapshot().startPositions.forEach((position) => game7.press({ ...position, pressed: true, atMillis: 100 }));
+  game7.tick({ atMillis: 3100 });
 }
-function eliminateFirst(game5, atMillis) {
-  game5.press({ x: 3, y: 2, pressed: true, atMillis });
-  game5.press({ x: 2, y: 2, pressed: true, atMillis: atMillis + 1 });
+function eliminateFirst(game7, atMillis) {
+  game7.press({ x: 3, y: 2, pressed: true, atMillis });
+  game7.press({ x: 2, y: 2, pressed: true, atMillis: atMillis + 1 });
 }
 
 // games/guardianes/src/index.ts
@@ -7668,12 +7729,12 @@ function PlayerDisplay6({ snapshot }) {
 
 // games/guardianes/src/fixtures.ts
 function startedGame2() {
-  const game5 = createGame6({ playerCount: 0, durationMillis: manifest6.defaultDurationMillis, difficulty: "medium" });
-  game5.init(0);
-  game5.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
-  game5.tick({ atMillis: 2100 });
-  game5.release({ x: 8, y: 16, pressed: false, atMillis: 2120 });
-  return game5;
+  const game7 = createGame6({ playerCount: 0, durationMillis: manifest6.defaultDurationMillis, difficulty: "medium" });
+  game7.init(0);
+  game7.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
+  game7.tick({ atMillis: 2100 });
+  game7.release({ x: 8, y: 16, pressed: false, atMillis: 2120 });
+  return game7;
 }
 var runningGame5 = startedGame2();
 runningGame5.tick({ atMillis: 4500 });
@@ -8109,11 +8170,11 @@ losingGame.tick({ atMillis: 4100 });
 var losingFrame = losingGame.render();
 var losingSnapshot = losingGame.snapshot();
 function createStartedGame() {
-  const game5 = createGame7({ seed: 2024, playerCount: 1, durationMillis: 3e4 });
-  game5.init(0);
-  game5.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
-  game5.tick({ atMillis: 2100 });
-  return game5;
+  const game7 = createGame7({ seed: 2024, playerCount: 1, durationMillis: 3e4 });
+  game7.init(0);
+  game7.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
+  game7.tick({ atMillis: 2100 });
+  return game7;
 }
 
 // games/lava/src/index.ts
@@ -8840,12 +8901,12 @@ var players = [
   { name: "Cian", color: "#24d9ff" }
 ];
 function gameAt(stage) {
-  const game5 = createGame9({ playerCount: 2, players, seed: 137 });
-  game5.init(0);
-  if (stage !== "waiting") occupy(game5, 100);
-  if (stage === "memorize" || stage === "recall") game5.tick({ atMillis: 2200 });
-  if (stage === "recall") game5.tick({ atMillis: 5100 });
-  return game5;
+  const game7 = createGame9({ playerCount: 2, players, seed: 137 });
+  game7.init(0);
+  if (stage !== "waiting") occupy(game7, 100);
+  if (stage === "memorize" || stage === "recall") game7.tick({ atMillis: 2200 });
+  if (stage === "recall") game7.tick({ atMillis: 5100 });
+  return game7;
 }
 var waiting = gameAt("waiting");
 var waitingFrame3 = waiting.render();
@@ -8868,11 +8929,11 @@ var finished = gameAt("recall");
 playSteps(finished, 0, Number.POSITIVE_INFINITY, 5200);
 var finishedFrame6 = finished.render();
 var finishedSnapshot6 = finished.snapshot();
-function occupy(game5, atMillis) {
-  for (const zone of game5.playerReadyZones()) game5.press({ x: zone.minX, y: zone.minY, pressed: true, atMillis });
+function occupy(game7, atMillis) {
+  for (const zone of game7.playerReadyZones()) game7.press({ x: zone.minX, y: zone.minY, pressed: true, atMillis });
 }
-function playSteps(game5, player, count, atMillis) {
-  game5.pathForPlayer(player).slice(0, count).forEach((point, index) => game5.press({ ...point, pressed: true, atMillis: atMillis + index }));
+function playSteps(game7, player, count, atMillis) {
+  game7.pathForPlayer(player).slice(0, count).forEach((point, index) => game7.press({ ...point, pressed: true, atMillis: atMillis + index }));
 }
 
 // games/memoria-v2/src/index.ts
@@ -9646,59 +9707,1707 @@ for (let hit = 0; hit < 3; hit += 1) {
 }
 var failedFrame3 = failedGame2.render();
 var failedSnapshot3 = failedGame2.snapshot();
-function startGame2(game5) {
-  game5.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
-  game5.tick({ atMillis: 2100 });
+function startGame2(game7) {
+  game7.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
+  game7.tick({ atMillis: 2100 });
 }
-function damageOnce(game5, nowMillis) {
-  game5.release({ x: 8, y: 16, pressed: false, atMillis: nowMillis });
-  game5.tick({ atMillis: nowMillis });
-  const meteor = game5.snapshot().meteors.find((candidate) => candidate.result === "pending");
+function damageOnce(game7, nowMillis) {
+  game7.release({ x: 8, y: 16, pressed: false, atMillis: nowMillis });
+  game7.tick({ atMillis: nowMillis });
+  const meteor = game7.snapshot().meteors.find((candidate) => candidate.result === "pending");
   if (!meteor) {
     return nowMillis;
   }
-  game5.press({ x: meteor.x, y: meteor.y, pressed: true, atMillis: meteor.impactAtMillis - 1 });
-  game5.tick({ atMillis: meteor.impactAtMillis });
-  game5.release({ x: meteor.x, y: meteor.y, pressed: false, atMillis: meteor.impactAtMillis + 1 });
+  game7.press({ x: meteor.x, y: meteor.y, pressed: true, atMillis: meteor.impactAtMillis - 1 });
+  game7.tick({ atMillis: meteor.impactAtMillis });
+  game7.release({ x: meteor.x, y: meteor.y, pressed: false, atMillis: meteor.impactAtMillis + 1 });
   return meteor.impactAtMillis + 1;
 }
 
-// games/patrones/src/index.ts
+// games/parkour/src/index.ts
 var src_exports12 = {};
 __export(src_exports12, {
-  PlayerDisplay: () => PlayerDisplay12,
+  PlayerDisplay: () => PublishedLevelPlayerDisplay,
+  countdownFrame: () => countdownFrame,
+  countdownSnapshot: () => countdownSnapshot,
   createGame: () => createGame12,
+  createSessionController: () => createSessionController2,
+  fallbackContent: () => fallbackContent,
   finishedFrame: () => finishedFrame8,
   finishedSnapshot: () => finishedSnapshot8,
   initEvents: () => initEvents7,
   manifest: () => manifest12,
+  parkourEngineGame: () => parkourEngineGame,
+  parkourGameId: () => parkourGameId,
+  runningFrame: () => runningFrame10,
+  runningSnapshot: () => runningSnapshot10
+});
+
+// packages/published-level-runtime/src/display.tsx
+var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
+function PublishedLevelPlayerDisplay({
+  snapshot: rawSnapshot,
+  frame
+}) {
+  const snapshot = rawSnapshot;
+  const countdown = Math.max(1, Math.ceil((snapshot.countdownMillis ?? 0) / 1e3));
+  const maxLives = Math.max(1, snapshot.maxLives ?? snapshot.lives);
+  const lifeScale = Math.min(1, 3.3 / maxLives);
+  const lifeStyle = {
+    display: "block",
+    transform: `scale(${lifeScale})`,
+    transformOrigin: "left center",
+    width: `${100 / lifeScale}%`
+  };
+  const phase = snapshot.phase === "countdown" ? "starting" : snapshot.phase;
+  const clockMillis = snapshot.mode === "challenge" && snapshot.remainingMillis > 0 ? snapshot.remainingMillis : snapshot.elapsedMillis;
+  return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(GameDisplayShell, { title: snapshot.label, phase, children: /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: `ml-solo-display published-level-display is-${snapshot.phase}`, children: [
+    snapshot.phase === "countdown" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
+      "section",
+      {
+        "aria-label": "El nivel est\xE1 a punto de empezar",
+        className: "ml-player-ready-overlay is-starting",
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "ml-player-ready-pulse", "aria-hidden": "true", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", {}),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", {}),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", {})
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { children: snapshot.levelLabel || "Siguiente nivel" }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("strong", { children: countdown }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("b", { children: "Busca una zona verde y prep\xE1rate" })
+        ]
+      }
+    ) : null,
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "ml-solo-summary", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MetricPanel, { label: "Puntos", tone: "green", value: snapshot.score }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+          MetricPanel,
+          {
+            label: "Vidas",
+            tone: "red",
+            value: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { style: lifeStyle, children: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(LivesMeter, { lives: snapshot.lives, maxLives }) })
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MetricPanel, { label: "Tiempo", tone: "cyan", value: formatClock(clockMillis) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+        MetricPanel,
+        {
+          className: "ml-solo-message",
+          label: messageLabel(snapshot),
+          tone: snapshot.phase === "finished" ? snapshot.success ? "green" : "red" : "blue",
+          value: messageValue(snapshot)
+        }
+      )
+    ] }),
+    frame ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Juego en el suelo" }) : null
+  ] }) });
+}
+function messageLabel(snapshot) {
+  if (snapshot.phase === "finished") return snapshot.success ? "Resultado" : "Reintento";
+  return snapshot.levelCount > 1 ? `Nivel ${Math.max(1, snapshot.levelNumber)} de ${snapshot.levelCount}` : "Misi\xF3n";
+}
+function messageValue(snapshot) {
+  if (snapshot.phase === "finished") {
+    if (snapshot.success) {
+      return snapshot.isFinalLevel ? "\xA1Juego completado!" : "\xA1Nivel superado!";
+    }
+    const seconds = Math.max(1, Math.ceil(snapshot.resultMillis / 1e3));
+    return `Vuelve a intentarlo en ${seconds}`;
+  }
+  const currentMillis = snapshot.phase === "countdown" ? snapshot.attemptStartedMillis - snapshot.countdownMillis : snapshot.attemptStartedMillis + snapshot.elapsedMillis;
+  const recentSemanticEvent = ["coin", "doubleCoin", "damage"].includes(snapshot.lastEventCue) && currentMillis - snapshot.lastEventMillis <= 2500;
+  if (recentSemanticEvent && snapshot.lastEventMessage) return snapshot.lastEventMessage;
+  if (snapshot.objectivesRemaining > 0) {
+    return snapshot.objectivesRemaining === 1 ? "Queda 1 objetivo" : `Quedan ${snapshot.objectivesRemaining} objetivos`;
+  }
+  return snapshot.levelDescription || "Recoge los objetivos y evita las baldosas rojas";
+}
+
+// packages/published-level-runtime/src/types.ts
+var PUBLISHED_LEVEL_CONTENT_SCHEMA = "motion-levels-published-level-content-v1";
+
+// packages/published-level-runtime/src/content.ts
+var MAX_LEVELS = 160;
+var MAX_RESULT_ANIMATIONS = 160;
+var MAX_FRAMES_PER_RECORD = 4096;
+var MAX_CELLS_PER_FRAME = FLOOR_COLS * FLOOR_ROWS * 2;
+function createPublishedLevelContent(input2) {
+  const gameId = requiredStableId(input2.gameId, "gameId");
+  const engineGame = requiredString(input2.engineGame, "engineGame", 120).toLowerCase();
+  const rawLevels = recordsFromPayload(input2.levelsPayload, "levelsPayload");
+  if (rawLevels.length === 0) throw new Error("Published level content has no playable levels");
+  if (rawLevels.length > MAX_LEVELS) {
+    throw new Error(`Published level content exceeds the ${MAX_LEVELS} level limit`);
+  }
+  const levels = rawLevels.map((value, index) => normalizeLevelRecord(value, `levels[${index}]`));
+  const levelIds = /* @__PURE__ */ new Set();
+  for (const level of levels) {
+    if (levelIds.has(level.id)) {
+      throw new Error(`Published level content contains duplicate canonical level id ${level.id}`);
+    }
+    levelIds.add(level.id);
+  }
+  const rawAnimations = optionalRecordsFromPayload(input2.resultAnimationsPayload, "resultAnimationsPayload");
+  if (rawAnimations.length > MAX_RESULT_ANIMATIONS) {
+    throw new Error(`Published level content exceeds the ${MAX_RESULT_ANIMATIONS} animation limit`);
+  }
+  const resultAnimations = rawAnimations.map(
+    (value, index) => normalizeAnimationRecord(value, `resultAnimations[${index}]`)
+  );
+  const selection = resolveLevelSelection(levels, input2.selectedLevelId, input2.selectedLevelSlug);
+  const selectedLevelId = selection.id;
+  const selectedLevelSlug = selection.slug;
+  if (input2.mode !== void 0 && input2.mode !== "free" && input2.mode !== "challenge") {
+    throw new Error("mode must be challenge or free");
+  }
+  const mode = input2.mode ?? "challenge";
+  const suppliedRevision = input2.contentRevision;
+  if (suppliedRevision !== void 0 && !/^[0-9a-f]{16,64}$/u.test(suppliedRevision)) {
+    throw new Error("contentRevision must be 16 through 64 lowercase hexadecimal characters");
+  }
+  const contentRevision = suppliedRevision || contentHash({ gameId, engineGame, selectedLevelId, selectedLevelSlug, mode, levels, resultAnimations });
+  return deepFreeze({
+    schema: PUBLISHED_LEVEL_CONTENT_SCHEMA,
+    gameId,
+    engineGame,
+    contentRevision,
+    selectedLevelId,
+    selectedLevelSlug,
+    mode,
+    levels,
+    resultAnimations
+  });
+}
+function parsePublishedLevelContent(value, expectedGameId, aliases = []) {
+  if (!value || value.schema !== PUBLISHED_LEVEL_CONTENT_SCHEMA) {
+    throw new Error(`Expected ${PUBLISHED_LEVEL_CONTENT_SCHEMA} content`);
+  }
+  if (typeof value.contentRevision !== "string") {
+    throw new Error("content.contentRevision must be supplied by the content boundary");
+  }
+  const canonicalExpectedGameId = requiredStableId(expectedGameId, "expectedGameId");
+  const contentGameId = requiredStableId(value.gameId, "content.gameId");
+  if (contentGameId !== canonicalExpectedGameId) {
+    throw new Error(`Published level content is for ${contentGameId}, expected ${canonicalExpectedGameId}`);
+  }
+  void aliases;
+  const parsed = createPublishedLevelContent({
+    gameId: contentGameId,
+    engineGame: requiredString(value.engineGame, "content.engineGame", 120),
+    contentRevision: value.contentRevision,
+    selectedLevelId: optionalText(value.selectedLevelId, 120) || void 0,
+    selectedLevelSlug: optionalText(value.selectedLevelSlug, 120) || void 0,
+    mode: value.mode,
+    levelsPayload: value.levels,
+    resultAnimationsPayload: value.resultAnimations
+  });
+  return parsed;
+}
+function normalizeLevelId(value) {
+  const clean = optionalText(value, 120).toLowerCase();
+  if (!clean || clean === "starter") return "level-1";
+  const numeric = /^(?:(?:nivel|level)[\s-]*)?(\d+)$/u.exec(clean);
+  return numeric ? `level-${Math.max(1, Number(numeric[1]))}` : clean;
+}
+function recordsFromPayload(value, path) {
+  if (Array.isArray(value)) return value;
+  if (!isRecord(value) || !Array.isArray(value.levels)) {
+    throw new Error(`${path} must be an array or an object with a levels array`);
+  }
+  return value.levels;
+}
+function optionalRecordsFromPayload(value, path) {
+  if (value === void 0 || value === null) return [];
+  return recordsFromPayload(value, path);
+}
+function normalizeLevelRecord(value, path) {
+  const record = requiredRecord(value, path);
+  const id = requiredStableId(record.id, `${path}.id`);
+  const slugSource = requiredText(record.slug, `${path}.slug`, 120);
+  const slug = normalizeLevelId(slugSource);
+  const frames = normalizeFrames(record.frames, `${path}.frames`);
+  if (frames.length === 0) throw new Error(`${path}.frames must contain at least one frame`);
+  const rules = normalizeRules(record.rules, `${path}.rules`);
+  const resultAnimations = normalizeResultAnimations(record.result_animations, `${path}.result_animations`);
+  return compactObject({
+    id,
+    slug,
+    settings_hash: optionalText(record.settings_hash, 160) || void 0,
+    label: optionalText(record.label, 160) || levelLabel(slug),
+    description: optionalText(record.description, 500) || void 0,
+    difficulty: optionalText(record.difficulty, 40).toLowerCase() || void 0,
+    life: optionalInteger(record.life, 0, 99, `${path}.life`),
+    pass_score: optionalInteger(record.pass_score, 0, 1e5, `${path}.pass_score`),
+    time_limit_seconds: optionalInteger(record.time_limit_seconds, 0, 86400, `${path}.time_limit_seconds`),
+    frame_tick_ms: optionalInteger(record.frame_tick_ms, 1, 6e4, `${path}.frame_tick_ms`) ?? 25,
+    rules,
+    result_animations: resultAnimations,
+    music_ref: optionalText(record.music_ref, 500) || void 0,
+    music_volume: optionalFinite(record.music_volume, 0, 1, `${path}.music_volume`),
+    narration_cue_ref: optionalText(record.narration_cue_ref, 500) || void 0,
+    start_cue_ref: optionalText(record.start_cue_ref, 500) || void 0,
+    coin_cue_ref: optionalText(record.coin_cue_ref, 500) || void 0,
+    double_coin_cue_ref: optionalText(record.double_coin_cue_ref, 500) || void 0,
+    damage_cue_ref: optionalText(record.damage_cue_ref, 500) || void 0,
+    win_cue_ref: optionalText(record.win_cue_ref, 500) || void 0,
+    defeat_cue_ref: optionalText(record.defeat_cue_ref, 500) || void 0,
+    frames
+  });
+}
+function normalizeAnimationRecord(value, path) {
+  const record = requiredRecord(value, path);
+  const slug = optionalText(record.slug ?? record.id, 120).toLowerCase();
+  if (!slug) throw new Error(`${path} requires slug or id`);
+  const frames = normalizeFrames(record.frames, `${path}.frames`);
+  if (frames.length === 0) throw new Error(`${path}.frames must contain at least one frame`);
+  const effects = record.tile_effects === void 0 ? {} : requiredRecord(record.tile_effects, `${path}.tile_effects`);
+  const tileEffects = Object.fromEntries(Object.entries(effects).map(([kind, effect]) => {
+    const effectRecord = requiredRecord(effect, `${path}.tile_effects.${kind}`);
+    const color = normalizeHex(effectRecord.color);
+    if (!color) throw new Error(`${path}.tile_effects.${kind}.color must be a six-digit hex color`);
+    return [kind, { color }];
+  }));
+  return compactObject({
+    id: optionalText(record.id, 120) || void 0,
+    slug,
+    frame_tick_ms: optionalInteger(record.frame_tick_ms, 1, 6e4, `${path}.frame_tick_ms`) ?? 50,
+    tile_effects: tileEffects,
+    frames
+  });
+}
+function resolveLevelSelection(levels, requestedId, requestedSlug) {
+  const cleanId = optionalText(requestedId, 120).toLowerCase();
+  const cleanSlug = requestedSlug ? normalizeLevelId(requestedSlug) : "";
+  let selected;
+  if (cleanId) {
+    selected = levels.find((level) => level.id.toLowerCase() === cleanId);
+    if (!selected) {
+      const legacyMatches = levels.filter((level) => normalizeLevelId(level.slug) === normalizeLevelId(cleanId));
+      if (legacyMatches.length > 1) {
+        throw new Error(`Legacy selected level alias ${cleanId} is ambiguous`);
+      }
+      selected = legacyMatches[0];
+      if (!selected) throw new Error(`Selected level ${cleanId} is not present in content`);
+    }
+  } else if (cleanSlug) {
+    const matches = levels.filter((level) => normalizeLevelId(level.slug) === cleanSlug);
+    if (matches.length !== 1) throw new Error(`Selected level slug ${cleanSlug} is not uniquely resolvable`);
+    selected = matches[0];
+  } else {
+    selected = levels[0];
+  }
+  if (!selected) throw new Error("Published level content has no selected level");
+  if (cleanSlug && normalizeLevelId(selected.slug) !== cleanSlug) {
+    throw new Error(`selectedLevelSlug ${cleanSlug} does not match selectedLevelId ${selected.id}`);
+  }
+  return selected;
+}
+function normalizeFrames(value, path) {
+  if (!Array.isArray(value)) throw new Error(`${path} must be an array`);
+  if (value.length > MAX_FRAMES_PER_RECORD) {
+    throw new Error(`${path} exceeds the ${MAX_FRAMES_PER_RECORD} frame limit`);
+  }
+  return value.map((raw, frameIndex) => {
+    const record = requiredRecord(raw, `${path}[${frameIndex}]`);
+    if (!Array.isArray(record.c)) throw new Error(`${path}[${frameIndex}].c must be an array`);
+    if (record.c.length > MAX_CELLS_PER_FRAME) {
+      throw new Error(`${path}[${frameIndex}].c exceeds the ${MAX_CELLS_PER_FRAME} cell limit`);
+    }
+    return {
+      r: optionalInteger(record.r, 1, 1e6, `${path}[${frameIndex}].r`) ?? 1,
+      c: record.c.map((cell, cellIndex2) => normalizeCell(cell, `${path}[${frameIndex}].c[${cellIndex2}]`))
+    };
+  });
+}
+function normalizeCell(value, path) {
+  if (!Array.isArray(value) || value.length < 3 || value.length > 4) {
+    throw new Error(`${path} must be [x, y, kind] or [x, y, kind, uniq]`);
+  }
+  const x = requiredInteger(value[0], 0, FLOOR_COLS - 1, `${path}[0]`);
+  const y = requiredInteger(value[1], 0, FLOOR_ROWS - 1, `${path}[1]`);
+  const kind = requiredInteger(value[2], 0, 255, `${path}[2]`);
+  const uniq = optionalText(value[3], 120);
+  return uniq ? [x, y, kind, uniq] : [x, y, kind];
+}
+function normalizeRules(value, path) {
+  const rules = value === void 0 ? {} : requiredRecord(value, path);
+  const victoryCondition = optionalText(rules.victory_condition, 40);
+  if (victoryCondition && victoryCondition !== "collect_all" && victoryCondition !== "score_at_least") {
+    throw new Error(`${path}.victory_condition is not supported`);
+  }
+  const redAnimation = optionalText(rules.red_floor_animation, 40);
+  if (redAnimation && redAnimation !== "none" && redAnimation !== "parkour_lava") {
+    throw new Error(`${path}.red_floor_animation is not supported`);
+  }
+  const loadSide = optionalText(rules.green_platform_load_side, 20);
+  if (loadSide && loadSide !== "left" && loadSide !== "right") {
+    throw new Error(`${path}.green_platform_load_side is not supported`);
+  }
+  return {
+    victory_condition: victoryCondition,
+    difficulty_changes_layout: rules.difficulty_changes_layout === true,
+    difficulty_settings: normalizeDifficultySettings(rules.difficulty_settings, `${path}.difficulty_settings`),
+    red_floor_animation: redAnimation,
+    red_damage_grace_period: rules.red_damage_grace_period === true,
+    green_platform_load_animation: rules.green_platform_load_animation !== false,
+    green_platform_load_side: loadSide === "right" ? "right" : "left",
+    green_platform_disappear: rules.green_platform_disappear === true,
+    green_platform_impact_ripple: rules.green_platform_impact_ripple === true,
+    blue_platform_turn_green: rules.blue_platform_turn_green === true,
+    blue_platform_capture_area: rules.blue_platform_capture_area === true
+  };
+}
+function normalizeResultAnimations(value, path) {
+  const animations = value === void 0 ? {} : requiredRecord(value, path);
+  return {
+    victory_animations: textList(animations.victory_animations, `${path}.victory_animations`),
+    defeat_animations: textList(animations.defeat_animations, `${path}.defeat_animations`)
+  };
+}
+function normalizeDifficultySettings(value, path) {
+  if (value === void 0) return {};
+  const settings = requiredRecord(value, path);
+  const entries = Object.entries(settings);
+  if (entries.length > 12) throw new Error(`${path} exceeds the 12 difficulty limit`);
+  return Object.fromEntries(entries.map(([key, raw]) => {
+    const normalizedKey = requiredText(key, `${path} key`, 40).toLowerCase();
+    const setting = requiredRecord(raw, `${path}.${normalizedKey}`);
+    return [normalizedKey, compactObject({
+      life: optionalInteger(setting.life, 0, 99, `${path}.${normalizedKey}.life`),
+      frame_duration_ms: optionalInteger(
+        setting.frame_duration_ms,
+        0,
+        6e4,
+        `${path}.${normalizedKey}.frame_duration_ms`
+      ),
+      gameplay_lives: optionalInteger(
+        setting.gameplay_lives,
+        0,
+        99,
+        `${path}.${normalizedKey}.gameplay_lives`
+      ),
+      gameplay_time_limit_seconds: optionalInteger(
+        setting.gameplay_time_limit_seconds,
+        0,
+        86400,
+        `${path}.${normalizedKey}.gameplay_time_limit_seconds`
+      ),
+      speed_multiplier: optionalFinite(
+        setting.speed_multiplier,
+        0,
+        100,
+        `${path}.${normalizedKey}.speed_multiplier`
+      )
+    })];
+  }));
+}
+function textList(value, path) {
+  if (value === void 0) return [];
+  if (!Array.isArray(value)) throw new Error(`${path} must be an array`);
+  if (value.length > 32) throw new Error(`${path} exceeds the 32 item limit`);
+  return value.map((entry, index) => requiredText(entry, `${path}[${index}]`, 120).toLowerCase());
+}
+function levelLabel(id) {
+  const match = /^level-(\d+)$/u.exec(id);
+  return match ? `Nivel ${match[1]}` : id;
+}
+function normalizeHex(value) {
+  const clean = optionalText(value, 20).toLowerCase();
+  return /^#[0-9a-f]{6}$/u.test(clean) ? clean : "";
+}
+function requiredRecord(value, path) {
+  if (!isRecord(value)) throw new Error(`${path} must be an object`);
+  return value;
+}
+function requiredText(value, path, max) {
+  const clean = optionalText(value, max);
+  if (!clean) throw new Error(`${path} must be a non-empty string`);
+  return clean;
+}
+function requiredString(value, path, max) {
+  if (typeof value !== "string") throw new Error(`${path} must be a non-empty string`);
+  return requiredText(value, path, max);
+}
+function requiredStableId(value, path) {
+  const clean = requiredString(value, path, 120);
+  if (value !== clean) {
+    throw new Error(`${path} must use its canonical representation without surrounding or control characters`);
+  }
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+  const hash = /^(?:[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})$/u;
+  if (!uuid.test(clean) && !hash.test(clean)) {
+    throw new Error(`${path} must be a canonical UUID or lowercase 32/40/64-character hash`);
+  }
+  return clean;
+}
+function optionalText(value, max) {
+  if (value === void 0 || value === null) return "";
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  return [...String(value).trim()].filter((character) => character.codePointAt(0) >= 32 && character.codePointAt(0) !== 127).join("").slice(0, max);
+}
+function requiredInteger(value, min, max, path) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || !Number.isInteger(number) || number < min || number > max) {
+    throw new Error(`${path} must be an integer from ${min} through ${max}`);
+  }
+  return number;
+}
+function optionalInteger(value, min, max, path) {
+  if (value === void 0 || value === null || value === "") return void 0;
+  return requiredInteger(Number(value), min, max, path);
+}
+function optionalFinite(value, min, max, path) {
+  if (value === void 0 || value === null || value === "") return void 0;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < min || number > max) {
+    throw new Error(`${path} must be a number from ${min} through ${max}`);
+  }
+  return number;
+}
+function isRecord(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+function compactObject(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, child]) => child !== void 0));
+}
+function contentHash(value) {
+  const source = stableStringify(value);
+  let first = 2166136261;
+  let second = 2654435769;
+  for (let index = 0; index < source.length; index += 1) {
+    const code = source.charCodeAt(index);
+    first = Math.imul(first ^ code, 16777619) >>> 0;
+    second = Math.imul(second ^ code, 2246822507) >>> 0;
+  }
+  return `${first.toString(16).padStart(8, "0")}${second.toString(16).padStart(8, "0")}`;
+}
+function stableStringify(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  return `{${Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, child]) => `${JSON.stringify(key)}:${stableStringify(child)}`).join(",")}}`;
+}
+function deepFreeze(value) {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+}
+
+// packages/published-level-runtime/src/controller.ts
+var SHARED_PLANNERS = /* @__PURE__ */ new WeakMap();
+function createPublishedLevelSessionController(options) {
+  const initialGame = assertPublishedLevelGame(options.game);
+  const initialSnapshot = initialGame.snapshot();
+  if (initialSnapshot.currentGame !== options.manifest.id) {
+    throw new Error(
+      `Published-level controller cannot drive ${initialSnapshot.currentGame} as ${options.manifest.id}`
+    );
+  }
+  if (!Number.isInteger(options.playerIndex) || options.playerIndex < 0 || options.playerIndex >= initialSnapshot.playerCount) {
+    throw new Error("Published-level controller playerIndex must address a configured player");
+  }
+  const profileKey = normalizeProfile(options.profile);
+  let shared = sharedPlanner(initialGame, options.seed, profileKey);
+  shared.references += 1;
+  let disposed = false;
+  return Object.freeze({
+    id: options.id,
+    step(observation) {
+      if (disposed) return void 0;
+      if (observation.gameId !== options.manifest.id) return void 0;
+      const game7 = assertPublishedLevelGame(observation.game);
+      if (game7 !== shared.game) {
+        releaseShared2(shared, options.playerIndex);
+        shared = sharedPlanner(game7, options.seed, profileKey);
+        shared.references += 1;
+      }
+      return decide(shared, options.playerIndex, observation);
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      releaseShared2(shared, options.playerIndex);
+    }
+  });
+}
+function decide(shared, playerIndex, observation) {
+  const snapshot = observation.snapshot;
+  if (snapshot.phase !== "running") {
+    return { explanation: `Published level is ${snapshot.phase}; the authoritative countdown remains in the game` };
+  }
+  const semantic = shared.game.semanticTiles(observation.atMillis);
+  const targets = targetGroups(semantic);
+  const availableIds = new Set(targets.map((target4) => target4.uniq));
+  for (const [owner, uniq] of shared.assignments) {
+    if (!availableIds.has(uniq)) shared.assignments.delete(owner);
+  }
+  const current = semantic.find(
+    (tile) => tile.x === observation.self.tile.x && tile.y === observation.self.tile.y
+  );
+  if (current?.originalKind === 3 && !current.removed && current.kind === 4) {
+    return jumpResult("Purple objective is held; jump releases it for the required second press");
+  }
+  let assigned = shared.assignments.get(playerIndex);
+  let target3 = assigned ? targets.find((candidate) => candidate.uniq === assigned) : void 0;
+  if (!target3) {
+    target3 = chooseTarget(shared, playerIndex, observation.self.tile, targets);
+    assigned = target3?.uniq;
+    if (assigned) shared.assignments.set(playerIndex, assigned);
+  }
+  if (!target3) {
+    return { explanation: "No visible uncaptured blue or purple objective is available" };
+  }
+  const profile2 = profileFor(shared.profileKey, playerIndex);
+  const occupied = observation.avatars.filter((avatar) => avatar.id !== observation.self.id).flatMap((avatar) => [avatar.tile, ...avatar.target ? [avatar.target] : []]);
+  const route = bestRoute(shared.game, observation.self.tile, target3.tiles, semantic, occupied, profile2, observation.atMillis);
+  if (!route || route.length === 0) {
+    return {
+      explanation: current?.originalKind === 3 && current.primed ? "Purple objective is primed; allow the avatar to land and press it a second time" : `Objective ${target3.uniq} is underfoot; allow floor authority to register the press`
+    };
+  }
+  const immediate = observation.self.target ?? route[0];
+  const airborneUntil = observation.self.airborneUntil ?? 0;
+  if (observation.self.target && shared.game.dangerAt(immediate.x, immediate.y, observation.atMillis) > 0 && airborneUntil <= observation.atMillis) {
+    return jumpResult(`A red hazard is forecast at ${immediate.x},${immediate.y}; jump before crossing`);
+  }
+  if (observation.self.target) {
+    return { explanation: `Following a semantic route to objective ${target3.uniq}` };
+  }
+  const destination = route.at(-1);
+  const explanation = `Reserved objective ${target3.uniq}; planned ${route.length} safe tile${route.length === 1 ? "" : "s"}`;
+  return Object.freeze({
+    action: Object.freeze({ kind: "move", target: destination, path: Object.freeze(route), explanation }),
+    explanation
+  });
+}
+function jumpResult(explanation) {
+  return Object.freeze({
+    action: Object.freeze({ kind: "jump", explanation }),
+    explanation
+  });
+}
+function targetGroups(tiles) {
+  const grouped = /* @__PURE__ */ new Map();
+  for (const tile of tiles) {
+    if (tile.removed || !tile.uniq || tile.originalKind !== 1 && tile.originalKind !== 3) continue;
+    const group = grouped.get(tile.uniq) ?? [];
+    group.push(tile);
+    grouped.set(tile.uniq, group);
+  }
+  return [...grouped.entries()].map(([uniq, values]) => Object.freeze({
+    uniq,
+    tiles: Object.freeze(values.sort((left, right) => left.y - right.y || left.x - right.x))
+  })).sort((left, right) => left.uniq.localeCompare(right.uniq));
+}
+function chooseTarget(shared, playerIndex, from, targets) {
+  const claimed = new Set(
+    [...shared.assignments.entries()].filter(([owner]) => owner !== playerIndex).map(([, uniq]) => uniq)
+  );
+  const unclaimed = targets.filter((target3) => !claimed.has(target3.uniq));
+  const candidates = unclaimed.length > 0 ? unclaimed : targets;
+  return [...candidates].sort((left, right) => {
+    const leftDistance = groupDistance(from, left);
+    const rightDistance = groupDistance(from, right);
+    return leftDistance - rightDistance || stableRank(shared.seed, playerIndex, left.uniq) - stableRank(shared.seed, playerIndex, right.uniq) || left.uniq.localeCompare(right.uniq);
+  })[0];
+}
+function groupDistance(from, target3) {
+  return Math.min(...target3.tiles.map((tile) => manhattan(from, tile)));
+}
+function bestRoute(game7, from, destinations, semantic, occupied, profile2, atMillis) {
+  const targetKeys = new Set(destinations.map(pointKey2));
+  const byKey = new Map(semantic.map((tile) => [pointKey2(tile), tile]));
+  const startKey = pointKey2(from);
+  const open = /* @__PURE__ */ new Set([startKey]);
+  const cameFrom = /* @__PURE__ */ new Map();
+  const scores = /* @__PURE__ */ new Map([[startKey, 0]]);
+  const estimates = /* @__PURE__ */ new Map([[startKey, nearestDistance(from, destinations)]]);
+  while (open.size > 0) {
+    const currentKey = [...open].sort(
+      (left, right) => (estimates.get(left) ?? Infinity) - (estimates.get(right) ?? Infinity) || left.localeCompare(right)
+    )[0];
+    if (targetKeys.has(currentKey)) return reconstructPath2(cameFrom, currentKey).slice(1);
+    open.delete(currentKey);
+    const current = parsePointKey(currentKey);
+    for (const next of neighbors(current)) {
+      const nextKey = pointKey2(next);
+      const tile = byKey.get(nextKey);
+      const hazard = tile?.kind === 2 || game7.dangerAt(next.x, next.y, atMillis) > 0;
+      const occupiedPenalty = occupied.some((spot) => spot.x === next.x && spot.y === next.y) ? profile2.occupiedCost : 0;
+      const traversal = tile?.present ? 1 : profile2.emptyCost;
+      const tentative = (scores.get(currentKey) ?? Infinity) + traversal + (hazard ? profile2.hazardCost : 0) + occupiedPenalty;
+      if (tentative >= (scores.get(nextKey) ?? Infinity)) continue;
+      cameFrom.set(nextKey, currentKey);
+      scores.set(nextKey, tentative);
+      estimates.set(nextKey, tentative + nearestDistance(next, destinations));
+      open.add(nextKey);
+    }
+  }
+  return void 0;
+}
+function reconstructPath2(cameFrom, end) {
+  const path = [parsePointKey(end)];
+  let cursor = end;
+  while (cameFrom.has(cursor)) {
+    cursor = cameFrom.get(cursor);
+    path.push(parsePointKey(cursor));
+  }
+  return path.reverse();
+}
+function neighbors(point) {
+  return [
+    { x: point.x - 1, y: point.y },
+    { x: point.x + 1, y: point.y },
+    { x: point.x, y: point.y - 1 },
+    { x: point.x, y: point.y + 1 }
+  ].filter((next) => inFloorBounds(next.x, next.y));
+}
+function nearestDistance(point, destinations) {
+  return Math.min(...destinations.map((destination) => manhattan(point, destination)));
+}
+function manhattan(left, right) {
+  return Math.abs(left.x - right.x) + Math.abs(left.y - right.y);
+}
+function pointKey2(point) {
+  return `${point.x},${point.y}`;
+}
+function parsePointKey(value) {
+  const [x = "0", y = "0"] = value.split(",");
+  return { x: Number(x), y: Number(y) };
+}
+function stableRank(seed, playerIndex, value) {
+  let hash = (seed ^ Math.imul(playerIndex + 1, 2654435761)) >>> 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = Math.imul(hash ^ value.charCodeAt(index), 2246822507) >>> 0;
+  }
+  return hash;
+}
+function normalizeProfile(value) {
+  const normalized = value?.trim().toLowerCase() || "balanced";
+  if (!["balanced", "cautious", "bold", "expert", "mixed"].includes(normalized)) {
+    throw new Error(`Unknown published-level controller profile: ${value}`);
+  }
+  return normalized;
+}
+function profileFor(profileKey, playerIndex) {
+  const key = profileKey === "mixed" ? ["cautious", "balanced", "bold", "expert"][playerIndex % 4] : profileKey;
+  if (key === "cautious") return { hazardCost: 120, occupiedCost: 16, emptyCost: 2.4 };
+  if (key === "bold") return { hazardCost: 14, occupiedCost: 5, emptyCost: 1.4 };
+  if (key === "expert") return { hazardCost: 200, occupiedCost: 12, emptyCost: 1.8 };
+  return { hazardCost: 60, occupiedCost: 9, emptyCost: 1.8 };
+}
+function sharedPlanner(game7, seed, profileKey) {
+  const existing = SHARED_PLANNERS.get(game7);
+  if (existing) {
+    if (existing.seed !== seed || existing.profileKey !== profileKey) {
+      throw new Error("Published-level controllers sharing one game must use the same seed and profile");
+    }
+    return existing;
+  }
+  const shared = {
+    game: game7,
+    seed,
+    profileKey,
+    assignments: /* @__PURE__ */ new Map(),
+    references: 0
+  };
+  SHARED_PLANNERS.set(game7, shared);
+  return shared;
+}
+function releaseShared2(shared, playerIndex) {
+  shared.assignments.delete(playerIndex);
+  shared.references = Math.max(0, shared.references - 1);
+  if (shared.references === 0) SHARED_PLANNERS.delete(shared.game);
+}
+function assertPublishedLevelGame(game7) {
+  const candidate = game7;
+  if (typeof candidate.semanticTiles !== "function" || typeof candidate.dangerAt !== "function" || typeof candidate.playerReadyZones !== "function") {
+    throw new Error("Published-level controller requires a semantic published-level game instance");
+  }
+  return candidate;
+}
+
+// packages/published-level-runtime/src/engine.ts
+var frameSize = FLOOR_COLS * FLOOR_ROWS;
+var countdownDuration = 3e3;
+var greenAppearWindow = 400;
+var greenDisappearWindow = 800;
+var greenImpactDuration = 1100;
+var blueCaptureWindow = 600;
+var damageCooldown = 1e3;
+var resultDuration = 1250;
+var failureRestartDuration = 3e3;
+var black = { r: 0, g: 0, b: 0 };
+var safeGreen = { r: 0, g: 255, b: 72 };
+var blue = { r: 0, g: 0, b: 255 };
+var red = { r: 255, g: 0, b: 0 };
+var purple = { r: 245, g: 38, b: 255 };
+var heldPurple = { r: 245, g: 250, b: 255 };
+var hitYellow = { r: 255, g: 236, b: 82 };
+var defaultAudio = Object.freeze({
+  musicRef: "Motion/canciones/Background07.mp3",
+  musicVolume: 0.18,
+  narrationCueRef: "",
+  startCueRef: "",
+  coinCueRef: "Motion/sonidos/coin.wav",
+  doubleCoinCueRef: "Motion/sonidos/coin.wav",
+  damageCueRef: "Motion/sonidos/fallo.mp3",
+  winCueRef: "Motion/sonidos/victoria.mp3",
+  defeatCueRef: "Motion/sonidos/fallo.mp3"
+});
+function createPublishedLevelGame(product3, config) {
+  return new PublishedLevelGame(product3, config);
+}
+var PublishedLevelGame = class {
+  product;
+  config;
+  content;
+  levels = [];
+  animations = /* @__PURE__ */ new Map();
+  level;
+  players = publishedPlayers(1);
+  nowMillis = 0;
+  createdAt = 0;
+  startedAt = countdownDuration;
+  endedAt = 0;
+  restartAt = 0;
+  score = 0;
+  lives = 5;
+  success = false;
+  ended = false;
+  removed = /* @__PURE__ */ new Set();
+  purpleHeld = /* @__PURE__ */ new Set();
+  purplePrimed = /* @__PURE__ */ new Set();
+  pressed = /* @__PURE__ */ new Set();
+  greenImpacts = /* @__PURE__ */ new Set();
+  ripples = [];
+  capturedAt = /* @__PURE__ */ new Map();
+  lastDamageAt = Number.NEGATIVE_INFINITY;
+  lastDamageBy = /* @__PURE__ */ new Map();
+  hitFlash = /* @__PURE__ */ new Map();
+  lastEvent = gameEvent("none", "Listo", 0);
+  constructor(product3, config) {
+    this.product = product3;
+    this.config = normalizeGameConfig(config, product3.manifest);
+    this.content = this.resolveContent(this.config);
+    this.rebuild(this.config.nowMillis);
+  }
+  init(nowMillis) {
+    this.rebuild(nowMillis);
+    return this.record([gameEvent("ready", `Prep\xE1rate para ${this.level.label}`, nowMillis)]);
+  }
+  press(event) {
+    if (!inFloorBounds(event.x, event.y)) return [];
+    this.nowMillis = event.atMillis;
+    const events = this.tickState(event.atMillis);
+    const key = cellIndex(event.x, event.y);
+    if (event.pressed) this.pressed.add(key);
+    else {
+      this.pressed.delete(key);
+      this.releasePurple(key, event.atMillis);
+    }
+    if (!event.pressed || this.ended || event.atMillis < this.startedAt) return this.record(events);
+    this.triggerGreenImpact(key, event.atMillis);
+    const pointEvents = this.applyPoint(this.pointAt(key, event.atMillis), key, event.atMillis);
+    const completionEvents = this.tickState(event.atMillis);
+    return this.record([
+      ...events,
+      ...pointEvents,
+      ...completionEvents
+    ]);
+  }
+  release(event) {
+    return this.press({ ...event, pressed: false });
+  }
+  tick(event) {
+    this.nowMillis = event.atMillis;
+    return this.record(this.tickState(event.atMillis));
+  }
+  render() {
+    const frame = createFrame("#000000");
+    for (let y = 0; y < FLOOR_ROWS; y += 1) {
+      for (let x = 0; x < FLOOR_COLS; x += 1) {
+        paintFrameCell(frame, x, y, rgbToHex(this.colorAt(cellIndex(x, y), this.nowMillis)));
+      }
+    }
+    return frame;
+  }
+  snapshot() {
+    const phase = this.ended ? "finished" : this.nowMillis < this.startedAt ? "countdown" : "running";
+    const elapsedMillis = Math.max(0, this.nowMillis - this.startedAt);
+    const remainingMillis = this.level.timeLimit > 0 && !this.ended ? Math.max(0, this.startedAt + this.level.timeLimit - this.nowMillis) : 0;
+    const countdownMillis = this.nowMillis < this.startedAt ? this.startedAt - this.nowMillis : 0;
+    const players2 = this.players.map((player) => ({ ...player, score: this.score, lives: this.lives }));
+    return Object.freeze({
+      currentGame: this.content.gameId,
+      engineGame: this.content.engineGame,
+      contentRevision: this.content.contentRevision,
+      label: this.product.manifest.label,
+      phase,
+      playerCount: players2.length,
+      players: players2,
+      score: this.score,
+      lives: this.lives,
+      maxLives: this.startingLives(),
+      elapsedMillis,
+      remainingMillis,
+      activeTargets: Math.max(0, this.level.scoreUniqs.size - this.removed.size),
+      success: this.success,
+      lastEventCue: this.lastEvent.cue,
+      lastEventMessage: this.lastEvent.message,
+      lastEventMillis: this.lastEvent.atMillis,
+      countdownMillis,
+      difficulty: String(this.config.difficulty),
+      level: this.level.id,
+      levelSlug: this.level.slug,
+      levelNumber: levelNumber(this.level.slug),
+      levelCount: this.levels.length,
+      levelLabel: this.level.label,
+      levelDescription: this.level.description,
+      isFinalLevel: this.levels.at(-1)?.id === this.level.id,
+      objectivesTotal: this.level.scoreUniqs.size,
+      objectivesRemaining: Math.max(0, this.level.scoreUniqs.size - this.removed.size),
+      resultMillis: this.ended ? Math.max(0, (this.success ? resultDuration : failureRestartDuration) - (this.nowMillis - this.endedAt)) : 0,
+      mode: this.content.mode,
+      attemptCreatedMillis: this.createdAt,
+      attemptStartedMillis: this.startedAt,
+      attemptEndedMillis: this.endedAt,
+      audio: this.level.audio
+    });
+  }
+  reset(config = {}) {
+    this.config = normalizeGameConfig({ ...this.config, ...config }, this.product.manifest);
+    this.content = this.resolveContent(this.config);
+    this.rebuild(this.config.nowMillis);
+  }
+  playerReadyZones() {
+    const first = this.level.frames[0];
+    if (!first) return [];
+    const safe = first.points.flatMap(
+      (point, key) => point?.present === true && point.kind === 0 ? [key] : []
+    );
+    if (safe.length === 0) return [];
+    return farthestSafeTiles(safe, Math.max(1, this.config.playerCount)).map((key) => {
+      const x = key % FLOOR_COLS;
+      const y = Math.floor(key / FLOOR_COLS);
+      return { minX: x, maxX: x, minY: y, maxY: y };
+    });
+  }
+  semanticTiles(atMillis = this.nowMillis) {
+    const raw = this.frameAt(atMillis);
+    if (!raw) return [];
+    return raw.points.flatMap((point, index) => {
+      if (!point?.present) return [];
+      const effective = this.pointAt(index, atMillis);
+      return [{
+        x: index % FLOOR_COLS,
+        y: Math.floor(index / FLOOR_COLS),
+        kind: effective.kind,
+        originalKind: point.kind,
+        uniq: point.uniq,
+        present: effective.present,
+        removed: point.uniq ? this.removed.has(point.uniq) : false,
+        primed: point.uniq ? this.purplePrimed.has(point.uniq) : false
+      }];
+    });
+  }
+  dangerAt(x, y, atMillis = this.nowMillis) {
+    if (!inFloorBounds(x, y)) return 1;
+    const key = cellIndex(x, y);
+    const samples = [atMillis, atMillis + 200, atMillis + 400];
+    return samples.reduce((danger2, sample) => Math.max(danger2, this.pointAt(key, sample).kind === 2 ? 1 : 0), 0);
+  }
+  resolveContent(config) {
+    return parsePublishedLevelContent(
+      config.content ?? this.product.fallbackContent,
+      this.product.manifest.id
+    );
+  }
+  rebuild(nowMillis) {
+    this.levels = compileLevels(this.content, String(this.config.difficulty));
+    this.animations = compileAnimations(this.content.resultAnimations);
+    this.level = selectLevel(this.levels, this.content.selectedLevelId);
+    this.players = publishedPlayers(Math.max(1, this.config.playerCount), this.config.players);
+    this.createdAt = nowMillis;
+    this.startedAt = nowMillis + countdownDuration;
+    this.nowMillis = nowMillis;
+    this.resetAttemptState();
+  }
+  resetAttemptState(preservePressed = false) {
+    this.endedAt = 0;
+    this.restartAt = 0;
+    this.score = 0;
+    this.lives = this.startingLives();
+    this.success = false;
+    this.ended = false;
+    this.removed.clear();
+    this.purpleHeld.clear();
+    this.purplePrimed.clear();
+    if (!preservePressed) this.pressed.clear();
+    this.greenImpacts.clear();
+    this.ripples = [];
+    this.capturedAt.clear();
+    this.lastDamageAt = Number.NEGATIVE_INFINITY;
+    this.lastDamageBy.clear();
+    this.hitFlash.clear();
+    this.lastEvent = gameEvent("none", "Listo", this.nowMillis);
+  }
+  tickState(nowMillis) {
+    this.pruneRipples(nowMillis);
+    if (this.ended) {
+      if (this.success && nowMillis >= this.endedAt + resultDuration && this.advanceSuccessLevel(nowMillis)) {
+        return [gameEvent("ready", `Siguiente: ${this.level.label}`, nowMillis)];
+      }
+      if (!this.success && this.restartAt > 0 && nowMillis >= this.restartAt) {
+        this.restartFailedLevel(nowMillis);
+        return [gameEvent("ready", `Reintenta ${this.level.label}`, nowMillis)];
+      }
+      return [];
+    }
+    if (nowMillis < this.startedAt) return [];
+    if (this.startedAt === this.createdAt && nowMillis === this.startedAt) return [];
+    if (this.level.timeLimit > 0 && nowMillis - this.startedAt >= this.level.timeLimit) {
+      this.finishFailure(nowMillis);
+      return [gameEvent("fail", "Se acab\xF3 el tiempo", nowMillis)];
+    }
+    const events = [];
+    for (const key of this.pressed) {
+      if (this.pointAt(key, nowMillis).kind !== 2) continue;
+      if (this.damage(key, nowMillis)) {
+        events.push(gameEvent(this.ended ? "fail" : "damage", this.ended ? "Sin vidas" : `Impacto: quedan ${this.lives} vidas`, nowMillis));
+      }
+      if (this.ended) return events;
+    }
+    if (this.hasWon()) {
+      if (this.level.winCondition === "collect_all" && this.level.passScore > 0) this.score += this.level.passScore;
+      this.success = true;
+      this.ended = true;
+      this.endedAt = nowMillis;
+      events.push(gameEvent("win", `${this.level.label} superado`, nowMillis));
+    }
+    return events;
+  }
+  hasWon() {
+    return this.level.winCondition === "score_at_least" ? this.level.passScore > 0 && this.score >= this.level.passScore : this.level.scoreUniqs.size > 0 && this.removed.size >= this.level.scoreUniqs.size;
+  }
+  applyPoint(point, key, atMillis) {
+    if (point.kind === 1) {
+      const captured = this.captureBlue(point, key, atMillis);
+      return captured > 0 ? [gameEvent("coin", `${this.score} puntos`, atMillis)] : [];
+    }
+    if (point.kind === 3 && point.uniq && !this.removed.has(point.uniq) && !this.purplePrimed.has(point.uniq)) {
+      this.purpleHeld.add(point.uniq);
+      return [gameEvent("doubleCoin", "Suelta y vuelve a pisar", atMillis)];
+    }
+    if (point.kind === 2 && this.damage(key, atMillis)) {
+      return [gameEvent(this.ended ? "fail" : "damage", this.ended ? "Sin vidas" : `Impacto: quedan ${this.lives} vidas`, atMillis)];
+    }
+    return [];
+  }
+  releasePurple(key, atMillis) {
+    if (this.ended || atMillis < this.startedAt) return;
+    const point = this.rawPointAt(key, atMillis);
+    if (!point.uniq || !this.purpleHeld.has(point.uniq)) return;
+    this.purpleHeld.delete(point.uniq);
+    if (!this.removed.has(point.uniq)) this.purplePrimed.add(point.uniq);
+  }
+  damage(key, atMillis) {
+    if (this.level.damageGrace) {
+      if (atMillis - this.lastDamageAt < damageCooldown) return false;
+      this.lastDamageAt = atMillis;
+    } else {
+      const last = this.lastDamageBy.get(key) ?? Number.NEGATIVE_INFINITY;
+      if (atMillis - last < damageCooldown) return false;
+      this.lastDamageBy.set(key, atMillis);
+    }
+    this.hitFlash.set(key, atMillis + 350);
+    if (this.lives > 0) this.lives -= 1;
+    if (this.lives <= 0) this.finishFailure(atMillis);
+    return true;
+  }
+  finishFailure(atMillis) {
+    this.ended = true;
+    this.success = false;
+    this.endedAt = atMillis;
+    this.restartAt = atMillis + failureRestartDuration;
+  }
+  restartFailedLevel(atMillis) {
+    this.createdAt = atMillis;
+    this.startedAt = atMillis;
+    this.nowMillis = atMillis;
+    this.resetAttemptState(true);
+  }
+  advanceSuccessLevel(atMillis) {
+    const index = this.levels.findIndex((candidate) => candidate.id === this.level.id);
+    const next = index >= 0 ? this.levels[index + 1] : void 0;
+    if (!next) return false;
+    this.level = next;
+    this.createdAt = atMillis;
+    this.startedAt = atMillis + countdownDuration;
+    this.nowMillis = atMillis;
+    this.resetAttemptState(true);
+    return true;
+  }
+  colorAt(key, atMillis) {
+    if (this.ended) return this.resultColorAt(key, atMillis);
+    if ((this.hitFlash.get(key) ?? 0) > atMillis) return hitYellow;
+    if (atMillis < this.startedAt) return this.countdownColorAt(key, atMillis);
+    const point = this.pointAt(key, atMillis);
+    return this.greenImpactColor(key, point, this.colorForPoint(key, point, atMillis), atMillis);
+  }
+  resultColorAt(key, atMillis) {
+    const names = this.success ? this.level.victoryAnimations : this.level.defeatAnimations;
+    const name = chosenResultAnimation(names, this.endedAt);
+    const animation = name ? this.animations.get(name) : void 0;
+    if (!animation) return black;
+    const elapsed = Math.max(0, atMillis - this.endedAt) % Math.max(1, animation.totalDuration);
+    let remaining = elapsed;
+    let selected = animation.frames[animation.frames.length - 1];
+    for (const frame of animation.frames) {
+      if (remaining < frame.duration) {
+        selected = frame;
+        break;
+      }
+      remaining -= frame.duration;
+    }
+    const point = selected?.points[key];
+    return point?.present ? animation.colors.get(point.kind) ?? black : black;
+  }
+  colorForPoint(key, point, atMillis) {
+    if (!point.present) return black;
+    if (point.kind === 2 && this.level.redAnimation === "parkour_lava") return lavaColor(key, atMillis);
+    if (point.kind === 0 && point.uniq && this.removed.has(point.uniq) && this.level.blueTurnGreen) {
+      return this.capturedBlueColor(point.uniq, atMillis);
+    }
+    if (point.kind === 0 && this.level.greenFade) return this.greenPlatformColor(key, atMillis);
+    return basePointColor(point);
+  }
+  pointAt(key, atMillis) {
+    const raw = this.rawPointAt(key, atMillis);
+    if (raw.uniq && this.removed.has(raw.uniq)) {
+      return this.level.blueTurnGreen && raw.kind === 1 ? { ...raw, kind: 0 } : emptyPoint;
+    }
+    if (raw.uniq && this.purplePrimed.has(raw.uniq)) return { ...raw, kind: 1 };
+    if (raw.uniq && this.purpleHeld.has(raw.uniq)) return { ...raw, kind: 4 };
+    return raw;
+  }
+  rawPointAt(key, atMillis) {
+    return this.frameAt(atMillis)?.points[key] ?? emptyPoint;
+  }
+  frameAt(atMillis) {
+    return framePosition(this.level, atMillis - this.startedAt).frame;
+  }
+  greenPlatformColor(key, atMillis) {
+    const position = framePosition(this.level, atMillis - this.startedAt);
+    const frame = position.frame;
+    if (!frame) return black;
+    const point = frame.points[key];
+    if (!point?.present || point.kind !== 0) return black;
+    let color = basePointColor(point);
+    if (this.level.frames.length <= 1) return color;
+    const index = position.index;
+    const previous = this.level.frames[(index - 1 + this.level.frames.length) % this.level.frames.length]?.points[key] ?? emptyPoint;
+    const next = this.level.frames[(index + 1) % this.level.frames.length]?.points[key] ?? emptyPoint;
+    const appearWindow = Math.min(greenAppearWindow, frame.duration / 2);
+    const disappearWindow = Math.min(greenDisappearWindow, frame.duration / 2);
+    if ((!previous.present || previous.kind !== 0) && appearWindow > 0 && position.elapsed < appearWindow) {
+      color = mixRgb(this.transitionPointColor(key, previous, atMillis - position.elapsed), color, ease(position.elapsed / appearWindow));
+    }
+    const remaining = frame.duration - position.elapsed;
+    if ((!next.present || next.kind !== 0) && disappearWindow > 0 && remaining < disappearWindow) {
+      color = mixRgb(color, this.transitionPointColor(key, next, atMillis + remaining), 1 - ease(remaining / disappearWindow));
+    }
+    return color;
+  }
+  transitionPointColor(key, point, atMillis) {
+    if (!point.present) return black;
+    return point.kind === 2 && this.level.redAnimation === "parkour_lava" ? lavaColor(key, atMillis) : basePointColor(point);
+  }
+  capturedBlueColor(uniq, atMillis) {
+    const started = this.capturedAt.get(uniq);
+    if (started === void 0 || atMillis - started >= blueCaptureWindow) return safeGreen;
+    return mixRgb(blue, safeGreen, ease(Math.max(0, atMillis - started) / blueCaptureWindow));
+  }
+  captureBlue(point, key, atMillis) {
+    if (!point.uniq || this.removed.has(point.uniq)) return 0;
+    const originalKind = this.frameAt(atMillis)?.points[key]?.kind;
+    const uniqs = this.level.blueCapture && originalKind === 1 ? this.connectedBlueUniqs(key, atMillis) : [point.uniq];
+    let captured = 0;
+    for (const uniq of uniqs) {
+      if (!uniq || this.removed.has(uniq)) continue;
+      this.removed.add(uniq);
+      this.capturedAt.set(uniq, atMillis);
+      this.purpleHeld.delete(uniq);
+      this.purplePrimed.delete(uniq);
+      this.score += 1;
+      captured += 1;
+    }
+    return captured;
+  }
+  connectedBlueUniqs(start2, atMillis) {
+    const frame = this.frameAt(atMillis);
+    if (!frame || frame.points[start2]?.kind !== 1) return [];
+    const component = floodFill(start2, (key) => frame.points[key]?.present === true && frame.points[key]?.kind === 1);
+    return [...new Set(component.map((key) => frame.points[key]?.uniq ?? "").filter(Boolean))];
+  }
+  triggerGreenImpact(key, atMillis) {
+    if (!this.level.greenImpact || this.pointAt(key, atMillis).kind !== 0) return;
+    const frame = this.frameAt(atMillis);
+    if (!frame) return;
+    const component = floodFill(key, (candidate) => frame.points[candidate]?.present === true && frame.points[candidate]?.kind === 0);
+    if (component.length === 0) return;
+    const componentKey = [...component].sort((a, b) => a - b).join(";");
+    if (this.greenImpacts.has(componentKey)) return;
+    this.greenImpacts.add(componentKey);
+    this.ripples.push({
+      centerX: component.reduce((sum, value) => sum + value % FLOOR_COLS + 0.5, 0) / component.length,
+      centerY: component.reduce((sum, value) => sum + Math.floor(value / FLOOR_COLS) + 0.5, 0) / component.length,
+      startedAt: atMillis
+    });
+  }
+  greenImpactColor(key, point, base, atMillis) {
+    if (!this.level.greenImpact || !point.present || point.kind !== 2) return base;
+    const x = key % FLOOR_COLS + 0.5;
+    const y = Math.floor(key / FLOOR_COLS) + 0.5;
+    return this.ripples.reduce((color, ripple) => {
+      const age = atMillis - ripple.startedAt;
+      if (age < 0 || age > greenImpactDuration) return color;
+      const progress = age / greenImpactDuration;
+      const radius = 0.35 + progress * 7;
+      const distance = Math.hypot(x - ripple.centerX, y - ripple.centerY);
+      const strength = clamp012(1 - Math.abs(distance - radius) / 0.85) * (1 - progress);
+      return strength > 0 ? mixRgb(color, { r: 255, g: 185, b: 72 }, strength * 0.7) : color;
+    }, base);
+  }
+  pruneRipples(atMillis) {
+    this.ripples = this.ripples.filter((ripple) => atMillis - ripple.startedAt <= greenImpactDuration);
+  }
+  countdownColorAt(key, atMillis) {
+    const first = this.level.frames[0];
+    if (!first) return black;
+    const point = first.points[key];
+    if (!this.level.greenLoad) {
+      return point?.present === true && point.kind === 0 ? basePointColor(point) : black;
+    }
+    const safeTiles = first ? countdownSafeTiles(first, this.level.greenLoadSide) : [];
+    const x = key % FLOOR_COLS;
+    const y = Math.floor(key / FLOOR_COLS);
+    const countdownProgress = (atMillis - this.createdAt) / Math.max(1, this.startedAt - this.createdAt);
+    for (let order = 0; order < safeTiles.length; order += 1) {
+      const target3 = safeTiles[order];
+      const progress = countdownTileProgress(countdownProgress, order, safeTiles.length);
+      if (progress < 0) continue;
+      const targetX = target3 % FLOOR_COLS;
+      const targetY = Math.floor(target3 / FLOOR_COLS);
+      if (targetX !== x || countdownFallingY(targetY, progress, this.level.greenLoadSide) !== y) continue;
+      if (progress >= 1) return safeGreen;
+      const phase = (atMillis - this.createdAt) / 1e3 * Math.PI * 4 + (targetX + targetY) * 0.22;
+      return scaleRgb2(safeGreen, 0.78 + 0.22 * (0.5 + 0.5 * Math.sin(phase)));
+    }
+    return black;
+  }
+  startingLives() {
+    return this.level.lives > 0 ? this.level.lives : 5;
+  }
+  record(events) {
+    if (events.length > 0) this.lastEvent = events[events.length - 1];
+    return events;
+  }
+};
+var emptyPoint = Object.freeze({ present: false, kind: -1, uniq: "" });
+function compileLevels(content, difficulty) {
+  const selectedDifficulty = difficulty.trim().toLowerCase();
+  const deduped = dedupeLevels(content.levels, selectedDifficulty);
+  if (deduped.length === 0) throw new Error("Published level content has no levels for this difficulty");
+  return deduped.map((raw) => compileLevel(raw, selectedDifficulty, content.mode));
+}
+function compileLevel(raw, difficulty, mode) {
+  const settings = raw.rules?.difficulty_settings?.[difficulty];
+  const hasSettings = Object.keys(raw.rules?.difficulty_settings ?? {}).length > 0;
+  let lives = hasSettings ? settings?.life ?? 0 : raw.life ?? 0;
+  let timeLimit = mode === "challenge" && !hasSettings ? (raw.time_limit_seconds ?? 0) * 1e3 : 0;
+  let frameTick = raw.frame_tick_ms && raw.frame_tick_ms > 0 ? raw.frame_tick_ms : 25;
+  if (hasSettings) {
+    if ((settings?.life ?? 0) > 0) lives = settings.life;
+    if (mode === "challenge" && (settings?.gameplay_time_limit_seconds ?? 0) > 0) {
+      timeLimit = settings.gameplay_time_limit_seconds * 1e3;
+    }
+    if ((settings?.speed_multiplier ?? 0) > 0) frameTick = Math.max(1, frameTick / settings.speed_multiplier);
+  }
+  const scoreUniqs = /* @__PURE__ */ new Set();
+  let totalDuration = 0;
+  const frames = raw.frames.map((frame) => {
+    const points = Array.from({ length: frameSize });
+    for (const [x, y, kind, uniq = ""] of frame.c) {
+      points[cellIndex(x, y)] = Object.freeze({ present: true, kind, uniq });
+      if (uniq && (kind === 1 || kind === 3)) scoreUniqs.add(uniq);
+    }
+    const duration = Math.max(1, frame.r) * frameTick;
+    totalDuration += duration;
+    return Object.freeze({ duration, points: Object.freeze(points) });
+  });
+  const audio = Object.freeze({
+    musicRef: raw.music_ref || defaultAudio.musicRef,
+    musicVolume: raw.music_volume === void 0 ? defaultAudio.musicVolume : clamp2(raw.music_volume, 0, 1),
+    narrationCueRef: raw.narration_cue_ref || "",
+    startCueRef: raw.start_cue_ref || "",
+    coinCueRef: raw.coin_cue_ref || defaultAudio.coinCueRef,
+    doubleCoinCueRef: raw.double_coin_cue_ref || raw.coin_cue_ref || defaultAudio.doubleCoinCueRef,
+    damageCueRef: raw.damage_cue_ref || defaultAudio.damageCueRef,
+    winCueRef: raw.win_cue_ref || defaultAudio.winCueRef,
+    defeatCueRef: raw.defeat_cue_ref || raw.damage_cue_ref || defaultAudio.defeatCueRef
+  });
+  return Object.freeze({
+    id: raw.id,
+    slug: normalizeLevelId(raw.slug),
+    aliases: uniqueStrings([raw.slug]),
+    label: raw.label,
+    description: raw.description ?? "",
+    difficulty,
+    lives,
+    passScore: raw.pass_score ?? 0,
+    timeLimit,
+    frameTick,
+    winCondition: raw.rules?.victory_condition === "score_at_least" ? "score_at_least" : "collect_all",
+    redAnimation: raw.rules?.red_floor_animation === "parkour_lava" ? "parkour_lava" : "none",
+    victoryAnimations: uniqueStrings(raw.result_animations?.victory_animations),
+    defeatAnimations: uniqueStrings(raw.result_animations?.defeat_animations),
+    greenFade: raw.rules?.green_platform_disappear === true,
+    greenImpact: raw.rules?.green_platform_impact_ripple === true,
+    greenLoad: raw.rules?.green_platform_load_animation !== false,
+    greenLoadSide: raw.rules?.green_platform_load_side === "right" ? "right" : "left",
+    blueTurnGreen: raw.rules?.blue_platform_turn_green === true,
+    blueCapture: raw.rules?.blue_platform_capture_area === true,
+    damageGrace: raw.rules?.red_damage_grace_period === true,
+    totalDuration,
+    frames: Object.freeze(frames),
+    scoreUniqs,
+    audio
+  });
+}
+function dedupeLevels(levels, difficulty) {
+  const order = [];
+  const byId = /* @__PURE__ */ new Map();
+  for (const level of levels) {
+    const id = normalizeLevelId(level.slug);
+    const rank = level.difficulty?.toLowerCase() === difficulty ? 3 : level.rules?.difficulty_settings?.[difficulty] ? 2 : 1;
+    const previous = byId.get(id);
+    if (!previous) {
+      order.push(id);
+      byId.set(id, { level, rank });
+    } else if (rank > previous.rank) byId.set(id, { level, rank });
+  }
+  return order.map((id) => byId.get(id).level);
+}
+function compileAnimations(records) {
+  const result = /* @__PURE__ */ new Map();
+  for (const record of records) {
+    const frameTick = record.frame_tick_ms && record.frame_tick_ms > 0 ? record.frame_tick_ms : 50;
+    let totalDuration = 0;
+    const frames = (record.frames ?? []).map((frame) => {
+      const points = Array.from({ length: frameSize });
+      for (const [x, y, kind] of frame.c) points[cellIndex(x, y)] = { present: true, kind, uniq: "" };
+      const duration = Math.max(1, frame.r) * frameTick;
+      totalDuration += duration;
+      return { duration, points };
+    });
+    if (frames.length === 0) continue;
+    const colors = /* @__PURE__ */ new Map();
+    for (const [kind, effect] of Object.entries(record.tile_effects ?? {})) {
+      const parsed = parseHex(effect.color ?? "");
+      if (parsed) colors.set(Number(kind), parsed);
+    }
+    const ids = uniqueStrings([record.slug, record.id ?? ""]);
+    const compiled = Object.freeze({ ids, frameTick, totalDuration, frames, colors });
+    for (const id of ids) result.set(id, compiled);
+  }
+  return result;
+}
+function selectLevel(levels, selected) {
+  const exact = levels.find((level) => level.id === selected.toLowerCase());
+  if (exact) return exact;
+  const normalized = normalizeLevelId(selected);
+  const aliases = levels.filter((level) => level.aliases.includes(normalized));
+  if (aliases.length === 1) return aliases[0];
+  if (aliases.length > 1) throw new Error(`Selected level alias ${selected} is ambiguous`);
+  throw new Error(`Selected level ${selected} is not present in compiled content`);
+}
+function framePosition(level, rawElapsed) {
+  if (level.frames.length === 0 || rawElapsed < 0) return { index: -1, elapsed: 0 };
+  let elapsed = level.totalDuration > 0 ? rawElapsed % level.totalDuration : rawElapsed;
+  for (let index2 = 0; index2 < level.frames.length; index2 += 1) {
+    const frame2 = level.frames[index2];
+    if (elapsed < frame2.duration) return { frame: frame2, index: index2, elapsed };
+    elapsed -= frame2.duration;
+  }
+  const index = level.frames.length - 1;
+  const frame = level.frames[index];
+  return { frame, index, elapsed: frame?.duration ?? 0 };
+}
+function basePointColor(point) {
+  if (!point.present) return black;
+  if (point.kind === 0) return safeGreen;
+  if (point.kind === 1) return blue;
+  if (point.kind === 2) return red;
+  if (point.kind === 3) return purple;
+  if (point.kind === 4) return heldPurple;
+  return black;
+}
+function lavaColor(key, atMillis) {
+  const x = key % FLOOR_COLS;
+  const y = Math.floor(key / FLOOR_COLS);
+  const seconds = atMillis / 1e3 * 0.22;
+  const nx = x / FLOOR_COLS;
+  const ny = y / FLOOR_ROWS;
+  const field = 0.5 + 0.5 * Math.sin((nx * 3 + ny * 1.6 + seconds * 0.7) * Math.PI) * Math.cos((nx * 2.2 - ny * 3.2 - seconds * 0.5) * Math.PI);
+  const heat = clamp012(0.18 + field * 0.82);
+  const flicker = 0.92 + 0.08 * Math.sin((x * 1.3 + y * 0.7 + seconds * 4.2) * Math.PI);
+  return {
+    r: byte((150 + 105 * heat) * flicker),
+    g: byte((14 + 70 * heat) * flicker),
+    b: byte((2 + 10 * heat) * flicker)
+  };
+}
+function chosenResultAnimation(values, endedAt) {
+  const normalized = uniqueStrings(values);
+  if (normalized.length <= 1) return normalized[0] ?? "";
+  return normalized[hashInt(Math.trunc(endedAt)) % normalized.length] ?? normalized[0];
+}
+function hashInt(value) {
+  let x = value + 2654435769 >>> 0;
+  x ^= x >>> 16;
+  x = Math.imul(x, 2246822507) >>> 0;
+  x ^= x >>> 13;
+  x = Math.imul(x, 3266489909) >>> 0;
+  x ^= x >>> 16;
+  return x & 2147483647;
+}
+function countdownSafeTiles(frame, side) {
+  const result = [];
+  const rows = Array.from({ length: FLOOR_ROWS }, (_, index) => side === "right" ? FLOOR_ROWS - 1 - index : index);
+  for (const y of rows) for (let x = 0; x < FLOOR_COLS; x += 1) {
+    const key = cellIndex(x, y);
+    const point = frame.points[key];
+    if (point?.present && point.kind === 0) result.push(key);
+  }
+  return result;
+}
+function countdownTileProgress(progressValue, order, total) {
+  const progress = clamp012(progressValue);
+  if (total <= 1) return Math.min(progress / 0.92, 1);
+  const delay = order / (total - 1) * 0.68;
+  return clamp2((progress - delay) / 0.24, -1, 1);
+}
+function countdownFallingY(targetY, tileProgress, side) {
+  const progress = clamp012(tileProgress);
+  const eased = 1 - (1 - progress) ** 3;
+  const startY = side === "right" ? targetY - FLOOR_ROWS : targetY + FLOOR_ROWS;
+  return Math.round(startY + (targetY - startY) * eased);
+}
+function farthestSafeTiles(safe, count) {
+  const selected = [safe[Math.floor((safe.length - 1) / 2)]];
+  while (selected.length < count) {
+    const next = safe.filter((key) => !selected.includes(key)).map((key) => ({
+      key,
+      distance: Math.min(...selected.map((other) => tileDistanceSquared(key, other)))
+    })).sort((left, right) => right.distance - left.distance || left.key - right.key)[0]?.key;
+    selected.push(next ?? safe[selected.length % safe.length]);
+  }
+  return selected;
+}
+function tileDistanceSquared(left, right) {
+  const deltaX = left % FLOOR_COLS - right % FLOOR_COLS;
+  const deltaY = Math.floor(left / FLOOR_COLS) - Math.floor(right / FLOOR_COLS);
+  return deltaX * deltaX + deltaY * deltaY;
+}
+function floodFill(start2, predicate) {
+  if (!predicate(start2)) return [];
+  const visited = /* @__PURE__ */ new Set([start2]);
+  const queue = [start2];
+  while (queue.length > 0) {
+    const key = queue.shift();
+    for (const next of neighbors2(key)) {
+      if (!visited.has(next) && predicate(next)) {
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  return [...visited];
+}
+function neighbors2(key) {
+  const x = key % FLOOR_COLS;
+  const y = Math.floor(key / FLOOR_COLS);
+  return [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]].filter(([nextX, nextY]) => inFloorBounds(nextX, nextY)).map(([nextX, nextY]) => cellIndex(nextX, nextY));
+}
+function uniqueStrings(values) {
+  return [...new Set((values ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean))];
+}
+function publishedPlayers(count, supplied = []) {
+  const colors = [
+    "#ff0000",
+    "#00ffff",
+    "#00ff00",
+    "#ff00ff",
+    "#0000ff",
+    "#ffff00"
+  ];
+  return Array.from({ length: count }, (_, index) => ({
+    index,
+    label: supplied[index]?.label || supplied[index]?.name || `Jugador ${index + 1}`,
+    color: supplied[index]?.color || colors[index % colors.length],
+    score: 0,
+    lives: -1
+  }));
+}
+function cellIndex(x, y) {
+  return y * FLOOR_COLS + x;
+}
+function levelNumber(id) {
+  return Number(/^level-(\d+)$/u.exec(id)?.[1] ?? 0);
+}
+function mixRgb(from, to, amount) {
+  const t = clamp012(amount);
+  return {
+    r: byte(from.r + (to.r - from.r) * t),
+    g: byte(from.g + (to.g - from.g) * t),
+    b: byte(from.b + (to.b - from.b) * t)
+  };
+}
+function scaleRgb2(color, scale) {
+  return { r: byte(color.r * scale), g: byte(color.g * scale), b: byte(color.b * scale) };
+}
+function ease(value) {
+  const t = clamp012(value);
+  return t * t * (3 - 2 * t);
+}
+function parseHex(value) {
+  if (!/^#[0-9a-f]{6}$/iu.test(value)) return void 0;
+  const number = Number.parseInt(value.slice(1), 16);
+  return { r: number >> 16, g: number >> 8 & 255, b: number & 255 };
+}
+function byte(value) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+function clamp012(value) {
+  return clamp2(value, 0, 1);
+}
+function clamp2(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+// games/parkour/src/manifest.ts
+var parkourGameId = "c1daea4f-e586-4116-8cbe-871cde887a81";
+var parkourEngineGame = "parkour";
+var manifest12 = {
+  id: parkourGameId,
+  slug: parkourEngineGame,
+  aliases: [parkourEngineGame],
+  label: "Parkour",
+  description: "Supera plataformas, recoge objetivos y evita la lava en niveles editables.",
+  availability: { development: true, production: true },
+  catalog: {
+    category: "individual",
+    color: "#ff9f45",
+    durationLabel: "Mejor tiempo",
+    modeLabel: "Niveles",
+    audioLabel: "M\xFAsica + efectos",
+    rules: [
+      "Avanza por las plataformas verdes sin tocar la lava",
+      "Recoge suficientes objetivos azules para superar cada nivel"
+    ]
+  },
+  players: {
+    allowAny: true,
+    min: 1,
+    max: 8
+  },
+  start: { mode: "immediate" },
+  config: {
+    difficulty: {
+      default: "medium",
+      options: ["easy", "medium", "hard"]
+    },
+    vars: []
+  },
+  defaultDurationMillis: 0,
+  display: {
+    entry: "./display"
+  },
+  preview: {
+    seed: 137,
+    playerCount: 0,
+    difficulty: "medium",
+    actions: [{ atMillis: 3100, type: "press", x: 7, y: 29 }],
+    captureStartMillis: 3180,
+    frameCount: 18,
+    frameIntervalMillis: 120
+  },
+  tags: ["published-levels", "platform-editable", "jugar-3d", "individual", "typescript"]
+};
+
+// games/parkour/src/fixtures-content.ts
+var fallbackContent = createPublishedLevelContent({
+  gameId: parkourGameId,
+  engineGame: parkourEngineGame,
+  selectedLevelId: "11111111-1111-4111-8111-111111111101",
+  selectedLevelSlug: "level-1",
+  mode: "challenge",
+  levelsPayload: [
+    parkourLevel("11111111-1111-4111-8111-111111111101", "level-1", "Parkour / Nivel 1", 0),
+    parkourLevel("11111111-1111-4111-8111-111111111102", "level-2", "Parkour / Nivel 2", 2)
+  ],
+  resultAnimationsPayload: {
+    levels: [resultAnimation("game-pass", "#00ff48", victoryCells()), resultAnimation("game-fail", "#ff2036", defeatCells())]
+  }
+});
+function parkourLevel(id, slug, label, shift) {
+  return {
+    id,
+    slug,
+    label,
+    description: "Cruza la lava por las plataformas verdes y captura la plataforma azul.",
+    life: 3,
+    pass_score: 3,
+    time_limit_seconds: 0,
+    frame_tick_ms: 25,
+    rules: {
+      victory_condition: "score_at_least",
+      difficulty_changes_layout: true,
+      difficulty_settings: {
+        easy: { life: 5, speed_multiplier: 0.8 },
+        medium: { life: 3, speed_multiplier: 1 },
+        hard: { life: 2, speed_multiplier: 1.3 }
+      },
+      red_floor_animation: "parkour_lava",
+      red_damage_grace_period: false,
+      green_platform_load_animation: true,
+      green_platform_load_side: "left",
+      green_platform_disappear: true,
+      green_platform_impact_ripple: true,
+      blue_platform_turn_green: true,
+      blue_platform_capture_area: true
+    },
+    result_animations: {
+      victory_animations: ["game-pass"],
+      defeat_animations: ["game-fail"]
+    },
+    music_ref: "Motion/canciones/Background07.mp3",
+    music_volume: 0.18,
+    coin_cue_ref: "Motion/sonidos/coin.wav",
+    damage_cue_ref: "Motion/sonidos/fallo.mp3",
+    win_cue_ref: "Motion/sonidos/victoria.mp3",
+    defeat_cue_ref: "Motion/sonidos/fallo.mp3",
+    frames: [
+      { r: 100, c: parkourCells(shift, 0) },
+      { r: 100, c: parkourCells(shift, 1) }
+    ]
+  };
+}
+function parkourCells(levelShift, motionShift) {
+  const cells = [];
+  for (let y = 0; y < 32; y += 1) {
+    for (let x = 0; x < 16; x += 1) cells.push([x, y, 2, `lava-${x}-${y}`]);
+  }
+  for (let y = 28; y < 32; y += 1) {
+    for (let x = 5; x <= 10; x += 1) cells.push([x, y, 0, `start-${x}-${y}`]);
+  }
+  const islands = [23, 18, 13, 9].map((y, index) => ({
+    x: 3 + index % 2 * 6 + (motionShift + levelShift) % 2,
+    y: y - levelShift
+  }));
+  for (const [index, island] of islands.entries()) {
+    for (let y = island.y; y <= island.y + 1; y += 1) {
+      for (let x = island.x; x <= island.x + 3; x += 1) cells.push([x, y, 0, `island-${index}-${x}-${y}`]);
+    }
+  }
+  const targetY = Math.max(2, 5 - levelShift);
+  for (let x = 7; x <= 9; x += 1) cells.push([x, targetY, 1, `goal-${levelShift}-${x}`]);
+  return cells;
+}
+function resultAnimation(slug, color, cells) {
+  return {
+    slug,
+    frame_tick_ms: 50,
+    tile_effects: { 0: { color } },
+    frames: [{ r: 12, c: cells }, { r: 12, c: cells.map(([x, y, kind]) => [15 - x, 31 - y, kind]) }]
+  };
+}
+function victoryCells() {
+  const cells = [];
+  for (let x = 0; x < 16; x += 1) cells.push([x, 0, 0], [x, 31, 0]);
+  for (let y = 1; y < 31; y += 1) cells.push([0, y, 0], [15, y, 0]);
+  for (let step = 0; step < 8; step += 1) cells.push([4 + step, 12 + step, 0], [11 - step, 12 + step, 0]);
+  return cells;
+}
+function defeatCells() {
+  const cells = [];
+  for (let step = 0; step < 16; step += 1) cells.push([step, 8 + step, 0], [15 - step, 8 + step, 0]);
+  return cells;
+}
+
+// games/parkour/src/game.ts
+var product = Object.freeze({
+  manifest: manifest12,
+  fallbackContent
+});
+function createGame12(config) {
+  return createPublishedLevelGame(product, config);
+}
+var createSessionController2 = createPublishedLevelSessionController;
+
+// games/parkour/src/fixtures.ts
+var game3 = createGame12({ playerCount: 1, difficulty: "medium" });
+var initEvents7 = game3.init(0);
+game3.tick({ atMillis: 1500 });
+var countdownFrame = game3.render();
+var countdownSnapshot = game3.snapshot();
+game3.tick({ atMillis: 3e3 });
+var runningFrame10 = game3.render();
+var runningSnapshot10 = game3.snapshot();
+game3.press({ x: 7, y: 5, pressed: true, atMillis: 3020 });
+game3.tick({ atMillis: 3040 });
+var finishedFrame8 = game3.render();
+var finishedSnapshot8 = game3.snapshot();
+
+// games/patrones/src/index.ts
+var src_exports13 = {};
+__export(src_exports13, {
+  PlayerDisplay: () => PlayerDisplay12,
+  createGame: () => createGame13,
+  finishedFrame: () => finishedFrame9,
+  finishedSnapshot: () => finishedSnapshot9,
+  initEvents: () => initEvents8,
+  manifest: () => manifest13,
   patronesCelebrationMillis: () => patronesCelebrationMillis,
   patternTargets: () => patternTargets,
-  runningFrame: () => runningFrame10,
-  runningSnapshot: () => runningSnapshot10,
+  runningFrame: () => runningFrame11,
+  runningSnapshot: () => runningSnapshot11,
   startingSnapshot: () => startingSnapshot6,
   waitingSnapshot: () => waitingSnapshot6
 });
 
 // games/patrones/src/display.tsx
-var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
 function PlayerDisplay12({ snapshot, frame }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "ml-solo-display", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(PlayerReadyOverlay, { snapshot }),
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "ml-solo-summary", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MetricPanel, { label: "Aciertos", tone: "green", value: snapshot.claimedTargets }),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MetricPanel, { label: "Objetivos", tone: "blue", value: snapshot.totalTargets }),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MetricPanel, { label: "Tiempo", tone: "cyan", value: formatClock(snapshot.remainingMillis) })
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "ml-solo-display", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(PlayerReadyOverlay, { snapshot }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "ml-solo-summary", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { label: "Aciertos", tone: "green", value: snapshot.claimedTargets }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { label: "Objetivos", tone: "blue", value: snapshot.totalTargets }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { label: "Tiempo", tone: "cyan", value: formatClock(snapshot.remainingMillis) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MetricPanel, { className: "ml-solo-message", label: "Patr\xF3n", tone: snapshot.success ? "green" : "yellow", value: snapshot.lastEventMessage || "Reconstruye el patr\xF3n azul" })
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { className: "ml-solo-message", label: "Patr\xF3n", tone: snapshot.success ? "green" : "yellow", value: snapshot.lastEventMessage || "Reconstruye el patr\xF3n azul" })
     ] }),
-    frame ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Patr\xF3n en el suelo" }) : null
+    frame ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Patr\xF3n en el suelo" }) : null
   ] }) });
 }
 
 // games/patrones/src/manifest.ts
-var manifest12 = {
+var manifest13 = {
   id: "patrones",
   label: "Patrones",
   description: "Reconstruye patrones azules sin pisar baldosas incorrectas.",
@@ -9777,7 +11486,7 @@ var patterns = {
 function patternTargets(difficulty = "medium") {
   return (patterns[difficulty] ?? patterns.medium ?? []).map((point) => ({ ...point }));
 }
-function createGame12(config) {
+function createGame13(config) {
   return new PatronesGame(config);
 }
 var PatronesGame = class {
@@ -9793,8 +11502,8 @@ var PatronesGame = class {
   success = false;
   targets;
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest12);
-    this.readyGate = createPlayerReadyGate(manifest12.start, [{ minX: 5, maxX: 10, minY: 13, maxY: 18 }], this.config.nowMillis);
+    this.config = normalizeGameConfig(config, manifest13);
+    this.readyGate = createPlayerReadyGate(manifest13.start, [{ minX: 5, maxX: 10, minY: 13, maxY: 18 }], this.config.nowMillis);
     this.targets = patternTargets(this.config.difficulty);
     this.players = this.scoredPlayers();
   }
@@ -9853,8 +11562,8 @@ var PatronesGame = class {
   snapshot() {
     const ready = this.readyGate.state(this.nowMillis);
     return {
-      currentGame: manifest12.id,
-      label: manifest12.label,
+      currentGame: manifest13.id,
+      label: manifest13.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players,
@@ -9876,7 +11585,7 @@ var PatronesGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest12);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest13);
     this.targets = patternTargets(this.config.difficulty);
     this.resetState(this.config.nowMillis);
   }
@@ -9925,36 +11634,36 @@ var PatronesGame = class {
 };
 
 // games/patrones/src/fixtures.ts
-var game3 = createGame12({ playerCount: 0, difficulty: "medium", durationMillis: manifest12.defaultDurationMillis });
-var initEvents7 = game3.init(0);
-var waitingSnapshot6 = game3.snapshot();
-game3.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
-var startingSnapshot6 = game3.snapshot();
-game3.tick({ atMillis: 2100 });
-var runningFrame10 = game3.render();
-var runningSnapshot10 = game3.snapshot();
-patternTargets("medium").forEach((target3, index) => game3.press({ ...target3, pressed: true, atMillis: 2200 + index * 10 }));
-var finishedFrame8 = game3.render();
-var finishedSnapshot8 = game3.snapshot();
+var game4 = createGame13({ playerCount: 0, difficulty: "medium", durationMillis: manifest13.defaultDurationMillis });
+var initEvents8 = game4.init(0);
+var waitingSnapshot6 = game4.snapshot();
+game4.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
+var startingSnapshot6 = game4.snapshot();
+game4.tick({ atMillis: 2100 });
+var runningFrame11 = game4.render();
+var runningSnapshot11 = game4.snapshot();
+patternTargets("medium").forEach((target3, index) => game4.press({ ...target3, pressed: true, atMillis: 2200 + index * 10 }));
+var finishedFrame9 = game4.render();
+var finishedSnapshot9 = game4.snapshot();
 
 // games/ping-pong/src/index.ts
-var src_exports13 = {};
-__export(src_exports13, {
+var src_exports14 = {};
+__export(src_exports14, {
   PlayerDisplay: () => PlayerDisplay13,
   ballColor: () => ballColor2,
   blueColor: () => blueColor,
-  createGame: () => createGame13,
-  finishedSnapshot: () => finishedSnapshot9,
-  manifest: () => manifest13,
+  createGame: () => createGame14,
+  finishedSnapshot: () => finishedSnapshot10,
+  manifest: () => manifest14,
   pingPongConfigVars: () => pingPongConfigVars,
   redColor: () => redColor,
-  runningFrame: () => runningFrame11,
-  runningSnapshot: () => runningSnapshot11,
+  runningFrame: () => runningFrame12,
+  runningSnapshot: () => runningSnapshot12,
   waitingSnapshot: () => waitingSnapshot7
 });
 
 // games/ping-pong/src/display.tsx
-var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
 function positionStyle(position) {
   return {
     "--ping-pong-ball-x": `${3.5 + position.y / 31 * 93}%`,
@@ -9964,9 +11673,9 @@ function positionStyle(position) {
 function PlayerDisplay13({
   snapshot
 }) {
-  const [red, blue] = snapshot.players;
-  const redPlayer = red ?? { label: "Rojo", score: 0, color: "#ff1c28" };
-  const bluePlayer = blue ?? { label: "Azul", score: 0, color: "#145cff" };
+  const [red2, blue2] = snapshot.players;
+  const redPlayer = red2 ?? { label: "Rojo", score: 0, color: "#ff1c28" };
+  const bluePlayer = blue2 ?? { label: "Azul", score: 0, color: "#145cff" };
   const target3 = Math.max(snapshot.matchTarget, 1);
   const totalRounds2 = target3 * 2 - 1;
   const centerLabel = snapshot.phase === "starting" ? "Empieza en" : "Objetivo";
@@ -9998,13 +11707,13 @@ function PlayerDisplay13({
   const winnerLabel = snapshot.winnerIndex === 0 ? redPlayer.label : bluePlayer.label;
   const rallyCaption = snapshot.phase === "waiting" ? `${snapshot.activeTargets}/2 en posici\xF3n` : snapshot.phase === "starting" ? "Preparados" : snapshot.phase === "finished" ? `Victoria ${winnerLabel}` : snapshot.pointFlashMillis > 0 ? `Punto ${scorerLabel}` : snapshot.roundHits > 0 ? `${snapshot.roundHits} ${snapshot.roundHits === 1 ? "golpe" : "golpes"}` : "Saque";
   const impactStyle = snapshot.impact ? positionStyle(snapshot.impact) : void 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, variant: "versus", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, variant: "versus", children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
     "div",
     {
       className: displayClassName,
       style: { "--ping-pong-rally-pace": snapshot.rallyPace },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
           VersusScoreboard,
           {
             className: "ping-pong-scoreboard",
@@ -10016,17 +11725,17 @@ function PlayerDisplay13({
             centerCaption
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
           "section",
           {
             "aria-label": `Trayectoria de la pelota: ${rallyCaption}`,
             className: "ping-pong-rally-lane",
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "ping-pong-rally-team is-red", children: "Rojo" }),
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "ping-pong-rally-team is-blue", children: "Azul" }),
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "ping-pong-rally-net", "aria-hidden": "true" }),
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "ping-pong-rally-scan", "aria-hidden": "true" }),
-              snapshot.ballTrail.map((position, index) => /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "ping-pong-rally-team is-red", children: "Rojo" }),
+              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "ping-pong-rally-team is-blue", children: "Azul" }),
+              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "ping-pong-rally-net", "aria-hidden": "true" }),
+              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "ping-pong-rally-scan", "aria-hidden": "true" }),
+              snapshot.ballTrail.map((position, index) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
                 "i",
                 {
                   "aria-hidden": "true",
@@ -10035,7 +11744,7 @@ function PlayerDisplay13({
                 },
                 `${index}-${position.x}-${position.y}`
               )),
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
                 "i",
                 {
                   "aria-hidden": "true",
@@ -10043,7 +11752,7 @@ function PlayerDisplay13({
                   style: positionStyle(snapshot.ball)
                 }
               ),
-              snapshot.impact ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+              snapshot.impact ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
                 "i",
                 {
                   "aria-hidden": "true",
@@ -10052,17 +11761,17 @@ function PlayerDisplay13({
                 },
                 snapshot.motionEventId
               ) : null,
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("strong", { className: "ping-pong-rally-caption", children: rallyCaption }, `caption-${snapshot.motionEventId}`)
+              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("strong", { className: "ping-pong-rally-caption", children: rallyCaption }, `caption-${snapshot.motionEventId}`)
             ]
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(MetricRow, { columns: 4, className: "ping-pong-metrics", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { className: "ping-pong-rally-metric", label: rallyLabel, tone: "cyan", value: rallyValue }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { className: "ping-pong-progress-metric", label: progressLabel, tone: readyVisible ? "green" : "yellow", value: progressValue }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { className: "ping-pong-last-metric", label: "\xDAltimo", tone: lastTone, value: lastValue }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MetricPanel, { className: "ping-pong-time-metric", label: "Tiempo", tone: "amber", value: formatClock(snapshot.elapsedMillis) })
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(MetricRow, { columns: 4, className: "ping-pong-metrics", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(MetricPanel, { className: "ping-pong-rally-metric", label: rallyLabel, tone: "cyan", value: rallyValue }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(MetricPanel, { className: "ping-pong-progress-metric", label: progressLabel, tone: readyVisible ? "green" : "yellow", value: progressValue }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(MetricPanel, { className: "ping-pong-last-metric", label: "\xDAltimo", tone: lastTone, value: lastValue }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(MetricPanel, { className: "ping-pong-time-metric", label: "Tiempo", tone: "amber", value: formatClock(snapshot.elapsedMillis) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
           RoundStrip,
           {
             className: "ping-pong-rounds",
@@ -10125,7 +11834,7 @@ var pingPongConfigVars = {
     step: 0.05
   }
 };
-var manifest13 = {
+var manifest14 = {
   id: "ping-pong",
   label: "Ping Pong",
   description: "Two-player arcade ping pong for red and blue halves of the Motion Levels floor.",
@@ -10190,7 +11899,7 @@ var paddleWidth2 = 5;
 var serveX = Math.floor(FLOOR_COLS / 2);
 var serveY = Math.floor(FLOOR_ROWS / 2);
 var maximumSpeedRatio = 2.5;
-function createGame13(config) {
+function createGame14(config) {
   return new PingPongGame(config);
 }
 var PingPongGame = class {
@@ -10225,9 +11934,9 @@ var PingPongGame = class {
   motionEventId = 0;
   lastEvent = gameEvent("none", "Listo", 0);
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest13);
+    this.config = normalizeGameConfig(config, manifest14);
     this.rng = createSeededRng(this.config.seed);
-    this.readyGate = createPlayerReadyGate(manifest13.start, createHorizontalPlayerReadyZones(2), this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest14.start, createHorizontalPlayerReadyZones(2), this.config.nowMillis);
     this.winningScore = this.readWinningScore();
     this.players = this.createPlayers();
     this.speed = speedForConfig(this.config);
@@ -10307,8 +12016,8 @@ var PingPongGame = class {
     const countdownMillis = this.phase === "starting" ? readyState.countdownMillis : 0;
     const remainingMillis = this.phase === "finished" && this.nowMillis < this.finishAtMillis + winAnimationMillis3 ? this.finishAtMillis + winAnimationMillis3 - this.nowMillis : 0;
     return {
-      currentGame: manifest13.id,
-      label: manifest13.label,
+      currentGame: manifest14.id,
+      label: manifest14.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: [
@@ -10365,7 +12074,7 @@ var PingPongGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest13);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest14);
     this.rng = createSeededRng(this.config.seed);
     this.winningScore = this.readWinningScore();
     this.players = this.createPlayers();
@@ -10569,9 +12278,9 @@ var PingPongGame = class {
     }
   }
   drawReady(frame) {
-    const countdownDuration = gameStartCountdownMillis(manifest13.start);
-    const elapsed = Math.max(0, countdownDuration - this.readyGate.state(this.nowMillis).countdownMillis);
-    const progress = clamp(elapsed / countdownDuration, 0, 1);
+    const countdownDuration2 = gameStartCountdownMillis(manifest14.start);
+    const elapsed = Math.max(0, countdownDuration2 - this.readyGate.state(this.nowMillis).countdownMillis);
+    const progress = clamp(elapsed / countdownDuration2, 0, 1);
     const radius = progress * (FLOOR_ROWS * 0.7);
     const pulse = 0.5 + Math.sin(elapsed / 86) * 0.5;
     for (let y = 0; y < FLOOR_ROWS; y += 1) {
@@ -10803,7 +12512,7 @@ function mix(color, colorPercent, whitePercent) {
 }
 
 // games/ping-pong/src/fixtures.ts
-var runningFrame11 = (() => {
+var runningFrame12 = (() => {
   const frame = createFrame("#05070a");
   fillFrameRect(frame, 5, 2, 5, 1, redColor);
   fillFrameRect(frame, 6, 29, 5, 1, blueColor);
@@ -10811,8 +12520,8 @@ var runningFrame11 = (() => {
   return frame;
 })();
 var waitingSnapshot7 = {
-  currentGame: manifest13.id,
-  label: manifest13.label,
+  currentGame: manifest14.id,
+  label: manifest14.label,
   phase: "waiting",
   playerCount: 2,
   players: [
@@ -10848,7 +12557,7 @@ var waitingSnapshot7 = {
   returnSpeedMultiplier: 1.042,
   difficultySpeedFactor: 1.2
 };
-var runningSnapshot11 = {
+var runningSnapshot12 = {
   ...waitingSnapshot7,
   phase: "running",
   readyPlayers: 2,
@@ -10868,8 +12577,8 @@ var runningSnapshot11 = {
   impact: { team: 1, x: 10, y: 29, remainingMillis: 180 },
   motionEventId: 4
 };
-var finishedSnapshot9 = {
-  ...runningSnapshot11,
+var finishedSnapshot10 = {
+  ...runningSnapshot12,
   phase: "finished",
   score: 5,
   remainingMillis: 2400,
@@ -10892,23 +12601,23 @@ var finishedSnapshot9 = {
 };
 
 // games/ping-pong-v2/src/index.ts
-var src_exports14 = {};
-__export(src_exports14, {
+var src_exports15 = {};
+__export(src_exports15, {
   PlayerDisplay: () => PlayerDisplay14,
   ballColor: () => ballColor3,
   blueColor: () => blueColor2,
-  createGame: () => createGame14,
-  finishedSnapshot: () => finishedSnapshot10,
-  manifest: () => manifest14,
+  createGame: () => createGame15,
+  finishedSnapshot: () => finishedSnapshot11,
+  manifest: () => manifest15,
   pingPongV2ConfigVars: () => pingPongV2ConfigVars,
   redColor: () => redColor2,
-  runningFrame: () => runningFrame12,
-  runningSnapshot: () => runningSnapshot12,
+  runningFrame: () => runningFrame13,
+  runningSnapshot: () => runningSnapshot13,
   waitingSnapshot: () => waitingSnapshot8
 });
 
 // games/ping-pong-v2/src/display.tsx
-var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
 function positionStyle2(position) {
   return {
     "--ping-pong-ball-x": `${3.5 + position.y / 31 * 93}%`,
@@ -10918,9 +12627,9 @@ function positionStyle2(position) {
 function PlayerDisplay14({
   snapshot
 }) {
-  const [red, blue] = snapshot.players;
-  const redPlayer = red ?? { label: "Rojo", score: 0, color: "#ff1c28" };
-  const bluePlayer = blue ?? { label: "Azul", score: 0, color: "#145cff" };
+  const [red2, blue2] = snapshot.players;
+  const redPlayer = red2 ?? { label: "Rojo", score: 0, color: "#ff1c28" };
+  const bluePlayer = blue2 ?? { label: "Azul", score: 0, color: "#145cff" };
   const target3 = Math.max(snapshot.matchTarget, 1);
   const totalRounds2 = target3 * 2 - 1;
   const centerLabel = snapshot.phase === "starting" ? "Empieza en" : "Objetivo";
@@ -10952,13 +12661,13 @@ function PlayerDisplay14({
   const winnerLabel = snapshot.winnerIndex === 0 ? redPlayer.label : bluePlayer.label;
   const rallyCaption = snapshot.phase === "waiting" ? `${snapshot.activeTargets}/2 en posici\xF3n` : snapshot.phase === "starting" ? "Preparados" : snapshot.phase === "finished" ? `Victoria ${winnerLabel}` : snapshot.pointFlashMillis > 0 ? `Punto ${scorerLabel}` : snapshot.roundHits > 0 ? `${snapshot.roundHits} ${snapshot.roundHits === 1 ? "golpe" : "golpes"}` : "Saque";
   const impactStyle = snapshot.impact ? positionStyle2(snapshot.impact) : void 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, variant: "versus", children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, variant: "versus", children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
     "div",
     {
       className: displayClassName,
       style: { "--ping-pong-rally-pace": snapshot.rallyPace },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           VersusScoreboard,
           {
             className: "ping-pong-scoreboard",
@@ -10970,17 +12679,17 @@ function PlayerDisplay14({
             centerCaption
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
           "section",
           {
             "aria-label": `Trayectoria de la pelota: ${rallyCaption}`,
             className: "ping-pong-rally-lane",
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "ping-pong-rally-team is-red", children: "Rojo" }),
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "ping-pong-rally-team is-blue", children: "Azul" }),
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "ping-pong-rally-net", "aria-hidden": "true" }),
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "ping-pong-rally-scan", "aria-hidden": "true" }),
-              snapshot.ballTrail.map((position, index) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ping-pong-rally-team is-red", children: "Rojo" }),
+              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ping-pong-rally-team is-blue", children: "Azul" }),
+              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ping-pong-rally-net", "aria-hidden": "true" }),
+              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ping-pong-rally-scan", "aria-hidden": "true" }),
+              snapshot.ballTrail.map((position, index) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
                 "i",
                 {
                   "aria-hidden": "true",
@@ -10989,7 +12698,7 @@ function PlayerDisplay14({
                 },
                 `${index}-${position.x}-${position.y}`
               )),
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
                 "i",
                 {
                   "aria-hidden": "true",
@@ -10997,7 +12706,7 @@ function PlayerDisplay14({
                   style: positionStyle2(snapshot.ball)
                 }
               ),
-              snapshot.impact ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+              snapshot.impact ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
                 "i",
                 {
                   "aria-hidden": "true",
@@ -11006,17 +12715,17 @@ function PlayerDisplay14({
                 },
                 snapshot.motionEventId
               ) : null,
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("strong", { className: "ping-pong-rally-caption", children: rallyCaption }, `caption-${snapshot.motionEventId}`)
+              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("strong", { className: "ping-pong-rally-caption", children: rallyCaption }, `caption-${snapshot.motionEventId}`)
             ]
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(MetricRow, { columns: 4, className: "ping-pong-metrics", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(MetricPanel, { className: "ping-pong-rally-metric", label: rallyLabel, tone: "cyan", value: rallyValue }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(MetricPanel, { className: "ping-pong-progress-metric", label: progressLabel, tone: readyVisible ? "green" : "yellow", value: progressValue }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(MetricPanel, { className: "ping-pong-last-metric", label: "\xDAltimo", tone: lastTone, value: lastValue }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(MetricPanel, { className: "ping-pong-time-metric", label: "Tiempo", tone: "amber", value: formatClock(snapshot.elapsedMillis) })
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(MetricRow, { columns: 4, className: "ping-pong-metrics", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(MetricPanel, { className: "ping-pong-rally-metric", label: rallyLabel, tone: "cyan", value: rallyValue }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(MetricPanel, { className: "ping-pong-progress-metric", label: progressLabel, tone: readyVisible ? "green" : "yellow", value: progressValue }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(MetricPanel, { className: "ping-pong-last-metric", label: "\xDAltimo", tone: lastTone, value: lastValue }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(MetricPanel, { className: "ping-pong-time-metric", label: "Tiempo", tone: "amber", value: formatClock(snapshot.elapsedMillis) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           RoundStrip,
           {
             className: "ping-pong-rounds",
@@ -11079,7 +12788,7 @@ var pingPongV2ConfigVars = {
     step: 0.05
   }
 };
-var manifest14 = {
+var manifest15 = {
   id: "ping-pong-v2",
   label: "Ping Pong v2",
   description: "La versi\xF3n competitiva de Ping Pong: peloteos acelerados y partidas al mejor de cinco puntos.",
@@ -11129,7 +12838,7 @@ var paddleWidth3 = 5;
 var serveX2 = Math.floor(FLOOR_COLS / 2);
 var serveY2 = Math.floor(FLOOR_ROWS / 2);
 var maximumSpeedRatio2 = 2.5;
-function createGame14(config) {
+function createGame15(config) {
   return new PingPongGame2(config);
 }
 var PingPongGame2 = class {
@@ -11164,9 +12873,9 @@ var PingPongGame2 = class {
   motionEventId = 0;
   lastEvent = gameEvent("none", "Listo", 0);
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest14);
+    this.config = normalizeGameConfig(config, manifest15);
     this.rng = createSeededRng(this.config.seed);
-    this.readyGate = createPlayerReadyGate(manifest14.start, createHorizontalPlayerReadyZones(2), this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest15.start, createHorizontalPlayerReadyZones(2), this.config.nowMillis);
     this.winningScore = this.readWinningScore();
     this.players = this.createPlayers();
     this.speed = speedForConfig2(this.config);
@@ -11246,8 +12955,8 @@ var PingPongGame2 = class {
     const countdownMillis = this.phase === "starting" ? readyState.countdownMillis : 0;
     const remainingMillis = this.phase === "finished" && this.nowMillis < this.finishAtMillis + winAnimationMillis4 ? this.finishAtMillis + winAnimationMillis4 - this.nowMillis : 0;
     return {
-      currentGame: manifest14.id,
-      label: manifest14.label,
+      currentGame: manifest15.id,
+      label: manifest15.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: [
@@ -11304,7 +13013,7 @@ var PingPongGame2 = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest14);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest15);
     this.rng = createSeededRng(this.config.seed);
     this.winningScore = this.readWinningScore();
     this.players = this.createPlayers();
@@ -11508,9 +13217,9 @@ var PingPongGame2 = class {
     }
   }
   drawReady(frame) {
-    const countdownDuration = gameStartCountdownMillis(manifest14.start);
-    const elapsed = Math.max(0, countdownDuration - this.readyGate.state(this.nowMillis).countdownMillis);
-    const progress = clamp(elapsed / countdownDuration, 0, 1);
+    const countdownDuration2 = gameStartCountdownMillis(manifest15.start);
+    const elapsed = Math.max(0, countdownDuration2 - this.readyGate.state(this.nowMillis).countdownMillis);
+    const progress = clamp(elapsed / countdownDuration2, 0, 1);
     const radius = progress * (FLOOR_ROWS * 0.7);
     const pulse = 0.5 + Math.sin(elapsed / 86) * 0.5;
     for (let y = 0; y < FLOOR_ROWS; y += 1) {
@@ -11742,7 +13451,7 @@ function mix2(color, colorPercent, whitePercent) {
 }
 
 // games/ping-pong-v2/src/fixtures.ts
-var runningFrame12 = (() => {
+var runningFrame13 = (() => {
   const frame = createFrame("#05070a");
   fillFrameRect(frame, 5, 2, 5, 1, redColor2);
   fillFrameRect(frame, 6, 29, 5, 1, blueColor2);
@@ -11750,8 +13459,8 @@ var runningFrame12 = (() => {
   return frame;
 })();
 var waitingSnapshot8 = {
-  currentGame: manifest14.id,
-  label: manifest14.label,
+  currentGame: manifest15.id,
+  label: manifest15.label,
   phase: "waiting",
   playerCount: 2,
   players: [
@@ -11787,7 +13496,7 @@ var waitingSnapshot8 = {
   returnSpeedMultiplier: 1.042,
   difficultySpeedFactor: 1.2
 };
-var runningSnapshot12 = {
+var runningSnapshot13 = {
   ...waitingSnapshot8,
   phase: "running",
   readyPlayers: 2,
@@ -11807,8 +13516,8 @@ var runningSnapshot12 = {
   impact: { team: 1, x: 10, y: 29, remainingMillis: 180 },
   motionEventId: 4
 };
-var finishedSnapshot10 = {
-  ...runningSnapshot12,
+var finishedSnapshot11 = {
+  ...runningSnapshot13,
   phase: "finished",
   score: 5,
   remainingMillis: 2400,
@@ -11831,29 +13540,29 @@ var finishedSnapshot10 = {
 };
 
 // games/pulso/src/index.ts
-var src_exports15 = {};
-__export(src_exports15, {
+var src_exports16 = {};
+__export(src_exports16, {
   PlayerDisplay: () => PlayerDisplay15,
   comboFrame: () => comboFrame,
   comboSnapshot: () => comboSnapshot,
-  createGame: () => createGame15,
+  createGame: () => createGame16,
   failedFrame: () => failedFrame4,
   failedSnapshot: () => failedSnapshot4,
-  finishedFrame: () => finishedFrame9,
-  finishedSnapshot: () => finishedSnapshot11,
+  finishedFrame: () => finishedFrame10,
+  finishedSnapshot: () => finishedSnapshot12,
   gameFailAnimationMillis: () => gameFailAnimationMillis,
   gameWinAnimationMillis: () => gameWinAnimationMillis4,
-  manifest: () => manifest15,
+  manifest: () => manifest16,
   pulseChart: () => pulseChart,
   pulseDifficultyProfile: () => pulseDifficultyProfile,
   pulsePads: () => pulsePads,
-  runningFrame: () => runningFrame13,
-  runningSnapshot: () => runningSnapshot13,
+  runningFrame: () => runningFrame14,
+  runningSnapshot: () => runningSnapshot14,
   startingEnergy: () => startingEnergy
 });
 
 // games/pulso/src/manifest.ts
-var manifest15 = {
+var manifest16 = {
   id: "pulso",
   label: "Pulso",
   description: "Ritmo cooperativo: pisa cada pulso a tiempo y mant\xE9n la energ\xEDa de la pista.",
@@ -11958,7 +13667,7 @@ function pulseChart(difficulty = "medium") {
 function pulseDifficultyProfile(difficulty) {
   return { ...profiles[difficulty] ?? profiles.medium };
 }
-function createGame15(config) {
+function createGame16(config) {
   return new PulseGame(config);
 }
 var PulseGame = class {
@@ -11981,8 +13690,8 @@ var PulseGame = class {
   successfulNotes = 0;
   success = false;
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest15);
-    this.readyGate = createPlayerReadyGate(manifest15.start, [readyZone3], this.config.nowMillis);
+    this.config = normalizeGameConfig(config, manifest16);
+    this.readyGate = createPlayerReadyGate(manifest16.start, [readyZone3], this.config.nowMillis);
     this.resetState(this.config.nowMillis);
   }
   init(nowMillis) {
@@ -12127,8 +13836,8 @@ var PulseGame = class {
     const note = this.chart[this.noteIndex];
     const noteProgress = note ? Math.max(0, Math.min(1, 1 - (note.atMillis - this.elapsedMillis()) / this.profile().spacingMillis)) : 1;
     return {
-      currentGame: manifest15.id,
-      label: manifest15.label,
+      currentGame: manifest16.id,
+      label: manifest16.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players,
@@ -12160,8 +13869,8 @@ var PulseGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest15);
-    this.readyGate = createPlayerReadyGate(manifest15.start, [readyZone3], this.config.nowMillis);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest16);
+    this.readyGate = createPlayerReadyGate(manifest16.start, [readyZone3], this.config.nowMillis);
     this.resetState(this.config.nowMillis);
     this.phase = "waiting";
     this.lastEvent = gameEvent("ready", "Entra en el centro para iniciar", this.config.nowMillis);
@@ -12292,7 +14001,7 @@ var PulseGame = class {
 };
 
 // games/pulso/src/display.tsx
-var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
 var pulsoStyles = `
 .pulso-display { --pulso-energy:#5fff9e; background:radial-gradient(circle at 50% 42%,rgba(255,59,215,.18),transparent 34%),linear-gradient(145deg,#050410,#0a071b 52%,#03040d); display:grid; gap:22px; grid-template-columns:minmax(0,1fr) 430px; grid-template-rows:minmax(0,1fr) auto; inset:0; overflow:hidden; padding:32px 38px 28px; position:absolute; }
 .pulso-stage { align-content:center; display:grid; justify-items:center; min-width:0; position:relative; }
@@ -12340,66 +14049,66 @@ function PlayerDisplay15({ snapshot }) {
     "--pulso-note-progress": snapshot.noteProgress,
     "--pulso-track-progress": `${snapshot.noteIndex / Math.max(snapshot.noteCount, 1) * 100}%`
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(GameDisplayShell, { title: snapshot.label, phase: phaseClass, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: `pulso-display is-${snapshot.phase}`, style, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("style", { children: pulsoStyles }),
-    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(PlayerReadyOverlay, { snapshot }),
-    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("section", { className: "pulso-stage", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "pulso-beat", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("small", { children: noteLabel(snapshot) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("strong", { children: snapshot.combo > 0 ? `x${snapshot.combo}` : "0" }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { children: snapshot.combo > 0 ? "combo" : "busca el pulso" })
+  return /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(GameDisplayShell, { title: snapshot.label, phase: phaseClass, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: `pulso-display is-${snapshot.phase}`, style, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("style", { children: pulsoStyles }),
+    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(PlayerReadyOverlay, { snapshot }),
+    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("section", { className: "pulso-stage", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "pulso-beat", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("small", { children: noteLabel(snapshot) }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("strong", { children: snapshot.combo > 0 ? `x${snapshot.combo}` : "0" }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { children: snapshot.combo > 0 ? "combo" : "busca el pulso" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "pulso-pads", children: pulsePads.map((pad, index) => {
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { className: "pulso-pads", children: pulsePads.map((pad, index) => {
         const active = snapshot.noteZones.includes(index);
         const hit = snapshot.hitZones.includes(index);
-        return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("article", { className: `pulso-pad${active ? " is-active" : ""}${hit ? " is-hit" : ""}`, style: { "--pulso-pad": pad.color }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("i", {}),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("strong", { children: pad.label })
+        return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("article", { className: `pulso-pad${active ? " is-active" : ""}${hit ? " is-hit" : ""}`, style: { "--pulso-pad": pad.color }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("i", {}),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("strong", { children: pad.label })
         ] }, pad.label);
       }) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("aside", { className: "pulso-sidebar", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("article", { className: "pulso-metric pulso-energy", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { children: "Energ\xEDa" }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("strong", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("aside", { className: "pulso-sidebar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("article", { className: "pulso-metric pulso-energy", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { children: "Energ\xEDa" }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("strong", { children: [
           snapshot.energy,
           "%"
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("article", { className: "pulso-metric", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { children: "Precisi\xF3n" }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("strong", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("article", { className: "pulso-metric", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { children: "Precisi\xF3n" }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("strong", { children: [
           snapshot.accuracy,
           "%"
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "pulso-sidebar-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("article", { className: "pulso-metric", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { children: "Secci\xF3n" }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("strong", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "pulso-sidebar-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("article", { className: "pulso-metric", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { children: "Secci\xF3n" }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("strong", { children: [
             snapshot.section,
             "/4"
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("article", { className: "pulso-metric", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { children: "Tiempo" }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("strong", { children: formatClock(snapshot.remainingMillis) })
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("article", { className: "pulso-metric", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { children: "Tiempo" }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("strong", { children: formatClock(snapshot.remainingMillis) })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "pulso-event", children: snapshot.lastEventMessage || "La pista est\xE1 lista" })
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { className: "pulso-event", children: snapshot.lastEventMessage || "La pista est\xE1 lista" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("footer", { className: "pulso-footer", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { children: "Pista" }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "pulso-progress", children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("i", {}) }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("b", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("footer", { className: "pulso-footer", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { children: "Pista" }),
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { className: "pulso-progress", children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("i", {}) }),
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("b", { children: [
         snapshot.noteIndex,
         "/",
         snapshot.noteCount
       ] })
     ] }),
-    snapshot.phase === "finished" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: `pulso-result ${snapshot.success ? "is-win" : "is-fail"}`, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("strong", { children: snapshot.success ? "\xA1Pista completada!" : "Sin energ\xEDa" }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { children: snapshot.success ? `Combo m\xE1ximo x${snapshot.maxCombo} \xB7 Precisi\xF3n ${snapshot.accuracy}%` : "Recupera el ritmo y vuelve a intentarlo" })
+    snapshot.phase === "finished" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: `pulso-result ${snapshot.success ? "is-win" : "is-fail"}`, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("strong", { children: snapshot.success ? "\xA1Pista completada!" : "Sin energ\xEDa" }),
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { children: snapshot.success ? `Combo m\xE1ximo x${snapshot.maxCombo} \xB7 Precisi\xF3n ${snapshot.accuracy}%` : "Recupera el ritmo y vuelve a intentarlo" })
     ] }) : null
   ] }) });
 }
@@ -12413,16 +14122,16 @@ function noteLabel(snapshot) {
 
 // games/pulso/src/fixtures.ts
 function startedGame3() {
-  const game5 = createGame15({ playerCount: 0, durationMillis: manifest15.defaultDurationMillis, difficulty: "medium" });
-  game5.init(0);
-  game5.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
-  game5.tick({ atMillis: 2100 });
-  return game5;
+  const game7 = createGame16({ playerCount: 0, durationMillis: manifest16.defaultDurationMillis, difficulty: "medium" });
+  game7.init(0);
+  game7.press({ x: 8, y: 16, pressed: true, atMillis: 100 });
+  game7.tick({ atMillis: 2100 });
+  return game7;
 }
 var runningGame8 = startedGame3();
 runningGame8.tick({ atMillis: 2100 + 1200 });
-var runningFrame13 = runningGame8.render();
-var runningSnapshot13 = runningGame8.snapshot();
+var runningFrame14 = runningGame8.render();
+var runningSnapshot14 = runningGame8.snapshot();
 var comboGame = startedGame3();
 var comboChart = pulseChart();
 for (const note of comboChart.slice(0, 7)) {
@@ -12453,20 +14162,20 @@ for (const note of pulseChart()) {
     finishedGame6.tick({ atMillis: 2100 + note.atMillis + note.holdMillis });
   }
 }
-var finishedFrame9 = finishedGame6.render();
-var finishedSnapshot11 = finishedGame6.snapshot();
+var finishedFrame10 = finishedGame6.render();
+var finishedSnapshot12 = finishedGame6.snapshot();
 
 // games/saltos/src/index.ts
-var src_exports16 = {};
-__export(src_exports16, {
+var src_exports17 = {};
+__export(src_exports17, {
   PlayerDisplay: () => PlayerDisplay16,
-  createGame: () => createGame16,
-  finishedFrame: () => finishedFrame10,
-  finishedSnapshot: () => finishedSnapshot12,
-  initEvents: () => initEvents8,
-  manifest: () => manifest16,
-  runningFrame: () => runningFrame14,
-  runningSnapshot: () => runningSnapshot14,
+  createGame: () => createGame17,
+  finishedFrame: () => finishedFrame11,
+  finishedSnapshot: () => finishedSnapshot13,
+  initEvents: () => initEvents9,
+  manifest: () => manifest17,
+  runningFrame: () => runningFrame15,
+  runningSnapshot: () => runningSnapshot15,
   saltosCelebrationMillis: () => saltosCelebrationMillis,
   saltosStartingLives: () => saltosStartingLives,
   startingSnapshot: () => startingSnapshot7,
@@ -12475,24 +14184,24 @@ __export(src_exports16, {
 });
 
 // games/saltos/src/display.tsx
-var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
 function PlayerDisplay16({ snapshot, frame }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "ml-solo-display", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(PlayerReadyOverlay, { snapshot }),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "ml-solo-summary", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(MetricPanel, { label: "Saltos", tone: "green", value: snapshot.score }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(MetricPanel, { label: "Tiempo", tone: "cyan", value: formatClock(snapshot.remainingMillis) }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(MetricPanel, { label: "Vida", tone: "red", value: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives }) })
+  return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "ml-solo-display", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(PlayerReadyOverlay, { snapshot }),
+    /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "ml-solo-summary", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(MetricRow, { columns: 3, className: "ml-solo-number-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(MetricPanel, { label: "Saltos", tone: "green", value: snapshot.score }),
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(MetricPanel, { label: "Tiempo", tone: "cyan", value: formatClock(snapshot.remainingMillis) }),
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(MetricPanel, { label: "Vida", tone: "red", value: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(MetricPanel, { className: "ml-solo-message", label: "Objetivo", tone: snapshot.success ? "green" : "yellow", value: snapshot.lastEventMessage || "Salta del azul al verde" })
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(MetricPanel, { className: "ml-solo-message", label: "Objetivo", tone: snapshot.success ? "green" : "yellow", value: snapshot.lastEventMessage || "Salta del azul al verde" })
     ] }),
-    frame ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Juego en el suelo" }) : null
+    frame ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(FramePreviewPanel, { className: "ml-solo-floor", frame, label: "Juego en el suelo" }) : null
   ] }) });
 }
 
 // games/saltos/src/manifest.ts
-var manifest16 = {
+var manifest17 = {
   id: "saltos",
   label: "Saltos",
   description: "Salta entre plataformas seguras sin tocar la lava durante un minuto.",
@@ -12526,7 +14235,7 @@ var saltosCelebrationMillis = 5e3;
 var saltosStartingLives = 1;
 var startPlatform = { x: 7, y: 3 };
 var platformSize = 3;
-function createGame16(config) {
+function createGame17(config) {
   return new SaltosGame(config);
 }
 var SaltosGame = class {
@@ -12544,8 +14253,8 @@ var SaltosGame = class {
   startedAtMillis = 0;
   target = startPlatform;
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest16);
-    this.readyGate = createPlayerReadyGate(manifest16.start, [{ minX: 5, maxX: 10, minY: 0, maxY: 7 }], this.config.nowMillis);
+    this.config = normalizeGameConfig(config, manifest17);
+    this.readyGate = createPlayerReadyGate(manifest17.start, [{ minX: 5, maxX: 10, minY: 0, maxY: 7 }], this.config.nowMillis);
     this.rng = createSeededRng(this.config.seed);
     this.players = this.scoredPlayers();
     this.target = this.nextTarget(this.current);
@@ -12616,8 +14325,8 @@ var SaltosGame = class {
   snapshot() {
     const ready = this.readyGate.state(this.nowMillis);
     return {
-      currentGame: manifest16.id,
-      label: manifest16.label,
+      currentGame: manifest17.id,
+      label: manifest17.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players,
@@ -12639,7 +14348,7 @@ var SaltosGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest16);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest17);
     this.resetState(this.config.nowMillis);
   }
   applyReadyTransition(transition, nowMillis) {
@@ -12711,38 +14420,38 @@ function insidePlatform(point, platform) {
 }
 
 // games/saltos/src/fixtures.ts
-var game4 = createGame16({ playerCount: 0, durationMillis: manifest16.defaultDurationMillis, seed: 137 });
-var initEvents8 = game4.init(0);
-var waitingFrame4 = game4.render();
-var waitingSnapshot9 = game4.snapshot();
-game4.press({ x: 8, y: 4, pressed: true, atMillis: 100 });
-var startingSnapshot7 = game4.snapshot();
-game4.tick({ atMillis: 2100 });
-var runningFrame14 = game4.render();
-var runningSnapshot14 = game4.snapshot();
-var target = game4.snapshot().targetPlatform;
-if (target) game4.press({ ...target, pressed: true, atMillis: 2200 });
-game4.tick({ atMillis: 62100 });
-var finishedFrame10 = game4.render();
-var finishedSnapshot12 = game4.snapshot();
+var game5 = createGame17({ playerCount: 0, durationMillis: manifest17.defaultDurationMillis, seed: 137 });
+var initEvents9 = game5.init(0);
+var waitingFrame4 = game5.render();
+var waitingSnapshot9 = game5.snapshot();
+game5.press({ x: 8, y: 4, pressed: true, atMillis: 100 });
+var startingSnapshot7 = game5.snapshot();
+game5.tick({ atMillis: 2100 });
+var runningFrame15 = game5.render();
+var runningSnapshot15 = game5.snapshot();
+var target = game5.snapshot().targetPlatform;
+if (target) game5.press({ ...target, pressed: true, atMillis: 2200 });
+game5.tick({ atMillis: 62100 });
+var finishedFrame11 = game5.render();
+var finishedSnapshot13 = game5.snapshot();
 
 // games/suelo-seguro/src/index.ts
-var src_exports17 = {};
-__export(src_exports17, {
+var src_exports18 = {};
+__export(src_exports18, {
   PlayerDisplay: () => PlayerDisplay17,
-  createGame: () => createGame17,
+  createGame: () => createGame18,
   damagedFrame: () => damagedFrame5,
   damagedSnapshot: () => damagedSnapshot5,
   failedFrame: () => failedFrame5,
   failedSnapshot: () => failedSnapshot5,
-  finishedFrame: () => finishedFrame11,
-  finishedSnapshot: () => finishedSnapshot13,
-  manifest: () => manifest17,
+  finishedFrame: () => finishedFrame12,
+  finishedSnapshot: () => finishedSnapshot14,
+  manifest: () => manifest18,
   resetSnapshot: () => resetSnapshot,
   roundWinFrame: () => roundWinFrame4,
   roundWinSnapshot: () => roundWinSnapshot4,
-  runningFrame: () => runningFrame15,
-  runningSnapshot: () => runningSnapshot15,
+  runningFrame: () => runningFrame16,
+  runningSnapshot: () => runningSnapshot16,
   sueloSeguroDamageImmunityMillis: () => sueloSeguroDamageImmunityMillis,
   sueloSeguroDepartureGraceMillis: () => sueloSeguroDepartureGraceMillis,
   sueloSeguroDifficultyProfile: () => sueloSeguroDifficultyProfile,
@@ -12758,7 +14467,7 @@ __export(src_exports17, {
 });
 
 // games/suelo-seguro/src/display.tsx
-var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
 var sueloSeguroStyles = `
 .suelo-seguro-display{background:radial-gradient(circle at 50% 42%,rgba(53,215,255,.14),transparent 32%),linear-gradient(145deg,#02070b,#071219 54%,#18050c);display:grid;gap:28px;grid-template-columns:390px minmax(0,1fr) 430px;inset:0;overflow:hidden;padding:34px 40px;position:absolute}
 .suelo-seguro-floor{align-content:center;background:rgba(2,8,12,.82);border:1px solid rgba(255,255,255,.11);border-radius:28px;display:grid;justify-items:center;padding:22px}.suelo-seguro-floor>span{color:#9bb1bc;font-size:19px;font-weight:900;letter-spacing:.11em;text-transform:uppercase}.suelo-seguro-floor .ml-floor-preview{height:720px;width:360px}
@@ -12781,75 +14490,75 @@ function PlayerDisplay17({ snapshot, frame }) {
     "--turn-progress": `${turnProgress}%`
   };
   const shellPhase = snapshot.phase === "round-win" || snapshot.phase === "turn-fail" ? "running" : snapshot.phase;
-  return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(GameDisplayShell, { title: snapshot.label, phase: shellPhase, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "suelo-seguro-display", style, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("style", { children: sueloSeguroStyles }),
-    /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(PlayerReadyOverlay, { snapshot }),
-    frame ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(FramePreviewPanel, { className: "suelo-seguro-floor", frame, label: "Pista en movimiento" }) : /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", {}),
-    /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("main", { className: "suelo-seguro-main", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("section", { className: "suelo-seguro-turn", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { children: "Turno de" }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("strong", { children: snapshot.activePlayerLabel }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("b", { children: snapshot.phase === "running" ? "Busca la plataforma de tu color" : "Prep\xE1rate para el siguiente relevo" }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { className: "suelo-seguro-turn-clock", children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("i", {}) })
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(GameDisplayShell, { title: snapshot.label, phase: shellPhase, children: /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "suelo-seguro-display", style, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("style", { children: sueloSeguroStyles }),
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(PlayerReadyOverlay, { snapshot }),
+    frame ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(FramePreviewPanel, { className: "suelo-seguro-floor", frame, label: "Pista en movimiento" }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", {}),
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("main", { className: "suelo-seguro-main", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("section", { className: "suelo-seguro-turn", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { children: "Turno de" }),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("strong", { children: snapshot.activePlayerLabel }),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("b", { children: snapshot.phase === "running" ? "Busca la plataforma de tu color" : "Prep\xE1rate para el siguiente relevo" }),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "suelo-seguro-turn-clock", children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("i", {}) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("section", { className: "suelo-seguro-players", "aria-label": "Jugadores", children: snapshot.players.map((player) => /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("article", { className: `suelo-seguro-player${player.index === snapshot.activePlayerIndex ? " is-active" : ""}`, style: { "--player-color": player.color }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("i", {}),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { children: player.label }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("strong", { children: player.score > 0 ? formatRelayTime(player.score) : "\u2014" })
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("section", { className: "suelo-seguro-players", "aria-label": "Jugadores", children: snapshot.players.map((player) => /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("article", { className: `suelo-seguro-player${player.index === snapshot.activePlayerIndex ? " is-active" : ""}`, style: { "--player-color": player.color }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("i", {}),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { children: player.label }),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("strong", { children: player.score > 0 ? formatRelayTime(player.score) : "\u2014" })
       ] }, player.index)) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("aside", { className: "suelo-seguro-sidebar", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("article", { className: "suelo-seguro-card suelo-seguro-lives", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { children: "Vidas del equipo" }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives })
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("aside", { className: "suelo-seguro-sidebar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("article", { className: "suelo-seguro-card suelo-seguro-lives", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { children: "Vidas del equipo" }),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(LivesMeter, { lives: snapshot.lives, maxLives: snapshot.maxLives })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("article", { className: "suelo-seguro-card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { children: "Tiempo del equipo" }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("strong", { children: formatRelayTime(snapshot.teamTransferMillis) }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("small", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("article", { className: "suelo-seguro-card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { children: "Tiempo del equipo" }),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("strong", { children: formatRelayTime(snapshot.teamTransferMillis) }),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("small", { children: [
           "Menos es mejor \xB7 quedan ",
           formatClock(snapshot.remainingMillis)
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("article", { className: "suelo-seguro-card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { children: "Relevos seguros" }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("strong", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("article", { className: "suelo-seguro-card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { children: "Relevos seguros" }),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("strong", { children: [
           snapshot.completedTransfers,
           "/",
           snapshot.requiredTransfers
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { className: "suelo-seguro-progress", children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("i", {}) }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("small", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "suelo-seguro-progress", children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("i", {}) }),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("small", { children: [
           "Mejor relevo: ",
           snapshot.bestTransferMillis === null ? "\u2014" : formatRelayTime(snapshot.bestTransferMillis)
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { className: "suelo-seguro-event", children: snapshot.lastEventMessage || "El suelo est\xE1 preparado" })
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "suelo-seguro-event", children: snapshot.lastEventMessage || "El suelo est\xE1 preparado" })
     ] }),
-    snapshot.phase === "round-win" ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Result2, { className: "is-round", title: `\xA1${snapshot.activePlayerLabel} est\xE1 a salvo!`, caption: `Relevo en ${formatRelayTime(snapshot.lastTransferMillis ?? 0)} \xB7 equipo ${formatRelayTime(snapshot.teamTransferMillis)}` }) : null,
-    snapshot.lastEventCue === "damage" ? /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "suelo-seguro-life-lost", role: "status", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("strong", { children: "Una vida menos" }),
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("span", { children: [
+    snapshot.phase === "round-win" ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Result2, { className: "is-round", title: `\xA1${snapshot.activePlayerLabel} est\xE1 a salvo!`, caption: `Relevo en ${formatRelayTime(snapshot.lastTransferMillis ?? 0)} \xB7 equipo ${formatRelayTime(snapshot.teamTransferMillis)}` }) : null,
+    snapshot.lastEventCue === "damage" ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "suelo-seguro-life-lost", role: "status", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("strong", { children: "Una vida menos" }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { children: [
         "Quedan ",
         snapshot.lives,
         " para todo el equipo"
       ] })
     ] }, snapshot.lastEventMessage) : null,
-    snapshot.phase === "finished" ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Result2, { className: snapshot.success ? "is-game-win" : "is-game-fail", title: snapshot.success ? "\xA1Equipo a salvo!" : "El rojo os alcanz\xF3", caption: snapshot.success ? `${snapshot.completedTransfers} relevos en ${formatRelayTime(snapshot.teamTransferMillis)}` : `${snapshot.completedTransfers} relevos \xB7 ${formatRelayTime(snapshot.teamTransferMillis)}` }) : null
+    snapshot.phase === "finished" ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Result2, { className: snapshot.success ? "is-game-win" : "is-game-fail", title: snapshot.success ? "\xA1Equipo a salvo!" : "El rojo os alcanz\xF3", caption: snapshot.success ? `${snapshot.completedTransfers} relevos en ${formatRelayTime(snapshot.teamTransferMillis)}` : `${snapshot.completedTransfers} relevos \xB7 ${formatRelayTime(snapshot.teamTransferMillis)}` }) : null
   ] }) });
 }
 function formatRelayTime(millis) {
   return `${(Math.max(0, millis) / 1e3).toFixed(2).replace(".", ",")} s`;
 }
 function Result2({ className, title, caption }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: `suelo-seguro-result ${className}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("strong", { children: title }),
-    /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { children: caption })
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: `suelo-seguro-result ${className}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("strong", { children: title }),
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { children: caption })
   ] });
 }
 
 // games/suelo-seguro/src/manifest.ts
-var manifest17 = {
+var manifest18 = {
   id: "suelo-seguro",
   label: "Suelo Seguro",
   description: "El equipo enlaza refugios de 2\xD72 en el per\xEDmetro, comparte vidas y compite por completar los relevos en el menor tiempo.",
@@ -12974,7 +14683,7 @@ function sueloSeguroStartingPlatforms(playerCount) {
 function sueloSeguroHazardOrigin(step) {
   return { ...sueloSeguroHazardOrbit[positiveModulo2(step, sueloSeguroHazardOrbit.length)] };
 }
-function createGame17(config) {
+function createGame18(config) {
   return new SueloSeguroGame(config);
 }
 var SueloSeguroGame = class {
@@ -13004,7 +14713,7 @@ var SueloSeguroGame = class {
   turnDeadlineMillis = 0;
   turnStartedAtMillis = 0;
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest17);
+    this.config = normalizeGameConfig(config, manifest18);
     this.readyGate = this.createReadyGate(this.config.nowMillis);
     this.rng = createSeededRng(this.config.seed);
     this.resetState(this.config.nowMillis);
@@ -13101,8 +14810,8 @@ var SueloSeguroGame = class {
     const active = this.players[this.activePlayerIndex];
     const visiblePlatforms = this.visiblePlatforms();
     return {
-      currentGame: manifest17.id,
-      label: manifest17.label,
+      currentGame: manifest18.id,
+      label: manifest18.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players,
@@ -13135,7 +14844,7 @@ var SueloSeguroGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest17);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest18);
     this.readyGate = this.createReadyGate(this.config.nowMillis);
     this.resetState(this.config.nowMillis);
   }
@@ -13217,7 +14926,7 @@ var SueloSeguroGame = class {
     const origin = this.platforms[this.activePlayerIndex];
     const occupied = this.platforms.filter((_platform, index) => index !== this.activePlayerIndex);
     const candidates = sueloSeguroPlatformAnchors.filter(
-      (candidate) => !samePlatform(origin, candidate) && !occupied.some((platform) => touchesOrAdjacent(platform, candidate)) && manhattan(origin, candidate) >= 8
+      (candidate) => !samePlatform(origin, candidate) && !occupied.some((platform) => touchesOrAdjacent(platform, candidate)) && manhattan2(origin, candidate) >= 8
     );
     const fallback = sueloSeguroPlatformAnchors.filter(
       (candidate) => !samePlatform(origin, candidate) && !occupied.some((platform) => touchesOrAdjacent(platform, candidate))
@@ -13340,7 +15049,7 @@ var SueloSeguroGame = class {
       minY: platform.y,
       maxY: platform.y + sueloSeguroPlatformSize - 1
     }));
-    return createPlayerReadyGate(manifest17.start, zones, nowMillis);
+    return createPlayerReadyGate(manifest18.start, zones, nowMillis);
   }
   resetState(nowMillis) {
     this.activePlayerIndex = 0;
@@ -13390,7 +15099,7 @@ function touchesOrAdjacent(left, right) {
 function samePlatform(left, right) {
   return left.x === right.x && left.y === right.y;
 }
-function manhattan(left, right) {
+function manhattan2(left, right) {
   return Math.abs(left.x - right.x) + Math.abs(left.y - right.y);
 }
 function formatTransferTime(millis) {
@@ -13402,18 +15111,18 @@ function positiveModulo2(value, divisor) {
 
 // games/suelo-seguro/src/fixtures.ts
 function startedGame4() {
-  const game5 = createGame17({ playerCount: 4, durationMillis: manifest17.defaultDurationMillis, difficulty: "medium", seed: 137 });
-  game5.init(0);
+  const game7 = createGame18({ playerCount: 4, durationMillis: manifest18.defaultDurationMillis, difficulty: "medium", seed: 137 });
+  game7.init(0);
   sueloSeguroStartingPlatforms(4).forEach((platform, index) => {
-    game5.press({ x: platform.x, y: platform.y, pressed: true, atMillis: 100 + index * 80 });
+    game7.press({ x: platform.x, y: platform.y, pressed: true, atMillis: 100 + index * 80 });
   });
-  game5.tick({ atMillis: 2400 });
-  return game5;
+  game7.tick({ atMillis: 2400 });
+  return game7;
 }
 var runningGame9 = startedGame4();
 runningGame9.tick({ atMillis: 2700 });
-var runningFrame15 = runningGame9.render();
-var runningSnapshot15 = runningGame9.snapshot();
+var runningFrame16 = runningGame9.render();
+var runningSnapshot16 = runningGame9.snapshot();
 var roundWinGame3 = startedGame4();
 var firstTarget = roundWinGame3.snapshot().targetPlatform;
 roundWinGame3.press({ x: firstTarget.x, y: firstTarget.y, pressed: true, atMillis: 2650 });
@@ -13446,28 +15155,228 @@ while (finishedGame7.snapshot().phase !== "finished") {
     clock2 += 40;
   }
 }
-var finishedFrame11 = finishedGame7.render();
-var finishedSnapshot13 = finishedGame7.snapshot();
+var finishedFrame12 = finishedGame7.render();
+var finishedSnapshot14 = finishedGame7.snapshot();
 var resetGame = startedGame4();
-resetGame.tick({ atMillis: manifest17.defaultDurationMillis + 2400 });
-resetGame.tick({ atMillis: manifest17.defaultDurationMillis + 2400 + sueloSeguroGameResultMillis });
+resetGame.tick({ atMillis: manifest18.defaultDurationMillis + 2400 });
+resetGame.tick({ atMillis: manifest18.defaultDurationMillis + 2400 + sueloSeguroGameResultMillis });
 var resetSnapshot = resetGame.snapshot();
 
+// games/temporada1-niveles/src/index.ts
+var src_exports19 = {};
+__export(src_exports19, {
+  PlayerDisplay: () => PublishedLevelPlayerDisplay,
+  countdownFrame: () => countdownFrame2,
+  countdownSnapshot: () => countdownSnapshot2,
+  createGame: () => createGame19,
+  createSessionController: () => createSessionController3,
+  fallbackContent: () => fallbackContent2,
+  finishedFrame: () => finishedFrame13,
+  finishedSnapshot: () => finishedSnapshot15,
+  initEvents: () => initEvents10,
+  manifest: () => manifest19,
+  runningFrame: () => runningFrame17,
+  runningSnapshot: () => runningSnapshot17,
+  temporada1EngineGame: () => temporada1EngineGame,
+  temporada1GameId: () => temporada1GameId
+});
+
+// games/temporada1-niveles/src/manifest.ts
+var temporada1GameId = "4773837e-3565-49d7-8953-3b40f59fca7b";
+var temporada1EngineGame = "temporada1-niveles";
+var manifest19 = {
+  id: temporada1GameId,
+  slug: temporada1EngineGame,
+  aliases: [temporada1EngineGame],
+  label: "Temporada 1",
+  description: "Ruta cooperativa de 24 niveles con puntos, peligros y retos cl\xE1sicos de la pista.",
+  availability: { development: true, production: true },
+  catalog: {
+    category: "team",
+    color: "#8dff6e",
+    durationLabel: "Por nivel",
+    modeLabel: "Temporada",
+    audioLabel: "M\xFAsica + efectos",
+    rules: [
+      "Recoge todos los objetivos azules y morados",
+      "Los objetivos morados necesitan dos pisadas y las baldosas rojas quitan vidas"
+    ]
+  },
+  players: {
+    allowAny: false,
+    min: 1,
+    max: 6
+  },
+  start: { mode: "immediate" },
+  config: {
+    difficulty: {
+      default: "medium",
+      options: ["easy", "medium", "hard", "expert"]
+    },
+    vars: []
+  },
+  defaultDurationMillis: 0,
+  display: {
+    entry: "./display"
+  },
+  preview: {
+    seed: 137,
+    playerCount: 4,
+    difficulty: "medium",
+    actions: [{ atMillis: 3100, type: "press", x: 7, y: 29 }],
+    captureStartMillis: 3180,
+    frameCount: 18,
+    frameIntervalMillis: 120
+  },
+  tags: ["published-levels", "platform-editable", "jugar-3d", "team", "typescript"]
+};
+
+// games/temporada1-niveles/src/fixtures-content.ts
+var fallbackContent2 = createPublishedLevelContent({
+  gameId: temporada1GameId,
+  engineGame: temporada1EngineGame,
+  selectedLevelId: "22222222-2222-4222-8222-222222222201",
+  selectedLevelSlug: "level-1",
+  mode: "challenge",
+  levelsPayload: [
+    temporadaLevel("22222222-2222-4222-8222-222222222201", "level-1", "Temporada 1 / Nivel 1", 0),
+    temporadaLevel("22222222-2222-4222-8222-222222222202", "level-2", "Temporada 1 / Nivel 2", 2)
+  ],
+  resultAnimationsPayload: {
+    levels: [resultAnimation2("game-pass", "#35d7ff", victoryCells2()), resultAnimation2("game-fail", "#ff2036", defeatCells2())]
+  }
+});
+function temporadaLevel(id, slug, label, offset) {
+  return {
+    id,
+    slug,
+    label,
+    description: "Esquiva las l\xEDneas rojas y recoge todos los objetivos azules y morados.",
+    life: 4,
+    pass_score: 10,
+    time_limit_seconds: 75,
+    frame_tick_ms: 25,
+    rules: {
+      victory_condition: "collect_all",
+      difficulty_changes_layout: false,
+      difficulty_settings: {
+        easy: { life: 5, gameplay_time_limit_seconds: 100, speed_multiplier: 0.8 },
+        medium: { life: 4, gameplay_time_limit_seconds: 75, speed_multiplier: 1 },
+        hard: { life: 3, gameplay_time_limit_seconds: 60, speed_multiplier: 1.25 },
+        expert: { life: 2, gameplay_time_limit_seconds: 45, speed_multiplier: 1.5 }
+      },
+      red_floor_animation: "none",
+      red_damage_grace_period: false,
+      green_platform_load_animation: true,
+      green_platform_load_side: "left",
+      green_platform_disappear: false,
+      green_platform_impact_ripple: false,
+      blue_platform_turn_green: false,
+      blue_platform_capture_area: false
+    },
+    result_animations: {
+      victory_animations: ["game-pass"],
+      defeat_animations: ["game-fail"]
+    },
+    music_ref: "Motion/canciones/Background07.mp3",
+    music_volume: 0.18,
+    coin_cue_ref: "Motion/sonidos/coin.wav",
+    double_coin_cue_ref: "Motion/sonidos/coin.wav",
+    damage_cue_ref: "Motion/sonidos/fallo.mp3",
+    win_cue_ref: "Motion/sonidos/victoria.mp3",
+    defeat_cue_ref: "Motion/sonidos/fallo.mp3",
+    frames: [
+      { r: 24, c: temporadaCells(offset, 0) },
+      { r: 24, c: temporadaCells(offset, 1) },
+      { r: 24, c: temporadaCells(offset, 2) }
+    ]
+  };
+}
+function temporadaCells(levelOffset, motionOffset) {
+  const cells = [];
+  for (let y = 28; y < 32; y += 1) {
+    for (let x = 3; x <= 12; x += 1) cells.push([x, y, 0, `safe-${x}-${y}`]);
+  }
+  for (let y = 3; y <= 26; y += 6) {
+    for (let x = 5; x <= 10; x += 1) cells.push([x, y, 0, `rest-${x}-${y}`]);
+  }
+  const lineA = 8 + (motionOffset + levelOffset) % 3;
+  const lineB = 19 - (motionOffset + levelOffset) % 3;
+  for (let x = 0; x < 16; x += 1) {
+    cells.push([x, lineA, 2, `laser-a-${x}`], [x, lineB, 2, `laser-b-${x}`]);
+  }
+  cells.push(
+    [2 + levelOffset, 5, 1, `blue-a-${levelOffset}`],
+    [13 - levelOffset, 24, 1, `blue-b-${levelOffset}`],
+    [8, 14, 3, `purple-${levelOffset}`]
+  );
+  return cells;
+}
+function resultAnimation2(slug, color, cells) {
+  return {
+    slug,
+    frame_tick_ms: 50,
+    tile_effects: { 0: { color } },
+    frames: [{ r: 10, c: cells }, { r: 10, c: cells.map(([x, y, kind]) => [15 - x, y, kind]) }]
+  };
+}
+function victoryCells2() {
+  const cells = [];
+  for (let radius = 0; radius <= 7; radius += 1) {
+    cells.push([7 - radius, 16, 0], [8 + radius, 16, 0], [7, 16 - radius, 0], [8, 16 + radius, 0]);
+  }
+  return cells.filter(([x, y]) => x >= 0 && x < 16 && y >= 0 && y < 32);
+}
+function defeatCells2() {
+  const cells = [];
+  for (let y = 7; y < 25; y += 1) cells.push([5, y, 0], [10, y, 0]);
+  for (let x = 5; x <= 10; x += 1) cells.push([x, 7, 0], [x, 24, 0]);
+  return cells;
+}
+
+// games/temporada1-niveles/src/game.ts
+var product2 = Object.freeze({
+  manifest: manifest19,
+  fallbackContent: fallbackContent2
+});
+function createGame19(config) {
+  return createPublishedLevelGame(product2, config);
+}
+var createSessionController3 = createPublishedLevelSessionController;
+
+// games/temporada1-niveles/src/fixtures.ts
+var game6 = createGame19({ playerCount: 4, difficulty: "medium" });
+var initEvents10 = game6.init(0);
+game6.tick({ atMillis: 1500 });
+var countdownFrame2 = game6.render();
+var countdownSnapshot2 = game6.snapshot();
+game6.tick({ atMillis: 3e3 });
+var runningFrame17 = game6.render();
+var runningSnapshot17 = game6.snapshot();
+game6.press({ x: 2, y: 5, pressed: true, atMillis: 3020 });
+game6.press({ x: 13, y: 24, pressed: true, atMillis: 3040 });
+game6.press({ x: 8, y: 14, pressed: true, atMillis: 3060 });
+game6.release({ x: 8, y: 14, pressed: false, atMillis: 3080 });
+game6.press({ x: 8, y: 14, pressed: true, atMillis: 3100 });
+game6.tick({ atMillis: 3120 });
+var finishedFrame13 = game6.render();
+var finishedSnapshot15 = game6.snapshot();
+
 // games/tira-soga/src/index.ts
-var src_exports18 = {};
-__export(src_exports18, {
+var src_exports20 = {};
+__export(src_exports20, {
   PlayerDisplay: () => PlayerDisplay18,
   blueColor: () => blueColor3,
   blueFieldColor: () => blueFieldColor,
   blueFieldFirstRow: () => blueFieldFirstRow,
   centerLineColor: () => centerLineColor,
-  createGame: () => createGame18,
-  finishedFrame: () => finishedFrame12,
-  finishedSnapshot: () => finishedSnapshot14,
+  createGame: () => createGame20,
+  finishedFrame: () => finishedFrame14,
+  finishedSnapshot: () => finishedSnapshot16,
   gameWinAnimationMillis: () => gameWinAnimationMillis5,
-  initEvents: () => initEvents9,
+  initEvents: () => initEvents11,
   knotColor: () => knotColor,
-  manifest: () => manifest18,
+  manifest: () => manifest20,
   onBlueTilePressed: () => onBlueTilePressed,
   onRedTilePressed: () => onRedTilePressed,
   redColor: () => redColor3,
@@ -13480,8 +15389,8 @@ __export(src_exports18, {
   roundWinFrame: () => roundWinFrame5,
   roundWinSnapshot: () => roundWinSnapshot5,
   roundsToWin: () => roundsToWin2,
-  runningFrame: () => runningFrame16,
-  runningSnapshot: () => runningSnapshot16,
+  runningFrame: () => runningFrame18,
+  runningSnapshot: () => runningSnapshot18,
   startingFrame: () => startingFrame4,
   startingSnapshot: () => startingSnapshot8,
   teamForTile: () => teamForTile,
@@ -13493,7 +15402,7 @@ __export(src_exports18, {
 });
 
 // games/tira-soga/src/display.tsx
-var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
 var tiraSogaStyles = `
 .tira-soga-display {
   display: grid;
@@ -13656,9 +15565,9 @@ var tiraSogaStyles = `
 function PlayerDisplay18({
   snapshot
 }) {
-  const [red, blue] = snapshot.players;
-  const redPlayer = red ?? { label: "Rojo", score: 0, color: "#ff1c28" };
-  const bluePlayer = blue ?? { label: "Azul", score: 0, color: "#145cff" };
+  const [red2, blue2] = snapshot.players;
+  const redPlayer = red2 ?? { label: "Rojo", score: 0, color: "#ff1c28" };
+  const bluePlayer = blue2 ?? { label: "Azul", score: 0, color: "#145cff" };
   const currentRound = snapshot.currentRound ?? 1;
   const totalRounds2 = snapshot.totalRounds ?? 5;
   const pressesPerAdvance = snapshot.pressesPerAdvance ?? 1;
@@ -13674,15 +15583,15 @@ function PlayerDisplay18({
   const centerValue = snapshot.phase === "waiting" ? `${snapshot.readyPlayers ?? 0}/${snapshot.requiredPlayers ?? 2}` : snapshot.phase === "starting" ? formatClock(snapshot.countdownMillis ?? 0) : `${currentRound}/${totalRounds2}`;
   const centerCaption = readyVisible ? snapshot.phase === "waiting" ? "en posici\xF3n" : "preparados" : `${snapshot.difficultyLabel ?? "Medio"} \xB7 ${pressesPerAdvance} ${pressesPerAdvance === 1 ? "pisada" : "pisadas"} por avance`;
   const caption = snapshot.phase === "finished" ? `Victoria ${winnerLabel}` : hasRoundResult ? `Ronda para ${roundWinnerLabel.toLowerCase()}` : ropePosition === 0 ? "\xA1Pisad vuestro campo para tirar!" : ropePosition < 0 ? "Rojo toma ventaja" : "Azul toma ventaja";
-  return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, variant: "versus", children: /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, variant: "versus", children: /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(
     "div",
     {
       className: `tira-soga-display is-phase-${snapshot.phase}`,
       style: { "--tira-soga-rope-x": `${ropePercent}%` },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("style", { children: tiraSogaStyles }),
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(PlayerReadyOverlay, { snapshot }),
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("style", { children: tiraSogaStyles }),
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(PlayerReadyOverlay, { snapshot }),
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
           VersusScoreboard,
           {
             className: "tira-soga-scoreboard",
@@ -13694,42 +15603,42 @@ function PlayerDisplay18({
             centerCaption
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("section", { className: "tira-soga-arena", "aria-label": `Posici\xF3n de la soga: ${ropePosition}`, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "tira-soga-team is-red", children: "Rojo" }),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "tira-soga-track", "aria-hidden": "true", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("i", { className: "tira-soga-rope" }),
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("i", { className: "tira-soga-center" }),
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("i", { className: "tira-soga-knot" })
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("section", { className: "tira-soga-arena", "aria-label": `Posici\xF3n de la soga: ${ropePosition}`, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "tira-soga-team is-red", children: "Rojo" }),
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "tira-soga-track", "aria-hidden": "true", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("i", { className: "tira-soga-rope" }),
+            /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("i", { className: "tira-soga-center" }),
+            /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("i", { className: "tira-soga-knot" })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "tira-soga-team is-blue", children: "Azul" }),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("strong", { className: "tira-soga-caption", children: caption }),
-          snapshot.phase === "finished" ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "tira-soga-result is-game-win", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("strong", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "tira-soga-team is-blue", children: "Azul" }),
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("strong", { className: "tira-soga-caption", children: caption }),
+          snapshot.phase === "finished" ? /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "tira-soga-result is-game-win", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("strong", { children: [
               "\xA1Gana ",
               winnerLabel,
               "!"
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("span", { children: [
               "Resultado final ",
               redPlayer.score,
               " \u2013 ",
               bluePlayer.score
             ] })
-          ] }) : hasRoundResult ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "tira-soga-result is-round-win", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("strong", { children: [
+          ] }) : hasRoundResult ? /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "tira-soga-result is-round-win", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("strong", { children: [
               "Ronda para ",
               roundWinnerLabel
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { children: "Siguiente ronda en breve" })
+            /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { children: "Siguiente ronda en breve" })
           ] }) : null
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(MetricRow, { columns: 4, className: "tira-soga-metrics", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(MetricPanel, { label: "Pisadas rojas", tone: "red", value: snapshot.redPresses ?? 0 }),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(MetricPanel, { label: "Avance rojo", tone: "amber", value: `${snapshot.redProgress ?? 0}/${pressesPerAdvance}` }),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(MetricPanel, { label: "Avance azul", tone: "cyan", value: `${snapshot.blueProgress ?? 0}/${pressesPerAdvance}` }),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(MetricPanel, { label: "Pisadas azules", tone: "blue", value: snapshot.bluePresses ?? 0 })
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(MetricRow, { columns: 4, className: "tira-soga-metrics", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(MetricPanel, { label: "Pisadas rojas", tone: "red", value: snapshot.redPresses ?? 0 }),
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(MetricPanel, { label: "Avance rojo", tone: "amber", value: `${snapshot.redProgress ?? 0}/${pressesPerAdvance}` }),
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(MetricPanel, { label: "Avance azul", tone: "cyan", value: `${snapshot.blueProgress ?? 0}/${pressesPerAdvance}` }),
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(MetricPanel, { label: "Pisadas azules", tone: "blue", value: snapshot.bluePresses ?? 0 })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
           RoundStrip,
           {
             className: "tira-soga-rounds",
@@ -13746,7 +15655,7 @@ function PlayerDisplay18({
 }
 
 // games/tira-soga/src/manifest.ts
-var manifest18 = {
+var manifest20 = {
   id: "tira-soga",
   label: "Tira-Soga",
   description: "Five-round team tug of war driven by rapid presses on the red and blue floor halves.",
@@ -13824,7 +15733,7 @@ var difficultyLabels = {
   medium: "Medio",
   hard: "Dif\xEDcil"
 };
-function createGame18(config) {
+function createGame20(config) {
   return new TiraSogaGame(config);
 }
 function tiraSogaReadyZones() {
@@ -13855,8 +15764,8 @@ var TiraSogaGame = class {
   flashUntil = Array.from({ length: FLOOR_COLS * FLOOR_ROWS }, () => 0);
   lastEvent = gameEvent("none", "Listos para tirar", 0);
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest18);
-    this.readyGate = createPlayerReadyGate(manifest18.start, this.readyZones, this.config.nowMillis);
+    this.config = normalizeGameConfig(config, manifest20);
+    this.readyGate = createPlayerReadyGate(manifest20.start, this.readyZones, this.config.nowMillis);
     this.resetMatch(this.config.nowMillis);
   }
   init(nowMillis) {
@@ -13948,8 +15857,8 @@ var TiraSogaGame = class {
     const roundRemaining = Math.max(0, this.roundPauseUntilMillis - this.nowMillis);
     const gameRemaining = this.phase === "finished" ? Math.max(0, this.finishAtMillis + gameWinAnimationMillis5 - this.nowMillis) : 0;
     return {
-      currentGame: manifest18.id,
-      label: manifest18.label,
+      currentGame: manifest20.id,
+      label: manifest20.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: players2,
@@ -13993,10 +15902,10 @@ var TiraSogaGame = class {
         ...config,
         options: { ...this.config.options, ...config.options }
       },
-      manifest18
+      manifest20
     );
     this.readyZones = tiraSogaReadyZones();
-    this.readyGate = createPlayerReadyGate(manifest18.start, this.readyZones, this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest20.start, this.readyZones, this.config.nowMillis);
     this.resetMatch(this.config.nowMillis);
     this.lastEvent = gameEvent("ready", "Tira-Soga espera a rojo y azul", this.config.nowMillis);
   }
@@ -14196,15 +16105,15 @@ var TiraSogaGame = class {
       }
     }
   }
-  drawBaseFields(frame, red, blue) {
-    fillFrameRect(frame, 0, 0, FLOOR_COLS, redFieldLastRow + 1, red);
+  drawBaseFields(frame, red2, blue2) {
+    fillFrameRect(frame, 0, 0, FLOOR_COLS, redFieldLastRow + 1, red2);
     fillFrameRect(
       frame,
       0,
       blueFieldFirstRow,
       FLOOR_COLS,
       FLOOR_ROWS - blueFieldFirstRow,
-      blue
+      blue2
     );
     fillFrameRect(frame, 0, 15, FLOOR_COLS, 2, centerLineColor);
   }
@@ -14235,29 +16144,29 @@ function teamForTile(x, y) {
 function teamLabel(team) {
   return team === 0 ? "Rojo" : "Azul";
 }
-function onRedTilePressed(game5, atMillis, x = 4, y = 8) {
-  const events = game5.press({ x, y, pressed: true, atMillis });
-  game5.release({ x, y, pressed: false, atMillis: atMillis + 1 });
+function onRedTilePressed(game7, atMillis, x = 4, y = 8) {
+  const events = game7.press({ x, y, pressed: true, atMillis });
+  game7.release({ x, y, pressed: false, atMillis: atMillis + 1 });
   return events;
 }
-function onBlueTilePressed(game5, atMillis, x = 11, y = 24) {
-  const events = game5.press({ x, y, pressed: true, atMillis });
-  game5.release({ x, y, pressed: false, atMillis: atMillis + 1 });
+function onBlueTilePressed(game7, atMillis, x = 11, y = 24) {
+  const events = game7.press({ x, y, pressed: true, atMillis });
+  game7.release({ x, y, pressed: false, atMillis: atMillis + 1 });
   return events;
 }
 
 // games/tira-soga/src/fixtures.ts
-var waitingGame3 = createGame18({ playerCount: 2, difficulty: "medium" });
-var initEvents9 = waitingGame3.init(0);
+var waitingGame3 = createGame20({ playerCount: 2, difficulty: "medium" });
+var initEvents11 = waitingGame3.init(0);
 var waitingFrame5 = waitingGame3.render();
 var waitingSnapshot10 = waitingGame3.snapshot();
-var startingGame3 = createGame18({ playerCount: 2, difficulty: "hard" });
+var startingGame3 = createGame20({ playerCount: 2, difficulty: "hard" });
 startingGame3.init(0);
 occupyReadyZones2(startingGame3, 100);
 startingGame3.tick({ atMillis: 1100 });
 var startingFrame4 = startingGame3.render();
 var startingSnapshot8 = startingGame3.snapshot();
-var runningGame10 = createGame18({ playerCount: 2, difficulty: "medium" });
+var runningGame10 = createGame20({ playerCount: 2, difficulty: "medium" });
 runningGame10.init(0);
 startGame3(runningGame10);
 onRedTilePressed(runningGame10, 3200);
@@ -14267,9 +16176,9 @@ onBlueTilePressed(runningGame10, 3500);
 onBlueTilePressed(runningGame10, 3600);
 onBlueTilePressed(runningGame10, 3700);
 onBlueTilePressed(runningGame10, 3800);
-var runningFrame16 = runningGame10.render();
-var runningSnapshot16 = runningGame10.snapshot();
-var roundWinGame4 = createGame18({ playerCount: 2, difficulty: "easy" });
+var runningFrame18 = runningGame10.render();
+var runningSnapshot18 = runningGame10.snapshot();
+var roundWinGame4 = createGame20({ playerCount: 2, difficulty: "easy" });
 roundWinGame4.init(0);
 startGame3(roundWinGame4);
 var roundWinTime = 3200;
@@ -14280,51 +16189,51 @@ for (let index = 0; index < ropeLimit; index += 1) {
 roundWinGame4.tick({ atMillis: roundWinTime + 500 });
 var roundWinFrame5 = roundWinGame4.render();
 var roundWinSnapshot5 = roundWinGame4.snapshot();
-var finishedGame8 = createGame18({ playerCount: 2, difficulty: "easy" });
+var finishedGame8 = createGame20({ playerCount: 2, difficulty: "easy" });
 finishedGame8.init(0);
 startGame3(finishedGame8);
 var fixtureTime = 3200;
-function winFixtureRound(game5, team) {
+function winFixtureRound(game7, team) {
   for (let index = 0; index < ropeLimit; index += 1) {
     if (team === 0) {
-      onRedTilePressed(game5, fixtureTime);
+      onRedTilePressed(game7, fixtureTime);
     } else {
-      onBlueTilePressed(game5, fixtureTime);
+      onBlueTilePressed(game7, fixtureTime);
     }
     fixtureTime += 30;
   }
-  if (game5.snapshot().phase !== "finished") {
+  if (game7.snapshot().phase !== "finished") {
     fixtureTime += roundWinAnimationMillis2;
-    game5.tick({ atMillis: fixtureTime });
+    game7.tick({ atMillis: fixtureTime });
   }
 }
 for (const winner of [0, 1, 0, 1, 0]) {
   winFixtureRound(finishedGame8, winner);
 }
 finishedGame8.tick({ atMillis: fixtureTime + Math.floor(gameWinAnimationMillis5 / 3) });
-var finishedFrame12 = finishedGame8.render();
-var finishedSnapshot14 = finishedGame8.snapshot();
-function occupyReadyZones2(game5, atMillis) {
-  for (const zone of game5.playerReadyZones()) {
-    game5.press({ x: zone.minX + 2, y: zone.minY + 2, pressed: true, atMillis });
+var finishedFrame14 = finishedGame8.render();
+var finishedSnapshot16 = finishedGame8.snapshot();
+function occupyReadyZones2(game7, atMillis) {
+  for (const zone of game7.playerReadyZones()) {
+    game7.press({ x: zone.minX + 2, y: zone.minY + 2, pressed: true, atMillis });
   }
 }
-function startGame3(game5) {
-  occupyReadyZones2(game5, 100);
-  game5.tick({ atMillis: 3100 });
-  for (const zone of game5.playerReadyZones()) {
-    game5.release({ x: zone.minX + 2, y: zone.minY + 2, pressed: false, atMillis: 3101 });
+function startGame3(game7) {
+  occupyReadyZones2(game7, 100);
+  game7.tick({ atMillis: 3100 });
+  for (const zone of game7.playerReadyZones()) {
+    game7.release({ x: zone.minX + 2, y: zone.minY + 2, pressed: false, atMillis: 3101 });
   }
 }
 
 // games/tetris/src/index.ts
-var src_exports19 = {};
-__export(src_exports19, {
+var src_exports21 = {};
+__export(src_exports21, {
   PlayerDisplay: () => PlayerDisplay19,
-  createGame: () => createGame19,
-  manifest: () => manifest19,
-  runningFrame: () => runningFrame17,
-  runningSnapshot: () => runningSnapshot17,
+  createGame: () => createGame21,
+  manifest: () => manifest21,
+  runningFrame: () => runningFrame19,
+  runningSnapshot: () => runningSnapshot19,
   startingFrame: () => startingFrame5,
   startingSnapshot: () => startingSnapshot9,
   tetrisConfigVars: () => tetrisConfigVars,
@@ -14333,48 +16242,48 @@ __export(src_exports19, {
 });
 
 // games/tetris/src/display.tsx
-var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
 function PlayerDisplay19({ snapshot, frame }) {
   const result = resultCopy(snapshot);
-  return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: `tetris-display is-${snapshot.result}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(PlayerReadyOverlay, { snapshot }),
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("section", { className: "tetris-summary", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "tetris-callout", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { children: result.eyebrow }),
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("strong", { children: result.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("b", { children: result.caption })
+  return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: `tetris-display is-${snapshot.result}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(PlayerReadyOverlay, { snapshot }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("section", { className: "tetris-summary", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "tetris-callout", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { children: result.eyebrow }),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("strong", { children: result.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("b", { children: result.caption })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(MetricRow, { columns: 4, className: "tetris-metrics", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(MetricPanel, { label: "Puntos", tone: "cyan", value: snapshot.score }),
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(MetricPanel, { label: "L\xEDneas", tone: "yellow", value: `${snapshot.lines}/${snapshot.linesTarget}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(MetricPanel, { label: "Nivel", tone: "magenta", value: snapshot.level }),
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(MetricPanel, { label: "Tiempo", tone: "amber", value: formatClock(snapshot.elapsedMillis) })
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(MetricRow, { columns: 4, className: "tetris-metrics", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(MetricPanel, { label: "Puntos", tone: "cyan", value: snapshot.score }),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(MetricPanel, { label: "L\xEDneas", tone: "yellow", value: `${snapshot.lines}/${snapshot.linesTarget}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(MetricPanel, { label: "Nivel", tone: "magenta", value: snapshot.level }),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(MetricPanel, { label: "Tiempo", tone: "amber", value: formatClock(snapshot.elapsedMillis) })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("section", { className: "tetris-main", children: [
-      frame ? /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(FramePreviewPanel, { className: "tetris-floor", frame, label: "Pista de Tetris" }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("aside", { className: "tetris-side", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(PieceCard, { label: "Pieza activa", piece: snapshot.activePiece }),
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(PieceCard, { label: "Siguiente", piece: snapshot.nextPiece }),
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("article", { className: "tetris-controls", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { children: "Control f\xEDsico" }),
-          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("strong", { children: "\u2190 Rotar \xB7 Guiar \xB7 Rotar \u2192" }),
-          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("b", { children: "Baja al fondo para soltar" })
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("section", { className: "tetris-main", children: [
+      frame ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(FramePreviewPanel, { className: "tetris-floor", frame, label: "Pista de Tetris" }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("aside", { className: "tetris-side", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(PieceCard, { label: "Pieza activa", piece: snapshot.activePiece }),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(PieceCard, { label: "Siguiente", piece: snapshot.nextPiece }),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("article", { className: "tetris-controls", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { children: "Control f\xEDsico" }),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("strong", { children: "\u2190 Rotar \xB7 Guiar \xB7 Rotar \u2192" }),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("b", { children: "Baja al fondo para soltar" })
         ] })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("footer", { className: "tetris-event", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { children: snapshot.result === "line-clear" ? "\xA1L\xEDnea!" : "\xDAltimo evento" }),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("strong", { children: snapshot.lastEventMessage }, snapshot.motionEventId),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("b", { children: eventDetail(snapshot) })
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("footer", { className: "tetris-event", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { children: snapshot.result === "line-clear" ? "\xA1L\xEDnea!" : "\xDAltimo evento" }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("strong", { children: snapshot.lastEventMessage }, snapshot.motionEventId),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("b", { children: eventDetail(snapshot) })
     ] })
   ] }) });
 }
 function PieceCard({ label, piece }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("article", { className: "tetris-piece-card", style: { "--tetris-piece": piece.color }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { children: label }),
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { children: piece.cells.map(([x, y], index) => /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("i", { style: { gridColumn: x + 1, gridRow: y + 1 } }, index)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("strong", { children: shapeNames[piece.shape] ?? "Pieza" })
+  return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("article", { className: "tetris-piece-card", style: { "--tetris-piece": piece.color }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { children: label }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { children: piece.cells.map(([x, y], index) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("i", { style: { gridColumn: x + 1, gridRow: y + 1 } }, index)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("strong", { children: shapeNames[piece.shape] ?? "Pieza" })
   ] });
 }
 var shapeNames = ["I", "O", "T", "S", "Z", "J", "L"];
@@ -14394,7 +16303,7 @@ function eventDetail(snapshot) {
 var tetrisConfigVars = {
   linesToWin: { key: "lines_to_win", label: "L\xEDneas para ganar", playerFacing: true, description: "L\xEDneas que hay que eliminar para activar la celebraci\xF3n final.", type: "int", default: 10, min: 1, max: 40, step: 1 }
 };
-var manifest19 = {
+var manifest21 = {
   id: "tetris",
   label: "Tetris",
   description: "Gu\xEDa, rota y deja caer piezas f\xEDsicas en una pista cl\xE1sica de diez columnas.",
@@ -14425,7 +16334,7 @@ var shapes = [
   [[[0, 0], [0, 1], [1, 1], [2, 1]], [[0, 0], [1, 0], [0, 1], [0, 2]], [[0, 0], [1, 0], [2, 0], [2, 1]], [[1, 0], [1, 1], [0, 2], [1, 2]]],
   [[[2, 0], [0, 1], [1, 1], [2, 1]], [[0, 0], [0, 1], [0, 2], [1, 2]], [[0, 0], [1, 0], [2, 0], [0, 1]], [[0, 0], [1, 0], [1, 1], [1, 2]]]
 ];
-function createGame19(config) {
+function createGame21(config) {
   return new TetrisGame(config);
 }
 var TetrisGame = class {
@@ -14453,9 +16362,9 @@ var TetrisGame = class {
   players = defaultPlayers(1);
   lastEvent = gameEvent("none", "Listo", 0);
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest19);
+    this.config = normalizeGameConfig(config, manifest21);
     this.rng = createSeededRng(this.config.seed);
-    this.readyGate = createPlayerReadyGate(manifest19.start, [{ minX: 5, maxX: 10, minY: 28, maxY: 31 }], this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest21.start, [{ minX: 5, maxX: 10, minY: 28, maxY: 31 }], this.config.nowMillis);
     this.resetState(this.config.nowMillis);
   }
   init(nowMillis) {
@@ -14534,8 +16443,8 @@ var TetrisGame = class {
     const ready = this.readyGate.state(this.nowMillis);
     const player = this.players[0];
     return {
-      currentGame: manifest19.id,
-      label: manifest19.label,
+      currentGame: manifest21.id,
+      label: manifest21.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: [{ index: 0, label: player.label, color: player.color, score: this.score, lives: -1 }],
@@ -14566,7 +16475,7 @@ var TetrisGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest19);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest21);
     this.rng = createSeededRng(this.config.seed);
     this.readyGate.reset(this.config.nowMillis);
     this.resetState(this.config.nowMillis);
@@ -14735,11 +16644,11 @@ function gravityInterval(level, difficulty, fast) {
 
 // games/tetris/src/fixtures.ts
 function gameAt2(stage) {
-  const game5 = createGame19({ playerCount: 1, seed: 137 });
-  game5.init(0);
-  if (stage !== "waiting") game5.press({ x: 8, y: 29, pressed: true, atMillis: 100 });
-  if (stage === "running") game5.tick({ atMillis: 2200 });
-  return game5;
+  const game7 = createGame21({ playerCount: 1, seed: 137 });
+  game7.init(0);
+  if (stage !== "waiting") game7.press({ x: 8, y: 29, pressed: true, atMillis: 100 });
+  if (stage === "running") game7.tick({ atMillis: 2200 });
+  return game7;
 }
 var waiting2 = gameAt2("waiting");
 var waitingFrame6 = waiting2.render();
@@ -14749,20 +16658,20 @@ var startingFrame5 = starting2.render();
 var startingSnapshot9 = starting2.snapshot();
 var running = gameAt2("running");
 running.press({ x: 5, y: 31, pressed: true, atMillis: 2300 });
-var runningFrame17 = running.render();
-var runningSnapshot17 = running.snapshot();
+var runningFrame19 = running.render();
+var runningSnapshot19 = running.snapshot();
 
 // games/whack-a-mole/src/index.ts
-var src_exports20 = {};
-__export(src_exports20, {
+var src_exports22 = {};
+__export(src_exports22, {
   PlayerDisplay: () => PlayerDisplay20,
-  createGame: () => createGame20,
-  finishedFrame: () => finishedFrame13,
-  finishedSnapshot: () => finishedSnapshot15,
-  manifest: () => manifest20,
+  createGame: () => createGame22,
+  finishedFrame: () => finishedFrame15,
+  finishedSnapshot: () => finishedSnapshot17,
+  manifest: () => manifest22,
   readyZonesForPlayers: () => readyZonesForPlayers,
-  runningFrame: () => runningFrame18,
-  runningSnapshot: () => runningSnapshot18,
+  runningFrame: () => runningFrame20,
+  runningSnapshot: () => runningSnapshot20,
   startingFrame: () => startingFrame6,
   startingSnapshot: () => startingSnapshot10,
   waitingFrame: () => waitingFrame7,
@@ -14770,60 +16679,60 @@ __export(src_exports20, {
 });
 
 // games/whack-a-mole/src/display.tsx
-var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime23 = __toESM(require_jsx_runtime(), 1);
 function PlayerDisplay20({ snapshot }) {
   const columns = snapshot.playerCount <= 4 ? 2 : snapshot.playerCount <= 6 ? 3 : 4;
   const leader = snapshot.playerProgress.reduce((best, player) => player.score > (snapshot.playerProgress[best]?.score ?? -1) ? player.index : best, 0);
   const hero = heroContent4(snapshot);
-  return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: `duelo-display whack-display is-phase-${snapshot.phase}`, style: { "--duelo-grid-columns": columns }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("section", { className: "duelo-hero", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "duelo-hero-copy", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { children: hero.eyebrow }),
-        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("strong", { children: hero.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("b", { children: hero.caption })
+  return /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(GameDisplayShell, { title: snapshot.label, phase: snapshot.phase, children: /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: `duelo-display whack-display is-phase-${snapshot.phase}`, style: { "--duelo-grid-columns": columns }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("section", { className: "duelo-hero", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "duelo-hero-copy", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { children: hero.eyebrow }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("strong", { children: hero.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("b", { children: hero.caption })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "duelo-hero-metrics", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Metric2, { label: "Tiempo", value: formatClock(snapshot.remainingMillis) }),
-        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Metric2, { label: "Topos", value: snapshot.activeTargets }),
-        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Metric2, { label: "Puntos", value: snapshot.score })
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "duelo-hero-metrics", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Metric2, { label: "Tiempo", value: formatClock(snapshot.remainingMillis) }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Metric2, { label: "Topos", value: snapshot.activeTargets }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Metric2, { label: "Puntos", value: snapshot.score })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("section", { className: "duelo-player-grid", "aria-label": "Puntuaci\xF3n de jugadores", children: snapshot.playerProgress.map((player) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(PlayerCard3, { player, leader: leader === player.index, ready: snapshot.readyPlayerIndices.includes(player.index), winner: snapshot.winnerIndex === player.index }, player.index)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("footer", { className: "duelo-event-rail", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { children: snapshot.phase === "finished" ? "Resultado" : "\xDAltimo evento" }),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("strong", { children: snapshot.lastEventMessage }, snapshot.motionEventId),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("b", { children: snapshot.phase === "running" ? `${snapshot.activeTargets} objetivos activos` : `${snapshot.readyPlayers}/${snapshot.requiredPlayers} listos` })
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("section", { className: "duelo-player-grid", "aria-label": "Puntuaci\xF3n de jugadores", children: snapshot.playerProgress.map((player) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(PlayerCard3, { player, leader: leader === player.index, ready: snapshot.readyPlayerIndices.includes(player.index), winner: snapshot.winnerIndex === player.index }, player.index)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("footer", { className: "duelo-event-rail", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { children: snapshot.phase === "finished" ? "Resultado" : "\xDAltimo evento" }),
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("strong", { children: snapshot.lastEventMessage }, snapshot.motionEventId),
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("b", { children: snapshot.phase === "running" ? `${snapshot.activeTargets} objetivos activos` : `${snapshot.readyPlayers}/${snapshot.requiredPlayers} listos` })
     ] })
   ] }) });
 }
 function PlayerCard3({ player, leader, ready, winner }) {
   const style = { "--duelo-player": player.color, "--duelo-player-rgb": hexToRgb5(player.color), "--duelo-progress": Math.min(1, player.score / 100) };
   const status = winner ? "Ganador" : leader && player.score > 0 ? "L\xEDder" : ready ? "Listo" : "Busca tu color";
-  return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("article", { className: `duelo-player-card${winner ? " is-winner" : ""}${leader ? " is-leader" : ""}`, style, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("header", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("i", {}),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "duelo-player-name", children: player.label }),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("b", { children: status })
+  return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("article", { className: `duelo-player-card${winner ? " is-winner" : ""}${leader ? " is-leader" : ""}`, style, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("header", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("i", {}),
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "duelo-player-name", children: player.label }),
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("b", { children: status })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "duelo-player-score", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("strong", { children: player.score }),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { children: "puntos" }),
-      player.lastPoints > 0 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("em", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "duelo-player-score", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("strong", { children: player.score }),
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { children: "puntos" }),
+      player.lastPoints > 0 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("em", { children: [
         "+",
         player.lastPoints
       ] }, `${player.index}-${player.hits}`) : null
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "duelo-player-track", children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("i", {}) }),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("footer", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { children: "Topos atrapados" }),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("strong", { children: player.hits })
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { className: "duelo-player-track", children: /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("i", {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("footer", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { children: "Topos atrapados" }),
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("strong", { children: player.hits })
     ] })
   ] });
 }
 function Metric2({ label, value }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("article", { className: "duelo-hero-metric", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { children: label }),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("strong", { children: value })
+  return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("article", { className: "duelo-hero-metric", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { children: label }),
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("strong", { children: value })
   ] });
 }
 function heroContent4(snapshot) {
@@ -14837,7 +16746,7 @@ function hexToRgb5(color) {
 }
 
 // games/whack-a-mole/src/manifest.ts
-var manifest20 = {
+var manifest22 = {
   id: "whack-a-mole",
   label: "Atrapa al topo",
   description: "Persigue objetivos de colores por todo el suelo y atr\xE1palos antes de que se apaguen.",
@@ -14873,7 +16782,7 @@ var finishMillis2 = 4e3;
 var hitFlashMillis = 500;
 var baseLifeMillis = 3400;
 var minLifeMillis = 2300;
-function createGame20(config) {
+function createGame22(config) {
   return new WhackAMoleGame(config);
 }
 var WhackAMoleGame = class {
@@ -14894,10 +16803,10 @@ var WhackAMoleGame = class {
   motionEventId = 0;
   lastEvent = gameEvent("none", "Listo", 0);
   constructor(config) {
-    this.config = normalizeGameConfig(config, manifest20);
+    this.config = normalizeGameConfig(config, manifest22);
     this.rng = createSeededRng(this.config.seed);
     this.readyZones = readyZonesForPlayers(this.config.playerCount);
-    this.readyGate = createPlayerReadyGate(manifest20.start, this.readyZones, this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest22.start, this.readyZones, this.config.nowMillis);
     this.resetState(this.config.nowMillis);
   }
   init(nowMillis) {
@@ -14971,8 +16880,8 @@ var WhackAMoleGame = class {
   snapshot() {
     const ready = this.readyGate.state(this.nowMillis);
     return {
-      currentGame: manifest20.id,
-      label: manifest20.label,
+      currentGame: manifest22.id,
+      label: manifest22.label,
       phase: this.phase,
       playerCount: this.config.playerCount,
       players: this.players.map((player) => ({ index: player.index, label: player.label, color: player.color, score: player.score, lives: -1 })),
@@ -14996,10 +16905,10 @@ var WhackAMoleGame = class {
     };
   }
   reset(config = {}) {
-    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest20);
+    this.config = normalizeGameConfig({ ...this.config, ...config }, manifest22);
     this.rng = createSeededRng(this.config.seed);
     this.readyZones = readyZonesForPlayers(this.config.playerCount);
-    this.readyGate = createPlayerReadyGate(manifest20.start, this.readyZones, this.config.nowMillis);
+    this.readyGate = createPlayerReadyGate(manifest22.start, this.readyZones, this.config.nowMillis);
     this.resetState(this.config.nowMillis);
   }
   playerReadyZones() {
@@ -15118,12 +17027,12 @@ function scaleHex(color, factor) {
 
 // games/whack-a-mole/src/fixtures.ts
 function create(stage) {
-  const game5 = createGame20({ playerCount: 4, seed: 404, durationMillis: stage === "finished" ? 3e3 : 6e4 });
-  game5.init(0);
-  if (stage !== "waiting") occupy2(game5);
-  if (stage === "running" || stage === "finished") game5.tick({ atMillis: 2200 });
-  if (stage === "finished") game5.tick({ atMillis: 5300 });
-  return game5;
+  const game7 = createGame22({ playerCount: 4, seed: 404, durationMillis: stage === "finished" ? 3e3 : 6e4 });
+  game7.init(0);
+  if (stage !== "waiting") occupy2(game7);
+  if (stage === "running" || stage === "finished") game7.tick({ atMillis: 2200 });
+  if (stage === "finished") game7.tick({ atMillis: 5300 });
+  return game7;
 }
 var waiting3 = create("waiting");
 var waitingFrame7 = waiting3.render();
@@ -15134,44 +17043,66 @@ var startingSnapshot10 = starting3.snapshot();
 var running2 = create("running");
 var target2 = running2.snapshot().targets[1];
 running2.press({ x: target2.x, y: target2.y, pressed: true, atMillis: 2300 });
-var runningFrame18 = running2.render();
-var runningSnapshot18 = running2.snapshot();
+var runningFrame20 = running2.render();
+var runningSnapshot20 = running2.snapshot();
 var finished2 = create("finished");
-var finishedFrame13 = finished2.render();
-var finishedSnapshot15 = finished2.snapshot();
-function occupy2(game5) {
-  game5.playerReadyZones().forEach((zone) => game5.press({ x: zone.minX, y: zone.minY, pressed: true, atMillis: 100 }));
+var finishedFrame15 = finished2.render();
+var finishedSnapshot17 = finished2.snapshot();
+function occupy2(game7) {
+  game7.playerReadyZones().forEach((zone) => game7.press({ x: zone.minX, y: zone.minY, pressed: true, atMillis: 100 }));
 }
 
 // packages/runner/src/registry.ts
-var gameRegistry = /* @__PURE__ */ new Map([
-  [manifest.id, src_exports],
-  [manifest2.id, src_exports2],
-  [manifest3.id, src_exports3],
-  [manifest4.id, src_exports4],
-  [manifest5.id, src_exports5],
-  [manifest6.id, src_exports6],
-  [manifest7.id, src_exports7],
-  [manifest8.id, src_exports8],
-  [manifest9.id, src_exports9],
-  [manifest10.id, src_exports10],
-  [manifest11.id, src_exports11],
-  [manifest12.id, src_exports12],
-  [manifest13.id, src_exports13],
-  [manifest14.id, src_exports14],
-  [manifest15.id, src_exports15],
-  [manifest16.id, src_exports16],
-  [manifest17.id, src_exports17],
-  [manifest19.id, src_exports19],
-  [manifest18.id, src_exports18],
-  [manifest20.id, src_exports20]
-]);
-var gameCatalog = [...gameRegistry.values()].map((game5) => game5.manifest).sort((left, right) => left.id.localeCompare(right.id));
+var registeredGames = [
+  src_exports,
+  src_exports2,
+  src_exports3,
+  src_exports4,
+  src_exports5,
+  src_exports6,
+  src_exports7,
+  src_exports8,
+  src_exports9,
+  src_exports10,
+  src_exports11,
+  src_exports12,
+  src_exports13,
+  src_exports14,
+  src_exports15,
+  src_exports16,
+  src_exports17,
+  src_exports18,
+  src_exports19,
+  src_exports21,
+  src_exports20,
+  src_exports22
+];
+var gameRegistry = buildGameRegistry(registeredGames);
+var gamePackageRegistry = new Map(
+  registeredGames.map((game7) => [gameManifestSlug(game7.manifest), game7])
+);
+var gameCatalog = registeredGames.map((game7) => game7.manifest).sort((left, right) => left.id.localeCompare(right.id));
+function buildGameRegistry(games) {
+  const registry = /* @__PURE__ */ new Map();
+  for (const game7 of games) {
+    for (const key of gameManifestLookupKeys(game7.manifest)) {
+      const existing = registry.get(key);
+      if (existing && existing !== game7) {
+        throw new Error(
+          `game identity collision: ${key} is declared by ${existing.manifest.id} and ${game7.manifest.id}`
+        );
+      }
+      registry.set(key, game7);
+    }
+  }
+  return registry;
+}
 
 // packages/runner/src/session.ts
 var RunnerSession = class {
   engine = null;
   gameId = "";
+  initialConfig = null;
   paused = false;
   held = /* @__PURE__ */ new Set();
   handle(request) {
@@ -15189,17 +17120,18 @@ var RunnerSession = class {
     }
   }
   init(params) {
-    const gameId = String(params?.gameId || "").trim();
+    const gameId = normalizeGameLookupKey(params?.gameId);
     const module = gameRegistry.get(gameId);
     if (!module) throw new Error(`unknown game: ${gameId}`);
     if (!module.manifest.availability.production && params.development !== true) {
       throw new Error(`game is not production eligible: ${gameId}`);
     }
     const config = normalizeGameConfig(params, module.manifest);
-    const game5 = module.createGame(config);
-    const events = game5.init(config.nowMillis);
-    this.engine = createGameEngine(game5, { initialEvents: events, nowMillis: config.nowMillis });
-    this.gameId = gameId;
+    const game7 = module.createGame(config);
+    const events = game7.init(config.nowMillis);
+    this.engine = createGameEngine(game7, { initialEvents: events, nowMillis: config.nowMillis });
+    this.gameId = module.manifest.id;
+    this.initialConfig = config;
     this.paused = false;
     this.held.clear();
     return this.state(this.engine.state);
@@ -15235,10 +17167,11 @@ var RunnerSession = class {
     }
     if (action === "reset") {
       const module = gameRegistry.get(this.gameId);
-      if (!module) throw new Error("runner has no active game");
-      const game5 = module.createGame({});
-      const events = game5.init(0);
-      this.engine = createGameEngine(game5, { initialEvents: events });
+      if (!module || !this.initialConfig) throw new Error("runner has no active game");
+      const config = this.initialConfig;
+      const game7 = module.createGame(config);
+      const events = game7.init(config.nowMillis);
+      this.engine = createGameEngine(game7, { initialEvents: events, nowMillis: config.nowMillis });
       this.paused = false;
       this.held.clear();
       return this.state(this.engine.state);
@@ -15277,7 +17210,7 @@ function finiteNumber(value, fallback) {
 }
 
 // packages/runner/src/runner.ts
-var sourceRevision = true ? "1f2196886fba3cdbebb360dc6bacdf1863d44c69" : "development";
+var sourceRevision = true ? "2ead60349c56a3f8d2ce8aafb0915ffbeb8b0eca" : "development";
 var session = new RunnerSession();
 var input = createInterface({ input: process.stdin, crlfDelay: Infinity });
 input.on("line", (line) => {

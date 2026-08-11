@@ -1,5 +1,84 @@
 [
   {
+    "id": "4773837e-3565-49d7-8953-3b40f59fca7b",
+    "slug": "temporada1-niveles",
+    "aliases": [
+      "temporada1-niveles"
+    ],
+    "label": "Temporada 1",
+    "description": "Ruta cooperativa de 24 niveles con puntos, peligros y retos clásicos de la pista.",
+    "availability": {
+      "development": true,
+      "production": true
+    },
+    "catalog": {
+      "category": "team",
+      "color": "#8dff6e",
+      "durationLabel": "Por nivel",
+      "modeLabel": "Temporada",
+      "audioLabel": "Música + efectos",
+      "rules": [
+        "Recoge todos los objetivos azules y morados",
+        "Los objetivos morados necesitan dos pisadas y las baldosas rojas quitan vidas"
+      ]
+    },
+    "players": {
+      "allowAny": false,
+      "min": 1,
+      "max": 6
+    },
+    "start": {
+      "mode": "immediate"
+    },
+    "config": {
+      "difficulty": {
+        "default": "medium",
+        "options": [
+          "easy",
+          "medium",
+          "hard",
+          "expert"
+        ]
+      },
+      "vars": []
+    },
+    "defaultDurationMillis": 0,
+    "display": {
+      "entry": "./display"
+    },
+    "preview": {
+      "seed": 137,
+      "playerCount": 4,
+      "difficulty": "medium",
+      "actions": [
+        {
+          "atMillis": 3100,
+          "type": "press",
+          "x": 7,
+          "y": 29
+        }
+      ],
+      "captureStartMillis": 3180,
+      "frameCount": 18,
+      "frameIntervalMillis": 120
+    },
+    "tags": [
+      "published-levels",
+      "platform-editable",
+      "jugar-3d",
+      "team",
+      "typescript"
+    ],
+    "engineGame": "motion-levels-games:4773837e-3565-49d7-8953-3b40f59fca7b",
+    "media": {
+      "thumbnailSmall": "media/4773837e-3565-49d7-8953-3b40f59fca7b/4773837e-3565-49d7-8953-3b40f59fca7b-thumbnail-small.webp",
+      "thumbnail": "media/4773837e-3565-49d7-8953-3b40f59fca7b/4773837e-3565-49d7-8953-3b40f59fca7b-thumbnail.webp",
+      "animation": "media/4773837e-3565-49d7-8953-3b40f59fca7b/4773837e-3565-49d7-8953-3b40f59fca7b-preview.webp",
+      "playerDisplay": "media/4773837e-3565-49d7-8953-3b40f59fca7b/4773837e-3565-49d7-8953-3b40f59fca7b-player-display.webp",
+      "playerDisplayAnimation": "media/4773837e-3565-49d7-8953-3b40f59fca7b/4773837e-3565-49d7-8953-3b40f59fca7b-player-display-animation.webp"
+    }
+  },
+  {
     "id": "arkanoid",
     "label": "Arkanoid",
     "description": "Single-player floor Arkanoid with step-controlled paddle movement and deterministic brick physics.",
@@ -100,6 +179,84 @@
       "animation": "media/arkanoid/arkanoid-preview.webp",
       "playerDisplay": "media/arkanoid/arkanoid-player-display.webp",
       "playerDisplayAnimation": "media/arkanoid/arkanoid-player-display-animation.webp"
+    }
+  },
+  {
+    "id": "c1daea4f-e586-4116-8cbe-871cde887a81",
+    "slug": "parkour",
+    "aliases": [
+      "parkour"
+    ],
+    "label": "Parkour",
+    "description": "Supera plataformas, recoge objetivos y evita la lava en niveles editables.",
+    "availability": {
+      "development": true,
+      "production": true
+    },
+    "catalog": {
+      "category": "individual",
+      "color": "#ff9f45",
+      "durationLabel": "Mejor tiempo",
+      "modeLabel": "Niveles",
+      "audioLabel": "Música + efectos",
+      "rules": [
+        "Avanza por las plataformas verdes sin tocar la lava",
+        "Recoge suficientes objetivos azules para superar cada nivel"
+      ]
+    },
+    "players": {
+      "allowAny": true,
+      "min": 1,
+      "max": 8
+    },
+    "start": {
+      "mode": "immediate"
+    },
+    "config": {
+      "difficulty": {
+        "default": "medium",
+        "options": [
+          "easy",
+          "medium",
+          "hard"
+        ]
+      },
+      "vars": []
+    },
+    "defaultDurationMillis": 0,
+    "display": {
+      "entry": "./display"
+    },
+    "preview": {
+      "seed": 137,
+      "playerCount": 0,
+      "difficulty": "medium",
+      "actions": [
+        {
+          "atMillis": 3100,
+          "type": "press",
+          "x": 7,
+          "y": 29
+        }
+      ],
+      "captureStartMillis": 3180,
+      "frameCount": 18,
+      "frameIntervalMillis": 120
+    },
+    "tags": [
+      "published-levels",
+      "platform-editable",
+      "jugar-3d",
+      "individual",
+      "typescript"
+    ],
+    "engineGame": "motion-levels-games:c1daea4f-e586-4116-8cbe-871cde887a81",
+    "media": {
+      "thumbnailSmall": "media/c1daea4f-e586-4116-8cbe-871cde887a81/c1daea4f-e586-4116-8cbe-871cde887a81-thumbnail-small.webp",
+      "thumbnail": "media/c1daea4f-e586-4116-8cbe-871cde887a81/c1daea4f-e586-4116-8cbe-871cde887a81-thumbnail.webp",
+      "animation": "media/c1daea4f-e586-4116-8cbe-871cde887a81/c1daea4f-e586-4116-8cbe-871cde887a81-preview.webp",
+      "playerDisplay": "media/c1daea4f-e586-4116-8cbe-871cde887a81/c1daea4f-e586-4116-8cbe-871cde887a81-player-display.webp",
+      "playerDisplayAnimation": "media/c1daea4f-e586-4116-8cbe-871cde887a81/c1daea4f-e586-4116-8cbe-871cde887a81-player-display-animation.webp"
     }
   },
   {
