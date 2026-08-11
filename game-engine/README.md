@@ -55,6 +55,20 @@ Node.js 20 runner and remains responsible for the 50fps floor stream, audio,
 sessions, recording, health, and the extended display feed. A launch must name
 the source revision installed in the bundle pin.
 
+Platform-authored level games use the same runner without changing their
+catalog identity. `game` and `level` remain the platform canonical ids;
+`engineGame` and `levelSlug` are renameable compatibility aliases only. A
+bundle product opts into this bridge with the `published-levels` manifest tag.
+For each launch the venue fetches the immutable
+`motion-levels-published-level-content-v1` document from
+`/api/level-games/{canonical game id}/runtime-content`, validates its canonical
+identities and deterministic `contentRevision`, and passes it unchanged to the
+TypeScript runner. Canonical game and level ids may be UUIDs or lowercase
+32/40/64-character hex values. Go does not interpret authored rules. If the
+capability, endpoint, content validation, or runner initialization is
+unavailable, the venue logs the reason and launches the existing Go level
+runtime for that same canonical game instead.
+
 The player-facing TV display lives in `apps/player-display`. It subscribes to
 the game-engine display stream:
 

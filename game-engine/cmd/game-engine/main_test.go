@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -324,6 +326,26 @@ func TestConfigNormalizePreservesExplicitAllowAnyPlayerCount(t *testing.T) {
 	}
 	if got := rosterPlayerLimit(0, false, 4); got != 1 {
 		t.Fatalf("legacy roster limit = %d, want 1", got)
+	}
+}
+
+func TestPlatformLevelIdentityAcceptsUUIDOrLowercaseHash(t *testing.T) {
+	accepted := []string{
+		"c1daea4f-e586-4116-8cbe-871cde887a81",
+		"C1DAEA4F-E586-4116-8CBE-871CDE887A81",
+		strings.Repeat("a", 32),
+		strings.Repeat("b", 40),
+		strings.Repeat("c", 64),
+	}
+	for _, value := range accepted {
+		if !isPlatformLevelGameID(value) {
+			t.Fatalf("expected canonical identity %q to be accepted", value)
+		}
+	}
+	for _, value := range []string{"parkour", strings.Repeat("a", 39), strings.Repeat("A", 40), strings.Repeat("g", 64)} {
+		if isPlatformLevelGameID(value) {
+			t.Fatalf("expected non-canonical identity %q to be rejected", value)
+		}
 	}
 }
 
@@ -644,6 +666,126 @@ func TestSelectPlatformLevelGameByUUIDUsesLaunchPlatformURL(t *testing.T) {
 	}
 	if fetchedPath != "/api/level-games/"+gameID+"/levels" {
 		t.Fatalf("fetched path = %q", fetchedPath)
+	}
+}
+
+func TestSelectPublishedLevelRunnerCandidateFallsBackWithoutBundleCapability(t *testing.T) {
+	gameID := "c1daea4f-e586-4116-8cbe-871cde887a81"
+	levelID := "96b8403a-d5eb-41e8-b925-5afc3e2d7e41"
+	var fetchedLevels bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/game-runtime":
+			_, _ = w.Write([]byte(`{"games":[]}`))
+		case "/api/level-games/animations/levels":
+			_, _ = w.Write([]byte(`{"gameId":"animations","levels":[]}`))
+		case "/api/level-games/" + gameID + "/levels":
+			fetchedLevels = true
+			_, _ = w.Write([]byte(`{"gameId":"` + gameID + `","levels":[{"id":"legacy-level","slug":"level-1","label":"Nivel 1","difficulty":"medium","life":5,"pass_score":1,"frame_tick_ms":25,"frames":[{"r":1,"c":[[1,1,1,"target"]]}]}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	runtime := newGameRuntime(config{
+		Brightness: 80, PlayerCount: 1, PlatformURL: server.URL,
+		MotionLevelsGamesRoot: t.TempDir(), MotionLevelsGamesNode: "node",
+	}, nil, nil)
+	api := httptest.NewServer(gameAPIHandler(runtime))
+	defer api.Close()
+
+	body := bytes.NewBufferString(`{"game":"` + gameID + `","engineGame":"parkour-renamed","gameLabel":"Parkour","sourceKind":"platform_levels","playerCount":1,"difficulty":"medium","level":"` + levelID + `","levelSlug":"level-1","levelMode":"challenge"}`)
+	response, err := http.Post(api.URL+"/api/select", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("select response = %d", response.StatusCode)
+	}
+	var status runtimeStatus
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if !fetchedLevels {
+		t.Fatal("legacy platform levels were not fetched after runner capability failure")
+	}
+	if status.CurrentGame != gameID || status.EngineGame != "parkour-renamed" || status.Level != levelID || status.LevelSlug != "level-1" || status.SourceKind != "platform_levels" {
+		t.Fatalf("fallback status identity = %+v", status)
+	}
+	if display := runtime.DisplayStatus(time.Now()); display.CurrentGame != gameID || display.EngineGame != "parkour-renamed" || len(display.GameSnapshot) != 0 {
+		t.Fatalf("fallback display identity = %+v", display)
+	}
+
+	runtime.ControlGame("restart")
+	if restarted := runtime.Status(); restarted.CurrentGame != gameID || restarted.EngineGame != "parkour-renamed" {
+		t.Fatalf("restart changed canonical identity: %+v", restarted)
+	}
+}
+
+func TestSelectPublishedLevelUsesPinnedRunnerWhenCapabilityIsInstalled(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node is not installed")
+	}
+	gameID := "c1daea4f-e586-4116-8cbe-871cde887a81"
+	levelID := "96b8403a-d5eb-41e8-b925-5afc3e2d7e41"
+	bundleRoot := filepath.Clean("../../../game-bundles/motion-levels-games")
+	bundle, err := motionlevelsgames.Load(bundleRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bundle.ResolveTaggedGame(gameID, "parkour", motionlevelsgames.PublishedLevelProductTag); err != nil {
+		t.Skip("pinned bundle does not yet include the canonical Parkour published-level product")
+	}
+	contentRevision := strings.Repeat("c", 64)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/game-runtime":
+			_, _ = w.Write([]byte(`{"games":[]}`))
+		case "/api/level-games/animations/levels":
+			_, _ = w.Write([]byte(`{"gameId":"animations","levels":[]}`))
+		case "/api/level-games/" + gameID + "/runtime-content":
+			_, _ = fmt.Fprintf(w, `{"schema":%q,"gameId":%q,"engineGame":"parkour","contentRevision":%q,"selectedLevelId":%q,"selectedLevelSlug":"level-1","mode":"challenge","levels":[{"id":%q,"slug":"level-1","label":"Nivel 1","description":"Prueba canónica","difficulty":"medium","life":3,"pass_score":1,"frame_tick_ms":25,"rules":{"victory_condition":"score_at_least"},"frames":[{"r":8,"c":[[1,1,1,"target"]]}]}],"resultAnimations":[]}`, motionlevelsgames.PublishedLevelContentSchema, gameID, contentRevision, levelID, levelID)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	runtime := newGameRuntime(config{
+		Brightness: 80, PlayerCount: 1, PlatformURL: server.URL,
+		MotionLevelsGamesRoot: bundleRoot, MotionLevelsGamesNode: "node",
+	}, nil, nil)
+	api := httptest.NewServer(gameAPIHandler(runtime))
+	defer api.Close()
+	body := bytes.NewBufferString(`{"game":"` + gameID + `","engineGame":"parkour","gameLabel":"Parkour","sourceKind":"platform_levels","playerCount":1,"difficulty":"medium","level":"` + levelID + `","levelSlug":"level-1","levelMode":"challenge"}`)
+	response, err := http.Post(api.URL+"/api/select", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("select response = %d", response.StatusCode)
+	}
+	_, _ = runtime.Render(time.Now().Add(20 * time.Millisecond))
+	status := runtime.Status()
+	if status.CurrentGame != gameID || status.EngineGame != "parkour" || status.SourceKind != "motion_levels_games" || status.ContentRevision != contentRevision || status.Level != levelID || status.LevelSlug != "level-1" {
+		t.Fatalf("runner status identity = %+v", status)
+	}
+	display := runtime.DisplayStatus(time.Now().Add(20 * time.Millisecond))
+	if display.CurrentGame != gameID || display.SourceRevision != bundle.Manifest.SourceRevision || display.ContentRevision != contentRevision || len(display.GameSnapshot) == 0 || display.Frame == nil {
+		t.Fatalf("runner display identity = %+v", display)
+	}
+	var snapshot struct {
+		CurrentGame string `json:"currentGame"`
+	}
+	if err := json.Unmarshal(display.GameSnapshot, &snapshot); err != nil || snapshot.CurrentGame != gameID {
+		t.Fatalf("runner snapshot identity = %q, error=%v", snapshot.CurrentGame, err)
+	}
+	runtime.ControlGame("restart")
+	if restarted := runtime.Status(); restarted.CurrentGame != gameID || restarted.EngineGame != "parkour" || restarted.ContentRevision != contentRevision {
+		t.Fatalf("runner restart changed canonical identity: %+v", restarted)
 	}
 }
 

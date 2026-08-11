@@ -32,12 +32,14 @@ type config struct {
 	ControllerAddr               string
 	PressureAddr                 string
 	Game                         string
+	EngineGame                   string
 	GameLabel                    string
 	SourceKind                   string
 	SourceRevision               string
 	VenueSessionID               string
 	Difficulty                   string
 	Level                        string
+	LevelSlug                    string
 	LevelMode                    string
 	DurationSeconds              int
 	ChallengeElapsedMillis       int64
@@ -214,16 +216,21 @@ func main() {
 
 func (c *config) normalize() {
 	c.Game = normalizeGame(c.Game)
+	c.EngineGame = strings.TrimSpace(c.EngineGame)
 	c.Difficulty = normalizeDifficulty(c.Difficulty)
 	if strings.HasPrefix(c.Game, "authored-") {
 		normalizeAuthoredGameConfig(c)
 	} else if isNivelesRuntimeGame(c.Game) {
 		c.Level = niveles.NormalizeLevel(c.Level)
+		if strings.TrimSpace(c.LevelSlug) != "" {
+			c.LevelSlug = niveles.NormalizeLevel(c.LevelSlug)
+		}
 		if entry, ok := levelCatalogEntry(c.Game); ok && !entry.Players {
 			c.PlayerCount = clampInt(entry.MinPlayers, 1, maxAuthoredPlayers)
 		}
 	} else {
 		c.Level = ""
+		c.LevelSlug = ""
 	}
 	if c.AllowAnyPlayers && c.PlayerCount < 0 {
 		c.PlayerCount = 0
@@ -540,7 +547,8 @@ func clamp01(value float64) float64 {
 }
 
 func normalizeGame(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
+	canonicalCandidate := strings.TrimSpace(value)
+	value = strings.ToLower(canonicalCandidate)
 	if strings.HasPrefix(value, "authored-") {
 		return value
 	}
@@ -550,7 +558,7 @@ func normalizeGame(value string) string {
 	if strings.HasPrefix(value, "animation-") {
 		return value
 	}
-	if isPlatformLevelGameID(value) {
+	if isPlatformLevelGameID(canonicalCandidate) {
 		return strings.ToLower(value)
 	}
 	if isBaseCatalogGameID(value) {
@@ -592,7 +600,8 @@ func maxConfigPlayers(game string) int {
 }
 
 func isPlatformLevelGameID(value string) bool {
-	return uuidPattern.MatchString(strings.TrimSpace(value))
+	value = strings.TrimSpace(value)
+	return uuidPattern.MatchString(value) || canonicalHashPattern.MatchString(value)
 }
 
 func normalizeDifficulty(value string) string {

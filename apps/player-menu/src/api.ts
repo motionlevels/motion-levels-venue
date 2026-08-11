@@ -60,6 +60,7 @@ export type AnimationPreview = {
 
 export type SelectGameRequest = {
   game: string;
+  engineGame?: string;
   gameLabel?: string;
   sourceKind?: string;
   sourceRevision?: string;
@@ -70,6 +71,7 @@ export type SelectGameRequest = {
   allowAnyPlayers?: boolean;
   difficulty?: string;
   level?: string;
+  levelSlug?: string;
   levelMode?: "challenge" | "free";
   durationSeconds?: number;
   challengeElapsedMillis?: number;

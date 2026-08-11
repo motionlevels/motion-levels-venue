@@ -60,6 +60,28 @@ describe("level difficulty selection", () => {
     assert.equal(defaultLevelIDForDifficulty(game, "hard"), "level-1");
   });
 
+  it("migrates a persisted mutable slug to the canonical level UUID", () => {
+    const easyID = "96b8403a-d5eb-41e8-b925-5afc3e2d7e41";
+    const mediumID = "ab3425b4-9740-4cdd-a0a1-3a803a8d5c0c";
+    const game = levelGame({
+      difficulties: ["easy", "medium"],
+      levels: [
+        {
+          id: easyID,
+          slug: "parkour-principiante",
+          canonicalIdsByDifficulty: { easy: easyID, medium: mediumID },
+          label: "Principiante",
+          description: "",
+          difficulties: ["easy", "medium"],
+        },
+      ],
+    });
+
+    assert.equal(closestLevelIDForDifficulty(game, "parkour-principiante", "medium"), mediumID);
+    assert.equal(closestLevelIDForDifficulty(game, easyID, "medium"), mediumID);
+    assert.equal(defaultLevelIDForDifficulty(game, "medium"), mediumID);
+  });
+
   it("prefers the nearest level in authored order over later matches", () => {
     const game = levelGame({
       difficulties: ["easy", "medium"],

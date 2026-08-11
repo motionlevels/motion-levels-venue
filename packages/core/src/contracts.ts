@@ -95,13 +95,16 @@ export type FinishedLevelAttempt = {
 
 export type EngineStatus = {
   currentGame: string;
+  engineGame?: string;
   sourceKind?: string;
   sourceRevision?: string;
+  contentRevision?: string;
   venueSessionId: string;
   label: string;
   difficulty: string;
   difficultyConfigurable?: boolean;
   level?: string;
+  levelSlug?: string;
   levelMode?: string;
   teamName: string;
   playerCount: number;
@@ -153,8 +156,10 @@ export type DisplayRound = {
 
 export type DisplayStatus = {
   currentGame: string;
+  engineGame?: string;
   sourceKind?: string;
   sourceRevision?: string;
+  contentRevision?: string;
   gameSnapshot?: Record<string, unknown>;
   frame?: {
     width: number;
@@ -166,6 +171,7 @@ export type DisplayStatus = {
   difficulty: string;
   difficultyConfigurable?: boolean;
   levelMode?: string;
+  levelSlug?: string;
   playerCount: number;
   playerConfigurable?: boolean;
   players: DisplayPlayer[];
