@@ -567,7 +567,12 @@ describe("catalog metadata sync", () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, "../src/App.tsx"), "utf8");
 
     assert.match(appSource, /function runtimeGameID\(game: Pick<GameCard, "engineGame" \| "id" \| "sourceKind">\): string/);
-    assert.match(appSource, /game\.sourceKind === "platform_levels" && isUUID\(game\.id\) \? game\.id : engineGameID\(game\)/);
+    assert.match(appSource, /game\.sourceKind === "platform_levels" && isCanonicalEntityID\(game\.id\) \? game\.id : engineGameID\(game\)/);
+    assert.match(appSource, /game: runtimeGameID\(launchGame\),\s+engineGame: engineGameID\(launchGame\),/);
+    assert.match(appSource, /const levelID = String\(lvl\.id \|\| ""\)\.trim\(\);/);
+    assert.match(appSource, /slug: levelSlug \|\| undefined,/);
+    assert.match(appSource, /level: selectedLevelID \|\| undefined,\s+levelSlug: launchLevel\?\.slug \|\| undefined,/);
+    assert.match(appSource, /function canonicalLevelID\(/);
     assert.doesNotMatch(appSource, /function isPlatformLaunchableSource[^}]*game\.sourceKind === "motion_levels_games"/);
     assert.match(appSource, /game: runtimeGameID\(launchGame\)/);
     assert.doesNotMatch(appSource, /runtimeGameID\([^)]*\)[\s\S]{0,120}\|\|\s*"parkour"/);

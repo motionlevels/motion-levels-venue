@@ -124,6 +124,8 @@ export type PartyMiniGame = {
 
 export type GameLevel = {
   id: string;
+  slug?: string;
+  canonicalIdsByDifficulty?: Partial<Record<DifficultyID, string>>;
   label: string;
   description: string;
   difficulties?: DifficultyID[];

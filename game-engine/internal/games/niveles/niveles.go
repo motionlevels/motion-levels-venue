@@ -81,6 +81,7 @@ type Snapshot struct {
 	Phase            string
 	Difficulty       string
 	Level            string
+	LevelID          string
 	Label            string
 	LevelNumber      int
 	Players          []PlayerSnapshot
@@ -137,6 +138,7 @@ type Game struct {
 
 type compiledLevel struct {
 	id                string
+	canonicalID       string
 	settingsHash      string
 	label             string
 	description       string
@@ -423,6 +425,7 @@ func (g *Game) Snapshot(now time.Time) Snapshot {
 		Phase:            phase,
 		Difficulty:       string(g.difficulty),
 		Level:            g.level.id,
+		LevelID:          g.level.canonicalID,
 		Label:            g.level.label,
 		LevelNumber:      levelNumber(g.level.id),
 		Players:          g.playersLocked(),
@@ -1216,6 +1219,7 @@ func compileCloudLevelsForModeWithDifficulty(raw []cloudLevel, levelMode string,
 		}
 		compiled := compiledLevel{
 			id:                NormalizeLevel(id),
+			canonicalID:       strings.ToLower(strings.TrimSpace(level.ID)),
 			settingsHash:      strings.TrimSpace(level.SettingsHash),
 			label:             level.Label,
 			description:       level.Description,
@@ -1358,7 +1362,7 @@ func difficultyLevelRank(level cloudLevel, selectedDifficulty string) int {
 
 func selectLevel(levels []compiledLevel, id string) compiledLevel {
 	for _, candidate := range levels {
-		if candidate.id == id {
+		if candidate.id == id || (candidate.canonicalID != "" && candidate.canonicalID == strings.ToLower(strings.TrimSpace(id))) {
 			return candidate
 		}
 	}

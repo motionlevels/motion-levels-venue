@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lobis/motion-levels/game-engine/internal/animation"
+	"github.com/lobis/motion-levels/game-engine/internal/games/niveles"
 	"github.com/lobis/motion-levels/game-engine/internal/games/whackamole"
 )
 
@@ -26,6 +27,8 @@ type Config struct {
 	Difficulty       string
 	DurationMillis   int64
 	Options          map[string]json.RawMessage
+	Content          json.RawMessage
+	ContentRevision  string
 	StartedAt        time.Time
 	NodeBinary       string
 }
@@ -52,50 +55,71 @@ type RoundSnapshot struct {
 }
 
 type Snapshot struct {
-	CurrentGame      string           `json:"currentGame"`
-	Label            string           `json:"label"`
-	Phase            string           `json:"phase"`
-	PlayerCount      int              `json:"playerCount"`
-	Players          []PlayerSnapshot `json:"players"`
-	Score            int              `json:"score"`
-	Lives            int              `json:"lives"`
-	MaxLives         int              `json:"maxLives"`
-	ElapsedMillis    int64            `json:"elapsedMillis"`
-	RemainingMillis  int64            `json:"remainingMillis"`
-	ActiveTargets    int              `json:"activeTargets"`
-	Success          bool             `json:"success"`
-	CountdownMillis  int64            `json:"countdownMillis"`
-	MatchTarget      int              `json:"matchTarget"`
-	RoundHits        int              `json:"roundHits"`
-	LastRoundHits    int              `json:"lastRoundHits"`
-	LastRoundWinner  string           `json:"lastRoundWinner"`
-	Rounds           []RoundSnapshot  `json:"rounds"`
-	LastEventCue     string           `json:"lastEventCue"`
-	LastEventMessage string           `json:"lastEventMessage"`
+	CurrentGame          string           `json:"currentGame"`
+	Label                string           `json:"label"`
+	Phase                string           `json:"phase"`
+	PlayerCount          int              `json:"playerCount"`
+	Players              []PlayerSnapshot `json:"players"`
+	Score                int              `json:"score"`
+	Lives                int              `json:"lives"`
+	MaxLives             int              `json:"maxLives"`
+	ElapsedMillis        int64            `json:"elapsedMillis"`
+	RemainingMillis      int64            `json:"remainingMillis"`
+	ActiveTargets        int              `json:"activeTargets"`
+	Success              bool             `json:"success"`
+	CountdownMillis      int64            `json:"countdownMillis"`
+	MatchTarget          int              `json:"matchTarget"`
+	RoundHits            int              `json:"roundHits"`
+	LastRoundHits        int              `json:"lastRoundHits"`
+	LastRoundWinner      string           `json:"lastRoundWinner"`
+	Rounds               []RoundSnapshot  `json:"rounds"`
+	LastEventCue         string           `json:"lastEventCue"`
+	LastEventMessage     string           `json:"lastEventMessage"`
+	Level                string           `json:"level"`
+	LevelSlug            string           `json:"levelSlug"`
+	LevelNumber          int              `json:"levelNumber"`
+	AttemptCreatedMillis int64            `json:"attemptCreatedMillis"`
+	AttemptStartedMillis int64            `json:"attemptStartedMillis"`
+	AttemptEndedMillis   int64            `json:"attemptEndedMillis"`
+	Audio                SnapshotAudio    `json:"audio"`
+}
+
+type SnapshotAudio struct {
+	MusicRef         string  `json:"musicRef"`
+	MusicVolume      float64 `json:"musicVolume"`
+	NarrationCueRef  string  `json:"narrationCueRef"`
+	StartCueRef      string  `json:"startCueRef"`
+	CoinCueRef       string  `json:"coinCueRef"`
+	DoubleCoinCueRef string  `json:"doubleCoinCueRef"`
+	DamageCueRef     string  `json:"damageCueRef"`
+	WinCueRef        string  `json:"winCueRef"`
+	DefeatCueRef     string  `json:"defeatCueRef"`
 }
 
 type RunnerHealth struct {
-	Status         string `json:"status"`
-	SourceRevision string `json:"sourceRevision"`
-	GameID         string `json:"gameId"`
-	LastError      string `json:"lastError,omitempty"`
+	Status          string `json:"status"`
+	SourceRevision  string `json:"sourceRevision"`
+	GameID          string `json:"gameId"`
+	ContentRevision string `json:"contentRevision,omitempty"`
+	LastError       string `json:"lastError,omitempty"`
 }
 
 type Game struct {
-	mu       sync.Mutex
-	cmd      *exec.Cmd
-	stdin    io.WriteCloser
-	encoder  *json.Encoder
-	decoder  *json.Decoder
-	started  time.Time
-	sequence uint64
-	revision string
-	gameID   string
-	frame    []animation.RGB
-	snapshot Snapshot
-	raw      json.RawMessage
-	pending  []whackamole.Event
-	lastErr  error
+	mu              sync.Mutex
+	cmd             *exec.Cmd
+	stdin           io.WriteCloser
+	encoder         *json.Encoder
+	decoder         *json.Decoder
+	started         time.Time
+	sequence        uint64
+	revision        string
+	contentRevision string
+	gameID          string
+	frame           []animation.RGB
+	snapshot        Snapshot
+	raw             json.RawMessage
+	pending         []whackamole.Event
+	lastErr         error
 }
 
 type runnerRequest struct {
@@ -170,8 +194,21 @@ func New(vendorRoot string, cfg Config) (*Game, error) {
 	}
 	game := &Game{
 		cmd: cmd, stdin: stdin, encoder: json.NewEncoder(stdin), decoder: json.NewDecoder(bufio.NewReader(stdout)),
-		started: started, revision: bundle.Manifest.SourceRevision, gameID: cfg.GameID,
+		started: started, revision: bundle.Manifest.SourceRevision, contentRevision: cfg.ContentRevision, gameID: cfg.GameID,
 	}
+	params, err := runnerInitParams(cfg)
+	if err != nil {
+		_ = game.closeLocked()
+		return nil, err
+	}
+	if _, err := game.callLocked("init", params); err != nil {
+		_ = game.closeLocked()
+		return nil, err
+	}
+	return game, nil
+}
+
+func runnerInitParams(cfg Config) (map[string]any, error) {
 	params := map[string]any{
 		"gameId": cfg.GameID, "seed": cfg.Seed, "playerCount": cfg.PlayerCount,
 		"players": cfg.Players, "difficulty": cfg.Difficulty, "options": cfg.Options,
@@ -179,11 +216,13 @@ func New(vendorRoot string, cfg Config) (*Game, error) {
 	if cfg.DurationMillis > 0 {
 		params["durationMillis"] = cfg.DurationMillis
 	}
-	if _, err := game.callLocked("init", params); err != nil {
-		_ = game.closeLocked()
-		return nil, err
+	if len(cfg.Content) > 0 {
+		if !json.Valid(cfg.Content) {
+			return nil, fmt.Errorf("motion-levels-games content is not valid JSON")
+		}
+		params["content"] = append(json.RawMessage(nil), cfg.Content...)
 	}
-	return game, nil
+	return params, nil
 }
 
 func runnerEnvironment(environment []string) []string {
@@ -269,14 +308,32 @@ func (g *Game) Frame() []animation.RGB {
 	return append([]animation.RGB(nil), g.frame...)
 }
 
-func (g *Game) Label() string          { return g.Snapshot().Label }
-func (g *Game) RuntimeKind() string    { return "motion-levels-games" }
-func (g *Game) SourceRevision() string { return g.revision }
+func (g *Game) Label() string           { return g.Snapshot().Label }
+func (g *Game) RuntimeKind() string     { return "motion-levels-games" }
+func (g *Game) SourceRevision() string  { return g.revision }
+func (g *Game) ContentRevision() string { return g.contentRevision }
+
+func (g *Game) UnixNanosAt(clockMillis int64) int64 {
+	if clockMillis < 0 {
+		return 0
+	}
+	return g.started.Add(time.Duration(clockMillis) * time.Millisecond).UnixNano()
+}
+
+func (g *Game) AudioRefs() niveles.AudioRefs {
+	audio := g.Snapshot().Audio
+	return niveles.AudioRefs{
+		MusicRef: audio.MusicRef, MusicVolume: audio.MusicVolume,
+		NarrationCueRef: audio.NarrationCueRef, StartCueRef: audio.StartCueRef,
+		CoinCueRef: audio.CoinCueRef, DoubleCoinCueRef: audio.DoubleCoinCueRef,
+		DamageCueRef: audio.DamageCueRef, WinCueRef: audio.WinCueRef, DefeatCueRef: audio.DefeatCueRef,
+	}
+}
 
 func (g *Game) RunnerHealth() RunnerHealth {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	health := RunnerHealth{Status: "ok", SourceRevision: g.revision, GameID: g.gameID}
+	health := RunnerHealth{Status: "ok", SourceRevision: g.revision, ContentRevision: g.contentRevision, GameID: g.gameID}
 	if g.lastErr != nil {
 		health.Status = "error"
 		health.LastError = g.lastErr.Error()
@@ -341,6 +398,9 @@ func (g *Game) applyState(state runnerState) error {
 	var snapshot Snapshot
 	if err := json.Unmarshal(state.Snapshot, &snapshot); err != nil {
 		return err
+	}
+	if normalizeCatalogIdentity(snapshot.CurrentGame) != normalizeCatalogIdentity(g.gameID) {
+		return fmt.Errorf("motion-levels-games runner returned snapshot for %q, expected %q", snapshot.CurrentGame, g.gameID)
 	}
 	g.frame = frame
 	g.snapshot = snapshot

@@ -20,10 +20,14 @@ import (
 	"github.com/lobis/motion-levels/game-engine/internal/games/motionlevelsgames"
 )
 
-var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var (
+	uuidPattern          = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	canonicalHashPattern = regexp.MustCompile(`^(?:[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})$`)
+)
 
 type selectGameRequest struct {
 	Game                   string                     `json:"game"`
+	EngineGame             string                     `json:"engineGame"`
 	GameLabel              string                     `json:"gameLabel"`
 	SourceKind             string                     `json:"sourceKind"`
 	SourceRevision         string                     `json:"sourceRevision"`
@@ -34,6 +38,7 @@ type selectGameRequest struct {
 	AllowAnyPlayers        bool                       `json:"allowAnyPlayers"`
 	Difficulty             string                     `json:"difficulty"`
 	Level                  string                     `json:"level"`
+	LevelSlug              string                     `json:"levelSlug"`
 	LevelMode              string                     `json:"levelMode"`
 	DurationSeconds        int                        `json:"durationSeconds"`
 	ChallengeElapsedMillis int64                      `json:"challengeElapsedMillis"`
@@ -244,7 +249,7 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, "venueSessionId must be a UUID", http.StatusBadRequest)
 			return
 		}
-		runtime.SelectGameWithMetadata(request.Game, request.GameLabel, request.SourceKind, request.SourceRevision, request.PlayerCount, request.AllowAnyPlayers, request.Difficulty, request.Level, request.LevelMode, request.DurationSeconds, request.ChallengeElapsedMillis, request.ChallengeAttemptCount, request.NarrationEnabled, request.CountdownFloorOverlay, request.TeamName, venueSessionID, recordingEnabledValue(request.RecordingEnabled), normalizeLaunchPlatformURL(request.PlatformURL), players, request.Config)
+		runtime.SelectGameWithMetadata(request.Game, request.EngineGame, request.GameLabel, request.SourceKind, request.SourceRevision, request.PlayerCount, request.AllowAnyPlayers, request.Difficulty, request.Level, request.LevelSlug, request.LevelMode, request.DurationSeconds, request.ChallengeElapsedMillis, request.ChallengeAttemptCount, request.NarrationEnabled, request.CountdownFloorOverlay, request.TeamName, venueSessionID, recordingEnabledValue(request.RecordingEnabled), normalizeLaunchPlatformURL(request.PlatformURL), players, request.Config)
 		writeJSON(w, runtime.Status())
 	})
 	mux.HandleFunc("/api/control", func(w http.ResponseWriter, r *http.Request) {

@@ -56,6 +56,8 @@ import {
   selectableDifficultiesForGame,
 } from "./levelSelection";
 import { lifeMeterModel, teamLivesFromPlayers, type LifeMeterModel } from "./lifeMeter";
+import { isCanonicalEntityID } from "./identity.ts";
+import { migrateLegacyLevelState } from "./levelStateMigration.ts";
 
 type MenuState = {
   sessionActive: boolean;
@@ -296,7 +298,7 @@ function engineGameID(game: Pick<GameCard, "engineGame" | "id">): string {
 }
 
 function runtimeGameID(game: Pick<GameCard, "engineGame" | "id" | "sourceKind">): string {
-  return game.sourceKind === "platform_levels" && isUUID(game.id) ? game.id : engineGameID(game);
+  return game.sourceKind === "platform_levels" && isCanonicalEntityID(game.id) ? game.id : engineGameID(game);
 }
 
 function previewAnimationID(game: GameCard): string {
@@ -470,7 +472,7 @@ function scoreFromStatus(status: EngineStatus | null): number {
 }
 
 function finishedAttemptMatchesLevel(attempt: FinishedLevelAttempt, game: GameCard, levelID: string, status: EngineStatus | null): boolean {
-  if (!levelID || attempt.level !== levelID) return false;
+  if (!levelID || !levelIDsMatch(game, attempt.level, levelID)) return false;
   const gameIDs = new Set([game.id, engineGameID(game), runtimeGameID(game)].filter(Boolean));
   if (!gameIDs.has(attempt.game)) return false;
   if (status?.difficulty && attempt.difficulty && attempt.difficulty !== status.difficulty) return false;
@@ -482,20 +484,20 @@ function levelAttemptSummary(status: EngineStatus | null, game: GameCard, levelI
   if (!status || !levelID) return { attempts: 0, failures: 0 };
   const finishedAttempts = (status.finishedLevelAttempts || []).filter((attempt) => finishedAttemptMatchesLevel(attempt, game, levelID, status));
   const failures = finishedAttempts.filter((attempt) => !attempt.success || attempt.result === "failed").length;
-  const activeAttempt = activeLevelAttempt(status, levelID);
+  const activeAttempt = activeLevelAttempt(status, game, levelID);
   return {
     attempts: finishedAttempts.length + (activeAttempt ? 1 : 0),
     failures,
   };
 }
 
-function activeLevelAttempt(status: EngineStatus | null, levelID: string): boolean {
+function activeLevelAttempt(status: EngineStatus | null, game: GameCard, levelID: string): boolean {
   return Boolean(
     status
     && levelID
     && !isStoppedRuntimePhase(status)
     && !animationIsIdleLoop(status.currentGame, status.phase)
-    && status.level === levelID,
+    && levelIDsMatch(game, status.level || "", levelID),
   );
 }
 
@@ -529,16 +531,23 @@ function platformEntryToGameCard(entry: PlatformGameCatalogEntry, fallback: Game
   const partyMiniGames = platformPartyMiniGames(entry);
   const levels = supportsLevels && entry.levels && entry.levels.length > 0
 	    ? Array.from(entry.levels.reduce((byID, lvl) => {
-	        const levelID = String(lvl.slug || lvl.id || "").trim() || String(lvl.id || "").trim();
+	        const levelID = String(lvl.id || "").trim();
+	        const levelSlug = String(lvl.slug || "").trim();
 	        if (!levelID) return byID;
-	        const fallbackLevel = fallback?.levels?.find((level) => level.id === levelID || level.id === lvl.id);
+	        const levelKey = levelSlug || levelID;
+	        const fallbackLevel = fallback?.levels?.find((level) => level.id === levelID || level.id === levelSlug || level.slug === levelSlug);
 	        const levelDifficulties = platformLevelSupportedDifficulties(lvl);
+	        const rowDifficulty = catalogDifficultyIDs.includes(lvl.difficulty as DifficultyID) ? lvl.difficulty as DifficultyID : undefined;
 	        const platformThumbnailSrcs = catalogThumbnailMediaSrcs(lvl);
 	        const platformPreviewSrcs = catalogPreviewMediaSrcs(lvl);
 	        const hasLevelMedia = platformPreviewSrcs.length > 0 || platformThumbnailSrcs.length > 0;
-	        const existing = byID.get(levelID);
-	        byID.set(levelID, {
-	          id: levelID,
+	        const existing = byID.get(levelKey);
+	        const canonicalIdsByDifficulty = { ...(existing?.canonicalIdsByDifficulty || {}) };
+	        for (const difficulty of rowDifficulty ? [rowDifficulty] : levelDifficulties || []) canonicalIdsByDifficulty[difficulty] = levelID;
+	        byID.set(levelKey, {
+	          id: existing?.id || levelID,
+	          slug: levelSlug || undefined,
+	          canonicalIdsByDifficulty,
 	          label: existing?.label || lvl.label,
 	          description: existing?.description || lvl.description,
 	          difficulties: Array.from(new Set([...(existing?.difficulties || []), ...(levelDifficulties || [])])),
@@ -687,11 +696,42 @@ function levelNumber(levelID: string): number {
   return Number.isFinite(value) && value > 0 ? value : 1;
 }
 
+function logicalLevelForGame(game: Pick<GameCard, "levels"> | undefined, value: string | undefined): NonNullable<GameCard["levels"]>[number] | undefined {
+  if (!value) return undefined;
+  return game?.levels?.find((candidate) => candidate.id === value || candidate.slug === value || Object.values(candidate.canonicalIdsByDifficulty || {}).includes(value));
+}
+
+function logicalLevelIndexForGame(game: Pick<GameCard, "levels"> | undefined, value: string | undefined): number {
+  if (!value) return -1;
+  return game?.levels?.findIndex((candidate) => candidate.id === value || candidate.slug === value || Object.values(candidate.canonicalIdsByDifficulty || {}).includes(value)) ?? -1;
+}
+
+function canonicalLevelID(game: Pick<GameCard, "levels"> | undefined, value: string, difficulty?: DifficultyID): string {
+  if (!value) return "";
+  const level = logicalLevelForGame(game, value);
+  if (!level) return "";
+  if (Object.values(level.canonicalIdsByDifficulty || {}).includes(value)) return value;
+  return (difficulty && level.canonicalIdsByDifficulty?.[difficulty]) || level.id;
+}
+
+function levelIDsMatch(game: Pick<GameCard, "levels"> | undefined, left: string, right: string): boolean {
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const leftLevel = logicalLevelForGame(game, left);
+  const rightLevel = logicalLevelForGame(game, right);
+  return Boolean(leftLevel && leftLevel === rightLevel);
+}
+
+function levelNumberForGame(game: Pick<GameCard, "levels">, levelID: string): number {
+  const level = logicalLevelForGame(game, levelID);
+  return levelNumber(level?.slug || level?.id || levelID);
+}
+
 function playerLevelLabel(level: NonNullable<GameCard["levels"]>[number] | undefined, index?: number): string {
   if (!level) return "Nivel";
   const label = String(level.label || "").trim();
   if (label && !/^level[-_\s]?\d+$/i.test(label)) return label;
-  const number = typeof index === "number" && index >= 0 ? index + 1 : levelNumber(level.id);
+  const number = typeof index === "number" && index >= 0 ? index + 1 : levelNumber(level.slug || level.id);
   return `Nivel ${number}`;
 }
 
@@ -736,7 +776,7 @@ function activeLevelModeFor(game: GameCard, state: MenuState, status: EngineStat
   if (!game.levels?.length || configuredMode === "free" || !status?.level) return configuredMode;
   const difficulty = activeDifficultyForGame(game, state);
   const expectedChallengeLevel = challengeNextLevel(game, state)?.id || defaultLevelIDForDifficulty(game, difficulty);
-  return status.level === expectedChallengeLevel ? "challenge" : "free";
+  return levelIDsMatch(game, status.level, expectedChallengeLevel) ? "challenge" : "free";
 }
 
 function challengeRunFor(game: GameCard, state: MenuState): ChallengeRun | null {
@@ -802,11 +842,11 @@ function isLevelUnlocked(game: GameCard, levelID: string, state: MenuState): boo
 
 function isLevelUnlockedForMode(game: GameCard, levelID: string, state: MenuState, mode: LevelMode): boolean {
   if (!game.levels?.length) return true;
-  const level = game.levels.find((candidate) => candidate.id === levelID);
+  const level = logicalLevelForGame(game, levelID);
   if (!levelSupportsDifficulty(game, level, activeDifficultyForGame(game, state))) return false;
   if (unlockLevelsEnabled(state)) return true;
   if (mode === "free") return true;
-  return challengeNextLevel(game, state)?.id === levelID;
+  return levelIDsMatch(game, challengeNextLevel(game, state)?.id || "", levelID);
 }
 
 function challengeLevelPreviewRevealed(game: GameCard, levelID: string, state: MenuState, active: boolean, mode = levelModeFor(game, state)): boolean {
@@ -868,7 +908,8 @@ function recordLevelCompletion(
   elapsedMillis: number,
 ): MenuState {
   if (!game.levels?.length || !levelID) return state;
-  const finishedNumber = levelNumber(levelID);
+  levelID = canonicalLevelID(game, levelID, difficulty) || levelID;
+  const finishedNumber = levelNumberForGame(game, levelID);
   const previous = progressFor(game, state);
   const nextBest = { ...previous.bestByLevel };
   const nextBestTime = { ...previous.bestTimeByLevel };
@@ -878,7 +919,7 @@ function recordLevelCompletion(
   let challengeAttemptRun: ChallengeRun | null = null;
   if (levelModeFor(game, state) === "challenge") {
     const expectedLevel = challengeNextLevel(game, state);
-    if (expectedLevel?.id === levelID) {
+    if (expectedLevel && levelIDsMatch(game, expectedLevel.id, levelID)) {
       const previousRun = challengeRunFor(game, state) || emptyChallengeRun(difficulty);
       challengeAttemptRun = {
         ...previousRun,
@@ -977,7 +1018,7 @@ function challengeCompletionForAttempt(
 ): ChallengeCompletion | null {
   if (!success || !game.levels?.length || levelModeFor(game, state) !== "challenge") return null;
   const expectedLevel = challengeNextLevel(game, state);
-  if (expectedLevel?.id !== levelID) return null;
+  if (!expectedLevel || !levelIDsMatch(game, expectedLevel.id, levelID)) return null;
   const previousRun = challengeRunFor(game, state) || emptyChallengeRun(difficulty);
   const difficultyLevels = levelsForDifficulty(game, difficulty);
   const completedLevels = {
@@ -1362,6 +1403,11 @@ function MenuApp() {
 
   useEffect(() => {
     if (!platformCatalog || !menuGames.length) return;
+    setMenu((current) => migrateLegacyLevelState(current, menuGames));
+  }, [menuGames, platformCatalog]);
+
+  useEffect(() => {
+    if (!platformCatalog || !menuGames.length) return;
     const launchedStillVisible = menuGames.some((game) => game.id === launchedGameID);
     if (!launchedStillVisible) {
       setLaunchedGameID(menuGames[0].id);
@@ -1605,15 +1651,16 @@ function MenuApp() {
 
     setMenu((current) => {
       const engineDifficulty = usesDifficulty(engineGame) ? normalizedDifficultyForGame(engineGame, difficultyFromEngine(status.difficulty, current.difficulty)) : current.difficulty;
-      const statusLevel = status.level && levelSupportsDifficulty(engineGame, engineGame.levels?.find((candidate) => candidate.id === status.level), engineDifficulty)
-        ? status.level
+      const canonicalStatusLevel = canonicalLevelID(engineGame, status.level || "", engineDifficulty);
+      const statusLevel = canonicalStatusLevel && levelSupportsDifficulty(engineGame, logicalLevelForGame(engineGame, canonicalStatusLevel), engineDifficulty)
+        ? canonicalStatusLevel
         : "";
       const nextLevelID = engineGame.levels?.length
         ? closestLevelIDForDifficulty(engineGame, statusLevel || current.selectedLevels[engineGame.id] || defaultLevelIDForDifficulty(engineGame, engineDifficulty), engineDifficulty)
         : "";
       const selectedLevels = engineGame.levels?.length && current.selectedLevels[engineGame.id] !== nextLevelID ? { ...current.selectedLevels, [engineGame.id]: nextLevelID } : current.selectedLevels;
       const progress = progressFor(engineGame, current);
-      const syncedLevelNumber = status.level ? levelNumber(status.level) : 0;
+      const syncedLevelNumber = status.level ? levelNumberForGame(engineGame, status.level) : 0;
       const levelProgress =
         engineGame.levels?.length && status.level && progress.unlockedThrough < syncedLevelNumber
           ? {
@@ -1680,14 +1727,14 @@ function MenuApp() {
     if (status.phase === "finished") {
       const game = menuGames.find((candidate) => runtimeGameID(candidate) === status.currentGame || engineGameID(candidate) === status.currentGame);
       const finishedLevel = status.level || (game ? selectedLevelFor(game) : "");
-      const alreadyHasAttempt = attempts.some((attempt) => attempt.game === status.currentGame && attempt.level === finishedLevel);
+      const alreadyHasAttempt = attempts.some((attempt) => attempt.game === status.currentGame && (game ? levelIDsMatch(game, attempt.level, finishedLevel) : attempt.level === finishedLevel));
       if (game?.levels?.length && finishedLevel && !alreadyHasAttempt) {
         attempts.push({
           attemptId: `${status.sessionId}:${status.currentGame}:${finishedLevel}:${status.success ? "success" : "failed"}:${status.elapsedMillis || 0}`,
           venueSessionId: status.venueSessionId,
           game: status.currentGame,
           level: finishedLevel,
-          levelNumber: levelNumber(finishedLevel),
+          levelNumber: game ? levelNumberForGame(game, finishedLevel) : levelNumber(finishedLevel),
           difficulty: status.difficulty,
           result: status.success ? "success" : "failed",
           success: status.success,
@@ -1843,7 +1890,7 @@ function MenuApp() {
   const effectiveDifficulty = closestSupportedDifficulty(menu.difficulty, selectedSupportedDifficulties);
   const selectedVisibleLevels = levelsForDifficulty(selectedGame, effectiveDifficulty);
   const selectedLevelID = selectedLevelFor(selectedGame);
-  const selectedLevel = selectedVisibleLevels.find((level) => level.id === selectedLevelID) || selectedGame.levels?.find((level) => level.id === selectedLevelID);
+  const selectedLevel = selectedVisibleLevels.find((level) => level.id === selectedLevelID) || logicalLevelForGame(selectedGame, selectedLevelID);
   const selectedLevelProgress = progressFor(selectedGame, menu);
   const selectedLevelMode = levelModeFor(selectedGame, menu);
   const selectedChallengeRun = challengeRunFor(selectedGame, menu);
@@ -1866,7 +1913,7 @@ function MenuApp() {
   const launchedPlayers = rosterForGame(launchedGame, activePlayers);
   const displayPlayers = gameActive && enginePlayers.length > 0 ? enginePlayers : launchedPlayers;
   const headerPlayers = gameActive && enginePlayers.length > 0 ? enginePlayers : activePlayers;
-  const launchedLevel = launchedGame.levels?.find((level) => level.id === (status?.level || selectedLevelFor(launchedGame)));
+  const launchedLevel = logicalLevelForGame(launchedGame, status?.level || selectedLevelFor(launchedGame));
   const launchedSupportedDifficulties = launchedGame.levels?.length
     ? selectableDifficultiesForGame(launchedGame)
     : usesDifficulty(launchedGame) ? selectableDifficultiesForGame(launchedGame) : supportedDifficultiesFor(launchedGame, launchedLevel);
@@ -1878,7 +1925,7 @@ function MenuApp() {
     screenMode,
   });
   const pendingLevelSwitchGame = pendingLevelSwitch ? menuGames.find((game) => game.id === pendingLevelSwitch.gameID) || null : null;
-  const pendingLevelSwitchLevel = pendingLevelSwitchGame?.levels?.find((level) => level.id === pendingLevelSwitch?.levelID) || null;
+  const pendingLevelSwitchLevel = logicalLevelForGame(pendingLevelSwitchGame || undefined, pendingLevelSwitch?.levelID) || null;
   const pickerPlayer = menu.players.find((player) => player.id === colorPickerFor) || null;
   const removePlayer = menu.players.find((player) => player.id === confirmRemove) || null;
   const menuPlayerCount = activePlayers.length || 1;
@@ -2355,13 +2402,13 @@ function MenuApp() {
 
   function setSelectedLevel(game: GameCard, levelID: string) {
     const difficulty = activeDifficultyForGame(game, menu);
-    const level = game.levels?.find((candidate) => candidate.id === levelID);
+    const level = logicalLevelForGame(game, levelID);
     if (!levelSupportsDifficulty(game, level, difficulty) || !isLevelUnlocked(game, levelID, menu)) {
       captureMenuEvent("locked_level_tapped", {
         engine_game: engineGameID(game),
         game: game.id,
         level: levelID,
-        level_number: levelNumber(levelID),
+        level_number: levelNumberForGame(game, levelID),
       });
       return;
     }
@@ -2370,7 +2417,7 @@ function MenuApp() {
       engine_game: engineGameID(game),
       game: game.id,
       level: levelID,
-      level_number: levelNumber(levelID),
+      level_number: levelNumberForGame(game, levelID),
     });
     setMenu((current) => ({
       ...current,
@@ -2384,7 +2431,7 @@ function MenuApp() {
 
   function renderLevelOption(game: GameCard, level: NonNullable<GameCard["levels"]>[number]) {
     const active = selectedLevelFor(game) === level.id;
-    const levelIndex = game.levels?.findIndex((candidate) => candidate.id === level.id) ?? -1;
+    const levelIndex = logicalLevelIndexForGame(game, level.id);
     const levelLabel = playerLevelLabel(level, levelIndex);
     const progress = progressFor(game, menu);
     const challengeMode = levelModeFor(game, menu) === "challenge";
@@ -2452,7 +2499,7 @@ function MenuApp() {
   }) {
     const launching = options.launchingLevelID === level.id;
     const active = options.launchingLevelID ? launching : options.activeLevelID === level.id;
-    const levelIndex = game.levels?.findIndex((candidate) => candidate.id === level.id) ?? -1;
+    const levelIndex = logicalLevelIndexForGame(game, level.id);
     const levelLabel = playerLevelLabel(level, levelIndex);
     const progress = progressFor(game, menu);
     const challengeMode = options.levelMode === "challenge";
@@ -2695,7 +2742,7 @@ function MenuApp() {
     const selectedLevelID = launchGame.levels?.length && launchDifficulty
       ? closestLevelIDForDifficulty(launchGame, requestedLevelID, launchDifficulty)
       : requestedLevelID;
-    const launchLevel = launchGame.levels?.find((level) => level.id === selectedLevelID);
+    const launchLevel = logicalLevelForGame(launchGame, selectedLevelID);
     const menuDifficulty = isPartyCard(game) ? partyParentDifficulty : launchDifficulty;
     if (menuDifficulty && nextMenu.difficulty !== menuDifficulty) {
       nextMenu = { ...nextMenu, difficulty: menuDifficulty };
@@ -2735,7 +2782,7 @@ function MenuApp() {
         engine_game: engineGameID(launchGame),
         game: game.id,
         level: selectedLevelID,
-        level_number: levelNumber(selectedLevelID),
+        level_number: levelNumberForGame(launchGame, selectedLevelID),
         reason: "level_locked",
       });
       setMenu(nextMenu);
@@ -2765,7 +2812,7 @@ function MenuApp() {
       game_label: game.label,
       level: selectedLevelID || undefined,
       level_label: launchLevel?.label,
-      level_number: selectedLevelID ? levelNumber(selectedLevelID) : undefined,
+      level_number: selectedLevelID ? levelNumberForGame(launchGame, selectedLevelID) : undefined,
       level_mode: launchGame.levels?.length ? levelModeFor(launchGame, nextMenu) : undefined,
       narration_enabled: supportsNarration(game) ? playNarration : false,
       countdown_floor_overlay: showCountdownOverlay,
@@ -2789,6 +2836,7 @@ function MenuApp() {
     try {
       const nextStatus = await selectGame({
         game: runtimeGameID(launchGame),
+        engineGame: engineGameID(launchGame),
         gameLabel: launchGame.label,
         sourceKind: launchGame.sourceKind,
         sourceRevision: launchGame.sourceRevision,
@@ -2799,6 +2847,7 @@ function MenuApp() {
         allowAnyPlayers: launchGame.allowAnyPlayers === true,
         difficulty: launchDifficulty,
         level: selectedLevelID || undefined,
+        levelSlug: launchLevel?.slug || undefined,
         levelMode: launchLevelMode,
         durationSeconds: launchGame.levels?.length ? undefined : launchGame.estimatedDurationSeconds || undefined,
         challengeElapsedMillis: launchChallengeRun?.totalElapsedMillis || launchFreeRun?.totalElapsedMillis || 0,
@@ -2878,7 +2927,7 @@ function MenuApp() {
 
   async function switchLaunchedLevel(game: GameCard, levelID: string, stopCurrent: boolean, mode = levelModeFor(game, menu)) {
     if (levelSwitchInFlightRef.current || controlInFlightRef.current || launchInFlightRef.current) return;
-    const level = game.levels?.find((candidate) => candidate.id === levelID);
+    const level = logicalLevelForGame(game, levelID);
     if (!level || !isLevelUnlockedForMode(game, levelID, menu, mode)) return;
     levelSwitchInFlightRef.current = true;
     if (stopCurrent) controlInFlightRef.current = true;
@@ -2891,7 +2940,7 @@ function MenuApp() {
       engine_game: engineGameID(game),
       game: game.id,
       level: levelID,
-      level_number: levelNumber(levelID),
+      level_number: levelNumberForGame(game, levelID),
       stopped_current: stopCurrent,
       source: "active_game",
     });
@@ -3181,8 +3230,9 @@ function MenuApp() {
           onNextLevel={() => {
             const levels = levelsForDifficulty(launchedGame, launchedDifficulty);
             if (!levels.length) return;
-            const currentLevelID = status?.level && levels.some((level) => level.id === status.level)
-              ? status.level
+            const statusLevelID = canonicalLevelID(launchedGame, status?.level || "", launchedDifficulty);
+            const currentLevelID = statusLevelID && levels.some((level) => level.id === statusLevelID)
+              ? statusLevelID
               : selectedLevelFor(launchedGame);
             const currentIndex = levels.findIndex((level) => level.id === currentLevelID);
             const nextLevel = currentIndex < 0 ? levels[0] : levels[(currentIndex + 1) % levels.length];
@@ -3785,7 +3835,7 @@ function MenuApp() {
       {pendingLevelSwitch && pendingLevelSwitchGame && pendingLevelSwitchLevel ? (
         <ConfirmDialog
           title="¿Cambiar nivel?"
-          body={`Se detendrá el nivel actual y empezará ${playerLevelLabel(pendingLevelSwitchLevel, pendingLevelSwitchGame.levels?.findIndex((level) => level.id === pendingLevelSwitchLevel.id) ?? -1)}.`}
+          body={`Se detendrá el nivel actual y empezará ${playerLevelLabel(pendingLevelSwitchLevel, logicalLevelIndexForGame(pendingLevelSwitchGame, pendingLevelSwitchLevel.id))}.`}
           confirmLabel="Cambiar"
           cancelLabel="Cancelar"
           onConfirm={() => void switchLaunchedLevel(pendingLevelSwitchGame, pendingLevelSwitchLevel.id, true, activeLevelModeFor(pendingLevelSwitchGame, menu, status))}
@@ -4453,7 +4503,8 @@ function GameControlScreen({
   const levelModeFree = levelMode === "free";
   const levels = levelsForDifficulty(game, difficulty);
   const hasLevels = levels.length > 0;
-  const statusLevelID = status?.level && levels.some((level) => level.id === status.level) ? status.level : "";
+  const canonicalStatusLevelID = canonicalLevelID(game, status?.level || "", difficulty);
+  const statusLevelID = canonicalStatusLevelID && levels.some((level) => level.id === canonicalStatusLevelID) ? canonicalStatusLevelID : "";
   const currentLevelID = statusLevelID || closestLevelIDForDifficulty(game, selectedLevelID || levels[0]?.id || "", difficulty);
   const currentLevel = levels.find((level) => level.id === currentLevelID);
   const currentLevelIndex = currentLevel ? levels.findIndex((level) => level.id === currentLevel.id) : -1;
@@ -4464,7 +4515,7 @@ function GameControlScreen({
   const launchingLevelLabel = launchingLevel ? playerLevelLabel(launchingLevel, launchingLevelIndex) : "";
   const totalMillis = hasLevels ? 0 : Math.max(0, Math.round((game.estimatedDurationSeconds || 0) * 1000));
   const elapsedMillis = Math.max(0, Math.round(status?.elapsedMillis || 0));
-  const activeLevelElapsedMillis = activeLevelAttempt(status, currentLevelID) ? elapsedMillis : 0;
+  const activeLevelElapsedMillis = activeLevelAttempt(status, game, currentLevelID) ? elapsedMillis : 0;
   const freeElapsedMillis = Math.max(0, Math.round(freeRun?.totalElapsedMillis || 0)) + activeLevelElapsedMillis;
   const challengeElapsedMillis = Math.max(0, Math.round(challengeRun?.totalElapsedMillis || 0)) + activeLevelElapsedMillis;
   const challengeRemainingMillis = totalMillis > 0 ? Math.max(0, totalMillis - challengeElapsedMillis) : 0;
@@ -4493,7 +4544,7 @@ function GameControlScreen({
   const progressLabel = hasLevels ? `${completedCount}/${levels.length}` : "0/0";
   const stopped = isStoppedRuntimePhase(status);
   const attemptSummary = hasLevels ? levelAttemptSummary(status, game, currentLevelID) : { attempts: 0, failures: 0 };
-  const challengeAttemptCount = Math.max(0, Math.round(challengeRun?.attemptCount || 0)) + (activeLevelAttempt(status, currentLevelID) ? 1 : 0);
+  const challengeAttemptCount = Math.max(0, Math.round(challengeRun?.attemptCount || 0)) + (activeLevelAttempt(status, game, currentLevelID) ? 1 : 0);
   const attemptCount = hasLevels && !levelModeFree ? Math.max(1, challengeAttemptCount) : Math.max(1, attemptSummary.attempts || 0);
   const phaseLabel = activeLevelLaunch
     ? activeLevelLaunch.phase === "stopping" ? "Deteniendo nivel" : `Cargando ${launchingLevelLabel || "nivel"}`
@@ -4868,7 +4919,7 @@ function PartyPreview({ catalogGames, compact = false, difficulty, game, rich = 
           : difficulty;
         const levelID = item.level || (miniGame?.levels?.length ? defaultLevelIDForDifficulty(miniGame, previewDifficulty) : "");
         const selectedLevelID = miniGame?.levels?.length ? closestLevelIDForDifficulty(miniGame, levelID, previewDifficulty) : levelID;
-        const level = miniGame?.levels?.find((candidate) => candidate.id === selectedLevelID);
+        const level = logicalLevelForGame(miniGame, selectedLevelID);
         const previewSrc = miniGame && level ? levelThumbnailSrc(level, miniGame) : miniGame ? gameThumbnailSrc(miniGame) : undefined;
         const previewSrcs = miniGame && level ? levelThumbnailSrcs(level, miniGame) : miniGame ? gameThumbnailSrcs(miniGame) : emptyPreviewSources;
         const richSrc = rich && miniGame ? (level ? levelPreviewSrc(miniGame, level, previewDifficulty) : miniGame.previewSrc) : undefined;

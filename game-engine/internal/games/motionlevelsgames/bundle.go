@@ -44,10 +44,12 @@ type BundleTarget struct {
 }
 
 type CatalogEntry struct {
-	ID          string `json:"id"`
-	EngineGame  string `json:"engineGame"`
-	Label       string `json:"label"`
-	Description string `json:"description"`
+	ID          string   `json:"id"`
+	EngineGame  string   `json:"engineGame"`
+	Aliases     []string `json:"aliases"`
+	Tags        []string `json:"tags"`
+	Label       string   `json:"label"`
+	Description string   `json:"description"`
 	Players     struct {
 		AllowAny bool `json:"allowAny"`
 		Min      int  `json:"min"`
@@ -66,8 +68,82 @@ type Bundle struct {
 	Catalog  []CatalogEntry
 }
 
+func (entry CatalogEntry) HasTag(tag string) bool {
+	return containsNormalized(entry.Tags, tag)
+}
+
 func (b *Bundle) SupportsGame(gameID string) bool {
 	return b != nil && contains(b.Manifest.Runtime.Games, gameID)
+}
+
+// ResolveTaggedGame finds a production runner product without treating its
+// mutable catalog alias as the durable game identity. A canonical id match is
+// always preferred. Aliases exist only to bridge older platform catalog rows
+// while they are renamed; ambiguous aliases are rejected instead of picking a
+// package by catalog order.
+func (b *Bundle) ResolveTaggedGame(canonicalID string, alias string, requiredTag string) (CatalogEntry, error) {
+	canonicalID = normalizeCatalogIdentity(canonicalID)
+	alias = normalizeCatalogIdentity(alias)
+	requiredTag = normalizeCatalogIdentity(requiredTag)
+	if b == nil || canonicalID == "" {
+		return CatalogEntry{}, fmt.Errorf("motion-levels-games canonical game id is required")
+	}
+
+	eligible := make([]CatalogEntry, 0, len(b.Catalog))
+	for _, entry := range b.Catalog {
+		if !b.SupportsGame(entry.ID) || (requiredTag != "" && !containsNormalized(entry.Tags, requiredTag)) {
+			continue
+		}
+		eligible = append(eligible, entry)
+		if normalizeCatalogIdentity(entry.ID) == canonicalID {
+			return entry, nil
+		}
+	}
+	if alias == "" {
+		return CatalogEntry{}, fmt.Errorf("motion-levels-games has no %q product for canonical game %s", requiredTag, canonicalID)
+	}
+
+	var matches []CatalogEntry
+	for _, entry := range eligible {
+		if catalogEntryHasAlias(entry, alias) {
+			matches = append(matches, entry)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return CatalogEntry{}, fmt.Errorf("motion-levels-games has no %q product for canonical game %s (alias %s)", requiredTag, canonicalID, alias)
+	case 1:
+		return matches[0], nil
+	default:
+		return CatalogEntry{}, fmt.Errorf("motion-levels-games alias collision for %s", alias)
+	}
+}
+
+func catalogEntryHasAlias(entry CatalogEntry, alias string) bool {
+	if normalizeCatalogIdentity(entry.ID) == alias || normalizeCatalogIdentity(entry.EngineGame) == alias {
+		return true
+	}
+	for _, candidate := range entry.Aliases {
+		if normalizeCatalogIdentity(candidate) == alias {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeCatalogIdentity(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	return strings.TrimPrefix(value, "motion-levels-games:")
+}
+
+func containsNormalized(values []string, target string) bool {
+	target = normalizeCatalogIdentity(target)
+	for _, value := range values {
+		if normalizeCatalogIdentity(value) == target {
+			return true
+		}
+	}
+	return false
 }
 
 var bundleCache sync.Map
