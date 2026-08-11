@@ -2,9 +2,9 @@
   "schema": "motion-levels-games-bundle-v1",
   "contractVersion": 1,
   "runnerProtocolVersion": 1,
-  "sourceRevision": "d3f9dcde942bbea53d6c6b1acf15b9bcc96a6a40",
+  "sourceRevision": "1f2196886fba3cdbebb360dc6bacdf1863d44c69",
   "sdkFps": 50,
-  "artifactDigest": "9a4043d12155e53aa06d440291b013805c828adf0ed190348c2f2d31e859db48",
+  "artifactDigest": "3aa6e88f213a537dbd53963728beca6b9488b44d162cc442ab65f6dce334b5a4",
   "runtime": {
     "entry": "runtime/runner.mjs",
     "games": [
@@ -58,8 +58,8 @@
     },
     {
       "path": "display/display.js",
-      "sha256": "b566a3597c4d4748b68159849fa7e106bf15823c55507fc98546db681b7f5650",
-      "bytes": 545785
+      "sha256": "bcc8ff6cf65ae5cb70b351dd9163eb23bd7ab0cd814f0c98a4b0bca7e149a953",
+      "bytes": 577182
     },
     {
       "path": "media/arkanoid/arkanoid-player-display-animation.webp",
@@ -663,8 +663,8 @@
     },
     {
       "path": "runtime/runner.mjs",
-      "sha256": "8fa74e230b94c696c1d66fe3e52c8098b4924e9151569b49cad69b71805d4427",
-      "bytes": 578528
+      "sha256": "15565b179ad0eadef5cf3a35470da15000b675092ccf57d1f62d9e186c9285e5",
+      "bytes": 639020
     }
   ]
 }
