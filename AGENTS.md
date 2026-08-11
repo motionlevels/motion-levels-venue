@@ -4,8 +4,11 @@ Guidance for AI agents (and humans) working in this repository.
 
 ## Repository scope
 
-This is the **venue-side** repo: the Go game engine, the player-menu and
-player-display kiosk frontends, shared packages, and venue deploy tooling.
+This is the **venue-side** repo: the Go game engine, player-display kiosk,
+player-menu runtime adapter and temporary legacy fallback, shared packages,
+and venue deploy tooling. The production player-menu source/static artifact is
+owned by `motion-levels-games`; Electron/Caddy packaging, supervisor APIs,
+controller connectivity, hardware output, and deployment remain here.
 The cloud side (platform app, website, homelab infra) lives in
 `motionlevels/motion-levels-platform`. Generated motion-go seeds are consumed
 by the platform repo — after editing an authored native game, run

@@ -21,6 +21,10 @@ assert.equal(bundle.runnerProtocolVersion, 1);
 assert.equal(bundle.sdkFps, 50);
 assert.equal(bundle.sourceRevision, pin.sourceRevision);
 assert.equal(bundle.artifactDigest, pin.artifactDigest);
+if (bundle.playerMenu !== undefined) {
+  assert.equal(bundle.playerMenu.adapterProtocolVersion, 1);
+  assert.match(String(bundle.playerMenu.entry), /^menu\/(?:[^/]+\/)*index\.html$/u);
+}
 
 const files = await walk(bundleRoot);
 const actual = await Promise.all(files
@@ -35,6 +39,9 @@ const actual = await Promise.all(files
     };
   }));
 assert.deepEqual(actual, bundle.files);
+if (bundle.playerMenu !== undefined) {
+  assert.ok(actual.some((file) => file.path === bundle.playerMenu.entry), "player menu entry is missing from bundle files");
+}
 const canonical = actual.map((file) => `${file.path}\0${file.sha256}\0${file.bytes}\n`).join("");
 assert.equal(createHash("sha256").update(canonical).digest("hex"), pin.artifactDigest);
 console.log(`Verified motion-levels-games ${pin.sourceRevision} (${actual.length} files, ${pin.artifactDigest})`);

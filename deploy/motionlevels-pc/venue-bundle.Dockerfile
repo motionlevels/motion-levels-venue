@@ -13,6 +13,16 @@ RUN npm ci --prefix packages/floor-view \
     && npm run build --prefix apps/player-menu \
     && npm run build --prefix apps/player-display
 
+FROM ${NODE_IMAGE} AS player-menu-assets
+WORKDIR /workspace
+COPY game-bundles/motion-levels-games ./game-bundles/motion-levels-games
+COPY scripts/install-player-menu-from-games-bundle.mjs ./scripts/install-player-menu-from-games-bundle.mjs
+COPY --from=frontends /workspace/apps/player-menu/dist ./fallback
+RUN node ./scripts/install-player-menu-from-games-bundle.mjs \
+    --vendor-root ./game-bundles/motion-levels-games \
+    --fallback-root ./fallback \
+    --output-root ./player-menu
+
 FROM ${GO_IMAGE} AS runtime-build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2-dev \
@@ -46,7 +56,7 @@ LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-le
 LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
 COPY --from=runtime-build /release /release
-COPY --from=frontends /workspace/apps/player-menu/dist /release/apps/player-menu/dist
+COPY --from=player-menu-assets /workspace/player-menu /release/apps/player-menu/dist
 COPY --from=frontends /workspace/apps/player-display/dist /release/apps/player-display/dist
 COPY game-bundles /release/game-bundles
 COPY content /release/content
@@ -131,7 +141,7 @@ LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-le
 LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
 COPY deploy/motionlevels-pc/Caddyfile.container /etc/caddy/Caddyfile
-COPY --from=frontends /workspace/apps/player-menu/dist /srv/player-menu
+COPY --from=player-menu-assets /workspace/player-menu /srv/player-menu
 COPY --from=frontends /workspace/apps/player-display/dist /srv/player-display
 COPY game-bundles/motion-levels-games /srv/games
 COPY deploy/motionlevels-pc/cameras.html /srv/venue/cameras.html

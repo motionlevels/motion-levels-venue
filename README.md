@@ -6,7 +6,10 @@ monorepo. Everything that runs on a venue PC lives here:
 
 - `game-engine/` — the Go game engine (HTTP API on `:4102`), including the
   authored native games and the motion-go seed generator.
-- `apps/player-menu/` — kiosk UI for choosing games and launching the engine.
+- `apps/player-menu/` — transitional fallback build for legacy games bundles.
+  The production player-menu source and revision-matched static artifact now
+  live in `motion-levels-games`; this repo retains the kiosk shell, runtime
+  adapter implementation, and deployment.
 - `apps/player-display/` — the floor/TV display frontend.
 - `packages/` — shared code: `core`, `design-tokens`, `floor-view` (TS, used by
   both frontends), `contracts` (protobuf shared with

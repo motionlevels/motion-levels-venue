@@ -1,5 +1,10 @@
 # Player Menu
 
+> Transitional fallback only. The production source and release artifact now
+> live in `motion-levels-games/apps/player-menu`. This copy remains buildable
+> until all deployed games pins contain `playerMenu.adapterProtocolVersion: 1`.
+> Do not add new product behavior here.
+
 Standalone kiosk UI for choosing games, configuring a team, and launching the
 local Go game engine.
 

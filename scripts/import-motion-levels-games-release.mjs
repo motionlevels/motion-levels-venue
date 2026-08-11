@@ -151,10 +151,17 @@ export async function verifyBundleDirectory(root, expectedRevision) {
   assertSafeRelativePath(manifest.catalog, "catalog");
   assertSafeRelativePath(manifest.runtime?.entry, "runtime entry");
   assertSafeRelativePath(manifest.playerDisplay?.entry, "player display entry");
+  if (manifest.playerMenu !== undefined) {
+    assertSafeRelativePath(manifest.playerMenu?.entry, "player menu entry");
+    assert.equal(manifest.playerMenu?.adapterProtocolVersion, 1, "unsupported player menu adapter protocol");
+  }
   const filePaths = new Set(actualFiles.map((file) => file.path));
   assert.ok(filePaths.has(manifest.catalog), "catalog is missing from the bundle file list");
   assert.ok(filePaths.has(manifest.runtime.entry), "runtime entry is missing from the bundle file list");
   assert.ok(filePaths.has(manifest.playerDisplay.entry), "player display entry is missing from the bundle file list");
+  if (manifest.playerMenu !== undefined) {
+    assert.ok(filePaths.has(manifest.playerMenu.entry), "player menu entry is missing from the bundle file list");
+  }
 
   const catalog = JSON.parse(await readFile(path.join(root, ...manifest.catalog.split("/")), "utf8"));
   assert.ok(Array.isArray(catalog), "bundle catalog must be an array");
