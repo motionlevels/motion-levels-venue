@@ -21,7 +21,7 @@ test("prefers the revision-matched games player menu", async () => {
     await mkdir(menuRoot, { recursive: true });
     await writeFile(path.join(menuRoot, "index.html"), "games-menu");
     await writeFile(path.join(vendorRoot, revision, "bundle.json"), JSON.stringify({
-      playerMenu: { entry: "menu/index.html", adapterProtocolVersion: 1 },
+      playerMenu: { entry: "menu/index.html", adapterProtocolVersion: 2 },
     }));
 
     const { installPlayerMenu } = await import(installerURL);
@@ -47,12 +47,12 @@ test("fails closed for an incompatible games player menu", async () => {
     await mkdir(menuRoot, { recursive: true });
     await writeFile(path.join(menuRoot, "index.html"), "future-menu");
     await writeFile(path.join(vendorRoot, revision, "bundle.json"), JSON.stringify({
-      playerMenu: { entry: "menu/index.html", adapterProtocolVersion: 2 },
+      playerMenu: { entry: "menu/index.html", adapterProtocolVersion: 3 },
     }));
     const { installPlayerMenu } = await import(installerURL);
     await assert.rejects(
       installPlayerMenu({ vendorRoot, fallbackRoot, outputRoot }),
-      /unsupported player-menu adapter protocol 2/,
+      /unsupported player-menu adapter protocol 3/,
     );
   });
 });

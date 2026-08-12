@@ -3,7 +3,7 @@ import { cp, mkdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const supportedPlayerMenuAdapterProtocolVersion = 1;
+export const supportedPlayerMenuAdapterProtocolVersion = 2;
 
 export async function installPlayerMenu({ vendorRoot, fallbackRoot, outputRoot }) {
   const pin = JSON.parse(await readFile(path.join(vendorRoot, "pin.json"), "utf8"));

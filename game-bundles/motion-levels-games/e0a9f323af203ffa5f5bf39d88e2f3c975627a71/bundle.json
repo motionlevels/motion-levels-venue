@@ -2,9 +2,9 @@
   "schema": "motion-levels-games-bundle-v1",
   "contractVersion": 1,
   "runnerProtocolVersion": 1,
-  "sourceRevision": "946f20534b6509c7b6893158c7b2ee2ccd5f6945",
+  "sourceRevision": "e0a9f323af203ffa5f5bf39d88e2f3c975627a71",
   "sdkFps": 50,
-  "artifactDigest": "6f6676ca12e4ec687f2485150acf09dc3f4118f0f7d545160d95e3f3be6b3420",
+  "artifactDigest": "0e03b9864283f12e7319bccc599b2c64e0c7b710346771a8e0db5a63f3c1c57e",
   "runtime": {
     "entry": "runtime/runner.mjs",
     "games": [
@@ -57,7 +57,11 @@
   },
   "playerMenu": {
     "entry": "menu/index.html",
-    "adapterProtocolVersion": 1
+    "adapterProtocolVersion": 2
+  },
+  "playerExperience": {
+    "contractVersion": 1,
+    "schema": "player-experience-state.schema.json"
   },
   "playground": {
     "entry": "playground/index.html",
@@ -78,7 +82,7 @@
     },
     {
       "path": "display/display.js",
-      "sha256": "8e50ed17bc77b0ff4bc8e9a5f40438784ac97e964072a9725951ed49ea7aaa8e",
+      "sha256": "d9569b77d3677378ba4c373d85e340c81fa9941a7f15fd3cf2f9ffe0447ac002",
       "bytes": 646411
     },
     {
@@ -1262,9 +1266,9 @@
       "bytes": 89208
     },
     {
-      "path": "menu/assets/index-DC2wE-92.js",
-      "sha256": "3e5b9cb7c694d80ef88e6971cb557db27bffb5c30f6ad603b3d2f9bc603cf2ca",
-      "bytes": 587276
+      "path": "menu/assets/index-UMdrObIY.js",
+      "sha256": "63f5d6b0fb1d7d90031ced8f02b81494c8a2b47d41cfb2058aba56d3978b6e30",
+      "bytes": 587115
     },
     {
       "path": "menu/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2",
@@ -1302,8 +1306,8 @@
       "bytes": 10252
     },
     {
-      "path": "menu/assets/localCatalog-zvfNwWeP.js",
-      "sha256": "87103b12f0ae055c9fa6100c35df007d8c8d84e70d83495805ddd5fe70a3a47a",
+      "path": "menu/assets/localCatalog-DCySmuLq.js",
+      "sha256": "6a56520bcc9670997b472d1acc1867edb5c7763dea8f10af6badf0846062d413",
       "bytes": 28400
     },
     {
@@ -1318,7 +1322,7 @@
     },
     {
       "path": "menu/index.html",
-      "sha256": "fa5df86a0e6ea61fb37fe9e3d8cd101fdda9db75755406c0d9b9952d8f9ed7fa",
+      "sha256": "e62acd528f269c61d92623acfc75f1f8eb589bb3dbb2f5a6e773365a00b7aa45",
       "bytes": 619
     },
     {
@@ -1330,6 +1334,11 @@
       "path": "menu/motion-levels-icon.webp",
       "sha256": "b8a3988e0e31be41259e815e934686802dfeda754368fe11203f79a96364ed05",
       "bytes": 189758
+    },
+    {
+      "path": "player-experience-state.schema.json",
+      "sha256": "1252c0fe0f02b6c8d46ab67b5c0089457c3a68ffef8794eb5974c73a2c3f29ea",
+      "bytes": 4399
     },
     {
       "path": "playground/a.out.wasm",
@@ -1397,9 +1406,9 @@
       "bytes": 89874
     },
     {
-      "path": "playground/assets/main-B9KNSVFC.js",
-      "sha256": "6c74c5ba2ad9ba857063bcf9d02d162accde7905ed9d51b94318bc5e0fecf882",
-      "bytes": 1488662
+      "path": "playground/assets/main-B24Kftla.js",
+      "sha256": "03c7706dff8b36800b73928d5ca800cb37ecedfc2bae20173c469a9fd9a50540",
+      "bytes": 1490282
     },
     {
       "path": "playground/assets/manifest-C5Z5Hkzt.js",
@@ -1417,9 +1426,9 @@
       "bytes": 251542
     },
     {
-      "path": "playground/assets/player-menu/index-BO19JCjz.js",
-      "sha256": "cffa14b682f5a2dd2a86e0dad19d7036b78c0b9141014c1a59b87c0934886bf8",
-      "bytes": 381415
+      "path": "playground/assets/player-menu/index-D0cagNV2.js",
+      "sha256": "7d6168c5bf801bf7577099ab5a772132c00e08fd03b19b1ed5bae1202aea23f6",
+      "bytes": 381221
     },
     {
       "path": "playground/assets/preload-helper-ZGv1jg_m.js",
@@ -1448,7 +1457,7 @@
     },
     {
       "path": "playground/index.html",
-      "sha256": "dc3359dac82a66df89ef28cd9e238595cfa57a5a9bd95a2031964c31743b5d93",
+      "sha256": "3651de2a3fea77d7060441737b7e42fb5def1fc96caa2cc66e2903dd9b8336ce",
       "bytes": 4181
     },
     {
@@ -1518,12 +1527,12 @@
     },
     {
       "path": "playground/player-menu/index.html",
-      "sha256": "3c21541625b19b8287ccb2fb243e334041b5324af0edc57256c2ae7967579da5",
+      "sha256": "c7dc6f7c7f8fd6e190073e3640683722f9efc102c06c589c19bd3fb3498baa45",
       "bytes": 950
     },
     {
       "path": "runtime/runner.mjs",
-      "sha256": "cba34b4a1e60a1bcfd8eb4300d74fcb92010990099b5960e048ba1af859c62ba",
+      "sha256": "b6e8d12d962fb449f2bb8f2048f6fe8e90110cf41b7179307bcdb0b9f8a310a1",
       "bytes": 758237
     }
   ]
