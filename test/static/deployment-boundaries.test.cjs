@@ -20,6 +20,16 @@ test("cloud-init embeds the canonical venue runtime files", () => {
   assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
 });
 
+test("games release sync works without GitHub CLI on the self-hosted runner", () => {
+  const workflow = readRepoFile(".github/workflows/sync-games-bundle.yml");
+
+  assert.match(workflow, /api\.github\.com\/repos\/\$\{GAMES_REPOSITORY\}\/releases\/tags\/\$\{RELEASE_TAG\}/);
+  assert.match(workflow, /api\.github\.com\/repos\/\$\{GAMES_REPOSITORY\}\/releases\/assets\/\$\{asset_id\}/);
+  assert.match(workflow, /Accept: application\/octet-stream/);
+  assert.match(workflow, /actions\/workflows\/ci\.yml\/dispatches/);
+  assert.doesNotMatch(workflow, /\bgh (?:release|workflow)\b/);
+});
+
 test("venue core services are non-root, read-only, capability-dropped containers", () => {
   const compose = readRepoFile("deploy/motionlevels-pc/docker-compose.yml");
   const bundleDockerfile = readRepoFile("deploy/motionlevels-pc/venue-bundle.Dockerfile");
