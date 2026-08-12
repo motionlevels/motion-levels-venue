@@ -5,6 +5,7 @@ import { reportDisplayClient } from "./displayClient";
 import { acceptedPlayerStateRevision, createCoalescer, isFeedStalled } from "./displayFeed";
 import { challengeMode, heartMeterSlotCount, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeLabel, levelDisplayTimeMillis, levelHeartMeterModel } from "./displayMetrics";
 import { shouldReportDisplayClient, type GamesDisplayRenderState } from "./displayRuntime";
+import { playerLifecycleLabelES } from "./displayText";
 import { colorCSS, colorRGB, difficultyLabelES, formatClock, gameTitleES, levelLabelES, phaseLabel, playerLabelES } from "./utils";
 import { MotionLevelsGamesDisplay } from "./MotionLevelsGamesDisplay";
 
@@ -519,7 +520,7 @@ function createArcadeDisplayModel(status: DisplayStatus, connected: boolean, err
     header: {
       connected,
       error,
-      eyebrow: "Juego seleccionado",
+      eyebrow: playerLifecycleLabelES(status.lifecycle),
       levelLabel: displayLevelLabel(status),
       title: displayGameTitle(status),
     },

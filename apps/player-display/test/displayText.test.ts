@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { gameTitleES, levelLabelES } from "../src/displayText.ts";
+import { gameTitleES, levelLabelES, playerLifecycleLabelES } from "../src/displayText.ts";
 
 describe("gameTitleES", () => {
   it("uses native runtime ids instead of level labels", () => {
@@ -31,9 +31,9 @@ describe("displayGameTitle wiring", () => {
     assert.doesNotMatch(source, /return "Temporada 1";/);
   });
 
-  it("labels selected game displays instead of claiming a live round", () => {
+  it("labels the authoritative lifecycle instead of inventing a local phase", () => {
     const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-    assert.match(source, /eyebrow:\s*"Juego seleccionado",/);
+    assert.match(source, /eyebrow:\s*playerLifecycleLabelES\(status\.lifecycle\),/);
     assert.doesNotMatch(source, /eyebrow:\s*levelGame \?/);
     assert.match(source, /<span>\{model\.eyebrow\}<\/span>/);
   });
@@ -44,6 +44,15 @@ describe("displayGameTitle wiring", () => {
 
     assert.doesNotMatch(appSource, /arcade-bottom|arcade-event|event-strip|showFooterEvent/);
     assert.doesNotMatch(cssSource, /\.arcade-bottom|\.arcade-event|\.event-strip|has-event/);
+  });
+});
+
+describe("playerLifecycleLabelES", () => {
+  it("reflects pause and terminal state in Spanish", () => {
+    assert.equal(playerLifecycleLabelES("running"), "Juego en curso");
+    assert.equal(playerLifecycleLabelES("paused"), "Juego pausado");
+    assert.equal(playerLifecycleLabelES("finished"), "Juego terminado");
+    assert.equal(playerLifecycleLabelES("idle"), "Juego seleccionado");
   });
 });
 

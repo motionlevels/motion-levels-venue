@@ -1,4 +1,6 @@
 // Spanish display titles for native runtime ids; level games use the engine/catalog label.
+import type { PlayerExperienceLifecycle } from "@motion-levels/core";
+
 const gameTitlesES: Record<string, string> = {
   "whack-a-mole": "Atrapa al topo",
   lava: "El suelo es lava",
@@ -56,4 +58,18 @@ export function gameTitleES(currentGame: string, label: string): string {
   if (cleanLabel && cleanLabel !== gameID && !labelIsLevel) return cleanLabel;
   if (gameID && labelIsLevel) return uuidPattern.test(gameID) ? "Juego de niveles" : gameID;
   return cleanLabel || gameID || "Motion Levels";
+}
+
+export function playerLifecycleLabelES(lifecycle: PlayerExperienceLifecycle): string {
+  switch (lifecycle) {
+    case "launching": return "Iniciando juego";
+    case "waiting": return "Esperando inicio";
+    case "starting": return "Preparados";
+    case "running": return "Juego en curso";
+    case "paused": return "Juego pausado";
+    case "finished": return "Juego terminado";
+    case "stopping": return "Finalizando juego";
+    case "error": return "Error del juego";
+    default: return "Juego seleccionado";
+  }
 }
