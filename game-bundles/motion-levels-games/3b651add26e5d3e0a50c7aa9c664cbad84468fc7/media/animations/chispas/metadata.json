@@ -1,0 +1,57 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "animation": {
+    "id": "chispas",
+    "label": "Chispas",
+    "description": "Destellos cálidos que aparecen al compás",
+    "category": "ambient",
+    "durationMillis": 8000,
+    "palette": [
+      "#120704",
+      "#ff8a1f",
+      "#fff0a8"
+    ],
+    "tags": [
+      "energía",
+      "destellos"
+    ]
+  },
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "chispas-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 982,
+      "sha256": "0bae6756330ce55541f917ad9e2e1c1f1fe5165b48efc0c254db2c5d6b97d9bb"
+    },
+    "thumbnail": {
+      "file": "chispas-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 6834,
+      "sha256": "9fe7c991e540389c5c161498c88ceb3dc3d7183fef61e1aae67efbae5d91e41b"
+    },
+    "animation": {
+      "file": "chispas-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 58916,
+      "sha256": "500b868a8e759e5aebf12fb82b4b8f71d630cfcaa7dc49a5cf89a182e7ce824a"
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "animation": {
+    "id": "vortice",
+    "label": "Vórtice",
+    "description": "Espiral hipnótica que gira hacia el centro",
+    "category": "energetic",
+    "durationMillis": 12000,
+    "palette": [
+      "#080318",
+      "#774dff",
+      "#ff43cf",
+      "#35d7ff"
+    ],
+    "tags": [
+      "espiral",
+      "intenso"
+    ]
+  },
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "vortice-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1722,
+      "sha256": "3f9173cda003a5869c6ab37965e62ca710cab491496d394f71dafd869061af52"
+    },
+    "thumbnail": {
+      "file": "vortice-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 35734,
+      "sha256": "67e2d72bc2aa04e305b963bfd5461407739fe016f5dadfb44821dc0c3190a722"
+    },
+    "animation": {
+      "file": "vortice-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 258614,
+      "sha256": "90a475473fbbc90999c6905ed46f5368564cef9abfd5eb85f8e81e675e5f1841"
+    }
+  }
+}

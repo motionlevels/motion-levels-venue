@@ -1,0 +1,58 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "animation": {
+    "id": "lava",
+    "label": "Lava",
+    "description": "Magma vivo con grietas incandescentes",
+    "category": "nature",
+    "durationMillis": 18000,
+    "palette": [
+      "#100100",
+      "#8f1300",
+      "#ff4d00",
+      "#ffd36b"
+    ],
+    "tags": [
+      "fuego",
+      "orgánico"
+    ]
+  },
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "lava-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1510,
+      "sha256": "d895bc98f0abfe0632296aa637bb3be4b5aa0989c3515304c84940e51af5de87"
+    },
+    "thumbnail": {
+      "file": "lava-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 29990,
+      "sha256": "00ce9f37705b37137452180b766c410ba491f629ad8a3bb454fc075ca3affc4a"
+    },
+    "animation": {
+      "file": "lava-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 128356,
+      "sha256": "4e0dde52eb5eebb4cef4a93969ef99b0d65f1034062f66d5dc762a45cf1f5c7c"
+    }
+  }
+}

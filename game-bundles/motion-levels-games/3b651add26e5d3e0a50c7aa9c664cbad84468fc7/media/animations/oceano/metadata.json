@@ -1,0 +1,58 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "animation": {
+    "id": "oceano",
+    "label": "Océano",
+    "description": "Oleaje azul con crestas de espuma",
+    "category": "nature",
+    "durationMillis": 14000,
+    "palette": [
+      "#020c1e",
+      "#087ea4",
+      "#35d7ff",
+      "#e8fdff"
+    ],
+    "tags": [
+      "agua",
+      "calma"
+    ]
+  },
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "oceano-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1330,
+      "sha256": "21876c68d9826bc34bf2f3304b90e97c816e43755f80f11dae41be9d04b04ffc"
+    },
+    "thumbnail": {
+      "file": "oceano-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 32736,
+      "sha256": "ad9c6d6c640945c1cefa6266a111bab85ba8884300017167647167925ded417e"
+    },
+    "animation": {
+      "file": "oceano-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 125296,
+      "sha256": "a6f19978e5e2cfb77780829746d7a388b5de92890156c64ae0797e351a0b36f2"
+    }
+  }
+}

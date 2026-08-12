@@ -1,0 +1,59 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "animation": {
+    "id": "bioluminescence",
+    "label": "Bioluminiscencia",
+    "description": "Organismos marinos respiran luz turquesa y violeta",
+    "category": "nature",
+    "durationMillis": 18000,
+    "palette": [
+      "#01070d",
+      "#064f65",
+      "#20f4d1",
+      "#ae63ff"
+    ],
+    "tags": [
+      "nuevo",
+      "mar",
+      "orgánico"
+    ]
+  },
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "bioluminescence-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1552,
+      "sha256": "0a5fab5f51e0b81bcc450015ce04346964e1cd85a3f22d709cfd0ebc4e6f9015"
+    },
+    "thumbnail": {
+      "file": "bioluminescence-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 33062,
+      "sha256": "0174ed421bbd59357dc9dd886ce44aff29fa34e2f4205fe2e4eab124f3ad9124"
+    },
+    "animation": {
+      "file": "bioluminescence-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 156508,
+      "sha256": "99267776b433f996b4ddcae4b3f210a11d8df79bf5bc20376697cf53aadec142"
+    }
+  }
+}

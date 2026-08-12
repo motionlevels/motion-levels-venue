@@ -1,0 +1,57 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "animation": {
+    "id": "estrellas",
+    "label": "Estrellas",
+    "description": "Cielo profundo con estrellas centelleantes",
+    "category": "ambient",
+    "durationMillis": 12000,
+    "palette": [
+      "#01020a",
+      "#3449a7",
+      "#dce7ff"
+    ],
+    "tags": [
+      "espacio",
+      "calma"
+    ]
+  },
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "estrellas-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1138,
+      "sha256": "2daa256cfd42cc83a7351a781fe1669560a60c1455a88dc7dee0577606d0eef9"
+    },
+    "thumbnail": {
+      "file": "estrellas-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 8796,
+      "sha256": "d53370be315b2f1762d10cb71e593398542b0c847c73e536479b66f44c2c0082"
+    },
+    "animation": {
+      "file": "estrellas-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 50920,
+      "sha256": "c80a8783a620cec31eeac934eb283f865ff5668c610e0cded1d0dc3e19d70c35"
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "animation": {
+    "id": "portal",
+    "label": "Portal",
+    "description": "Anillos de energía convergen en otra dimensión",
+    "category": "energetic",
+    "durationMillis": 10000,
+    "palette": [
+      "#070216",
+      "#6d39ff",
+      "#ff48d7",
+      "#ffffff"
+    ],
+    "tags": [
+      "espacio",
+      "anillos"
+    ]
+  },
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "portal-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1574,
+      "sha256": "f71a5482fc4bc56af8e83da1aea4b168edd079a0c0804c15c9ef5530fced1baf"
+    },
+    "thumbnail": {
+      "file": "portal-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 21000,
+      "sha256": "48a8415098d88056bca3027c177bae6f3a2d3d4585a175d968be9f107c4a3b4b"
+    },
+    "animation": {
+      "file": "portal-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 113630,
+      "sha256": "f7bc372715528d3534ecb251655c221316508f5a5fb888b471088385364bc013"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "animation": {
+    "id": "radar",
+    "label": "Radar",
+    "description": "Barrido verde con ecos circulares",
+    "category": "ambient",
+    "durationMillis": 10000,
+    "palette": [
+      "#010806",
+      "#25ff79",
+      "#d7ffe8"
+    ],
+    "tags": [
+      "tecnología",
+      "barrido"
+    ]
+  },
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "radar-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1502,
+      "sha256": "ff4cc03c13220bfc85ebc798462c26b324e7d87ff1b48f854fada2ad67488c80"
+    },
+    "thumbnail": {
+      "file": "radar-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 29578,
+      "sha256": "8556e87ec91f372801ec04c8d85a380d014df7a622a78b5616a639dda73234aa"
+    },
+    "animation": {
+      "file": "radar-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 166198,
+      "sha256": "8a17f64a4168d7c31331eeca79e498659200841cb3b2986edc1f50c6cf436018"
+    }
+  }
+}

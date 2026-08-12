@@ -1,0 +1,58 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "animation": {
+    "id": "cristales",
+    "label": "Cristales",
+    "description": "Facetas heladas reflejan luz de colores",
+    "category": "ambient",
+    "durationMillis": 12000,
+    "palette": [
+      "#061020",
+      "#64d8ff",
+      "#b78bff",
+      "#ffffff"
+    ],
+    "tags": [
+      "hielo",
+      "geométrico"
+    ]
+  },
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "cristales-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1648,
+      "sha256": "18840d2c4d631fad4d1724b6c534690980b996720f35b5c308faf4811a7eeede"
+    },
+    "thumbnail": {
+      "file": "cristales-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 33974,
+      "sha256": "ac476fdd5f1de76963c3d24f756fc5619f7845b59b7dbbe2db5cd202c8739310"
+    },
+    "animation": {
+      "file": "cristales-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 149594,
+      "sha256": "0f3c427138e894be780b1c1bed82384a1d43cc5dff9bc6da8570bdd7c5a1b7bf"
+    }
+  }
+}
