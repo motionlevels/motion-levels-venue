@@ -2,9 +2,9 @@
   "schema": "motion-levels-games-bundle-v1",
   "contractVersion": 1,
   "runnerProtocolVersion": 1,
-  "sourceRevision": "61ca689624ca61cfccb012b1aca707e72c7981d1",
+  "sourceRevision": "0dad59f91581562d52a6de989d9b1994b3980d57",
   "sdkFps": 50,
-  "artifactDigest": "b4b98e879125d7ff5246fc56f71af3b0c35486050193eddc9241217c4408de06",
+  "artifactDigest": "b3536a2815ac09c66e7aa051dcc7dc2c005496c5d34cdf7b792dd34f29ff8165",
   "runtime": {
     "entry": "runtime/runner.mjs",
     "games": [
@@ -53,6 +53,14 @@
       "whack-a-mole"
     ]
   },
+  "playerMenu": {
+    "entry": "menu/index.html",
+    "adapterProtocolVersion": 1
+  },
+  "playground": {
+    "entry": "playground/index.html",
+    "basePath": "/games/play/"
+  },
   "catalog": "catalog.json",
   "files": [
     {
@@ -62,8 +70,8 @@
     },
     {
       "path": "display/display.js",
-      "sha256": "fc894c992167a79b56c6cea7dbda7bbda405399da7622d764570ad6fa290770d",
-      "bytes": 622222
+      "sha256": "3a3db6ae72c33019fc6de68981182666f8aabb9e3a754d61d11c8e5ab5197f1b",
+      "bytes": 622685
     },
     {
       "path": "media/4773837e-3565-49d7-8953-3b40f59fca7b/4773837e-3565-49d7-8953-3b40f59fca7b-player-display-animation.webp",
@@ -726,9 +734,214 @@
       "bytes": 3514
     },
     {
+      "path": "menu/apple-icon.png",
+      "sha256": "15c73b71872fed4ad06cfc0d8a3e46a0ab0255ea6eafc7915dcff7b5f829a230",
+      "bytes": 31981
+    },
+    {
+      "path": "menu/assets/index-CNjtw0IH.js",
+      "sha256": "ed6b738421df659c0f96eb91a1e1df695ce26eea53a6e377bc987c25be40ade4",
+      "bytes": 572870
+    },
+    {
+      "path": "menu/assets/index-Cqm521m-.css",
+      "sha256": "fc3bbcee795d5b9b186cfac17924f0e58861469577f8390959bc4c42ab587aa2",
+      "bytes": 89208
+    },
+    {
+      "path": "menu/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2",
+      "sha256": "ca157063339ac4ad418f214f3abfed119b0798ab4d377386ce5c9e5a7a435ebd",
+      "bytes": 25960
+    },
+    {
+      "path": "menu/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2",
+      "sha256": "71d5ee93cc1e9f1d520a3a8b66456de18c7879d8df09d57fcd2eaff75fef0075",
+      "bytes": 18748
+    },
+    {
+      "path": "menu/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2",
+      "sha256": "6e9e020a25f9b56d418f2c085b1d3c09725a4da23fe693a5b463064606732190",
+      "bytes": 11232
+    },
+    {
+      "path": "menu/assets/inter-greek-wght-normal-CkhJZR-_.woff2",
+      "sha256": "1be3448e292fbf05ffe176fe1e43f135013d50b1e7d324ad1a558f623d3bb6f6",
+      "bytes": 18996
+    },
+    {
+      "path": "menu/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2",
+      "sha256": "34b9c504cab7a73e37b746343a449132e56cf7b5481af2cb81dc74dcff25c956",
+      "bytes": 85068
+    },
+    {
+      "path": "menu/assets/inter-latin-wght-normal-Dx4kXJAl.woff2",
+      "sha256": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
+      "bytes": 48256
+    },
+    {
+      "path": "menu/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2",
+      "sha256": "5c66f9e07e90c6d4ac4922cc68d60de26c17b1858e677fb5e603fce3952b3ff2",
+      "bytes": 10252
+    },
+    {
+      "path": "menu/assets/localCatalog-DHvFdcaq.js",
+      "sha256": "4403a293a85948af79ce09fa2c482ccd7a1ac7db2ae8001db9d0a7e58ccf23cc",
+      "bytes": 26380
+    },
+    {
+      "path": "menu/favicon.ico",
+      "sha256": "5643f5be58682ea9174ce9e33edad8f6b344011fd62d85612527cc1d90dad821",
+      "bytes": 85449
+    },
+    {
+      "path": "menu/icon.png",
+      "sha256": "f4c527f76d4be60bb12ae7d138c2dcb6bf31d6edf79e795890697baad7f37c34",
+      "bytes": 657337
+    },
+    {
+      "path": "menu/index.html",
+      "sha256": "f6762ac8f67186200440f5ae005382fdd208215e6a67495d7949570d5d28ef8c",
+      "bytes": 619
+    },
+    {
+      "path": "menu/motion-levels-icon.png",
+      "sha256": "261b7706ce53fbf009da4e41a221b2222c5e68f3d10bb30c28633c488bfe912e",
+      "bytes": 251542
+    },
+    {
+      "path": "menu/motion-levels-icon.webp",
+      "sha256": "b8a3988e0e31be41259e815e934686802dfeda754368fe11203f79a96364ed05",
+      "bytes": 189758
+    },
+    {
+      "path": "playground/a.out.wasm",
+      "sha256": "fe90545a516c513f09654acc252b3dd37615791717b16c40ccb417a48fc7ca1c",
+      "bytes": 2313506
+    },
+    {
+      "path": "playground/apple-icon.png",
+      "sha256": "15c73b71872fed4ad06cfc0d8a3e46a0ab0255ea6eafc7915dcff7b5f829a230",
+      "bytes": 31981
+    },
+    {
+      "path": "playground/assets/adapter-YF718EXP.js",
+      "sha256": "3863cd80753d39f933f433df7bdd7fb5dda8a909fe44b1303c636f08dc35fbdc",
+      "bytes": 41928
+    },
+    {
+      "path": "playground/assets/index-CY_rAdXk.css",
+      "sha256": "3d673100b0ce41be5e978a9d247b6dd34d1dfd87793ed06205f945b6bcb75544",
+      "bytes": 89345
+    },
+    {
+      "path": "playground/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2",
+      "sha256": "ca157063339ac4ad418f214f3abfed119b0798ab4d377386ce5c9e5a7a435ebd",
+      "bytes": 25960
+    },
+    {
+      "path": "playground/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2",
+      "sha256": "71d5ee93cc1e9f1d520a3a8b66456de18c7879d8df09d57fcd2eaff75fef0075",
+      "bytes": 18748
+    },
+    {
+      "path": "playground/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2",
+      "sha256": "6e9e020a25f9b56d418f2c085b1d3c09725a4da23fe693a5b463064606732190",
+      "bytes": 11232
+    },
+    {
+      "path": "playground/assets/inter-greek-wght-normal-CkhJZR-_.woff2",
+      "sha256": "1be3448e292fbf05ffe176fe1e43f135013d50b1e7d324ad1a558f623d3bb6f6",
+      "bytes": 18996
+    },
+    {
+      "path": "playground/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2",
+      "sha256": "34b9c504cab7a73e37b746343a449132e56cf7b5481af2cb81dc74dcff25c956",
+      "bytes": 85068
+    },
+    {
+      "path": "playground/assets/inter-latin-wght-normal-Dx4kXJAl.woff2",
+      "sha256": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
+      "bytes": 48256
+    },
+    {
+      "path": "playground/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2",
+      "sha256": "5c66f9e07e90c6d4ac4922cc68d60de26c17b1858e677fb5e603fce3952b3ff2",
+      "bytes": 10252
+    },
+    {
+      "path": "playground/assets/localCatalog-BxVmmeuX.js",
+      "sha256": "e7056ceff4d250db144a70fda93e7d1356aada43a9bf8dee10727b9283af6c8a",
+      "bytes": 2402
+    },
+    {
+      "path": "playground/assets/main-CrB47fu6.js",
+      "sha256": "4cf0623c51afee1a7d23e46265d94b26a1295d2e4bec216ce042afa42fac2270",
+      "bytes": 1473635
+    },
+    {
+      "path": "playground/assets/main-CxzrBwGB.css",
+      "sha256": "aa63a0172d6cb2d24d0a9252835ffd4e4afeaf1e4b225dca165b283d3101d1e6",
+      "bytes": 84300
+    },
+    {
+      "path": "playground/assets/manifest-BHmeRlXL.js",
+      "sha256": "d1d50ae9d7750d24efd30ffe6177d9d0990926c6362e95afe537b57c507f696c",
+      "bytes": 24554
+    },
+    {
+      "path": "playground/assets/motion-levels-icon-2vb_FDl3.webp",
+      "sha256": "b8a3988e0e31be41259e815e934686802dfeda754368fe11203f79a96364ed05",
+      "bytes": 189758
+    },
+    {
+      "path": "playground/assets/motion-levels-icon-BqLXvRIH.png",
+      "sha256": "261b7706ce53fbf009da4e41a221b2222c5e68f3d10bb30c28633c488bfe912e",
+      "bytes": 251542
+    },
+    {
+      "path": "playground/assets/player-menu/index-C5y0upsm.js",
+      "sha256": "f5e8a8a05c40211fb123241457bd1067a73331278b3191b3c471f98b798ce758",
+      "bytes": 380963
+    },
+    {
+      "path": "playground/assets/preload-helper-B-jX6QEx.js",
+      "sha256": "243b17a006d6ae644df9cef2a537f36045fddacd3d115c87c00d46943b905214",
+      "bytes": 192241
+    },
+    {
+      "path": "playground/favicon.ico",
+      "sha256": "5643f5be58682ea9174ce9e33edad8f6b344011fd62d85612527cc1d90dad821",
+      "bytes": 85449
+    },
+    {
+      "path": "playground/icon.png",
+      "sha256": "f4c527f76d4be60bb12ae7d138c2dcb6bf31d6edf79e795890697baad7f37c34",
+      "bytes": 657337
+    },
+    {
+      "path": "playground/index.html",
+      "sha256": "70f711efb4ee90a002f9a04b03a13fada2e7becad1aaf350ad5a67b385faa1b9",
+      "bytes": 3998
+    },
+    {
+      "path": "playground/motion-levels-icon.png",
+      "sha256": "261b7706ce53fbf009da4e41a221b2222c5e68f3d10bb30c28633c488bfe912e",
+      "bytes": 251542
+    },
+    {
+      "path": "playground/motion-levels-icon.webp",
+      "sha256": "b8a3988e0e31be41259e815e934686802dfeda754368fe11203f79a96364ed05",
+      "bytes": 189758
+    },
+    {
+      "path": "playground/player-menu/index.html",
+      "sha256": "ea8ac33fbdeaf92848a964ee47c5267786a5b58b1446cf7008ace0eddcc838a7",
+      "bytes": 767
+    },
+    {
       "path": "runtime/runner.mjs",
-      "sha256": "2d9c4c7f1c6561fb9ce9a2140e512ef9942bf8afb9b44c09ca94ab5c5cb63523",
-      "bytes": 719649
+      "sha256": "21de5bc073b501c8b89a986a72c424365099b795b1de63dfdf927bdd6f2ff1c8",
+      "bytes": 720788
     }
   ]
 }
