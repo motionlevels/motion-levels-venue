@@ -79,8 +79,12 @@ type gameRuntime struct {
 	venueOutbox                 []venueOutboxEvent
 	venueDropped                uint64
 
-	menuStateSnapshot menuStateSnapshot
-	menuStateVersion  uint64
+	menuStateSnapshot  menuStateSnapshot
+	menuStateVersion   uint64
+	playerStateMu      sync.Mutex
+	playerStateVersion uint64
+	playerStateBucket  int64
+	playerStateCached  playerExperienceState
 
 	framePerf framePerf
 
@@ -322,6 +326,134 @@ type runtimeStatus struct {
 	FinishedLevelAttempts    []finishedLevelAttemptStatus `json:"finishedLevelAttempts,omitempty"`
 	Performance              framePerfSnapshot            `json:"performance"`
 	Catalog                  []gameCatalogEntry           `json:"catalog"`
+}
+
+const playerExperienceContractVersion = 1
+
+type playerExperienceState map[string]any
+
+func (r *gameRuntime) PlayerState(now time.Time) playerExperienceState {
+	return r.playerState(now, false)
+}
+
+func (r *gameRuntime) PlayerStateAfterTransition(now time.Time) playerExperienceState {
+	return r.playerState(now, true)
+}
+
+func (r *gameRuntime) playerState(now time.Time, force bool) playerExperienceState {
+	if now.IsZero() {
+		now = time.Now()
+	}
+	// Every caller observes the same immutable snapshot for an engine-sized
+	// wall-clock slice. GET, menu SSE and display SSE therefore do not create
+	// competing revisions merely by reading the runtime.
+	bucket := now.UnixMilli() / 20
+	r.playerStateMu.Lock()
+	defer r.playerStateMu.Unlock()
+	if !force && r.playerStateCached != nil && bucket == r.playerStateBucket {
+		return r.playerStateCached
+	}
+	status, display := r.statusAt(now)
+	state := playerExperienceState{}
+	mergeJSONFields(state, status)
+	mergeJSONFields(state, display)
+
+	r.playerStateVersion++
+	revision := r.playerStateVersion
+
+	lifecycle := playerExperienceLifecycle(status.CurrentGame, display.Phase, status.Paused)
+	players := display.Players
+	if players == nil {
+		players = []displayPlayer{}
+	}
+	catalog := status.Catalog
+	if catalog == nil {
+		catalog = []gameCatalogEntry{}
+	}
+	state["contractVersion"] = playerExperienceContractVersion
+	state["revision"] = revision
+	state["runId"] = status.SessionID
+	state["lifecycle"] = lifecycle
+	state["allowedControls"] = playerExperienceControls(lifecycle, status.AudioEnabled, status.AudioMuted)
+	// Required canonical fields are never omitted, even when the legacy views
+	// historically used omitempty.
+	state["players"] = players
+	state["score"] = display.Score
+	state["lives"] = display.Lives
+	state["endsUnix"] = display.EndsUnix
+	state["remainingMillis"] = display.RemainingMillis
+	state["activeTargets"] = display.ActiveTargets
+	state["lastEventUnixNanos"] = display.LastEventUnixNanos
+	state["lastEventCue"] = display.LastEventCue
+	state["lastEventMessage"] = display.LastEventMessage
+	state["lastPressureUnix"] = status.LastPressureUnix
+	state["catalog"] = catalog
+	r.playerStateBucket = bucket
+	r.playerStateCached = state
+	return state
+}
+
+func mergeJSONFields(target map[string]any, value any) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return
+	}
+	var fields map[string]any
+	if json.Unmarshal(data, &fields) != nil {
+		return
+	}
+	for key, field := range fields {
+		target[key] = field
+	}
+}
+
+func playerExperienceLifecycle(game string, phase string, paused bool) string {
+	if paused {
+		return "paused"
+	}
+	switch strings.ToLower(strings.TrimSpace(phase)) {
+	case "idle":
+		if isAmbientActivityGame(game) || game == "salvapantallas" || game == "screensaver" || game == "loop" {
+			return "idle"
+		}
+		return "waiting"
+	case "loading", "launching":
+		return "launching"
+	case "waiting":
+		return "waiting"
+	case "ready", "starting", "countdown":
+		return "starting"
+	case "finished", "complete", "completed":
+		return "finished"
+	case "stopping":
+		return "stopping"
+	case "error", "failed":
+		return "error"
+	}
+	if isAmbientActivityGame(game) || game == "salvapantallas" || game == "screensaver" || game == "loop" {
+		return "idle"
+	}
+	return "running"
+}
+
+func playerExperienceControls(lifecycle string, audioEnabled bool, audioMuted bool) []string {
+	if lifecycle == "idle" || lifecycle == "launching" || lifecycle == "stopping" || lifecycle == "error" {
+		return []string{}
+	}
+	controls := []string{"pause", "restart", "exit"}
+	if lifecycle == "paused" {
+		controls[0] = "resume"
+	}
+	controls = append(controls, "narration")
+	if audioEnabled {
+		if audioMuted {
+			controls = append(controls, "unmute")
+		} else {
+			controls = append(controls, "mute")
+		}
+		controls = append(controls, "toggle_mute")
+	}
+	return controls
 }
 
 func unixOrZero(t time.Time) int64 {
@@ -1008,10 +1140,20 @@ func (r *gameRuntime) withDisplayAttemptSummary(status displayStatus, sessionSta
 }
 
 func (r *gameRuntime) Status() runtimeStatus {
+	status, _ := r.statusAt(time.Now())
+	return status
+}
+
+// statusAt derives the operational and player-display views from one display
+// snapshot. PlayerState uses this directly so a canonical revision can never
+// combine status fields from one engine tick with display fields from another.
+func (r *gameRuntime) statusAt(now time.Time) (runtimeStatus, displayStatus) {
 	if r == nil {
-		return runtimeStatus{Catalog: gameCatalog("")}
+		return runtimeStatus{Catalog: gameCatalog("")}, displayStatus{}
 	}
-	now := time.Now()
+	if now.IsZero() {
+		now = time.Now()
+	}
 	r.enforceNoPressureTimeout(now)
 	r.ExpireIdleVenueSession(now)
 	r.mu.RLock()
@@ -1092,7 +1234,7 @@ func (r *gameRuntime) Status() runtimeStatus {
 		FinishedLevelAttempts:    recentAttempts,
 		Performance:              r.framePerf.Snapshot(),
 		Catalog:                  gameCatalog(cfg.PlatformURL),
-	}
+	}, display
 }
 
 func (r *gameRuntime) SetPressureStreamConnected(connected bool) {

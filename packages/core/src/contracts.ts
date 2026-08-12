@@ -207,3 +207,15 @@ export type DisplayStatus = {
   bestElapsedMillis?: number;
   sessionBestElapsedMillis?: number;
 };
+
+export type PlayerExperienceLifecycle = "idle" | "launching" | "waiting" | "starting" | "running" | "paused" | "finished" | "stopping" | "error";
+export type PlayerExperienceControl = "pause" | "resume" | "restart" | "exit" | "narration" | "mute" | "unmute" | "toggle_mute";
+
+/** Canonical v1 state. Shape authority lives in the pinned games-bundle schema. */
+export type PlayerExperienceState = EngineStatus & DisplayStatus & {
+  contractVersion: 1;
+  revision: number;
+  runId: string;
+  lifecycle: PlayerExperienceLifecycle;
+  allowedControls: PlayerExperienceControl[];
+};

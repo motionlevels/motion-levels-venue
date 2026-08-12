@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lobis/motion-levels/game-engine/internal/games/animations"
@@ -26,6 +27,7 @@ var (
 )
 
 type selectGameRequest struct {
+	CommandID              string                     `json:"commandId"`
 	Game                   string                     `json:"game"`
 	EngineGame             string                     `json:"engineGame"`
 	GameLabel              string                     `json:"gameLabel"`
@@ -55,7 +57,34 @@ type selectGameRequest struct {
 }
 
 type controlGameRequest struct {
-	Action string `json:"action"`
+	Action    string `json:"action"`
+	CommandID string `json:"commandId"`
+}
+
+type playerCommandCache struct {
+	mu      sync.Mutex
+	results map[string]playerExperienceState
+	order   []string
+}
+
+func (c *playerCommandCache) execute(commandID string, action func() playerExperienceState) playerExperienceState {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if commandID != "" {
+		if previous, ok := c.results[commandID]; ok {
+			return previous
+		}
+	}
+	result := action()
+	if commandID != "" {
+		c.results[commandID] = result
+		c.order = append(c.order, commandID)
+		if len(c.order) > 256 {
+			delete(c.results, c.order[0])
+			c.order = c.order[1:]
+		}
+	}
+	return result
 }
 
 type venueSessionRequest struct {
@@ -92,6 +121,7 @@ func serveGameAPI(addr string, runtime *gameRuntime) {
 
 func gameAPIHandler(runtime *gameRuntime) http.Handler {
 	mux := http.NewServeMux()
+	commands := &playerCommandCache{results: map[string]playerExperienceState{}}
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -105,6 +135,18 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			return
 		}
 		writeJSON(w, runtime.Status())
+	})
+	mux.HandleFunc("/api/player-state", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		state, err := canonicalPlayerState(runtime, time.Now())
+		if err != nil {
+			http.Error(w, "player state contract violation", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, state)
 	})
 	mux.HandleFunc("/api/performance", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -179,6 +221,13 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 		}
 		writeDisplayEvents(w, r, runtime)
 	})
+	mux.HandleFunc("/api/player-state/events", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		writePlayerStateEvents(w, r, runtime)
+	})
 	mux.HandleFunc("/api/menu-state", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -219,6 +268,10 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if request.CommandID != "" && !uuidPattern.MatchString(request.CommandID) {
+			http.Error(w, "commandId must be a UUID", http.StatusBadRequest)
+			return
+		}
 		if isMotionLevelsGamesGame(request.Game) {
 			bundle, err := motionlevelsgames.Load(runtime.base.MotionLevelsGamesRoot)
 			gameID := strings.TrimPrefix(normalizeGame(request.Game), "motion-levels-games:")
@@ -249,8 +302,15 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, "venueSessionId must be a UUID", http.StatusBadRequest)
 			return
 		}
-		runtime.SelectGameWithMetadata(request.Game, request.EngineGame, request.GameLabel, request.SourceKind, request.SourceRevision, request.PlayerCount, request.AllowAnyPlayers, request.Difficulty, request.Level, request.LevelSlug, request.LevelMode, request.DurationSeconds, request.ChallengeElapsedMillis, request.ChallengeAttemptCount, request.NarrationEnabled, request.CountdownFloorOverlay, request.TeamName, venueSessionID, recordingEnabledValue(request.RecordingEnabled), normalizeLaunchPlatformURL(request.PlatformURL), players, request.Config)
-		writeJSON(w, runtime.Status())
+		state := commands.execute(strings.ToLower(request.CommandID), func() playerExperienceState {
+			runtime.SelectGameWithMetadata(request.Game, request.EngineGame, request.GameLabel, request.SourceKind, request.SourceRevision, request.PlayerCount, request.AllowAnyPlayers, request.Difficulty, request.Level, request.LevelSlug, request.LevelMode, request.DurationSeconds, request.ChallengeElapsedMillis, request.ChallengeAttemptCount, request.NarrationEnabled, request.CountdownFloorOverlay, request.TeamName, venueSessionID, recordingEnabledValue(request.RecordingEnabled), normalizeLaunchPlatformURL(request.PlatformURL), players, request.Config)
+			return runtime.PlayerStateAfterTransition(time.Now())
+		})
+		if err := validateCanonicalPlayerState(runtime, state); err != nil {
+			http.Error(w, "player state contract violation", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, state)
 	})
 	mux.HandleFunc("/api/control", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -262,8 +322,19 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		runtime.ControlGame(request.Action)
-		writeJSON(w, runtime.Status())
+		if request.CommandID != "" && !uuidPattern.MatchString(request.CommandID) {
+			http.Error(w, "commandId must be a UUID", http.StatusBadRequest)
+			return
+		}
+		state := commands.execute(strings.ToLower(request.CommandID), func() playerExperienceState {
+			runtime.ControlGame(request.Action)
+			return runtime.PlayerStateAfterTransition(time.Now())
+		})
+		if err := validateCanonicalPlayerState(runtime, state); err != nil {
+			http.Error(w, "player state contract violation", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, state)
 	})
 	mux.HandleFunc("/api/venue-session", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -449,6 +520,60 @@ func writeDisplayEvents(w http.ResponseWriter, r *http.Request, runtime *gameRun
 			flusher.Flush()
 		}
 	}
+}
+
+func writePlayerStateEvents(w http.ResponseWriter, r *http.Request, runtime *gameRuntime) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Connection", "keep-alive")
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case now := <-ticker.C:
+			state, err := canonicalPlayerState(runtime, now)
+			if err != nil {
+				log.Printf("player state contract: %v", err)
+				continue
+			}
+			data, err := json.Marshal(state)
+			if err != nil {
+				log.Printf("player state event: %v", err)
+				continue
+			}
+			_, _ = fmt.Fprintf(w, "event: player-state\n")
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		}
+	}
+}
+
+func canonicalPlayerState(runtime *gameRuntime, now time.Time) (playerExperienceState, error) {
+	state := runtime.PlayerState(now)
+	return state, validateCanonicalPlayerState(runtime, state)
+}
+
+func validateCanonicalPlayerState(runtime *gameRuntime, state playerExperienceState) error {
+	if runtime == nil || strings.TrimSpace(runtime.base.MotionLevelsGamesRoot) == "" {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(runtime.base.MotionLevelsGamesRoot, "pin.json")); os.IsNotExist(err) {
+		// Legacy/fallback tests and recovery installs may intentionally run
+		// without a games bundle. Validation becomes mandatory once one exists.
+		return nil
+	}
+	bundle, err := motionlevelsgames.Load(runtime.base.MotionLevelsGamesRoot)
+	if err != nil {
+		return err
+	}
+	return bundle.ValidatePlayerExperienceState(state)
 }
 
 func writeMenuStateEvents(w http.ResponseWriter, r *http.Request, runtime *gameRuntime) {

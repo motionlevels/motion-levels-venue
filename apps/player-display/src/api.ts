@@ -1,6 +1,7 @@
-import type { DisplayPlayer, DisplayStatus } from "@motion-levels/core";
+import type { DisplayPlayer, PlayerExperienceState } from "@motion-levels/core";
 
-export type { DisplayPlayer, DisplayStatus };
+export type DisplayStatus = PlayerExperienceState;
+export type { DisplayPlayer, PlayerExperienceState };
 
 const enginePort = "4102";
 const localEngineURL = `http://127.0.0.1:${enginePort}`;
@@ -24,7 +25,7 @@ export function engineBaseURL(): string {
 }
 
 export async function fetchDisplayStatus(): Promise<DisplayStatus> {
-  const response = await fetch(`${engineBaseURL()}/api/display`);
+  const response = await fetch(`${engineBaseURL()}/api/player-state`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(await response.text());
   }
@@ -32,5 +33,5 @@ export async function fetchDisplayStatus(): Promise<DisplayStatus> {
 }
 
 export function displayEventSource(): EventSource {
-  return new EventSource(`${engineBaseURL()}/api/display/events`);
+  return new EventSource(`${engineBaseURL()}/api/player-state/events`);
 }

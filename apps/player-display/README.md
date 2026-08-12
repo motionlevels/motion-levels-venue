@@ -3,7 +3,7 @@
 Full-screen player-facing TV display for score, timer, phase, and game status.
 
 The display talks to the local Go game-engine API at `http://127.0.0.1:4102`
-and subscribes to `/api/display/events` for live state updates.
+and subscribes to the canonical revisioned `/api/player-state/events` feed.
 
 ```sh
 npm install

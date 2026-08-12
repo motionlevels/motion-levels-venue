@@ -2,8 +2,13 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 
 const revision = "games-test";
 
-function displayStatus(score = 7) {
+function displayStatus(score = 7, stateRevision = score + 1) {
   return {
+    contractVersion: 1,
+    revision: stateRevision,
+    runId: "run-test",
+    lifecycle: "running",
+    allowedControls: ["pause", "restart", "exit"],
     currentGame: "motion-levels-games:pong",
     sourceKind: "motion_levels_games",
     sourceRevision: revision,
@@ -11,6 +16,9 @@ function displayStatus(score = 7) {
     phase: "running",
     difficulty: "medium",
     difficultyConfigurable: true,
+    venueSessionId: "venue-test",
+    sessionId: "run-test",
+    teamName: "Equipo",
     playerCount: 2,
     playerConfigurable: true,
     players: [
@@ -33,6 +41,12 @@ function displayStatus(score = 7) {
     rounds: [],
     audioEnabled: true,
     audioMuted: false,
+    paused: false,
+    success: false,
+    music: "",
+    musicVolume: 1,
+    lastPressureUnix: 0,
+    catalog: [],
     lastEventUnixNanos: 0,
     lastEventCue: "",
     lastEventMessage: "",
@@ -52,8 +66,8 @@ window.MotionLevelsGamesDisplay = {
 
 async function mockEngine(page: Page, status: () => object, runtime: (route: Route) => Promise<void>) {
   const heartbeats: Array<Record<string, unknown>> = [];
-  await page.route("**/engine/api/display/events", (route) => route.abort());
-  await page.route(/\/engine\/api\/display$/u, (route) => route.fulfill({ json: status() }));
+  await page.route("**/engine/api/player-state/events", (route) => route.abort());
+  await page.route(/\/engine\/api\/player-state$/u, (route) => route.fulfill({ json: status() }));
   await page.route("**/engine/api/display-client", async (route) => {
     heartbeats.push(route.request().postDataJSON() as Record<string, unknown>);
     await route.fulfill({ json: { status: "ok" } });

@@ -69,11 +69,11 @@ capability, endpoint, content validation, or runner initialization is
 unavailable, the venue logs the reason and launches the existing Go level
 runtime for that same canonical game instead.
 
-The player-facing TV display lives in `apps/player-display`. It subscribes to
-the game-engine display stream:
+The player-facing TV display and player menu consume the same canonical,
+revisioned game state. The TV subscribes to:
 
 ```txt
-http://127.0.0.1:4102/api/display/events
+http://127.0.0.1:4102/api/player-state/events
 ```
 
 Every five seconds the browser also reports what it actually rendered to:

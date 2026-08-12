@@ -34,8 +34,12 @@ type Manifest struct {
 	ArtifactDigest        string       `json:"artifactDigest"`
 	Runtime               BundleTarget `json:"runtime"`
 	PlayerDisplay         BundleTarget `json:"playerDisplay"`
-	Catalog               string       `json:"catalog"`
-	Files                 []BundleFile `json:"files"`
+	PlayerExperience      struct {
+		ContractVersion int    `json:"contractVersion"`
+		Schema          string `json:"schema"`
+	} `json:"playerExperience"`
+	Catalog string       `json:"catalog"`
+	Files   []BundleFile `json:"files"`
 }
 
 type BundleTarget struct {
@@ -63,9 +67,10 @@ type CatalogEntry struct {
 }
 
 type Bundle struct {
-	Root     string
-	Manifest Manifest
-	Catalog  []CatalogEntry
+	Root                   string
+	Manifest               Manifest
+	Catalog                []CatalogEntry
+	playerExperienceSchema map[string]any
 }
 
 func (entry CatalogEntry) HasTag(tag string) bool {
@@ -208,7 +213,31 @@ func loadAndVerify(vendorRoot string) (*Bundle, error) {
 	if err := readJSON(filepath.Join(root, filepath.FromSlash(manifest.Catalog)), &catalog); err != nil {
 		return nil, err
 	}
-	return &Bundle{Root: root, Manifest: manifest, Catalog: catalog}, nil
+	var playerExperienceSchema map[string]any
+	if manifest.PlayerExperience.Schema != "" {
+		if manifest.PlayerExperience.ContractVersion != 1 {
+			return nil, fmt.Errorf("unsupported player experience contract")
+		}
+		if err := readJSON(filepath.Join(root, filepath.FromSlash(manifest.PlayerExperience.Schema)), &playerExperienceSchema); err != nil {
+			return nil, err
+		}
+	}
+	return &Bundle{Root: root, Manifest: manifest, Catalog: catalog, playerExperienceSchema: playerExperienceSchema}, nil
+}
+
+func (b *Bundle) ValidatePlayerExperienceState(value any) error {
+	if b == nil || b.playerExperienceSchema == nil {
+		return nil
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	var document any
+	if err := json.Unmarshal(encoded, &document); err != nil {
+		return err
+	}
+	return validateJSONSchema(b.playerExperienceSchema, b.playerExperienceSchema, document, "$")
 }
 
 func readJSON(filePath string, target any) error {

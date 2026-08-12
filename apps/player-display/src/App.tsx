@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { displayEventSource, fetchDisplayStatus, type DisplayStatus } from "./api";
 import { reportDisplayClient } from "./displayClient";
-import { createCoalescer, isFeedStalled } from "./displayFeed";
+import { acceptedPlayerStateRevision, createCoalescer, isFeedStalled } from "./displayFeed";
 import { challengeMode, heartMeterSlotCount, levelDisplayAttemptCount, levelDisplayLives, levelDisplayTimeLabel, levelDisplayTimeMillis, levelHeartMeterModel } from "./displayMetrics";
 import { shouldReportDisplayClient, type GamesDisplayRenderState } from "./displayRuntime";
 import { colorCSS, colorRGB, difficultyLabelES, formatClock, gameTitleES, levelLabelES, phaseLabel, playerLabelES } from "./utils";
@@ -17,11 +17,19 @@ const STREAM_RECONNECT_MS = 3000;
 const DISPLAY_HEARTBEAT_MS = 5000;
 
 const emptyStatus: DisplayStatus = {
+  contractVersion: 1,
+  revision: 0,
+  runId: "",
+  lifecycle: "idle",
+  allowedControls: [],
   currentGame: "salvapantallas",
   label: "Motion Levels",
   phase: "idle",
   difficulty: "easy",
   difficultyConfigurable: false,
+  venueSessionId: "",
+  sessionId: "",
+  teamName: "",
   playerCount: 1,
   playerConfigurable: false,
   players: [],
@@ -41,6 +49,12 @@ const emptyStatus: DisplayStatus = {
   rounds: [],
   audioEnabled: false,
   audioMuted: false,
+  paused: false,
+  success: false,
+  music: "",
+  musicVolume: 0,
+  lastPressureUnix: 0,
+  catalog: [],
   lastEventUnixNanos: 0,
   lastEventCue: "",
   lastEventMessage: "",
@@ -77,6 +91,7 @@ export default function App() {
     const monoNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
     let lastEventAt = monoNow();
     let lastReconnectAt = 0;
+    let acceptedRevision = 0;
     let source: EventSource | null = null;
 
     // Render the freshest status at most once per frame so the high-frequency
@@ -93,6 +108,9 @@ export default function App() {
 
     const accept = (next: DisplayStatus, transport: "eventsource" | "poll") => {
       if (cancelled) return;
+      const revision = acceptedPlayerStateRevision(acceptedRevision, next);
+      if (revision === null) return;
+      acceptedRevision = revision;
       lastEventAt = monoNow();
       lastFeedAt.current = Date.now();
       feedTransport.current = transport;
@@ -125,7 +143,7 @@ export default function App() {
     };
     const closeSource = () => {
       if (!source) return;
-      source.removeEventListener("display", onDisplay);
+      source.removeEventListener("player-state", onDisplay);
       source.close();
       source = null;
     };
@@ -140,7 +158,7 @@ export default function App() {
         setError("Sin conexión con el motor");
         return;
       }
-      source.addEventListener("display", onDisplay);
+      source.addEventListener("player-state", onDisplay);
       source.onerror = onError;
     };
     attach();
