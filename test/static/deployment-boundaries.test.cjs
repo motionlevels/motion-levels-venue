@@ -152,6 +152,10 @@ test("venue release activation is automated, idle-gated, and rollback-aware", ()
   assert.match(imagesWorkflow, /RELEASE_SHA: \$\{\{ inputs\.release_sha \|\| github\.event\.workflow_run\.head_sha \}\}/);
   assert.match(imagesWorkflow, /actions\/workflows\/deploy-production\.yml\/dispatches/);
   assert.match(imagesWorkflow, /venue_revision.*\$\{RELEASE_SHA\}/);
+  assert.match(
+    imagesWorkflow,
+    /docker:28-cli@sha256:625d9431a9f54c5a2bc90f24f0e1c3d55b1349fd857dd85035f98c2c9acbdd4d[\s\S]*?compose[\s\S]*?config --quiet/,
+  );
   assert.doesNotMatch(`${ciWorkflow}\n${imagesWorkflow}`, /\bgh workflow run\b/);
   assert.match(productionWorkflow, /workflows:[\s\S]*?- Container images[\s\S]*?types:[\s\S]*?- completed/);
   assert.match(productionWorkflow, /workflow_dispatch:[\s\S]*?venue_revision:/);

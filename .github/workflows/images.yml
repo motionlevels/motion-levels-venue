@@ -98,8 +98,8 @@ jobs:
           VENUE_FLOOR_BROADCAST_IPV4=255.255.255.255
           MOTION_LEVELS_X5_ENABLED=0
           MOTION_LEVELS_X5_UPSTREAM=
-          VENUE_CONFIG_ROOT=${config_root}
-          VENUE_RUNTIME_ENV=${config_root}/runtime.env
+          VENUE_CONFIG_ROOT=/config
+          VENUE_RUNTIME_ENV=/config/runtime.env
           VENUE_AUDIO_GID=10001
           VENUE_RENDER_GID=10002
           FLOOR_REVISION=0000000000000000000000000000000000000000
@@ -112,8 +112,13 @@ jobs:
           CADDY_IMAGE=example.invalid/caddy:sha-${RELEASE_SHA}
           PLAYER_IMAGE=example.invalid/player:sha-${RELEASE_SHA}
           EOF
-          docker compose \
-            --env-file "${config_root}/candidate.env" \
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/workspace:ro" \
+            --volume "${config_root}:/config:ro" \
+            --workdir /workspace \
+            docker:28-cli@sha256:625d9431a9f54c5a2bc90f24f0e1c3d55b1349fd857dd85035f98c2c9acbdd4d \
+            compose \
+            --env-file /config/candidate.env \
             --file deploy/motionlevels-pc/docker-compose.yml \
             config --quiet
 
