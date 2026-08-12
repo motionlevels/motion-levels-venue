@@ -26,8 +26,9 @@ import (
 )
 
 const (
-	loopMusicRef        = "Motion/canciones/Background01.mp3"
-	noPressureGameLimit = 5 * time.Minute
+	loopMusicRef          = "Motion/canciones/Background01.mp3"
+	nativeAnimationGameID = "a861f0dc-3e2e-4fe9-b487-33194af75b68"
+	noPressureGameLimit   = 5 * time.Minute
 )
 
 type gameRecordWriter interface {
@@ -2069,12 +2070,46 @@ func makeGame(cfg config, seed int64, now time.Time) floorGame {
 		return animations.NewWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.Level, cfg.PlatformURL)
 	case "salvapantallas":
 		rotationEvery := time.Duration(cfg.DurationSeconds) * time.Second
-		log.Printf("game: salvapantallas rotation=%s", rotationEvery)
+		if game, err := makeNativeScreensaverRunnerGame(cfg, seed, now); err == nil {
+			log.Printf("game: salvapantallas TypeScript rotation=%s", rotationEvery)
+			return game
+		} else {
+			log.Printf("game: salvapantallas TypeScript runner unavailable; using legacy Go fallback: %v", err)
+		}
+		log.Printf("game: salvapantallas legacy rotation=%s", rotationEvery)
 		return animations.NewScreensaverWithSeed(now, seed, cfg.PlayerCount, cfg.Difficulty, cfg.PlatformURL, rotationEvery)
 	default:
 		log.Printf("game: %s", cfg.Game)
 		return nil
 	}
+}
+
+func makeNativeScreensaverRunnerGame(cfg config, seed int64, now time.Time) (*motionlevelsgames.Game, error) {
+	bundle, err := motionlevelsgames.Load(cfg.MotionLevelsGamesRoot)
+	if err != nil {
+		return nil, err
+	}
+	product, err := bundle.ResolveTaggedGame(nativeAnimationGameID, "salvapantallas", "")
+	if err != nil {
+		return nil, err
+	}
+	rotationSeconds := clampInt(cfg.DurationSeconds, 5, 120)
+	options := map[string]json.RawMessage{
+		"mode":            json.RawMessage(`"rotation"`),
+		"animation":       json.RawMessage(`"aurora"`),
+		"speed":           json.RawMessage(`1`),
+		"rotationSeconds": json.RawMessage(strconv.Itoa(rotationSeconds)),
+	}
+	game, err := motionlevelsgames.New(cfg.MotionLevelsGamesRoot, motionlevelsgames.Config{
+		GameID: product.ID, ExpectedRevision: bundle.Manifest.SourceRevision, Seed: seed,
+		PlayerCount: cfg.PlayerCount, Players: motionLevelsPlayers(cfg), Difficulty: cfg.Difficulty,
+		Options: options, StartedAt: now, NodeBinary: cfg.MotionLevelsGamesNode,
+	})
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("game: animation product=%s bundle_revision=%s", product.ID, bundle.Manifest.SourceRevision)
+	return game, nil
 }
 
 func isPublishedLevelRunnerCandidate(cfg config) bool {
