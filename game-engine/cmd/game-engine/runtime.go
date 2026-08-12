@@ -2100,15 +2100,30 @@ func makeNativeScreensaverRunnerGame(cfg config, seed int64, now time.Time) (*mo
 		"speed":           json.RawMessage(`1`),
 		"rotationSeconds": json.RawMessage(strconv.Itoa(rotationSeconds)),
 	}
+	var content json.RawMessage
+	contentRevision := ""
+	if strings.TrimSpace(cfg.PlatformURL) != "" {
+		animationContent, contentErr := motionlevelsgames.FetchAnimationRuntimeContent(context.Background(), nil, cfg.PlatformURL, cfg.PlatformToken, motionlevelsgames.AnimationRuntimeContentRequest{
+			CanonicalGameID: nativeAnimationGameID,
+			RotationSeconds: rotationSeconds,
+		})
+		if contentErr != nil {
+			log.Printf("game: animation content unavailable; using pinned built-ins: %v", contentErr)
+		} else {
+			content = animationContent.Document
+			contentRevision = animationContent.ContentRevision
+		}
+	}
 	game, err := motionlevelsgames.New(cfg.MotionLevelsGamesRoot, motionlevelsgames.Config{
 		GameID: product.ID, ExpectedRevision: bundle.Manifest.SourceRevision, Seed: seed,
 		PlayerCount: cfg.PlayerCount, Players: motionLevelsPlayers(cfg), Difficulty: cfg.Difficulty,
-		Options: options, StartedAt: now, NodeBinary: cfg.MotionLevelsGamesNode,
+		Options: options, Content: content, ContentRevision: contentRevision,
+		StartedAt: now, NodeBinary: cfg.MotionLevelsGamesNode,
 	})
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("game: animation product=%s bundle_revision=%s", product.ID, bundle.Manifest.SourceRevision)
+	log.Printf("game: animation product=%s content_revision=%s bundle_revision=%s", product.ID, contentRevision, bundle.Manifest.SourceRevision)
 	return game, nil
 }
 
