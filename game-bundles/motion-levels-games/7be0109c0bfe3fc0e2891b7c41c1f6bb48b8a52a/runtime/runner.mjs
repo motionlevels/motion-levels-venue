@@ -10270,7 +10270,17 @@ function decide(shared, playerIndex, observation) {
   const immediate = observation.self.target ?? route[0];
   const airborneUntil = observation.self.airborneUntil ?? 0;
   if (observation.self.target && shared.game.dangerAt(immediate.x, immediate.y, observation.atMillis) > 0 && airborneUntil <= observation.atMillis) {
-    return jumpResult(`A red hazard is forecast at ${immediate.x},${immediate.y}; jump before crossing`);
+    const landingPath = safeLandingPath(
+      shared.game,
+      observation.self.target,
+      route,
+      semantic,
+      observation.atMillis
+    );
+    return landingPath ? jumpResult(
+      `A red hazard is forecast at ${immediate.x},${immediate.y}; jump to the next safe tile`,
+      landingPath
+    ) : jumpResult(`A red hazard is forecast at ${immediate.x},${immediate.y}; jump before crossing`);
   }
   if (observation.self.target) {
     return { explanation: `Following a semantic route to objective ${target3.uniq}` };
@@ -10282,11 +10292,33 @@ function decide(shared, playerIndex, observation) {
     explanation
   });
 }
-function jumpResult(explanation) {
+function jumpResult(explanation, landingPath = []) {
+  const target3 = landingPath.at(-1);
   return Object.freeze({
-    action: Object.freeze({ kind: "jump", explanation }),
+    action: Object.freeze({
+      kind: "jump",
+      ...target3 ? {
+        target: Object.freeze({ ...target3 }),
+        path: Object.freeze(landingPath.map((point) => Object.freeze({ ...point })))
+      } : {},
+      explanation
+    }),
     explanation
   });
+}
+function safeLandingPath(game7, immediate, route, semantic, atMillis) {
+  const byKey = new Map(semantic.map((tile) => [pointKey2(tile), tile]));
+  const path = [immediate, ...route].filter(
+    (point, index, values) => index === 0 || pointKey2(point) !== pointKey2(values[index - 1])
+  );
+  const crossing = [];
+  for (const point of path) {
+    crossing.push(point);
+    const tile = byKey.get(pointKey2(point));
+    const hazardous = tile?.kind === 2 || game7.dangerAt(point.x, point.y, atMillis) > 0;
+    if (!hazardous) return crossing.length <= 10 ? crossing : void 0;
+  }
+  return void 0;
 }
 function targetGroups(tiles) {
   const grouped = /* @__PURE__ */ new Map();
@@ -17210,7 +17242,7 @@ function finiteNumber(value, fallback) {
 }
 
 // packages/runner/src/runner.ts
-var sourceRevision = true ? "2ead60349c56a3f8d2ce8aafb0915ffbeb8b0eca" : "development";
+var sourceRevision = true ? "7be0109c0bfe3fc0e2891b7c41c1f6bb48b8a52a" : "development";
 var session = new RunnerSession();
 var input = createInterface({ input: process.stdin, crlfDelay: Infinity });
 input.on("line", (line) => {

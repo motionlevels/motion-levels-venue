@@ -2,9 +2,9 @@
   "schema": "motion-levels-games-bundle-v1",
   "contractVersion": 1,
   "runnerProtocolVersion": 1,
-  "sourceRevision": "2ead60349c56a3f8d2ce8aafb0915ffbeb8b0eca",
+  "sourceRevision": "7be0109c0bfe3fc0e2891b7c41c1f6bb48b8a52a",
   "sdkFps": 50,
-  "artifactDigest": "8099a72ed80d584bf578ea0991d78838b8682732ffe65ae9808300b0720fd62b",
+  "artifactDigest": "ed668fa200aaa62df895ec8d462e7ef2224f7dd4531af2b832d087adfb847621",
   "runtime": {
     "entry": "runtime/runner.mjs",
     "games": [
@@ -70,8 +70,8 @@
     },
     {
       "path": "display/display.js",
-      "sha256": "466bc434613e440bfb3e9d616e456d06f505cb24eb857fef5ae2e8ab64cdc719",
-      "bytes": 622222
+      "sha256": "f8827abb3b9b964dda6ec9e76a699891f1fe53c32d6fe105f02622233fc066fa",
+      "bytes": 622685
     },
     {
       "path": "media/4773837e-3565-49d7-8953-3b40f59fca7b/4773837e-3565-49d7-8953-3b40f59fca7b-player-display-animation.webp",
@@ -739,14 +739,14 @@
       "bytes": 31981
     },
     {
-      "path": "menu/assets/index-B9eu46vI.js",
-      "sha256": "de244623704c4d47338818f59b9e8dc4cb216b684eb97a8a62be7b58f992d3c2",
-      "bytes": 572870
-    },
-    {
       "path": "menu/assets/index-Cqm521m-.css",
       "sha256": "fc3bbcee795d5b9b186cfac17924f0e58861469577f8390959bc4c42ab587aa2",
       "bytes": 89208
+    },
+    {
+      "path": "menu/assets/index-Dd5W_NxK.js",
+      "sha256": "9848e0fcf04294ebf120748a39450f9a4a505dc22558a51624c634783c6e155f",
+      "bytes": 572870
     },
     {
       "path": "menu/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2",
@@ -784,8 +784,8 @@
       "bytes": 10252
     },
     {
-      "path": "menu/assets/localCatalog-D80d2BK8.js",
-      "sha256": "aaa6266cf857287a1541838d9acfc571b014d9ae28ab915c91514b2509bd4c56",
+      "path": "menu/assets/localCatalog-CK9u8Sfz.js",
+      "sha256": "54b9a383cf8c371fe2eb5e535383f175932e74f143a7b588c1a62fe38ef17f00",
       "bytes": 26380
     },
     {
@@ -800,7 +800,7 @@
     },
     {
       "path": "menu/index.html",
-      "sha256": "5d38395b661f0057d32e3c5adc6fa541826d4778c639403caecf7d75d0a98a03",
+      "sha256": "f3a24300ba43acdc023ead0926408302cc03500d1c611526d77f6f0e6829186f",
       "bytes": 619
     },
     {
@@ -874,14 +874,14 @@
       "bytes": 2402
     },
     {
+      "path": "playground/assets/main-CUTNxc-S.js",
+      "sha256": "30e2cb390b68be2411f13543c0a9715c6659c82836645f58beaaacd47867c88c",
+      "bytes": 1483087
+    },
+    {
       "path": "playground/assets/main-CxzrBwGB.css",
       "sha256": "aa63a0172d6cb2d24d0a9252835ffd4e4afeaf1e4b225dca165b283d3101d1e6",
       "bytes": 84300
-    },
-    {
-      "path": "playground/assets/main-ywtzEezE.js",
-      "sha256": "4e751be744688e57adaee2a8d3d49769acddbcd6ef2edf738cb658a712e13207",
-      "bytes": 1472778
     },
     {
       "path": "playground/assets/manifest-BHmeRlXL.js",
@@ -899,8 +899,8 @@
       "bytes": 251542
     },
     {
-      "path": "playground/assets/player-menu/index-DclUWHcm.js",
-      "sha256": "0192fa3da22f52b0c061baa6925bad7159133174de7ad3643507c1b7fdbdbd46",
+      "path": "playground/assets/player-menu/index-Bj-pZjtK.js",
+      "sha256": "0ba6a8ad316923d08717b0c8eaddecd3646730123cb8ad7813d25ba890a62784",
       "bytes": 380963
     },
     {
@@ -920,8 +920,63 @@
     },
     {
       "path": "playground/index.html",
-      "sha256": "7fa77da42703f47ef9108e616afe4b1fbe1bdcb8a1c0dd572adee9e2a5566732",
+      "sha256": "d62e7ba7357ad4d6f8820a110ab64ea34232b077d16d3db85793356b487cff64",
       "bytes": 3998
+    },
+    {
+      "path": "playground/models/quaternius/adventurer.glb",
+      "sha256": "359ce77215e3d4bf7ed9fa45d343280a8a1b3511ea07721a88f58fc36dec2f1a",
+      "bytes": 817116
+    },
+    {
+      "path": "playground/models/quaternius/casual-hoodie.glb",
+      "sha256": "903f460b55dd1563381739d56a495eadba82cf0d268e4c23e8c03753bb36bca7",
+      "bytes": 745836
+    },
+    {
+      "path": "playground/models/quaternius/mystic.glb",
+      "sha256": "3e39ea410be4b8b0fd1c0b0be3e506c7c8073e07e5bd0150efce9f826f50128d",
+      "bytes": 757612
+    },
+    {
+      "path": "playground/models/quaternius/punk.glb",
+      "sha256": "7cc6c3af903d16df88dc917cde0e4ac9f02f1b44196632e1dbc921511bcff772",
+      "bytes": 737424
+    },
+    {
+      "path": "playground/models/quaternius/spacesuit.glb",
+      "sha256": "2d3fbe5b2f03f6f1d08eb28a58a4ccf2f5ec4fd2f1dbbf3f93978457d708fb91",
+      "bytes": 812556
+    },
+    {
+      "path": "playground/models/quaternius/star-pilot.glb",
+      "sha256": "e6d802b27b085df54afcfeb13e95c6832959d46257d985f2f7b53f5239bead76",
+      "bytes": 783620
+    },
+    {
+      "path": "playground/models/quaternius/street-scout.glb",
+      "sha256": "b833ebb8d564a4c99ed2c6c7b2f688cd309c714d870cced4526d97db6d17f1d3",
+      "bytes": 743904
+    },
+    {
+      "path": "playground/models/quaternius/swat.glb",
+      "sha256": "68db9fd01465d4f584f4c7dcb54df67010d2e4ae4ad8355aefc5226e0f674f5f",
+      "bytes": 782300
+    },
+    {
+      "path": "playground/models/quaternius/trailblazer.glb",
+      "sha256": "c8bff37f0e8fef9e962a2a960558e0396dde9ca7d1bc2fdc5ac90f31523613f2",
+      "bytes": 761708
+    },
+    {
+      "path": "playground/models/quaternius/worker.glb",
+      "sha256": "62957fdcf4f54976240bfcb6ff16c0761873ea8c5f164d54648459c841d382c5",
+      "bytes": 734968
+    },
+    {
+      "path": "playground/models/tung-tung-tung-sahur.glb",
+      "sha256": "0107681fe307b9b8200abbfbf711659c6e837c8293f833b3c7fbdc5438fb9d92",
+      "bytes": 269968
     },
     {
       "path": "playground/motion-levels-icon.png",
@@ -935,13 +990,13 @@
     },
     {
       "path": "playground/player-menu/index.html",
-      "sha256": "c22164952ee3cde5afb1dbeefdc0a5ac2665bb3ce4bf3fd8905861f729401c99",
+      "sha256": "ca67d57013bb841bd177d60d7639a74bc1f35e0f54cb92189cdeed0a60389443",
       "bytes": 767
     },
     {
       "path": "runtime/runner.mjs",
-      "sha256": "73b7a59a6d34d2d0cce8392041d7de1488931c2468ffa2a1bfa326d45598c694",
-      "bytes": 719649
+      "sha256": "4f34010b07420cc4f7a87cd9c155f399db5feda63f74a773663917bd2e8cd17d",
+      "bytes": 720788
     }
   ]
 }
