@@ -1,0 +1,58 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "animation": {
+    "id": "tormenta",
+    "label": "Tormenta",
+    "description": "Nubes eléctricas atravesadas por relámpagos",
+    "category": "nature",
+    "durationMillis": 9000,
+    "palette": [
+      "#02040d",
+      "#27346f",
+      "#a8c7ff",
+      "#ffffff"
+    ],
+    "tags": [
+      "clima",
+      "dramático"
+    ]
+  },
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "tormenta-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 940,
+      "sha256": "2490c937285053d4e245c0c354d499f8cf65ff1797a9fe3f353a08d70ec2ff1f"
+    },
+    "thumbnail": {
+      "file": "tormenta-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 12208,
+      "sha256": "a64681911fbf1fe4276a9082d53ae4aece993e2b323213d71e5f4665d259d642"
+    },
+    "animation": {
+      "file": "tormenta-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 50186,
+      "sha256": "b8324a99b7a9fd97f7a063ebc7d8b030f67572dd92612d9c52a10c2015f37163"
+    }
+  }
+}

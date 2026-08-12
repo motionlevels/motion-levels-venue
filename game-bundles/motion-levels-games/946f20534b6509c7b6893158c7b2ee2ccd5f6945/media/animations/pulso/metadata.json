@@ -1,0 +1,57 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "animation": {
+    "id": "pulso",
+    "label": "Pulso",
+    "description": "Ondas concéntricas con ritmo de neón",
+    "category": "ambient",
+    "durationMillis": 8000,
+    "palette": [
+      "#02020a",
+      "#ff3bd7",
+      "#35d7ff"
+    ],
+    "tags": [
+      "ritmo",
+      "neón"
+    ]
+  },
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "pulso-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1616,
+      "sha256": "f4d6d8af5b77223c21649d0b64e3a5b874cc014e49c0ccb1c8e72e5687d9b18f"
+    },
+    "thumbnail": {
+      "file": "pulso-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 30386,
+      "sha256": "7355c5836c8a63bfae9a9e0785f4f69fef7e9d7234d3f885895f88bf1313d38f"
+    },
+    "animation": {
+      "file": "pulso-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 223892,
+      "sha256": "e10b16138ce32874fb20ee78ebdbdc367ebf8e4c1c4d277c0b707c0fe3f2cbdb"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "animation": {
+    "id": "luciernagas",
+    "label": "Luciérnagas",
+    "description": "Luces doradas flotan en un bosque nocturno",
+    "category": "nature",
+    "durationMillis": 14000,
+    "palette": [
+      "#010904",
+      "#16421d",
+      "#d8ff62"
+    ],
+    "tags": [
+      "naturaleza",
+      "calma"
+    ]
+  },
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "luciernagas-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1000,
+      "sha256": "28f7e31d623a04d318153ee8f872072fbfa921010b565c4600df9c5aa2503dd2"
+    },
+    "thumbnail": {
+      "file": "luciernagas-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 7532,
+      "sha256": "ea00982fac59acf64bb8881dc234b63f87804c34aa6098e68df3d08c2fab1913"
+    },
+    "animation": {
+      "file": "luciernagas-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 40710,
+      "sha256": "28c89294420845fbb3b370707dbe1051c1fd1b200c7c365144f069eafa0cacbe"
+    }
+  }
+}

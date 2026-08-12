@@ -1,0 +1,547 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "animations": [
+    {
+      "id": "arcoiris",
+      "label": "Arcoíris",
+      "description": "Bandas de color que recorren toda la pista",
+      "category": "ambient",
+      "durationMillis": 10000,
+      "palette": [
+        "#ff416c",
+        "#ffca3a",
+        "#56f39a",
+        "#35d7ff",
+        "#b968ff"
+      ],
+      "tags": [
+        "color",
+        "suave"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/arcoiris/arcoiris-thumbnail-small.webp",
+        "thumbnail": "media/animations/arcoiris/arcoiris-thumbnail.webp",
+        "animation": "media/animations/arcoiris/arcoiris-preview.webp"
+      }
+    },
+    {
+      "id": "aurora",
+      "label": "Aurora",
+      "description": "Cortinas boreales fluidas y profundas",
+      "category": "nature",
+      "durationMillis": 16000,
+      "palette": [
+        "#020617",
+        "#42ffd2",
+        "#5b8cff",
+        "#e66cff"
+      ],
+      "tags": [
+        "naturaleza",
+        "suave"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/aurora/aurora-thumbnail-small.webp",
+        "thumbnail": "media/animations/aurora/aurora-thumbnail.webp",
+        "animation": "media/animations/aurora/aurora-preview.webp"
+      }
+    },
+    {
+      "id": "bioluminescence",
+      "label": "Bioluminiscencia",
+      "description": "Organismos marinos respiran luz turquesa y violeta",
+      "category": "nature",
+      "durationMillis": 18000,
+      "palette": [
+        "#01070d",
+        "#064f65",
+        "#20f4d1",
+        "#ae63ff"
+      ],
+      "tags": [
+        "nuevo",
+        "mar",
+        "orgánico"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/bioluminescence/bioluminescence-thumbnail-small.webp",
+        "thumbnail": "media/animations/bioluminescence/bioluminescence-thumbnail.webp",
+        "animation": "media/animations/bioluminescence/bioluminescence-preview.webp"
+      }
+    },
+    {
+      "id": "chispas",
+      "label": "Chispas",
+      "description": "Destellos cálidos que aparecen al compás",
+      "category": "ambient",
+      "durationMillis": 8000,
+      "palette": [
+        "#120704",
+        "#ff8a1f",
+        "#fff0a8"
+      ],
+      "tags": [
+        "energía",
+        "destellos"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/chispas/chispas-thumbnail-small.webp",
+        "thumbnail": "media/animations/chispas/chispas-thumbnail.webp",
+        "animation": "media/animations/chispas/chispas-preview.webp"
+      }
+    },
+    {
+      "id": "neon-ribbons",
+      "label": "Cintas de neón",
+      "description": "Nuevas cintas luminosas se entrelazan sobre cristal negro",
+      "category": "energetic",
+      "durationMillis": 15000,
+      "palette": [
+        "#02030b",
+        "#00f0ff",
+        "#ff2bd6",
+        "#8dff5a"
+      ],
+      "tags": [
+        "nuevo",
+        "neón",
+        "fluido"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/neon-ribbons/neon-ribbons-thumbnail-small.webp",
+        "thumbnail": "media/animations/neon-ribbons/neon-ribbons-thumbnail.webp",
+        "animation": "media/animations/neon-ribbons/neon-ribbons-preview.webp"
+      }
+    },
+    {
+      "id": "cometas",
+      "label": "Cometas",
+      "description": "Estelas luminosas cruzan el suelo en diagonal",
+      "category": "ambient",
+      "durationMillis": 10000,
+      "palette": [
+        "#07121f",
+        "#35d7ff",
+        "#e9fbff"
+      ],
+      "tags": [
+        "espacio",
+        "movimiento"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/cometas/cometas-thumbnail-small.webp",
+        "thumbnail": "media/animations/cometas/cometas-thumbnail.webp",
+        "animation": "media/animations/cometas/cometas-preview.webp"
+      }
+    },
+    {
+      "id": "cristales",
+      "label": "Cristales",
+      "description": "Facetas heladas reflejan luz de colores",
+      "category": "ambient",
+      "durationMillis": 12000,
+      "palette": [
+        "#061020",
+        "#64d8ff",
+        "#b78bff",
+        "#ffffff"
+      ],
+      "tags": [
+        "hielo",
+        "geométrico"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/cristales/cristales-thumbnail-small.webp",
+        "thumbnail": "media/animations/cristales/cristales-thumbnail.webp",
+        "animation": "media/animations/cristales/cristales-preview.webp"
+      }
+    },
+    {
+      "id": "estrellas",
+      "label": "Estrellas",
+      "description": "Cielo profundo con estrellas centelleantes",
+      "category": "ambient",
+      "durationMillis": 12000,
+      "palette": [
+        "#01020a",
+        "#3449a7",
+        "#dce7ff"
+      ],
+      "tags": [
+        "espacio",
+        "calma"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/estrellas/estrellas-thumbnail-small.webp",
+        "thumbnail": "media/animations/estrellas/estrellas-thumbnail.webp",
+        "animation": "media/animations/estrellas/estrellas-preview.webp"
+      }
+    },
+    {
+      "id": "lava",
+      "label": "Lava",
+      "description": "Magma vivo con grietas incandescentes",
+      "category": "nature",
+      "durationMillis": 18000,
+      "palette": [
+        "#100100",
+        "#8f1300",
+        "#ff4d00",
+        "#ffd36b"
+      ],
+      "tags": [
+        "fuego",
+        "orgánico"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/lava/lava-thumbnail-small.webp",
+        "thumbnail": "media/animations/lava/lava-thumbnail.webp",
+        "animation": "media/animations/lava/lava-preview.webp"
+      }
+    },
+    {
+      "id": "solar-flare",
+      "label": "Llamarada solar",
+      "description": "Filamentos de plasma dorado estallan desde el núcleo",
+      "category": "energetic",
+      "durationMillis": 13000,
+      "palette": [
+        "#130100",
+        "#9d1900",
+        "#ff6b00",
+        "#fff08a"
+      ],
+      "tags": [
+        "nuevo",
+        "sol",
+        "energía"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/solar-flare/solar-flare-thumbnail-small.webp",
+        "thumbnail": "media/animations/solar-flare/solar-flare-thumbnail.webp",
+        "animation": "media/animations/solar-flare/solar-flare-preview.webp"
+      }
+    },
+    {
+      "id": "luciernagas",
+      "label": "Luciérnagas",
+      "description": "Luces doradas flotan en un bosque nocturno",
+      "category": "nature",
+      "durationMillis": 14000,
+      "palette": [
+        "#010904",
+        "#16421d",
+        "#d8ff62"
+      ],
+      "tags": [
+        "naturaleza",
+        "calma"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/luciernagas/luciernagas-thumbnail-small.webp",
+        "thumbnail": "media/animations/luciernagas/luciernagas-thumbnail.webp",
+        "animation": "media/animations/luciernagas/luciernagas-preview.webp"
+      }
+    },
+    {
+      "id": "matriz",
+      "label": "Matriz",
+      "description": "Lluvia digital verde sobre la oscuridad",
+      "category": "energetic",
+      "durationMillis": 8000,
+      "palette": [
+        "#010703",
+        "#00c853",
+        "#92ffb1"
+      ],
+      "tags": [
+        "digital",
+        "retro"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/matriz/matriz-thumbnail-small.webp",
+        "thumbnail": "media/animations/matriz/matriz-thumbnail.webp",
+        "animation": "media/animations/matriz/matriz-preview.webp"
+      }
+    },
+    {
+      "id": "oceano",
+      "label": "Océano",
+      "description": "Oleaje azul con crestas de espuma",
+      "category": "nature",
+      "durationMillis": 14000,
+      "palette": [
+        "#020c1e",
+        "#087ea4",
+        "#35d7ff",
+        "#e8fdff"
+      ],
+      "tags": [
+        "agua",
+        "calma"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/oceano/oceano-thumbnail-small.webp",
+        "thumbnail": "media/animations/oceano/oceano-thumbnail.webp",
+        "animation": "media/animations/oceano/oceano-preview.webp"
+      }
+    },
+    {
+      "id": "disco-tiles",
+      "label": "Pista disco",
+      "description": "Baldosas de club cambian de color con un pulso elegante",
+      "category": "energetic",
+      "durationMillis": 8000,
+      "palette": [
+        "#090013",
+        "#ff3196",
+        "#7a5cff",
+        "#25e6ff",
+        "#ffe14d"
+      ],
+      "tags": [
+        "nuevo",
+        "baile",
+        "retro"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/disco-tiles/disco-tiles-thumbnail-small.webp",
+        "thumbnail": "media/animations/disco-tiles/disco-tiles-thumbnail.webp",
+        "animation": "media/animations/disco-tiles/disco-tiles-preview.webp"
+      }
+    },
+    {
+      "id": "portal",
+      "label": "Portal",
+      "description": "Anillos de energía convergen en otra dimensión",
+      "category": "energetic",
+      "durationMillis": 10000,
+      "palette": [
+        "#070216",
+        "#6d39ff",
+        "#ff48d7",
+        "#ffffff"
+      ],
+      "tags": [
+        "espacio",
+        "anillos"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/portal/portal-thumbnail-small.webp",
+        "thumbnail": "media/animations/portal/portal-thumbnail.webp",
+        "animation": "media/animations/portal/portal-preview.webp"
+      }
+    },
+    {
+      "id": "pulso",
+      "label": "Pulso",
+      "description": "Ondas concéntricas con ritmo de neón",
+      "category": "ambient",
+      "durationMillis": 8000,
+      "palette": [
+        "#02020a",
+        "#ff3bd7",
+        "#35d7ff"
+      ],
+      "tags": [
+        "ritmo",
+        "neón"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/pulso/pulso-thumbnail-small.webp",
+        "thumbnail": "media/animations/pulso/pulso-thumbnail.webp",
+        "animation": "media/animations/pulso/pulso-preview.webp"
+      }
+    },
+    {
+      "id": "radar",
+      "label": "Radar",
+      "description": "Barrido verde con ecos circulares",
+      "category": "ambient",
+      "durationMillis": 10000,
+      "palette": [
+        "#010806",
+        "#25ff79",
+        "#d7ffe8"
+      ],
+      "tags": [
+        "tecnología",
+        "barrido"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/radar/radar-thumbnail-small.webp",
+        "thumbnail": "media/animations/radar/radar-thumbnail.webp",
+        "animation": "media/animations/radar/radar-preview.webp"
+      }
+    },
+    {
+      "id": "tormenta",
+      "label": "Tormenta",
+      "description": "Nubes eléctricas atravesadas por relámpagos",
+      "category": "nature",
+      "durationMillis": 9000,
+      "palette": [
+        "#02040d",
+        "#27346f",
+        "#a8c7ff",
+        "#ffffff"
+      ],
+      "tags": [
+        "clima",
+        "dramático"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/tormenta/tormenta-thumbnail-small.webp",
+        "thumbnail": "media/animations/tormenta/tormenta-thumbnail.webp",
+        "animation": "media/animations/tormenta/tormenta-preview.webp"
+      }
+    },
+    {
+      "id": "prism-tunnel",
+      "label": "Túnel prisma",
+      "description": "Un túnel caleidoscópico de profundidad infinita",
+      "category": "energetic",
+      "durationMillis": 11000,
+      "palette": [
+        "#020108",
+        "#4a2fff",
+        "#ff3dba",
+        "#ffe85c",
+        "#5cffda"
+      ],
+      "tags": [
+        "nuevo",
+        "prisma",
+        "intenso"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/prism-tunnel/prism-tunnel-thumbnail-small.webp",
+        "thumbnail": "media/animations/prism-tunnel/prism-tunnel-thumbnail.webp",
+        "animation": "media/animations/prism-tunnel/prism-tunnel-preview.webp"
+      }
+    },
+    {
+      "id": "victory-confetti",
+      "label": "Victoria · Confeti",
+      "description": "Confeti multicolor cae sobre la pista",
+      "category": "celebration",
+      "durationMillis": 5000,
+      "palette": [
+        "#110329",
+        "#ff4278",
+        "#ffd84a",
+        "#57f7a6",
+        "#4bd8ff"
+      ],
+      "tags": [
+        "victoria",
+        "confeti"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/victory-confetti/victory-confetti-thumbnail-small.webp",
+        "thumbnail": "media/animations/victory-confetti/victory-confetti-thumbnail.webp",
+        "animation": "media/animations/victory-confetti/victory-confetti-preview.webp"
+      }
+    },
+    {
+      "id": "victory-spark",
+      "label": "Victoria · Destellos",
+      "description": "Fogonazos dorados celebran el resultado",
+      "category": "celebration",
+      "durationMillis": 5000,
+      "palette": [
+        "#150800",
+        "#ff9d1f",
+        "#fff28c",
+        "#ffffff"
+      ],
+      "tags": [
+        "victoria",
+        "destellos"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/victory-spark/victory-spark-thumbnail-small.webp",
+        "thumbnail": "media/animations/victory-spark/victory-spark-thumbnail.webp",
+        "animation": "media/animations/victory-spark/victory-spark-preview.webp"
+      }
+    },
+    {
+      "id": "victory-wave",
+      "label": "Victoria · Ola",
+      "description": "Olas luminosas bañan el suelo al ganar",
+      "category": "celebration",
+      "durationMillis": 5000,
+      "palette": [
+        "#031329",
+        "#168bff",
+        "#35d7ff",
+        "#ffffff"
+      ],
+      "tags": [
+        "victoria",
+        "ola"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/victory-wave/victory-wave-thumbnail-small.webp",
+        "thumbnail": "media/animations/victory-wave/victory-wave-thumbnail.webp",
+        "animation": "media/animations/victory-wave/victory-wave-preview.webp"
+      }
+    },
+    {
+      "id": "victory-pulse",
+      "label": "Victoria · Pulso",
+      "description": "Celebración radial con energía azul y dorada",
+      "category": "celebration",
+      "durationMillis": 5000,
+      "palette": [
+        "#061235",
+        "#35d7ff",
+        "#ffe176",
+        "#ffffff"
+      ],
+      "tags": [
+        "victoria",
+        "celebración"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/victory-pulse/victory-pulse-thumbnail-small.webp",
+        "thumbnail": "media/animations/victory-pulse/victory-pulse-thumbnail.webp",
+        "animation": "media/animations/victory-pulse/victory-pulse-preview.webp"
+      }
+    },
+    {
+      "id": "vortice",
+      "label": "Vórtice",
+      "description": "Espiral hipnótica que gira hacia el centro",
+      "category": "energetic",
+      "durationMillis": 12000,
+      "palette": [
+        "#080318",
+        "#774dff",
+        "#ff43cf",
+        "#35d7ff"
+      ],
+      "tags": [
+        "espiral",
+        "intenso"
+      ],
+      "media": {
+        "thumbnailSmall": "media/animations/vortice/vortice-thumbnail-small.webp",
+        "thumbnail": "media/animations/vortice/vortice-thumbnail.webp",
+        "animation": "media/animations/vortice/vortice-preview.webp"
+      }
+    }
+  ]
+}

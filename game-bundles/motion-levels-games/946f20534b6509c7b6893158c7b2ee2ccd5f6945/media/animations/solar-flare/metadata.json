@@ -1,0 +1,59 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "animation": {
+    "id": "solar-flare",
+    "label": "Llamarada solar",
+    "description": "Filamentos de plasma dorado estallan desde el núcleo",
+    "category": "energetic",
+    "durationMillis": 13000,
+    "palette": [
+      "#130100",
+      "#9d1900",
+      "#ff6b00",
+      "#fff08a"
+    ],
+    "tags": [
+      "nuevo",
+      "sol",
+      "energía"
+    ]
+  },
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "solar-flare-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1690,
+      "sha256": "6631e48b472e67fd3a93758251cd84bf1736273ca8ac814078795a461e0957f0"
+    },
+    "thumbnail": {
+      "file": "solar-flare-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 38128,
+      "sha256": "da8a7893ab782091d7df6465e4d06c0950525aa165c509c119e1a75089fd4914"
+    },
+    "animation": {
+      "file": "solar-flare-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 277766,
+      "sha256": "21e4483e3d71434f18ebe805f6e3375c38d2a5ce4a2de5a4e3f2d5c29465827a"
+    }
+  }
+}

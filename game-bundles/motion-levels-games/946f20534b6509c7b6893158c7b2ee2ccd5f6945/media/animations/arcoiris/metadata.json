@@ -1,0 +1,59 @@
+{
+  "schema": "motion-levels-animation-media-v1",
+  "animation": {
+    "id": "arcoiris",
+    "label": "Arcoíris",
+    "description": "Bandas de color que recorren toda la pista",
+    "category": "ambient",
+    "durationMillis": 10000,
+    "palette": [
+      "#ff416c",
+      "#ffca3a",
+      "#56f39a",
+      "#35d7ff",
+      "#b968ff"
+    ],
+    "tags": [
+      "color",
+      "suave"
+    ]
+  },
+  "recipe": {
+    "seed": 137,
+    "captureStartMillis": 800,
+    "frameCount": 24,
+    "frameIntervalMillis": 100,
+    "stillFrameIndex": 4,
+    "pressure": {
+      "x": 8,
+      "y": 16,
+      "startedAtMillis": 1200
+    }
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "arcoiris-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1304,
+      "sha256": "68cac528f2ef859924b81b6a84e833681cfc287f229db251b9c552685d1a1296"
+    },
+    "thumbnail": {
+      "file": "arcoiris-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 33598,
+      "sha256": "125c7fc6490c9e3f95fa0709c833c7ffa8b26d35f5b2207b7f46a171f321416e"
+    },
+    "animation": {
+      "file": "arcoiris-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 248466,
+      "sha256": "11c3265751f9e93d5a7371b7388555bb268dd3980c708873fb4886654a64d103"
+    }
+  }
+}
