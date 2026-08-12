@@ -490,6 +490,10 @@ test("venue owns controller pin updates and all immutable venue images", () => {
   ]) {
     assert.match(imageWorkflow, new RegExp(`RELEASE_IMAGES:[\\s\\S]*${image}`));
   }
+  assert.match(
+    imageWorkflow,
+    /cache-to: type=gha,mode=max,scope=\$\{\{ matrix\.name \}\},ignore-error=true/,
+  );
   assert.equal(
     (bundleDockerfile.match(/LABEL org\.opencontainers\.image\.source="https:\/\/github\.com\/motionlevels\/motion-levels-venue"/g) || []).length,
     6,

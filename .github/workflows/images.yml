@@ -259,7 +259,7 @@ jobs:
             BUILD_REVISION=${{ env.RELEASE_SHA }}
             BUILD_CREATED_AT=${{ github.event.workflow_run.updated_at || github.event.repository.updated_at }}
           cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }},ignore-error=true
           provenance: mode=max
           sbom: true
 
