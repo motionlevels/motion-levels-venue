@@ -34,64 +34,57 @@ jobs:
   go:
     name: Go
     runs-on: ${{ vars.CI_RUNNER_LABEL }}
-    container: golang:1.24-bookworm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
 
       - name: Set up Node for the embedded games runner
         uses: actions/setup-node@v4
         with:
           node-version: 24
 
-      - name: Install native audio headers
-        run: >-
-          apt-get update &&
-          apt-get install -y --no-install-recommends
-          libasound2-dev pkg-config
-
-      - name: Run tests
-        run: go test ./...
-
-      - name: Compile packages
+      - name: Run Go checks in a pinned dependency container
+        shell: bash
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          go build ./...
-
-      - name: Verify motion-go seeds are current
-        run: go run ./game-engine/cmd/motion-go-seeds -check
+          set -euo pipefail
+          node_root="$(dirname "$(dirname "$(command -v node)")")"
+          docker run --rm \
+            --env HOME=/tmp/motion-levels-ci \
+            --env PATH=/opt/node/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin \
+            --volume "$node_root:/opt/node:ro" \
+            --volume "$GITHUB_WORKSPACE:/workspace:ro" \
+            --workdir /workspace \
+            golang:1.24-bookworm \
+            bash -lc '
+              mkdir -p "$HOME"
+              apt-get update
+              apt-get install -y --no-install-recommends libasound2-dev pkg-config
+              git config --global --add safe.directory /workspace
+              go test ./...
+              go build ./...
+              go run ./game-engine/cmd/motion-go-seeds -check
+            '
 
   node:
     name: Node / ${{ matrix.name }}
     runs-on: ${{ vars.CI_RUNNER_LABEL }}
-    container: ${{ matrix.image }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: player-display
-            image: mcr.microsoft.com/playwright:v1.62.1-noble
             working-directory: apps/player-display
             lockfile: apps/player-display/package-lock.json
             commands: |
               npm test
               npm run build
-              npm run test:e2e
           - name: player-menu
-            image: node:24-bookworm
             working-directory: apps/player-menu
             lockfile: apps/player-menu/package-lock.json
             commands: |
               npm test
               npm run build
           - name: floor-view
-            image: node:24-bookworm
             working-directory: packages/floor-view
             lockfile: packages/floor-view/package-lock.json
             commands: npm run typecheck
@@ -117,6 +110,22 @@ jobs:
       - name: Run checks
         working-directory: ${{ matrix.working-directory }}
         run: ${{ matrix.commands }}
+
+      - name: Run player-display E2E in pinned Playwright container
+        if: matrix.name == 'player-display'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/playwright-home"
+          docker run --rm --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/runner-temp/playwright-home \
+            --env PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --volume "$RUNNER_TEMP:/runner-temp" \
+            --workdir /workspace/apps/player-display \
+            mcr.microsoft.com/playwright:v1.62.1-noble \
+            bash -lc 'npm run test:e2e'
 
   trigger-images:
     name: Continue dispatched release with immutable images

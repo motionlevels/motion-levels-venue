@@ -33,10 +33,11 @@ test("games release sync works without GitHub CLI on the self-hosted runner", ()
 test("CI supplies native and browser dependencies without privileged runner setup", () => {
   const workflow = readRepoFile(".github/workflows/ci.yml");
 
-  assert.match(workflow, /name: Go[\s\S]*?container: golang:1\.24-bookworm/);
-  assert.match(workflow, /image: mcr\.microsoft\.com\/playwright:v1\.62\.1-noble/);
-  assert.match(workflow, /image: node:24-bookworm/);
-  assert.match(workflow, /git config --global --add safe\.directory "\$GITHUB_WORKSPACE"/);
+  assert.match(workflow, /golang:1\.24-bookworm/);
+  assert.match(workflow, /mcr\.microsoft\.com\/playwright:v1\.62\.1-noble/);
+  assert.match(workflow, /--user "\$\(id -u\):\$\(id -g\)"/);
+  assert.match(workflow, /--volume "\$GITHUB_WORKSPACE:\/workspace:ro"/);
+  assert.match(workflow, /git config --global --add safe\.directory \/workspace/);
   assert.doesNotMatch(workflow, /sudo apt-get|playwright install --with-deps/);
 });
 
