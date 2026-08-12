@@ -34,6 +34,7 @@ jobs:
   go:
     name: Go
     runs-on: ${{ vars.CI_RUNNER_LABEL }}
+    container: golang:1.24-bookworm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,8 +52,8 @@ jobs:
 
       - name: Install native audio headers
         run: >-
-          sudo apt-get update &&
-          sudo apt-get install -y --no-install-recommends
+          apt-get update &&
+          apt-get install -y --no-install-recommends
           libasound2-dev pkg-config
 
       - name: Run tests
@@ -67,11 +68,13 @@ jobs:
   node:
     name: Node / ${{ matrix.name }}
     runs-on: ${{ vars.CI_RUNNER_LABEL }}
+    container: ${{ matrix.image }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: player-display
+            image: mcr.microsoft.com/playwright:v1.62.1-noble
             working-directory: apps/player-display
             lockfile: apps/player-display/package-lock.json
             commands: |
@@ -79,12 +82,14 @@ jobs:
               npm run build
               npm run test:e2e
           - name: player-menu
+            image: node:24-bookworm
             working-directory: apps/player-menu
             lockfile: apps/player-menu/package-lock.json
             commands: |
               npm test
               npm run build
           - name: floor-view
+            image: node:24-bookworm
             working-directory: packages/floor-view
             lockfile: packages/floor-view/package-lock.json
             commands: npm run typecheck
@@ -107,11 +112,6 @@ jobs:
       - name: Install shared floor-view dependencies
         run: npm ci --prefix packages/floor-view
 
-      - name: Install Chromium for player-display E2E tests
-        if: matrix.name == 'player-display'
-        working-directory: apps/player-display
-        run: npx playwright install --with-deps chromium
-
       - name: Run checks
         working-directory: ${{ matrix.working-directory }}
         run: ${{ matrix.commands }}
@@ -129,4 +129,13 @@ jobs:
       RELEASE_SHA: ${{ github.sha }}
     steps:
       - name: Dispatch exact release images
-        run: gh workflow run images.yml --ref main -f release_sha="$RELEASE_SHA"
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "{\"ref\":\"main\",\"inputs\":{\"release_sha\":\"${RELEASE_SHA}\"}}" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/images.yml/dispatches"

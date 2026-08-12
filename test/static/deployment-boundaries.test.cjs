@@ -30,6 +30,15 @@ test("games release sync works without GitHub CLI on the self-hosted runner", ()
   assert.doesNotMatch(workflow, /\bgh (?:release|workflow)\b/);
 });
 
+test("CI supplies native and browser dependencies without privileged runner setup", () => {
+  const workflow = readRepoFile(".github/workflows/ci.yml");
+
+  assert.match(workflow, /name: Go[\s\S]*?container: golang:1\.24-bookworm/);
+  assert.match(workflow, /image: mcr\.microsoft\.com\/playwright:v1\.62\.1-noble/);
+  assert.match(workflow, /image: node:24-bookworm/);
+  assert.doesNotMatch(workflow, /sudo apt-get|playwright install --with-deps/);
+});
+
 test("venue core services are non-root, read-only, capability-dropped containers", () => {
   const compose = readRepoFile("deploy/motionlevels-pc/docker-compose.yml");
   const bundleDockerfile = readRepoFile("deploy/motionlevels-pc/venue-bundle.Dockerfile");
@@ -135,10 +144,13 @@ test("venue release activation is automated, idle-gated, and rollback-aware", ()
   assert.doesNotMatch(makefile, /deploy-motionlevels-1-legacy/);
   assert.match(imagesWorkflow, /scripts\/request-venue-deployment\.sh/);
   assert.doesNotMatch(imagesWorkflow, /deploy-production:|VENUE_AUTO_DEPLOY_TOKEN/);
-  assert.match(ciWorkflow, /gh workflow run images\.yml --ref main -f release_sha="\$RELEASE_SHA"/);
+  assert.match(ciWorkflow, /actions\/workflows\/images\.yml\/dispatches/);
+  assert.match(ciWorkflow, /release_sha.*\$\{RELEASE_SHA\}/);
   assert.match(imagesWorkflow, /workflow_dispatch:[\s\S]*?release_sha:/);
   assert.match(imagesWorkflow, /RELEASE_SHA: \$\{\{ inputs\.release_sha \|\| github\.event\.workflow_run\.head_sha \}\}/);
-  assert.match(imagesWorkflow, /gh workflow run deploy-production\.yml --ref main -f venue_revision="\$RELEASE_SHA"/);
+  assert.match(imagesWorkflow, /actions\/workflows\/deploy-production\.yml\/dispatches/);
+  assert.match(imagesWorkflow, /venue_revision.*\$\{RELEASE_SHA\}/);
+  assert.doesNotMatch(`${ciWorkflow}\n${imagesWorkflow}`, /\bgh workflow run\b/);
   assert.match(productionWorkflow, /workflows:[\s\S]*?- Container images[\s\S]*?types:[\s\S]*?- completed/);
   assert.match(productionWorkflow, /workflow_dispatch:[\s\S]*?venue_revision:/);
   assert.match(productionWorkflow, /github\.event\.workflow_run\.conclusion == 'success'/);

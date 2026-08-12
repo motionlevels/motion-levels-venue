@@ -281,4 +281,13 @@ jobs:
       RELEASE_SHA: ${{ inputs.release_sha }}
     steps:
       - name: Dispatch exact production deployment
-        run: gh workflow run deploy-production.yml --ref main -f venue_revision="$RELEASE_SHA"
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "{\"ref\":\"main\",\"inputs\":{\"venue_revision\":\"${RELEASE_SHA}\"}}" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-production.yml/dispatches"
