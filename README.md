@@ -20,7 +20,8 @@ monorepo. Everything that runs on a venue PC lives here:
   releases via the `Sync Motion Levels games bundle` workflow.
 - `content/audio/` — audio assets served by the engine.
 - `deploy/motionlevels-pc/` — venue container images, Compose model, and host
-  scripts; `ansible/` — venue deploy playbooks.
+  scripts; `deploy/nixos/` — declarative NixOS host evaluation;
+  `ansible/` — venue deploy playbooks.
 
 ## Development
 

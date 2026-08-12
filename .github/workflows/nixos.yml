@@ -1,0 +1,38 @@
+name: NixOS venue host
+
+on:
+  pull_request:
+    paths:
+      - deploy/nixos/**
+      - .github/workflows/nixos.yml
+  push:
+    branches:
+      - main
+    paths:
+      - deploy/nixos/**
+      - .github/workflows/nixos.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Evaluate and build NixOS host
+    runs-on: ${{ vars.CI_RUNNER_LABEL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+
+      - name: Check flake
+        working-directory: deploy/nixos
+        run: nix flake check
+
+      - name: Build venue lab host
+        working-directory: deploy/nixos
+        run: >-
+          nix build --no-link
+          .#nixosConfigurations.motionlevels-nixos-venue-lab.config.system.build.toplevel
