@@ -55,7 +55,7 @@ jobs:
             --volume "$GITHUB_WORKSPACE:/workspace:ro" \
             --workdir /workspace \
             golang:1.24-bookworm \
-            bash -lc '
+            bash -c '
               mkdir -p "$HOME"
               apt-get update
               apt-get install -y --no-install-recommends libasound2-dev pkg-config
