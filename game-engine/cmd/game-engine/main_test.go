@@ -870,6 +870,39 @@ func TestSelectMotionLevelsGamesUsesPinnedRunnerAndExtendedDisplayFeed(t *testin
 	}
 }
 
+func TestNativeScreensaverUsesPinnedTypeScriptAnimationProduct(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node is not installed")
+	}
+	bundleRoot := filepath.Clean("../../../game-bundles/motion-levels-games")
+	bundle, err := motionlevelsgames.Load(bundleRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	product, err := bundle.ResolveTaggedGame(nativeAnimationGameID, "salvapantallas", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	startedAt := time.Unix(1_700_000_000, 0)
+	game, err := makeNativeScreensaverRunnerGame(config{
+		Brightness: 80, PlayerCount: 1, DurationSeconds: 17,
+		MotionLevelsGamesRoot: bundleRoot, MotionLevelsGamesNode: "node",
+	}, 137, startedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer game.Close()
+
+	frame := game.Render(startedAt.Add(20 * time.Millisecond))
+	if len(frame) != 16*32 {
+		t.Fatalf("frame length = %d", len(frame))
+	}
+	snapshot := game.Snapshot()
+	if product.ID != nativeAnimationGameID || snapshot.CurrentGame != nativeAnimationGameID || snapshot.Phase != "running" {
+		t.Fatalf("native animation product = %s snapshot = %+v", product.ID, snapshot)
+	}
+}
+
 func TestSelectMotionLevelsGamesRejectsRevisionMismatch(t *testing.T) {
 	runtime := newGameRuntime(config{MotionLevelsGamesRoot: filepath.Clean("../../../game-bundles/motion-levels-games")}, nil, nil)
 	request := httptest.NewRequest(http.MethodPost, "/api/select", bytes.NewBufferString(`{"game":"motion-levels-games:ping-pong","sourceKind":"motion_levels_games","sourceRevision":"wrong","playerCount":0,"allowAnyPlayers":true}`))
