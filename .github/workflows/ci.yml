@@ -60,7 +60,9 @@ jobs:
         run: go test ./...
 
       - name: Compile packages
-        run: go build ./...
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          go build ./...
 
       - name: Verify motion-go seeds are current
         run: go run ./game-engine/cmd/motion-go-seeds -check

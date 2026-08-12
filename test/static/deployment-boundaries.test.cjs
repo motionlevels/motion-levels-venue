@@ -36,6 +36,7 @@ test("CI supplies native and browser dependencies without privileged runner setu
   assert.match(workflow, /name: Go[\s\S]*?container: golang:1\.24-bookworm/);
   assert.match(workflow, /image: mcr\.microsoft\.com\/playwright:v1\.62\.1-noble/);
   assert.match(workflow, /image: node:24-bookworm/);
+  assert.match(workflow, /git config --global --add safe\.directory "\$GITHUB_WORKSPACE"/);
   assert.doesNotMatch(workflow, /sudo apt-get|playwright install --with-deps/);
 });
 
