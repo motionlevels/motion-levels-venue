@@ -78,7 +78,7 @@ GOTOOLCHAIN="$controller_go_version" \
 CONTROLLER_EXPECTED_GO_VERSION="$controller_go_version" \
 SOURCE_REVISION="$controller_revision" \
 OUTPUT_DIR="$controller_output" \
-  "$controller_root/scripts/build-native.sh" >/dev/null
+  sh "$controller_root/scripts/build-native.sh" >/dev/null
 controller_binary="$controller_output/motion-levels-controller-linux-amd64-$controller_revision"
 install -m 0755 "$controller_binary" "$candidate/bin/floor-controller"
 
