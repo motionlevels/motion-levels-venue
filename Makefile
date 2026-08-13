@@ -56,7 +56,7 @@ deploy-standard-venues:
 	echo "==> No standard venues reachable; venue deploy skipped."
 
 deploy-motionlevels-1:
-	GHCR_TOKEN="$${GHCR_TOKEN:-$$(gh auth token)}" GHCR_USERNAME="$${GHCR_USERNAME:-lobis}" ansible-playbook ansible/playbooks/venue-containers.yml --limit motionlevels-1
+	GHCR_TOKEN="$${GHCR_TOKEN:-$$(gh auth token)}" GHCR_USERNAME="$${GHCR_USERNAME:-lobis}" ansible-playbook ansible/playbooks/venue.yml --limit motionlevels-1
 
 deploy-motionlevels-cloud-1:
 	GHCR_TOKEN="$${GHCR_TOKEN:-$$(gh auth token)}" GHCR_USERNAME="$${GHCR_USERNAME:-lobis}" MOTION_LEVELS_DEPLOY_MODE="$(DEPLOY_MODE)" ansible-playbook ansible/playbooks/venue.yml --limit motionlevels-cloud-1
@@ -68,13 +68,13 @@ deploy-runtime-motionlevels-cloud-1:
 	$(MAKE) deploy-motionlevels-cloud-1 DEPLOY_MODE=runtime
 
 status-motionlevels-1:
-	ssh "$(HOST)" '/usr/local/sbin/motion-levels-venue-containers status'
+	ssh "$(HOST)" 'systemctl --no-pager --full status motion-levels-floor-controller motion-levels-game-engine motion-levels-venue-supervisor motion-levels-kiosk caddy'
 
 logs-motionlevels-1:
-	ssh "$(HOST)" '/usr/local/sbin/motion-levels-venue-containers logs'
+	ssh "$(HOST)" 'journalctl -u motion-levels-floor-controller -u motion-levels-game-engine -u motion-levels-venue-supervisor -u motion-levels-kiosk -n 250 --no-pager'
 
 restart-motionlevels-1:
-	ssh "$(HOST)" '/usr/local/sbin/motion-levels-venue-containers restart'
+	ssh "$(HOST)" 'systemctl restart motion-levels-floor-controller motion-levels-game-engine motion-levels-venue-supervisor motion-levels-kiosk'
 
 rollback-motionlevels-1:
-	ssh "$(HOST)" '/usr/local/sbin/motion-levels-venue-containers rollback'
+	ssh "$(HOST)" 'set -eu; previous=$$(readlink -f /opt/motion-levels/rebuild/previous); test -d "$$previous"; ln -sfn "$$previous" /opt/motion-levels/rebuild/current; systemctl restart motion-levels-floor-controller motion-levels-game-engine motion-levels-venue-supervisor motion-levels-kiosk caddy'

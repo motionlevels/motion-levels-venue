@@ -1,0 +1,18 @@
+[Unit]
+Description=Motion Levels venue supervisor API
+After=network-online.target motion-levels-floor-controller.service motion-levels-game-engine.service
+Wants=network-online.target motion-levels-floor-controller.service motion-levels-game-engine.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/motion-levels/motion-levels.env
+EnvironmentFile=-/etc/motion-levels/platform.env
+EnvironmentFile=-/etc/motion-levels/venue-supervisor.env
+Environment=MOTION_LEVELS_CAMERA_RECORDER_TOKEN_FILE=/etc/motion-levels/camera-recorder-token
+ExecStart=/usr/bin/python3 /opt/motion-levels/rebuild/current/deploy/motionlevels-pc/motion-levels-venue-supervisor.py
+Restart=always
+RestartSec=2
+User=root
+
+[Install]
+WantedBy=multi-user.target

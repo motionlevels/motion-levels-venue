@@ -18,6 +18,13 @@ monorepo. The repository owns the venue host and image boundary:
 - `deploy/motionlevels-pc/` — venue container images, Compose model, and host
   scripts; `ansible/` — venue deploy playbooks.
 
+`motionlevels-1` runs the production controller, TypeScript venue runtime,
+display kiosk, Caddy, and host supervisor as systemd services. Docker remains
+the reproducible build/extraction boundary and the previous Compose release is
+kept as rollback material. The local operator dashboard is served at `/venue/`;
+its `/venue-api/v1/snapshot` contract is also the venue-owned status source for
+the platform sala view.
+
 The old `game-engine/`, `packages/motiongo`, and `content/audio` trees are
 retained only as historical migration material. Production images do not build,
 copy, execute, or mount them, and they must not be used as a fallback.

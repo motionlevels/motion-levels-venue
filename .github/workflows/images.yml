@@ -54,7 +54,8 @@ jobs:
             scripts/request-venue-deployment.sh
           python3 -m py_compile \
             deploy/motionlevels-pc/motion-levels-camera-helper.py \
-            deploy/motionlevels-pc/motion-levels-security-recorder.py
+            deploy/motionlevels-pc/motion-levels-security-recorder.py \
+            deploy/motionlevels-pc/motion-levels-venue-supervisor.py
           python3 -m unittest discover -s deploy/motionlevels-pc/tests
 
       - name: Validate the venue component lock

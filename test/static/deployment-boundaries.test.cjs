@@ -290,6 +290,31 @@ test("venue runtime activation is independent from the retired audio broker", ()
   assert.match(activation, /systemctl reload-or-restart motion-levels-container-firewall\.service/);
 });
 
+test("motionlevels-1 deploys the systemd-native supervisor and operator UI", () => {
+  const makefile = readRepoFile("Makefile");
+  const inventory = readRepoFile("ansible/inventory.yaml");
+  const playbook = readRepoFile("ansible/playbooks/venue.yml");
+  const caddy = readRepoFile("deploy/motionlevels-pc/Caddyfile");
+  const supervisor = readRepoFile("deploy/motionlevels-pc/motion-levels-venue-supervisor.py");
+  const service = readRepoFile("deploy/motionlevels-pc/motion-levels-venue-supervisor.service");
+  const ui = readRepoFile("deploy/motionlevels-pc/venue.html");
+
+  assert.match(makefile, /deploy-motionlevels-1:[\s\S]*ansible\/playbooks\/venue\.yml --limit motionlevels-1/);
+  assert.match(inventory, /motion_levels_containerized_venue: false/);
+  assert.match(playbook, /motion-levels-venue-supervisor\.service/);
+  assert.match(playbook, /motion-levels-venue-containers\.service/);
+  assert.match(playbook, /motion_levels_native_camera_recorder_url/);
+  assert.match(caddy, /handle_path \/venue-api\/\*/);
+  assert.match(caddy, /handle_path \/venue\/\*/);
+  assert.match(supervisor, /motion-levels-venue-snapshot-v1/);
+  assert.match(supervisor, /\/api\/ingest\/session/);
+  assert.match(supervisor, /\/recordings\/quick/);
+  assert.match(service, /ExecStart=\/usr\/bin\/python3 .*motion-levels-venue-supervisor\.py/);
+  assert.match(ui, /data-duration="10"/);
+  assert.match(ui, /data-duration="30"/);
+  assert.match(ui, /data-duration="60"/);
+});
+
 test("container, hardware, and Ethernet-only Caddy routes use kernel-visible boundaries", () => {
   const compose = readRepoFile("deploy/motionlevels-pc/docker-compose.yml");
   const firewall = readRepoFile("deploy/motionlevels-pc/motion-levels-container-firewall.nft");

@@ -19,6 +19,21 @@
 		reverse_proxy 127.0.0.1:4102
 	}
 
+	redir /venue /venue/
+	handle_path /venue/* {
+		root * /opt/motion-levels/rebuild/current/deploy/motionlevels-pc
+		rewrite * /venue.html
+		header Cache-Control "no-store"
+		file_server
+	}
+
+	# Canonical host snapshot/control API. The supervisor itself is loopback
+	# only; Caddy is the single network boundary shared by the local operator
+	# page and the platform sala view over Tailscale.
+	handle_path /venue-api/* {
+		reverse_proxy 127.0.0.1:4103
+	}
+
 	# The /tv and /cameras pages — and the platform assets/APIs and camera
 	# streams they depend on — are exposed only on the wired venue LAN address
 	# (192.168.1.142), which lives solely on the ethernet interface. Each

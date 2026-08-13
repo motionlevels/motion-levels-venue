@@ -12,13 +12,14 @@ all:
         motionlevels-1:
           ansible_host: 100.76.156.89
           motion_levels_hostname: motionlevels-1
-          motion_levels_containerized_venue: true
+          motion_levels_containerized_venue: false
           # The player is isolated behind the host Weston compositor and the
           # render-only device boundary; validate TV hotplug and HDMI audio live.
           motion_levels_display_backend: wayland
-          # The GoPro service is the production session recorder. The explicit
-          # egress gateway reaches the host-owned service from the engine.
+          # The GoPro recorder remains independently deployed. Keep distinct
+          # addresses for the rollback container network and the native host.
           motion_levels_camera_recorder_url: http://172.30.53.1:8040
+          motion_levels_native_camera_recorder_url: http://127.0.0.1:8040
           motion_levels_camera_recorder_segment_seconds: 300
           motion_levels_x5_caddy_upstream: http://172.30.53.1:8040
           motion_levels_lan_interface: enp2s0

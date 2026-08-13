@@ -555,6 +555,21 @@ write_files:
           reverse_proxy 127.0.0.1:4102
         }
 
+        redir /venue /venue/
+        handle_path /venue/* {
+          root * /opt/motion-levels/rebuild/current/deploy/motionlevels-pc
+          rewrite * /venue.html
+          header Cache-Control "no-store"
+          file_server
+        }
+
+        # Canonical host snapshot/control API. The supervisor itself is loopback
+        # only; Caddy is the single network boundary shared by the local operator
+        # page and the platform sala view over Tailscale.
+        handle_path /venue-api/* {
+          reverse_proxy 127.0.0.1:4103
+        }
+
         # The /tv and /cameras pages — and the platform assets/APIs and camera
         # streams they depend on — are exposed only on the wired venue LAN address
         # (192.168.1.142), which lives solely on the ethernet interface. Each
@@ -759,6 +774,7 @@ write_files:
       Environment=MOTION_LEVELS_CONTROLLER_ADDR=127.0.0.1:4201
       Environment=MOTION_LEVELS_GAMES_ROOT=/opt/motion-levels/rebuild/current/game-bundles/motion-levels-games
       Environment=MOTION_LEVELS_NODE_BINARY=/opt/motion-levels/rebuild/current/bin/node
+      Environment=MOTION_LEVELS_CAMERA_RECORDER_TOKEN_FILE=/etc/motion-levels/camera-recorder-token
       ExecStart=/opt/motion-levels/rebuild/current/deploy/motionlevels-pc/venue-game-engine
       Restart=always
       RestartSec=2
@@ -773,7 +789,7 @@ write_files:
     content: |
       [Unit]
       Description=Motion Levels HDMI kiosk browser
-      After=network-online.target sound.target caddy.service motion-levels-venue-containers.service
+      After=network-online.target sound.target caddy.service motion-levels-game-engine.service
       Wants=network-online.target sound.target
       Conflicts=getty@tty7.service display-manager.service motion-levels-player-tv.service
 

@@ -117,6 +117,7 @@ COPY --from=player-menu-assets /workspace/player-menu /srv/player-menu
 COPY --from=frontends /workspace/apps/player-display/dist /srv/player-display
 COPY game-bundles/motion-levels-games /srv/games
 COPY deploy/motionlevels-pc/cameras.html /srv/venue/cameras.html
+COPY deploy/motionlevels-pc/venue.html /srv/venue/venue.html
 RUN /bin/sh -n /usr/local/bin/venue-caddy \
     && caddy validate --config /etc/caddy/Caddyfile
 USER 10003:10003

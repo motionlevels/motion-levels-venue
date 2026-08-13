@@ -21,6 +21,14 @@
 		}
 	}
 
+	redir /venue /venue/
+	handle_path /venue/* {
+		root * /srv/venue
+		rewrite * /venue.html
+		header Cache-Control "no-store"
+		file_server
+	}
+
 	# Snapshot data remains reachable through Tailscale for the platform, but
 	# the helper itself is not published on a host port.
 	handle /cam/* {
