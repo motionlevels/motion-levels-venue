@@ -110,6 +110,58 @@ def service_states() -> dict[str, str]:
     return states
 
 
+def display_connection() -> dict[str, Any]:
+    """Report physical X output state without making HDMI a venue dependency."""
+    environment = os.environ.copy()
+    environment.setdefault("DISPLAY", ":0")
+    try:
+        result = subprocess.run(
+            ["/usr/bin/xrandr", "--query"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=3,
+            env=environment,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"available": False, "connected": None, "error": str(exc)}
+
+    if result.returncode != 0:
+        return {
+            "available": False,
+            "connected": None,
+            "error": (result.stderr.strip() or f"xrandr exited {result.returncode}"),
+        }
+
+    outputs: list[dict[str, Any]] = []
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) < 2 or fields[1] not in {"connected", "disconnected"}:
+            continue
+        active_mode = next(
+            (
+                field.split("+", 1)[0]
+                for field in fields[2:]
+                if "+" in field and field.split("+", 1)[0].replace("x", "").isdigit()
+            ),
+            None,
+        )
+        outputs.append(
+            {
+                "name": fields[0],
+                "connected": fields[1] == "connected",
+                "activeMode": active_mode,
+            }
+        )
+    connected = [output for output in outputs if output["connected"]]
+    return {
+        "available": True,
+        "connected": bool(connected),
+        "activeMode": next((output["activeMode"] for output in connected if output["activeMode"]), None),
+        "outputs": outputs,
+    }
+
+
 def build_snapshot() -> dict[str, Any]:
     targets = {
         "engine": f"{ENGINE_URL}/api/status",
@@ -117,11 +169,13 @@ def build_snapshot() -> dict[str, Any]:
         "controller": f"{CONTROLLER_URL}/health",
         "camera": f"{CAMERA_URL}/status",
     }
-    with ThreadPoolExecutor(max_workers=len(targets) + 1) as pool:
+    with ThreadPoolExecutor(max_workers=len(targets) + 2) as pool:
         probe_futures = [pool.submit(probe, name, url) for name, url in targets.items()]
         services_future = pool.submit(service_states)
+        display_connection_future = pool.submit(display_connection)
         probes = dict(future.result() for future in probe_futures)
         services = services_future.result()
+        physical_display = display_connection_future.result()
 
     engine = probes["engine"].get("data", {})
     camera = probes["camera"].get("data", {})
@@ -142,11 +196,13 @@ def build_snapshot() -> dict[str, Any]:
         "engineHealth": probes["engineHealth"],
         "controller": probes["controller"],
         "display": display,
+        "displayConnection": physical_display,
         "camera": probes["camera"],
         "summary": {
             "game": engine.get("currentGame") if isinstance(engine, dict) else None,
             "phase": engine.get("phase") if isinstance(engine, dict) else None,
             "displayHealthy": display.get("healthy") is True if isinstance(display, dict) else False,
+            "displayConnected": physical_display.get("connected"),
             "cameraDetected": camera.get("readyToRecord") is True
             or (isinstance(camera.get("camera"), dict) and camera["camera"].get("detected") is True)
             or (isinstance(camera.get("cameraStatus"), dict) and camera["cameraStatus"].get("ok") is True),

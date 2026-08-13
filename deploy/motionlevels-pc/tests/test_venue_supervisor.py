@@ -13,6 +13,36 @@ SPEC.loader.exec_module(SUPERVISOR)
 
 
 class VenueSupervisorTests(unittest.TestCase):
+    def test_display_connection_reports_disconnected_outputs(self):
+        query = """Screen 0: minimum 8 x 8, current 1024 x 768, maximum 32767 x 32767
+HDMI-1 disconnected primary (normal left inverted right x axis y axis)
+DP-1 disconnected (normal left inverted right x axis y axis)
+"""
+        with mock.patch.object(
+            SUPERVISOR.subprocess,
+            "run",
+            return_value=mock.Mock(returncode=0, stdout=query, stderr=""),
+        ):
+            status = SUPERVISOR.display_connection()
+
+        self.assertTrue(status["available"])
+        self.assertFalse(status["connected"])
+        self.assertIsNone(status["activeMode"])
+
+    def test_display_connection_reports_active_mode(self):
+        query = """Screen 0: minimum 8 x 8, current 1920 x 1080, maximum 32767 x 32767
+HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)
+"""
+        with mock.patch.object(
+            SUPERVISOR.subprocess,
+            "run",
+            return_value=mock.Mock(returncode=0, stdout=query, stderr=""),
+        ):
+            status = SUPERVISOR.display_connection()
+
+        self.assertTrue(status["connected"])
+        self.assertEqual(status["activeMode"], "1920x1080")
+
     def test_snapshot_composes_runtime_hardware_and_release_state(self):
         def fake_fetch(url, **_options):
             if url.endswith("/api/status"):
@@ -28,6 +58,11 @@ class VenueSupervisorTests(unittest.TestCase):
         with (
             mock.patch.object(SUPERVISOR, "fetch_json", side_effect=fake_fetch),
             mock.patch.object(SUPERVISOR, "service_states", return_value={"engine": "active"}),
+            mock.patch.object(
+                SUPERVISOR,
+                "display_connection",
+                return_value={"available": True, "connected": True, "activeMode": "1920x1080"},
+            ),
             mock.patch.object(SUPERVISOR, "read_json_file", return_value={"revision": "abc1234"}),
         ):
             snapshot = SUPERVISOR.build_snapshot()
@@ -36,8 +71,36 @@ class VenueSupervisorTests(unittest.TestCase):
         self.assertTrue(snapshot["ok"])
         self.assertEqual(snapshot["summary"]["game"], "motion-levels-games:lava")
         self.assertTrue(snapshot["summary"]["displayHealthy"])
+        self.assertTrue(snapshot["summary"]["displayConnected"])
         self.assertTrue(snapshot["summary"]["cameraDetected"])
         self.assertEqual(snapshot["venue"]["release"]["revision"], "abc1234")
+
+    def test_disconnected_display_is_visible_but_does_not_fail_the_venue(self):
+        def fake_fetch(url, **_options):
+            if url.endswith("/api/status"):
+                return {"currentGame": "salvapantallas", "phase": "idle"}
+            if url.endswith("/api/health"):
+                return {"status": "ok", "displayClient": {"healthy": False, "fresh": False}}
+            if url.endswith(":4101/health"):
+                return {"ok": True}
+            if url.endswith("/status"):
+                return {"readyToRecord": True}
+            raise AssertionError(url)
+
+        with (
+            mock.patch.object(SUPERVISOR, "fetch_json", side_effect=fake_fetch),
+            mock.patch.object(SUPERVISOR, "service_states", return_value={"engine": "active"}),
+            mock.patch.object(
+                SUPERVISOR,
+                "display_connection",
+                return_value={"available": True, "connected": False, "activeMode": None},
+            ),
+        ):
+            snapshot = SUPERVISOR.build_snapshot()
+
+        self.assertTrue(snapshot["ok"])
+        self.assertFalse(snapshot["summary"]["displayConnected"])
+        self.assertFalse(snapshot["summary"]["displayHealthy"])
 
     def test_quick_record_clamps_duration_and_identifies_venue_ui(self):
         with mock.patch.object(SUPERVISOR, "fetch_json", return_value={"ok": True}) as fetch:
