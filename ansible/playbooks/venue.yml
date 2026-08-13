@@ -1169,17 +1169,6 @@
         state: absent
       loop: "{{ motion_levels_retired_services }}"
 
-    - name: Reload systemd after retiring old units
-      ansible.builtin.systemd_service:
-        daemon_reload: true
-
-    - name: Clear failed state for units retired after healthy cutover
-      ansible.builtin.command:
-        argv:
-          - systemctl
-          - reset-failed
-      changed_when: false
-
     - name: Stop and disable the retired container runtime
       ansible.builtin.systemd_service:
         name: "{{ item }}"
@@ -1190,6 +1179,23 @@
         - docker.service
         - containerd.service
       failed_when: false
+
+    - name: Remove the retired container control plane after verified cutover
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ motion_levels_retired_container_control_paths }}"
+
+    - name: Reload systemd after retiring old units and container control files
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: Clear failed state for units retired after healthy cutover
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - reset-failed
+      changed_when: false
 
     - name: Remove successful and stale cutover rollback snapshots
       ansible.builtin.file:

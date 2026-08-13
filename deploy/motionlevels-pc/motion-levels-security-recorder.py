@@ -58,12 +58,22 @@ PLATFORM_TOKEN = secret_value(
     "MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_TOKEN",
     secret_value("MOTION_LEVELS_PLATFORM_TOKEN"),
 )
-PLATFORM_TIMEOUT_SECONDS = float(os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_TIMEOUT_SECONDS", "60"))
+# A request must never hold shutdown past the unit's 20-second stop ceiling.
+# Failed uploads retain their local segment and are retried on the next scan.
+PLATFORM_TIMEOUT_SECONDS = max(
+    1.0,
+    min(10.0, float(os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_TIMEOUT_SECONDS", "10"))),
+)
+FFMPEG_STOP_TIMEOUT_SECONDS = max(
+    1.0,
+    min(10.0, float(os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_FFMPEG_STOP_TIMEOUT_SECONDS", "5"))),
+)
 CONTROLLER_HOSTNAME = os.environ.get("MOTION_LEVELS_CONTROLLER_HOSTNAME") or os.environ.get("MOTION_LEVELS_HOSTNAME") or os.uname().nodename
 HEARTBEAT_PATH = Path(os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_HEARTBEAT", "/tmp/security-recorder-heartbeat.json"))
 RTSP_INPUT_PATH = Path(os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_INPUT_FILE", "/tmp/security-recorder-input.ffconcat"))
 
 stop_requested = False
+stop_event = threading.Event()
 ffmpeg_process: subprocess.Popen[str] | None = None
 
 
@@ -211,6 +221,8 @@ def sidecar_path(path: Path) -> Path:
 
 
 def upload_segment(path: Path) -> bool:
+    if stop_requested:
+        return False
     sidecar = sidecar_path(path)
     if sidecar.exists():
         return True
@@ -247,7 +259,11 @@ def upload_segment(path: Path) -> bool:
         segment_id = str(upload.get("segmentId") or "")
         if not upload_url or not segment_id:
             raise RuntimeError("platform init did not return uploadUrl and segmentId")
+        if stop_requested:
+            return False
         put_file(upload_url, path, "video/mp4")
+        if stop_requested:
+            return False
         complete = post_json(
             "/api/security-recordings/complete",
             {
@@ -272,11 +288,11 @@ def upload_segment(path: Path) -> bool:
     except error.HTTPError as exc:
         detail = exc.read(4096).decode("utf-8", errors="replace")
         log(f"security segment upload failed status={exc.code} path={path} detail={detail}")
-        if upload and upload.get("segmentId"):
+        if not stop_requested and upload and upload.get("segmentId"):
             mark_failed(str(upload["segmentId"]), path, stat.st_size, str(exc))
     except Exception as exc:
         log(f"security segment upload failed path={path} error={exc}")
-        if upload and upload.get("segmentId"):
+        if not stop_requested and upload and upload.get("segmentId"):
             mark_failed(str(upload["segmentId"]), path, stat.st_size, str(exc))
     return False
 
@@ -315,13 +331,19 @@ def segment_candidates(include_newest: bool = False) -> list[Path]:
 
 
 def upload_pending(include_newest: bool = False) -> None:
+    if stop_requested:
+        return
     write_heartbeat("recording")
     if not PLATFORM_TOKEN:
         log("platform token is not configured; security segments will remain local")
         return
     cleanup_confirmed_local_segments()
     for path in segment_candidates(include_newest=include_newest):
+        if stop_requested:
+            break
         upload_segment(path)
+    if stop_requested:
+        return
     cleanup_confirmed_local_segments()
     write_heartbeat("recording")
 
@@ -342,10 +364,24 @@ def cleanup_confirmed_local_segments() -> None:
 def handle_signal(signum: int, _frame: Any) -> None:
     global stop_requested
     stop_requested = True
+    stop_event.set()
     log(f"received signal {signum}; stopping")
     write_heartbeat("stopping", f"signal={signum}")
     if ffmpeg_process and ffmpeg_process.poll() is None:
         ffmpeg_process.terminate()
+
+
+def stop_ffmpeg() -> None:
+    process = ffmpeg_process
+    if process is None or process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=FFMPEG_STOP_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        log(f"ffmpeg did not stop within {FFMPEG_STOP_TIMEOUT_SECONDS:g}s; killing it")
+        process.kill()
+        process.wait(timeout=2)
 
 
 def main() -> int:
@@ -368,30 +404,33 @@ def main() -> int:
     log(f"starting security recorder camera={CAMERA_ID} host={CAMERA_HOST} role={CAMERA_ROLE} audio={'on' if AUDIO_ENABLED else 'off'} root={ROOT}")
     log(f"segments={SEGMENT_SECONDS}s retention={RETENTION_DAYS}d platform={PLATFORM_URL}")
 
-    while not stop_requested:
-        write_rtsp_input()
-        command = ffmpeg_command()
-        log("launching ffmpeg " + " ".join(command))
-        ffmpeg_process = subprocess.Popen(
-            command,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        threading.Thread(target=log_ffmpeg_stderr, args=(ffmpeg_process,), daemon=True).start()
-        write_heartbeat("recording")
-        while ffmpeg_process.poll() is None and not stop_requested:
-            upload_pending(include_newest=False)
-            time.sleep(SCAN_SECONDS)
-        upload_pending(include_newest=True)
-        if stop_requested:
-            break
-        detail = f"ffmpeg exited code={ffmpeg_process.returncode}; restarting in 10s"
-        log(detail)
-        write_heartbeat("restarting", detail)
-        time.sleep(10)
-    RTSP_INPUT_PATH.unlink(missing_ok=True)
-    write_heartbeat("stopped")
+    try:
+        while not stop_requested:
+            write_rtsp_input()
+            command = ffmpeg_command()
+            log("launching ffmpeg " + " ".join(command))
+            ffmpeg_process = subprocess.Popen(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            threading.Thread(target=log_ffmpeg_stderr, args=(ffmpeg_process,), daemon=True).start()
+            write_heartbeat("recording")
+            while ffmpeg_process.poll() is None and not stop_requested:
+                upload_pending(include_newest=False)
+                stop_event.wait(SCAN_SECONDS)
+            if stop_requested:
+                break
+            upload_pending(include_newest=True)
+            detail = f"ffmpeg exited code={ffmpeg_process.returncode}; restarting in 10s"
+            log(detail)
+            write_heartbeat("restarting", detail)
+            stop_event.wait(10)
+    finally:
+        stop_ffmpeg()
+        RTSP_INPUT_PATH.unlink(missing_ok=True)
+        write_heartbeat("stopped")
     return 0
 
 

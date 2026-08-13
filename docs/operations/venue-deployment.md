@@ -152,8 +152,18 @@ The native service set is:
 - `caddy.service`
 
 After every native health gate succeeds, the playbook retires old display/audio/container units and
-stops and disables Docker and containerd. Their legacy storage is deliberately preserved until an
-operator explicitly approves reclaiming it; Docker is not a running production dependency.
+stops and disables Docker and containerd. It then removes only the allowlisted legacy container
+helpers and manifest/config roots that could reactivate Compose or rewrite the retired
+`/etc/motion-levels/venue/runtime.env` symlink. Native releases under `/opt/motion-levels/venue`,
+mutable state under `/var/lib/motion-levels*`, and `/var/lib/docker` are never part of that cleanup.
+Docker storage is deliberately preserved until an operator explicitly approves reclaiming it;
+Docker is not a running production dependency.
+
+The floor controller is ordered after `motion-levels-lan-ip.service`, so its configured UDP source
+address exists before the controller binds on a cold boot. The security recorder stops accepting
+new upload work on `SIGTERM`, finalizes or boundedly terminates its `ffmpeg` child, and has a 20-second
+systemd stop ceiling. Individual platform requests are capped at 10 seconds; an interrupted or
+failed upload keeps its local segment for retry on the next start.
 
 The camera environment and udev rule are rendered from production host vars. Both the playbook and
 udev reconciliation require the exact GoPro USB vendor, product, and serial; another HERO12 on the

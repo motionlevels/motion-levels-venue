@@ -167,15 +167,52 @@ test("retired display, audio, and TV broker units are removed after cutover", ()
 
 test("a verified native cutover disables the retired container runtime", () => {
   const playbook = read("ansible/playbooks/venue.yml");
+  const variables = read("ansible/inventory/production/group_vars/all.yml");
   const cameraGate = playbook.indexOf("Verify the exact GoPro through the native service");
   const runtimeStop = playbook.indexOf("Stop and disable the retired container runtime");
+  const controlCleanup = playbook.indexOf("Remove the retired container control plane after verified cutover");
 
   assert.ok(cameraGate >= 0 && cameraGate < runtimeStop);
+  assert.ok(runtimeStop < controlCleanup);
   assert.match(playbook, /docker\.socket/);
   assert.match(playbook, /docker\.service/);
   assert.match(playbook, /containerd\.service/);
+  const cleanupBlock = variables.match(/motion_levels_retired_container_control_paths:\n((?:\s+- \/[^\n]+\n?)+)/);
+  assert.ok(cleanupBlock, "retired container cleanup allowlist is missing");
+  const cleanupPaths = [...cleanupBlock[1].matchAll(/^\s+- (\/[^\n]+)$/gm)].map((match) => match[1]);
+  assert.deepEqual(cleanupPaths.sort(), [
+    "/etc/motion-levels/venue",
+    "/etc/motion-levels/venue-public",
+    "/etc/systemd/system/docker.service.d/motion-levels-firewall.conf",
+    "/opt/motion-levels/venue-containers",
+    "/usr/local/sbin/motion-levels-container-firewall",
+    "/usr/local/sbin/motion-levels-venue-containers",
+  ]);
+  for (const preserved of [
+    "/opt/motion-levels/venue",
+    "/var/lib/docker",
+    "/var/lib/motion-levels",
+    "/var/lib/motion-levels-cameras",
+  ]) {
+    assert.equal(cleanupPaths.includes(preserved), false, `${preserved} must survive legacy cleanup`);
+  }
   assert.match(playbook, /Remove successful and stale cutover rollback snapshots/);
   assert.doesNotMatch(playbook, /state: absent[\s\S]{0,160}\/var\/lib\/docker/);
+});
+
+test("cold boot orders the floor adapter after LAN assignment and bounds recorder shutdown", () => {
+  const floorService = read("deploy/motionlevels-pc/motion-levels-floor-controller.service");
+  const recorderService = read("deploy/motionlevels-pc/motion-levels-security-recorder.service");
+  const recorder = read("deploy/motionlevels-pc/motion-levels-security-recorder.py");
+
+  assert.match(floorService, /^After=.*motion-levels-lan-ip\.service$/m);
+  assert.match(floorService, /^Requires=motion-levels-lan-ip\.service$/m);
+  assert.match(recorderService, /^TimeoutStopSec=20$/m);
+  assert.match(recorderService, /^KillMode=control-group$/m);
+  assert.match(recorder, /min\(10\.0, float\(os\.environ\.get\("MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_TIMEOUT_SECONDS"/);
+  assert.match(recorder, /stop_event\.wait\(SCAN_SECONDS\)/);
+  assert.match(recorder, /if stop_requested:\n\s+break\n\s+upload_pending\(include_newest=True\)/);
+  assert.match(recorder, /process\.wait\(timeout=FFMPEG_STOP_TIMEOUT_SECONDS\)/);
 });
 
 test("the native camera can traverse to its group-readable API token", () => {

@@ -2,11 +2,14 @@ import contextlib
 import importlib.util
 import io
 import os
+import signal
 import stat
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "motion-levels-security-recorder.py"
@@ -62,6 +65,45 @@ class SecurityRecorderCredentialBoundaryTest(unittest.TestCase):
         self.assertNotIn(encoded_password, logged)
         self.assertNotIn(self.module.rtsp_url(), logged)
         self.assertIn("<redacted-password>", logged)
+
+    def test_signal_stops_ffmpeg_and_prevents_new_upload_work(self) -> None:
+        process = mock.Mock()
+        process.poll.return_value = None
+        self.module.ffmpeg_process = process
+
+        with (
+            mock.patch.object(self.module, "write_heartbeat") as heartbeat,
+            mock.patch.object(self.module, "segment_candidates") as candidates,
+        ):
+            self.module.handle_signal(signal.SIGTERM, None)
+            self.module.upload_pending(include_newest=True)
+
+        self.assertTrue(self.module.stop_requested)
+        self.assertTrue(self.module.stop_event.is_set())
+        process.terminate.assert_called_once_with()
+        candidates.assert_not_called()
+        heartbeat.assert_called_once_with("stopping", f"signal={signal.SIGTERM}")
+
+    def test_ffmpeg_shutdown_escalates_after_the_bounded_grace_period(self) -> None:
+        process = mock.Mock()
+        process.poll.return_value = None
+        process.wait.side_effect = [
+            subprocess.TimeoutExpired("ffmpeg", self.module.FFMPEG_STOP_TIMEOUT_SECONDS),
+            0,
+        ]
+        self.module.ffmpeg_process = process
+
+        self.module.stop_ffmpeg()
+
+        process.terminate.assert_called_once_with()
+        process.kill.assert_called_once_with()
+        self.assertEqual(
+            process.wait.call_args_list,
+            [
+                mock.call(timeout=self.module.FFMPEG_STOP_TIMEOUT_SECONDS),
+                mock.call(timeout=2),
+            ],
+        )
 
 
 if __name__ == "__main__":

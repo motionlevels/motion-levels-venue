@@ -67,3 +67,14 @@ motion_levels_retired_services:
   - motion-levels-display-wayland.service
   - motion-levels-container-firewall.service
   - motion-levels.service
+
+# Exact legacy container control plane removed only after the native release
+# passes every hardware and HTTP health gate. These paths are intentionally
+# separate from native releases/state and Docker's preserved storage.
+motion_levels_retired_container_control_paths:
+  - /usr/local/sbin/motion-levels-venue-containers
+  - /usr/local/sbin/motion-levels-container-firewall
+  - /opt/motion-levels/venue-containers
+  - /etc/motion-levels/venue
+  - /etc/motion-levels/venue-public
+  - /etc/systemd/system/docker.service.d/motion-levels-firewall.conf
