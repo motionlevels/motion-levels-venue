@@ -1,0 +1,67 @@
+{
+  "gameId": "pulso",
+  "scenario": {
+    "seed": 137,
+    "playerCount": 0,
+    "difficulty": "medium",
+    "actions": [
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 8,
+        "y": 16
+      },
+      {
+        "atMillis": 2150,
+        "type": "release",
+        "x": 8,
+        "y": 16
+      }
+    ],
+    "captureStartMillis": 2600,
+    "frameCount": 24,
+    "frameIntervalMillis": 90
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "pulso-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 834,
+      "sha256": "e3427c2bd80f5a9a7994ad93f89ccc9ed9068c1cdd8744d64b7323609154bf3e"
+    },
+    "thumbnail": {
+      "file": "pulso-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 7130,
+      "sha256": "8757d23cd5e5eeb72eab5add76245e5f538c5c942eb3e5d24c0d57af7c94b0e2"
+    },
+    "animation": {
+      "file": "pulso-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 9188,
+      "sha256": "384ab37f4b3cdc2cb7095e6f8a3ea6e4b423d4400398cb3a2aeb33110da023b1"
+    },
+    "playerDisplay": {
+      "file": "pulso-player-display.webp",
+      "width": 1280,
+      "height": 720,
+      "mimeType": "image/webp",
+      "bytes": 25022,
+      "sha256": "8ecda9777055e06f81ef7dfab8f2de2b30e45aba537975693c0e868750b77c8d"
+    },
+    "playerDisplayAnimation": {
+      "file": "pulso-player-display-animation.webp",
+      "width": 640,
+      "height": 360,
+      "mimeType": "image/webp",
+      "bytes": 85882,
+      "sha256": "9de53e41a10d51b7063caf3a566abecc2dd884640e242bd465b67f5f45e4d4ef"
+    }
+  }
+}

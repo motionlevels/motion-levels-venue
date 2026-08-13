@@ -1,0 +1,73 @@
+{
+  "gameId": "guardianes",
+  "scenario": {
+    "seed": 137,
+    "playerCount": 0,
+    "difficulty": "medium",
+    "actions": [
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 8,
+        "y": 16
+      },
+      {
+        "atMillis": 2150,
+        "type": "release",
+        "x": 8,
+        "y": 16
+      },
+      {
+        "atMillis": 3100,
+        "type": "press",
+        "x": 2,
+        "y": 28
+      }
+    ],
+    "captureStartMillis": 3300,
+    "frameCount": 28,
+    "frameIntervalMillis": 100
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "guardianes-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 834,
+      "sha256": "fdddffb2d7202cff92a5ba87cebb315df8f230e79998ae3b2ef9c3c5dccf678a"
+    },
+    "thumbnail": {
+      "file": "guardianes-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 10040,
+      "sha256": "ffc883345b3fa3e2ef4ba1fc4ff44d441f88fd36887ed79d8717b3d5312d641b"
+    },
+    "animation": {
+      "file": "guardianes-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 20852,
+      "sha256": "8eb2f1adee1fa31d2a90c238088953325c8c1a878a5fedeb0eb097352d4e72f8"
+    },
+    "playerDisplay": {
+      "file": "guardianes-player-display.webp",
+      "width": 1280,
+      "height": 720,
+      "mimeType": "image/webp",
+      "bytes": 25750,
+      "sha256": "763a47b433566beae46e87276b936c48740950192874ae3c692bef4276a8ff88"
+    },
+    "playerDisplayAnimation": {
+      "file": "guardianes-player-display-animation.webp",
+      "width": 640,
+      "height": 360,
+      "mimeType": "image/webp",
+      "bytes": 111378,
+      "sha256": "39dc8d5edd7cfc494faff9d3443dbd0e4cb2c5b05966fd0efa9cc918e2aef316"
+    }
+  }
+}

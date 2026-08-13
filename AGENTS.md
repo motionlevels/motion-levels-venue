@@ -4,18 +4,16 @@ Guidance for AI agents (and humans) working in this repository.
 
 ## Repository scope
 
-This is the **venue-side** repo: the Go game engine, player-display kiosk,
-player-menu runtime adapter and temporary legacy fallback, shared packages,
-and venue deploy tooling. The production player-menu source/static artifact is
-owned by `motion-levels-games`; Electron/Caddy packaging, supervisor APIs,
-controller connectivity, hardware output, and deployment remain here.
-The cloud side (platform app, website, homelab infra) lives in
-`motionlevels/motion-levels-platform`. Generated motion-go seeds are consumed
-by the platform repo — after editing an authored native game, run
-`make sync-platform-seeds` and commit the platform side too (see README).
-This repo is also canonical for `packages/`, `go.mod`/`go.sum`, and
-`content/audio`; run `make check-platform-mirrors` before publishing changes to
-those paths and `make sync-platform-mirrors` when the platform copy is stale.
+This is the **venue-side** packaging and deployment repo. The in-process
+TypeScript game runtime, player-menu source/static artifact, controller client,
+and kiosk API are owned by `motion-levels-games` and arrive only through its
+immutable pinned bundle. Electron/Caddy packaging, host supervision, physical
+controller deployment, display/camera hardware boundaries, and venue rollout
+remain here. The cloud side lives in `motionlevels/motion-levels-platform`.
+
+`game-engine/`, `packages/motiongo`, and `content/audio` are retained historical
+migration material, not a production runtime or fallback. Do not modify, build,
+mirror, deploy, or revive them. Make gameplay changes in `motion-levels-games`.
 
 ## Multiple parties share this repo
 

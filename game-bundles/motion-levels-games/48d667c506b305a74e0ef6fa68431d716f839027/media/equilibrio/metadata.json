@@ -1,0 +1,91 @@
+{
+  "gameId": "equilibrio",
+  "scenario": {
+    "seed": 137,
+    "playerCount": 0,
+    "difficulty": "medium",
+    "actions": [
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 4,
+        "y": 16
+      },
+      {
+        "atMillis": 180,
+        "type": "press",
+        "x": 11,
+        "y": 16
+      },
+      {
+        "atMillis": 2250,
+        "type": "release",
+        "x": 4,
+        "y": 16
+      },
+      {
+        "atMillis": 2260,
+        "type": "release",
+        "x": 11,
+        "y": 16
+      },
+      {
+        "atMillis": 2400,
+        "type": "press",
+        "x": 3,
+        "y": 6
+      },
+      {
+        "atMillis": 2480,
+        "type": "press",
+        "x": 12,
+        "y": 6
+      }
+    ],
+    "captureStartMillis": 2650,
+    "frameCount": 24,
+    "frameIntervalMillis": 100
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "equilibrio-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 892,
+      "sha256": "c63c85b4802a95e5e6ba46c7c3d52e22ae4ab21f5fc03633915400e151709540"
+    },
+    "thumbnail": {
+      "file": "equilibrio-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 11302,
+      "sha256": "6c28d813115c70b4aa634f32dfffcce71176e3dfbc73fc65d9bec68dee181e7b"
+    },
+    "animation": {
+      "file": "equilibrio-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 90862,
+      "sha256": "3fd7d004429a32629ee06376593093a3797ffa5e3a7348a447ad3481b0ddaefd"
+    },
+    "playerDisplay": {
+      "file": "equilibrio-player-display.webp",
+      "width": 1280,
+      "height": 720,
+      "mimeType": "image/webp",
+      "bytes": 21706,
+      "sha256": "069d3214e4257828fb28b0a0b8b7a72bee1d83fbbd2aee6ed80eabe03d4476e6"
+    },
+    "playerDisplayAnimation": {
+      "file": "equilibrio-player-display-animation.webp",
+      "width": 640,
+      "height": 360,
+      "mimeType": "image/webp",
+      "bytes": 53504,
+      "sha256": "692cd93ee4f486760413bf4c7596bf794c732dc8643ee672f0ccea4606c39783"
+    }
+  }
+}

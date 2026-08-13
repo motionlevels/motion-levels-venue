@@ -1,0 +1,60 @@
+{
+  "gameId": "saltos",
+  "scenario": {
+    "seed": 137,
+    "playerCount": 0,
+    "actions": [
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 8,
+        "y": 4
+      }
+    ],
+    "captureStartMillis": 2300,
+    "frameCount": 24,
+    "frameIntervalMillis": 120
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "saltos-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 1164,
+      "sha256": "3dfdf5b7d16954ac9a47586eadfd14c62dd0b1e4ca7f27e34663365dbd4fe5f7"
+    },
+    "thumbnail": {
+      "file": "saltos-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 26752,
+      "sha256": "7fd49941f078128b3342c0876c6c6f833a9029ce61c6b965b7e831db0d5b7b24"
+    },
+    "animation": {
+      "file": "saltos-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 61926,
+      "sha256": "8246be097df9bfeadf9be278f48b6a976c1153e43a14691388cc839720329e29"
+    },
+    "playerDisplay": {
+      "file": "saltos-player-display.webp",
+      "width": 1280,
+      "height": 720,
+      "mimeType": "image/webp",
+      "bytes": 47472,
+      "sha256": "103c60059630e33c0f6341a676827e23d62d24aad1fdaeec6775607f28cd3bbc"
+    },
+    "playerDisplayAnimation": {
+      "file": "saltos-player-display-animation.webp",
+      "width": 640,
+      "height": 360,
+      "mimeType": "image/webp",
+      "bytes": 136160,
+      "sha256": "ec41348d490d084df9d0984a8e3ba3ed845fd378b661a164544b1f4b27be446b"
+    }
+  }
+}

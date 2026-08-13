@@ -4,33 +4,35 @@ const path = require("node:path");
 const test = require("node:test");
 
 const repoRoot = path.resolve(__dirname, "../..");
-const runtimeRoot = path.join(repoRoot, "apps/venue-runtime");
+const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
 
-function sourceText() {
-  return fs
-    .readdirSync(path.join(runtimeRoot, "src"))
-    .filter((name) => name.endsWith(".ts"))
-    .map((name) => fs.readFileSync(path.join(runtimeRoot, "src", name), "utf8"))
-    .join("\n");
-}
-
-test("TypeScript venue runtime starts fail-closed in shadow mode", () => {
-  const main = fs.readFileSync(path.join(runtimeRoot, "src/main.ts"), "utf8");
-  assert.match(main, /mode !== "shadow"/);
-  assert.match(main, /only shadow is safe during migration/);
+test("venue packages the revision-matched TypeScript runtime from bundle v2", () => {
+  const dockerfile = read("deploy/motionlevels-pc/venue-bundle.Dockerfile");
+  const launcher = read("deploy/motionlevels-pc/venue-game-engine");
+  assert.equal(fs.existsSync(path.join(repoRoot, "apps/venue-runtime/package.json")), false);
+  assert.match(dockerfile, /AS games-bundle/);
+  assert.match(dockerfile, /COPY --from=games-bundle \/workspace\/bundle \/app\/games/);
+  assert.match(launcher, /venue\/runtime\.mjs/);
+  assert.match(launcher, /exec "\$node_binary" "\$runtime_entry"/);
+  assert.match(dockerfile, /cp \/usr\/local\/bin\/node \/release\/bin\/node/);
+  assert.doesNotMatch(dockerfile, /go build|\/app\/bin\/game-engine|runtime-build/);
 });
 
-test("TypeScript venue runtime has no physical floor or process boundary access", () => {
-  const sources = sourceText();
-  assert.doesNotMatch(sources, /node:dgram|createSocket\s*\(/);
-  assert.doesNotMatch(sources, /node:child_process|\bspawn\s*\(|\bexecFile\s*\(/);
-  assert.doesNotMatch(sources, /192\.168\.|255\.255\.255\.255|420[123]/);
-  assert.doesNotMatch(sources, /MOTION_LEVELS_(?:LED|FLOOR|CONTROLLER)_/);
+test("runtime and proxy use separate read-only copies of one engine token", () => {
+  const compose = read("deploy/motionlevels-pc/docker-compose.yml");
+  const caddy = read("deploy/motionlevels-pc/Caddyfile.container");
+  const playbook = read("ansible/playbooks/venue-containers.yml");
+  assert.match(compose, /engine-token-core[\s\S]*target: \/run\/secrets\/engine-token[\s\S]*read_only: true/);
+  assert.match(compose, /engine-token-caddy[\s\S]*target: \/run\/secrets\/engine-token[\s\S]*read_only: true/);
+  assert.match(caddy, /header_up X-Motion-Levels-Engine-Token/);
+  assert.match(playbook, /\("engine-token-core", engine_token, 10001, 10001\)/);
+  assert.match(playbook, /\("engine-token-caddy", engine_token, 10003, 10003\)/);
+  assert.match(playbook, /os\.chmod\(temporary, 0o400\)/);
 });
 
-test("TypeScript venue runtime is covered by pinned Node 24 CI", () => {
-  const workflow = fs.readFileSync(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8");
-  assert.match(workflow, /node-version: 24/);
-  assert.match(workflow, /name: venue-runtime[\s\S]*?working-directory: apps\/venue-runtime/);
-  assert.match(workflow, /lockfile: apps\/venue-runtime\/package-lock\.json/);
+test("venue runtime owns no audio or physical controller device boundary", () => {
+  const compose = read("deploy/motionlevels-pc/docker-compose.yml");
+  const engine = compose.slice(compose.indexOf("  engine:"), compose.indexOf("  camera-helper:"));
+  assert.match(engine, /MOTION_LEVELS_CONTROLLER_ADDR: floor-core:4201/);
+  assert.doesNotMatch(engine, /MOTION_LEVELS_AUDIO|\/dev\/|floor-hardware|LED_BROADCAST/);
 });

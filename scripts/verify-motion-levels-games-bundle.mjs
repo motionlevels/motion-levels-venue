@@ -15,18 +15,22 @@ assert.match(String(pin.releaseTag), /^games-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.
 
 const bundleRoot = path.join(vendorRoot, pin.bundlePath);
 const bundle = JSON.parse(await readFile(path.join(bundleRoot, "bundle.json"), "utf8"));
-assert.equal(bundle.schema, "motion-levels-games-bundle-v1");
-assert.equal(bundle.contractVersion, 1);
-assert.equal(bundle.runnerProtocolVersion, 1);
+assert.equal(bundle.schema, "motion-levels-games-bundle-v2");
+assert.equal(bundle.contractVersion, 2);
 assert.equal(bundle.sdkFps, 50);
 assert.equal(bundle.sourceRevision, pin.sourceRevision);
 assert.equal(bundle.artifactDigest, pin.artifactDigest);
-if (bundle.playerMenu !== undefined) {
-  assert.equal(bundle.playerMenu.adapterProtocolVersion, 2);
-  assert.match(String(bundle.playerMenu.entry), /^menu\/(?:[^/]+\/)*index\.html$/u);
-}
+assert.equal(bundle.venueRuntime?.apiProtocolVersion, 1);
+assert.equal(bundle.venueRuntime?.controllerProtocolVersion, 2);
+assert.match(String(bundle.venueRuntime?.entry), /^venue\/(?:[^/]+\/)*runtime\.mjs$/u);
+assert.equal(bundle.playerMenu?.adapterProtocolVersion, 2);
+assert.match(String(bundle.playerMenu?.entry), /^menu\/(?:[^/]+\/)*index\.html$/u);
 assert.equal(bundle.playerExperience?.contractVersion, 1);
 assert.match(String(bundle.playerExperience?.schema), /^(?:[^/]+\/)*player-experience-state\.schema\.json$/u);
+assert.match(String(bundle.playerDisplay?.entry), /^display\/(?:[^/]+\/)*display\.js$/u);
+assert.match(String(bundle.playground?.entry), /^playground\/(?:[^/]+\/)*index\.html$/u);
+assert.equal(bundle.playground?.basePath, "/games/play/");
+assert.equal(bundle.animations, "animations.json");
 
 const files = await walk(bundleRoot);
 const actual = await Promise.all(files
@@ -41,8 +45,14 @@ const actual = await Promise.all(files
     };
   }));
 assert.deepEqual(actual, bundle.files);
-if (bundle.playerMenu !== undefined) {
-  assert.ok(actual.some((file) => file.path === bundle.playerMenu.entry), "player menu entry is missing from bundle files");
+for (const entry of [
+  bundle.venueRuntime.entry,
+  bundle.playerMenu.entry,
+  bundle.playerDisplay.entry,
+  bundle.playground.entry,
+  bundle.animations,
+]) {
+  assert.ok(actual.some((file) => file.path === entry), `bundle entry is missing from bundle files: ${entry}`);
 }
 assert.ok(
   actual.some((file) => file.path === bundle.playerExperience.schema),

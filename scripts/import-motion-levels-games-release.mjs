@@ -127,9 +127,8 @@ export async function importMotionLevelsGamesRelease({
 
 export async function verifyBundleDirectory(root, expectedRevision) {
   const manifest = JSON.parse(await readFile(path.join(root, "bundle.json"), "utf8"));
-  assert.equal(manifest.schema, "motion-levels-games-bundle-v1");
-  assert.equal(manifest.contractVersion, 1);
-  assert.equal(manifest.runnerProtocolVersion, 1);
+  assert.equal(manifest.schema, "motion-levels-games-bundle-v2");
+  assert.equal(manifest.contractVersion, 2);
   assert.equal(manifest.sdkFps, 50);
   assert.equal(manifest.sourceRevision, expectedRevision);
   assert.match(String(manifest.artifactDigest), digestPattern);
@@ -149,38 +148,41 @@ export async function verifyBundleDirectory(root, expectedRevision) {
   assert.equal(createHash("sha256").update(canonical).digest("hex"), manifest.artifactDigest, "bundle artifact digest mismatch");
 
   assertSafeRelativePath(manifest.catalog, "catalog");
-  assertSafeRelativePath(manifest.runtime?.entry, "runtime entry");
+  assertSafeRelativePath(manifest.venueRuntime?.entry, "venue runtime entry");
+  assert.equal(manifest.venueRuntime?.apiProtocolVersion, 1, "unsupported venue API protocol");
+  assert.equal(manifest.venueRuntime?.controllerProtocolVersion, 2, "unsupported controller protocol");
   assertSafeRelativePath(manifest.playerDisplay?.entry, "player display entry");
-  if (manifest.playerMenu !== undefined) {
-    assertSafeRelativePath(manifest.playerMenu?.entry, "player menu entry");
-    assert.equal(manifest.playerMenu?.adapterProtocolVersion, 2, "unsupported player menu adapter protocol");
-  }
+  assertSafeRelativePath(manifest.playerMenu?.entry, "player menu entry");
+  assert.equal(manifest.playerMenu?.adapterProtocolVersion, 2, "unsupported player menu adapter protocol");
   assert.equal(manifest.playerExperience?.contractVersion, 1, "unsupported player experience contract");
   assertSafeRelativePath(manifest.playerExperience?.schema, "player experience schema");
+  assertSafeRelativePath(manifest.playground?.entry, "playground entry");
+  assert.equal(manifest.playground?.basePath, "/games/play/", "unsupported playground base path");
+  assertSafeRelativePath(manifest.animations, "animation catalog");
   const filePaths = new Set(actualFiles.map((file) => file.path));
   assert.ok(filePaths.has(manifest.catalog), "catalog is missing from the bundle file list");
-  assert.ok(filePaths.has(manifest.runtime.entry), "runtime entry is missing from the bundle file list");
+  assert.ok(filePaths.has(manifest.venueRuntime.entry), "venue runtime entry is missing from the bundle file list");
   assert.ok(filePaths.has(manifest.playerDisplay.entry), "player display entry is missing from the bundle file list");
-  if (manifest.playerMenu !== undefined) {
-    assert.ok(filePaths.has(manifest.playerMenu.entry), "player menu entry is missing from the bundle file list");
-  }
+  assert.ok(filePaths.has(manifest.playerMenu.entry), "player menu entry is missing from the bundle file list");
   assert.ok(
     filePaths.has(manifest.playerExperience.schema),
     "player experience schema is missing from the bundle file list",
   );
+  assert.ok(filePaths.has(manifest.playground.entry), "playground entry is missing from the bundle file list");
+  assert.ok(filePaths.has(manifest.animations), "animation catalog is missing from the bundle file list");
 
   const catalog = JSON.parse(await readFile(path.join(root, ...manifest.catalog.split("/")), "utf8"));
   assert.ok(Array.isArray(catalog), "bundle catalog must be an array");
-  assertStringArray(manifest.runtime.games, "runtime games");
+  assertStringArray(manifest.venueRuntime.games, "venue runtime games");
   assertStringArray(manifest.playerDisplay.games, "player display games");
-  assert.equal(new Set(manifest.runtime.games).size, manifest.runtime.games.length, "runtime games must be unique");
+  assert.equal(new Set(manifest.venueRuntime.games).size, manifest.venueRuntime.games.length, "venue runtime games must be unique");
   assert.equal(new Set(manifest.playerDisplay.games).size, manifest.playerDisplay.games.length, "player display games must be unique");
   validateCatalog(catalog, filePaths);
   const productionGames = catalog
     .filter((game) => game?.availability?.production === true)
     .map((game) => game.id)
     .sort();
-  assert.deepEqual([...manifest.runtime.games].sort(), productionGames, "runtime registry must match production catalog games");
+  assert.deepEqual([...manifest.venueRuntime.games].sort(), productionGames, "venue runtime registry must match production catalog games");
   assert.deepEqual([...manifest.playerDisplay.games].sort(), productionGames, "player display registry must match production catalog games");
   return manifest;
 }

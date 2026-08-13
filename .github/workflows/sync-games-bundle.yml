@@ -41,12 +41,6 @@ jobs:
         with:
           node-version: 24
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
       - name: Validate release identity
         shell: bash
         run: |
@@ -102,9 +96,7 @@ jobs:
             --source-revision "$SOURCE_REVISION"
 
       - name: Verify venue bundle boundary
-        run: |
-          npm run verify:games-bundle
-          go test ./game-engine/internal/games/motionlevelsgames/...
+        run: npm run verify:games-bundle
 
       - name: Commit pin update
         id: commit

@@ -203,55 +203,6 @@ raise SystemExit(75)
 PY
 }
 
-audio_probe() {
-  systemctl is-active --quiet motion-levels-audio-keepalive.service || {
-    log "persistent HDMI mixer owner is not active"
-    return 1
-  }
-  /usr/bin/python3 - <<'PY'
-import subprocess
-import time
-from concurrent.futures import ThreadPoolExecutor
-
-payload = b"\0" * (48000 * 2 * 2 // 4)  # 250 ms of silent stereo S16_LE.
-command = ["docker", "exec", "-i", "motion-levels-venue-engine", "/usr/local/bin/aplay"]
-started = time.monotonic()
-def play_silence() -> None:
-    subprocess.run(command, input=payload, check=True, timeout=10)
-
-with ThreadPoolExecutor(max_workers=4) as executor:
-    futures = [executor.submit(play_silence) for _ in range(4)]
-    for future in futures:
-        future.result()
-if time.monotonic() - started > 5:
-    raise SystemExit("concurrent audio probe exceeded 5 seconds")
-PY
-  sleep 1
-  if systemctl list-units --failed --no-legend 'motion-levels-audio@*.service' | grep -q .; then
-    log "audio broker probe failed"
-    systemctl list-units --failed --no-pager 'motion-levels-audio@*.service' || true
-    return 1
-  fi
-}
-
-stop_audio_broker() {
-  # A wedged SOF HDMI stream can remain blocked in poll after its Unix peer has
-  # gone away. Stop new accepts before terminating workers, then close the
-  # persistent owner last so the hardware cannot reopen between those steps.
-  systemctl --job-mode=ignore-dependencies stop motion-levels-audio.socket >/dev/null 2>&1 || true
-  systemctl stop 'motion-levels-audio@*.service' >/dev/null 2>&1 || true
-  systemctl stop motion-levels-audio-keepalive.service >/dev/null 2>&1 || true
-}
-
-reset_audio_broker() {
-  # Reopen one persistent mixer owner before accepting individual streams so a
-  # deployment or rollback cannot inherit an exhausted socket generation.
-  stop_audio_broker
-  systemctl start motion-levels-audio-keepalive.service
-  systemctl reset-failed 'motion-levels-audio@*.service' >/dev/null 2>&1 || true
-  systemctl start motion-levels-audio.socket
-}
-
 health_gate_once() {
   mode=${1:-containers}
   manifest=$2
@@ -275,14 +226,15 @@ import urllib.request
 
 with urllib.request.urlopen("http://127.0.0.1/engine/api/status", timeout=5) as response:
     engine = json.load(response)
-status = engine.get("floorAdapter") or {}
-assert status.get("connected") is True, "engine cannot see the floor adapter"
-assert status.get("protocol") == "v2", f"floor protocol is {status.get('protocol')}"
-fps = float(status.get("actualFps") or 0)
-assert 48 <= fps <= 52, f"floor actualFps is {fps}"
-assert int(status.get("udpErrorCount") or 0) == 0, "floor has UDP errors"
+with urllib.request.urlopen("http://127.0.0.1/engine/api/health", timeout=5) as response:
+    health = json.load(response)
+assert health.get("status") == "ok", "venue runtime is not healthy"
+assert health.get("controllerConnected") is True, "venue runtime cannot see the floor adapter"
+assert health.get("controllerProtocolVersion") == 2, "venue runtime is not using floor protocol v2"
+assert health.get("sourceRevision"), "venue runtime has no games source revision"
 assert engine.get("currentGame"), "engine has no current game"
-assert engine.get("audioEnabled") is True, "engine audio is disabled"
+assert engine.get("contractVersion") == 1, "player experience contract is not v1"
+assert engine.get("audioEnabled") is False, "retired venue audio unexpectedly became available"
 
 with urllib.request.urlopen("http://127.0.0.1/stack.json", timeout=5) as response:
     stack = json.load(response)
@@ -309,7 +261,6 @@ base = (os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_URL") or os.env
 with urllib.request.urlopen(base + "/api/healthz", timeout=8) as response:
     assert response.status == 200
 ' >/dev/null || return 1
-    audio_probe || return 1
   else
     /usr/bin/curl -fsS --max-time 8 http://127.0.0.1:8020/health >/dev/null || return 1
     systemctl is-active --quiet \
@@ -327,7 +278,7 @@ health_gate() {
   mode=${1:-containers}
   manifest=$2
   attempt=1
-  log "checking venue HTTP, floor, recorder, and audio health"
+  log "checking venue HTTP, floor, runtime, and recorder health"
   while [ "$attempt" -le 45 ]; do
     if health_gate_once "$mode" "$manifest"; then
       log "venue health gate passed"
@@ -426,10 +377,6 @@ fallback_to_native() {
     motion-levels-hdmi-agent.service \
     motion-levels-display-wayland.service \
     motion-levels-venue-containers.service >/dev/null 2>&1 || true
-  stop_audio_broker
-  systemctl disable \
-    motion-levels-audio.socket \
-    motion-levels-audio-keepalive.service >/dev/null 2>&1 || true
   systemctl disable --now motion-levels-container-firewall.service >/dev/null 2>&1 || true
 
   if start_native \
@@ -457,9 +404,7 @@ fallback_to_native() {
       motion-levels-camera-helper.service \
       motion-levels-security-recorder.service >/dev/null 2>&1 || true
     systemctl enable --now \
-      motion-levels-container-firewall.service \
-      motion-levels-audio-keepalive.service \
-      motion-levels-audio.socket >/dev/null 2>&1 || true
+      motion-levels-container-firewall.service >/dev/null 2>&1 || true
     if compose "$saved_current" up -d --no-build --wait --wait-timeout 240 \
       && health_gate containers "$saved_current"; then
       install -m 0600 "$saved_current" "$current.tmp"
@@ -564,10 +509,6 @@ restore_after_failure() {
   write_stack_metadata "$rollback_manifest" "$rollback_mode"
   log "candidate failed; removing it before rollback"
   compose "$candidate" down --remove-orphans --timeout 120 || true
-  if ! reset_audio_broker; then
-    log "warning: audio broker reset failed; continuing with the rollback path"
-  fi
-
   if [ "$rollback_available" != 1 ]; then
     log "no previously healthy runtime was available; candidate remains stopped"
     return 1
@@ -637,16 +578,11 @@ activate() {
   # Always apply the validated on-disk policy. A prior interrupted playbook may
   # have copied it without reaching its notified reload handler.
   systemctl reload-or-restart motion-levels-container-firewall.service
-  # Preflight the new mixer owner before touching the running producer. Once it
-  # is known to start, stop the producer before clearing accepted audio workers
-  # so it cannot reconnect into the broker generation being drained.
-  systemctl start motion-levels-audio-keepalive.service
   if manifest_is_containers "$rollback_manifest"; then
     compose "$rollback_manifest" stop --timeout 120 engine
   else
     stop_native
   fi
-  reset_audio_broker
 
   write_stack_metadata "$candidate" containers
   log "activating pinned venue containers revision=$(manifest_value VENUE_REVISION "$candidate")"
@@ -684,8 +620,6 @@ activate() {
     motion-levels-security-recorder.service >/dev/null 2>&1 || true
   systemctl enable \
     motion-levels-container-firewall.service \
-    motion-levels-audio-keepalive.service \
-    motion-levels-audio.socket \
     motion-levels-venue-containers.service >/dev/null
   systemctl start motion-levels-venue-containers.service
   prune_old_venue_images || log "warning: old venue image cleanup failed"
@@ -718,14 +652,12 @@ rollback() {
   }
   write_stack_metadata "$previous" containers
   compose "$current" down --remove-orphans --timeout 120 || true
-  if ! reset_audio_broker \
-    || ! compose "$previous" up -d --no-build --wait --wait-timeout 240 \
+  if ! compose "$previous" up -d --no-build --wait --wait-timeout 240 \
     || ! health_gate containers "$previous"; then
     log "previous manifest failed; restoring current manifest"
     compose "$previous" down --remove-orphans --timeout 120 || true
     write_stack_metadata "$current" containers
-    if ! reset_audio_broker \
-      || ! compose "$current" up -d --no-build --wait --wait-timeout 240 \
+    if ! compose "$current" up -d --no-build --wait --wait-timeout 240 \
       || ! health_gate containers "$current"; then
       compose "$current" down --remove-orphans --timeout 120 || true
       if manifest_is_native "$native_fallback"; then
@@ -760,7 +692,6 @@ restart_runtime() {
   if manifest_is_containers "$current"; then
     set_runtime_env_link "$current"
     systemctl stop motion-levels-venue-containers.service
-    reset_audio_broker
     systemctl start motion-levels-venue-containers.service
     if [ "$(manifest_value VENUE_DISPLAY_BACKEND "$current")" = wayland ]; then
       systemctl restart motion-levels-player-container.service

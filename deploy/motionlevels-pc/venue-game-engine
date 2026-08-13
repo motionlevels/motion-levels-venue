@@ -5,32 +5,18 @@ if [ -n "${MOTION_LEVELS_PLATFORM_TOKEN_FILE:-}" ]; then
   MOTION_LEVELS_PLATFORM_TOKEN="$(cat "$MOTION_LEVELS_PLATFORM_TOKEN_FILE")"
   export MOTION_LEVELS_PLATFORM_TOKEN
 fi
-if [ -n "${MOTION_LEVELS_CAMERA_RECORDER_TOKEN_FILE:-}" ]; then
-  MOTION_LEVELS_CAMERA_RECORDER_TOKEN="$(cat "$MOTION_LEVELS_CAMERA_RECORDER_TOKEN_FILE")"
-  export MOTION_LEVELS_CAMERA_RECORDER_TOKEN
+if [ -n "${MOTION_LEVELS_ENGINE_TOKEN_FILE:-}" ]; then
+  MOTION_LEVELS_ENGINE_TOKEN="$(cat "$MOTION_LEVELS_ENGINE_TOKEN_FILE")"
+  export MOTION_LEVELS_ENGINE_TOKEN
 fi
 
-exec /app/bin/game-engine \
-  -http "${MOTION_LEVELS_ENGINE_HTTP:-127.0.0.1:4102}" \
-  -controller "${MOTION_LEVELS_CONTROLLER_FRAMES:-127.0.0.1:4201}" \
-  -pressure-events "${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS:-127.0.0.1:4202}" \
-  -controller-duplex "${MOTION_LEVELS_CONTROLLER_DUPLEX:-127.0.0.1:4203}" \
-  -game salvapantallas \
-  -fps "${MOTION_LEVELS_ENGINE_FPS:-50}" \
-  -brightness "${MOTION_LEVELS_ENGINE_BRIGHTNESS:-100}" \
-  -audio=true \
-  -audio-player aplay-raw \
-  -audio-assets /app/content/audio \
-  -record-replay /run/motion-levels-game-engine/replays \
-  -replay-keep-local=false \
-  -replay-keyframe-interval 5s \
-  -replay-zstd-path /usr/bin/zstd \
-  -display-snapshot-fps "${MOTION_LEVELS_DISPLAY_SNAPSHOT_FPS:-4}" \
-  -camera-recorder-url="${MOTION_LEVELS_CAMERA_RECORDER_URL:-}" \
-  -camera-recorder-segment-seconds "${MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS:-300}" \
-  -platform-url "${MOTION_LEVELS_PLATFORM_URL:-https://platform.motionlevels.obis.dev}" \
-  -platform-asset-cache /var/lib/motion-levels/platform-asset-cache \
-  -platform-sync-interval 1s \
-  -controller-label "${MOTION_LEVELS_CONTROLLER_LABEL:-Motion Levels}" \
-  -controller-hostname "${MOTION_LEVELS_CONTROLLER_HOSTNAME:-motionlevels-1}" \
-  -controller-id-file /var/lib/motion-levels/floor-controller/controller-id
+node_binary=${MOTION_LEVELS_NODE_BINARY:-node}
+runtime_entry=${MOTION_LEVELS_GAMES_RUNTIME_ENTRY:-}
+if [ -z "$runtime_entry" ] && [ -f /app/games/venue/runtime.mjs ]; then
+  runtime_entry=/app/games/venue/runtime.mjs
+fi
+if [ -z "$runtime_entry" ]; then
+  games_root=${MOTION_LEVELS_GAMES_ROOT:-/opt/motion-levels/rebuild/current/game-bundles/motion-levels-games}
+  runtime_entry="$("$node_binary" -e 'const fs=require("node:fs"); const path=require("node:path"); const root=process.argv[1]; const pin=JSON.parse(fs.readFileSync(path.join(root,"pin.json"))); process.stdout.write(path.join(root,pin.bundlePath,"venue/runtime.mjs"))' "$games_root")"
+fi
+exec "$node_binary" "$runtime_entry"

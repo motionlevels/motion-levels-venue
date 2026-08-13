@@ -2,32 +2,7 @@ HOST ?= root@motionlevels-1
 LIMIT ?= motionlevels-1
 DEPLOY_MODE ?= all
 STANDARD_VENUES ?= motionlevels-1
-# Local checkout of motionlevels/motion-levels-platform, used by sync-platform-seeds.
-PLATFORM_DIR ?= ../motion-levels
-
-.PHONY: motion-go-seeds check-platform-mirrors sync-platform-mirrors sync-platform-seeds install-ansible-collections ansible-ping deploy-venues deploy-standard-venues deploy-motionlevels-1 deploy-motionlevels-cloud-1 deploy-frontends-motionlevels-cloud-1 deploy-runtime-motionlevels-cloud-1 status-motionlevels-1 logs-motionlevels-1 restart-motionlevels-1 rollback-motionlevels-1
-
-# Regenerate the motion-go seeds from the native engine games
-# (game-engine/internal/games/authored/nativegames). The engine copy is the
-# source of truth; game-engine/internal/games/authored/seedgen tests fail when
-# a seed is stale.
-motion-go-seeds:
-	go run ./game-engine/cmd/motion-go-seeds
-
-# Verify every platform-side mirror without modifying either checkout.
-check-platform-mirrors:
-	go run ./game-engine/cmd/motion-go-seeds -check
-	scripts/sync-platform-mirrors.sh --check --platform-dir "$(PLATFORM_DIR)"
-
-# Synchronize shared packages, the Go module, audio, and generated seeds into
-# the platform checkout. Review and commit that checkout separately.
-sync-platform-mirrors: motion-go-seeds
-	scripts/sync-platform-mirrors.sh --sync --platform-dir "$(PLATFORM_DIR)"
-
-# Copy only generated seeds into a motion-levels-platform checkout. Run after
-# motion-go-seeds whenever an authored game changed, then commit both repos.
-sync-platform-seeds: motion-go-seeds
-	scripts/sync-platform-mirrors.sh --sync --scope seeds --platform-dir "$(PLATFORM_DIR)"
+.PHONY: install-ansible-collections ansible-ping deploy-venues deploy-standard-venues deploy-motionlevels-1 deploy-motionlevels-cloud-1 deploy-frontends-motionlevels-cloud-1 deploy-runtime-motionlevels-cloud-1 status-motionlevels-1 logs-motionlevels-1 restart-motionlevels-1 rollback-motionlevels-1
 
 install-ansible-collections:
 	ansible-galaxy collection install -r ansible/requirements.yml
@@ -81,7 +56,7 @@ deploy-standard-venues:
 	echo "==> No standard venues reachable; venue deploy skipped."
 
 deploy-motionlevels-1:
-	GHCR_TOKEN="$${GHCR_TOKEN:-$$(gh auth token)}" GHCR_USERNAME="$${GHCR_USERNAME:-lobis}" ansible-playbook ansible/playbooks/venue-containers.yml --limit motionlevels-1
+	GHCR_TOKEN="$${GHCR_TOKEN:-$$(gh auth token)}" GHCR_USERNAME="$${GHCR_USERNAME:-lobis}" ansible-playbook ansible/playbooks/venue.yml --limit motionlevels-1
 
 deploy-motionlevels-cloud-1:
 	GHCR_TOKEN="$${GHCR_TOKEN:-$$(gh auth token)}" GHCR_USERNAME="$${GHCR_USERNAME:-lobis}" MOTION_LEVELS_DEPLOY_MODE="$(DEPLOY_MODE)" ansible-playbook ansible/playbooks/venue.yml --limit motionlevels-cloud-1
@@ -93,13 +68,13 @@ deploy-runtime-motionlevels-cloud-1:
 	$(MAKE) deploy-motionlevels-cloud-1 DEPLOY_MODE=runtime
 
 status-motionlevels-1:
-	ssh "$(HOST)" '/usr/local/sbin/motion-levels-venue-containers status'
+	ssh "$(HOST)" 'systemctl --no-pager --full status motion-levels-floor-controller motion-levels-game-engine motion-levels-venue-supervisor motion-levels-kiosk caddy'
 
 logs-motionlevels-1:
-	ssh "$(HOST)" '/usr/local/sbin/motion-levels-venue-containers logs'
+	ssh "$(HOST)" 'journalctl -u motion-levels-floor-controller -u motion-levels-game-engine -u motion-levels-venue-supervisor -u motion-levels-kiosk -n 250 --no-pager'
 
 restart-motionlevels-1:
-	ssh "$(HOST)" '/usr/local/sbin/motion-levels-venue-containers restart'
+	ssh "$(HOST)" 'systemctl restart motion-levels-floor-controller motion-levels-game-engine motion-levels-venue-supervisor motion-levels-kiosk'
 
 rollback-motionlevels-1:
-	ssh "$(HOST)" '/usr/local/sbin/motion-levels-venue-containers rollback'
+	ssh "$(HOST)" 'set -eu; previous=$$(readlink -f /opt/motion-levels/rebuild/previous); test -d "$$previous"; ln -sfn "$$previous" /opt/motion-levels/rebuild/current; systemctl restart motion-levels-floor-controller motion-levels-game-engine motion-levels-venue-supervisor motion-levels-kiosk caddy'

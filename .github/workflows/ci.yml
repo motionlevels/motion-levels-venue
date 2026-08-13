@@ -31,40 +31,6 @@ jobs:
       - name: Run static repository tests
         run: npm run test:static
 
-  go:
-    name: Go
-    runs-on: ${{ vars.CI_RUNNER_LABEL }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node for the embedded games runner
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Run Go checks in a pinned dependency container
-        shell: bash
-        run: |
-          set -euo pipefail
-          node_root="$(dirname "$(dirname "$(command -v node)")")"
-          docker run --rm \
-            --env HOME=/tmp/motion-levels-ci \
-            --env PATH=/opt/node/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin \
-            --volume "$node_root:/opt/node:ro" \
-            --volume "$GITHUB_WORKSPACE:/workspace:ro" \
-            --workdir /workspace \
-            golang:1.24-bookworm \
-            bash -c '
-              mkdir -p "$HOME"
-              apt-get update
-              apt-get install -y --no-install-recommends libasound2-dev pkg-config
-              git config --global --add safe.directory /workspace
-              go test ./...
-              go build ./...
-              go run ./game-engine/cmd/motion-go-seeds -check
-            '
-
   node:
     name: Node / ${{ matrix.name }}
     runs-on: ${{ vars.CI_RUNNER_LABEL }}
@@ -88,11 +54,6 @@ jobs:
             working-directory: packages/floor-view
             lockfile: packages/floor-view/package-lock.json
             commands: npm run typecheck
-          - name: venue-runtime
-            working-directory: apps/venue-runtime
-            lockfile: apps/venue-runtime/package-lock.json
-            commands: npm test
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -136,7 +97,6 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.ref_name == 'main'
     needs:
       - static
-      - go
       - node
     runs-on: ${{ vars.CI_RUNNER_LABEL }}
     env:

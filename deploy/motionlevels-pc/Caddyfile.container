@@ -16,7 +16,17 @@
 	}
 
 	handle_path /engine/* {
-		reverse_proxy engine-core:4102
+		reverse_proxy engine-core:4102 {
+			header_up X-Motion-Levels-Engine-Token "{$MOTION_LEVELS_ENGINE_TOKEN}"
+		}
+	}
+
+	redir /venue /venue/
+	handle_path /venue/* {
+		root * /srv/venue
+		rewrite * /venue.html
+		header Cache-Control "no-store"
+		file_server
 	}
 
 	# Snapshot data remains reachable through Tailscale for the platform, but
