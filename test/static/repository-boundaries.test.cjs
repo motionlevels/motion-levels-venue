@@ -164,6 +164,12 @@ test("retired display and audio broker units are removed after cutover", () => {
   }
 });
 
+test("the native camera can traverse to its group-readable API token", () => {
+  const playbook = read("ansible/playbooks/venue.yml");
+  assert.match(playbook, /Allow the camera account to traverse the shared config directory/);
+  assert.match(playbook, /group: motion-levels-cameras\n\s+mode: "0710"/);
+});
+
 test("the native floor adapter is pinned to the venue LAN source address", () => {
   const hostVars = read("ansible/inventory/production/host_vars/motionlevels-1.yml");
   const environment = read("ansible/templates/motion-levels.env.j2");

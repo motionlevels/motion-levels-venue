@@ -308,6 +308,15 @@
         create_home: false
       when: motion_levels_camera.enabled
 
+    - name: Allow the camera account to traverse the shared config directory
+      ansible.builtin.file:
+        path: "{{ motion_levels_config_root }}"
+        state: directory
+        owner: root
+        group: motion-levels-cameras
+        mode: "0710"
+      when: motion_levels_camera.enabled
+
     - name: Create camera state directories
       ansible.builtin.file:
         path: "{{ item }}"
