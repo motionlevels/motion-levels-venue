@@ -1,0 +1,2 @@
+# Exact venue-owned GoPro. A different HERO12 on the same USB port is ignored.
+ACTION=="add|change", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="{{ motion_levels_camera.usb.vendor_id }}", ATTR{idProduct}=="{{ motion_levels_camera.usb.product_id }}", ATTR{serial}=="{{ motion_levels_camera.expected_serial }}", TAG+="systemd", ENV{SYSTEMD_WANTS}+="motion-levels-gopro-reconcile.service"

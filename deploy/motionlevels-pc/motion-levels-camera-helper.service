@@ -7,8 +7,8 @@ Wants=network-online.target
 Type=simple
 EnvironmentFile=/etc/motion-levels/motion-levels.env
 EnvironmentFile=-/etc/motion-levels/camera.env
-WorkingDirectory=/opt/motion-levels/rebuild/current/deploy/motionlevels-pc
-ExecStart=/bin/sh -c 'if [ "${MOTION_LEVELS_CONTROLLER_HOSTNAME:-}" != "motionlevels-1" ]; then echo "camera helper disabled for ${MOTION_LEVELS_CONTROLLER_HOSTNAME:-unknown}"; exec sleep infinity; fi; if [ -z "${MOTION_LEVELS_CAMERA_PASSWORD:-}" ] && [ -z "${ML_TAPO_PASSWORD:-}" ]; then echo "camera helper waiting for camera password"; exec sleep infinity; fi; exec /usr/bin/python3 /opt/motion-levels/rebuild/current/deploy/motionlevels-pc/motion-levels-camera-helper.py'
+WorkingDirectory=/opt/motion-levels/venue/current/deploy/motionlevels-pc
+ExecStart=/bin/sh -c 'if [ "${MOTION_LEVELS_SECURITY_RECORDER_ENABLED:-0}" != "1" ]; then echo "camera helper disabled by venue configuration"; exec sleep infinity; fi; if [ -z "${MOTION_LEVELS_CAMERA_PASSWORD:-}" ] && [ -z "${ML_TAPO_PASSWORD:-}" ]; then echo "camera helper waiting for camera password"; exec sleep infinity; fi; exec /usr/bin/python3 /opt/motion-levels/venue/current/deploy/motionlevels-pc/motion-levels-camera-helper.py'
 Restart=always
 RestartSec=2
 Nice=12

@@ -1,7 +1,0 @@
-#!/bin/sh
-set -eu
-
-socket="${MOTION_LEVELS_AUDIO_SOCKET:-/run/motion-levels-audio/audio.sock}"
-timeout="${MOTION_LEVELS_AUDIO_CONNECT_TIMEOUT:-10}"
-
-exec socat -T "$timeout" - "UNIX-CONNECT:${socket}"

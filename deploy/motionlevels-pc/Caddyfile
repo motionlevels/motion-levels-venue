@@ -21,7 +21,7 @@
 
 	redir /venue /venue/
 	handle_path /venue/* {
-		root * /opt/motion-levels/rebuild/current/deploy/motionlevels-pc
+		root * {{ motion_levels_install_root }}/current/deploy/motionlevels-pc
 		rewrite * /venue.html
 		header Cache-Control "no-store"
 		file_server
@@ -34,113 +34,110 @@
 		reverse_proxy 127.0.0.1:4103
 	}
 
+	# The native camera service stays loopback-only. This stable venue-owned
+	# prefix is the single Tailscale/LAN boundary used by the local UI and the
+	# platform sala view for preview, status, and authenticated controls.
+	handle_path /camera-recorder/* {
+		reverse_proxy 127.0.0.1:8040
+	}
+
 	# The /tv and /cameras pages — and the platform assets/APIs and camera
 	# streams they depend on — are exposed only on the wired venue LAN address
-	# (192.168.1.142), which lives solely on the ethernet interface. Each
+	# ({{ motion_levels_network.lan.address | regex_replace('/.*$', '') }}), which lives solely on the ethernet interface. Each
 	# handler ANDs the host with its path so other routes (/menu, /display,
 	# /engine, ...) keep working on 192.168.1.142, while /tv and /cameras stay
 	# unreachable from the wifi interface or any other address.
 	@platform_tv {
 		path /tv /tv/
-		expression {http.request.local.host} == "192.168.1.142"
+		expression {http.request.local.host} == "{{ motion_levels_network.lan.address | regex_replace('/.*$', '') }}"
 	}
 	handle @platform_tv {
-		rewrite * /salas/motionlevels-1/tv
-		reverse_proxy https://84.7.190.81 {
-			header_up Host platform.motionlevels.obis.dev
+		rewrite * /salas/{{ motion_levels_venue.platform_room_slug }}/tv
+		reverse_proxy {{ motion_levels_platform_origin }} {
+			header_up Host {{ motion_levels_platform_host }}
 			transport http {
 				dial_timeout 10s
-				tls_server_name platform.motionlevels.obis.dev
+				tls_server_name {{ motion_levels_platform_host }}
 			}
 		}
 	}
 
 	@platform_cameras {
 		path /cameras /cameras/
-		expression {http.request.local.host} == "192.168.1.142"
+		expression {http.request.local.host} == "{{ motion_levels_network.lan.address | regex_replace('/.*$', '') }}"
 	}
 	handle @platform_cameras {
-		root * /opt/motion-levels/rebuild/current/deploy/motionlevels-pc
+		root * {{ motion_levels_install_root }}/current/deploy/motionlevels-pc
 		rewrite * /cameras.html
 		header Cache-Control "no-store"
 		file_server
 	}
 
 	# Camera frame endpoint. NOT restricted to the wired LAN address: the
-	# platform pulls these snapshots over Tailscale (Host: motionlevels-1) for
+	# platform pulls these snapshots over Tailscale for
 	# its own cameras page, so gating this to 192.168.1.142 would break it.
 	# Only the /cameras page above is ethernet-only.
 	handle /cam/* {
 		reverse_proxy 127.0.0.1:8020
 	}
 
-	# Keep native rollback from silently restoring the retired X5 surface. The
-	# route remains available as an explicit configuration-only opt-in.
-	handle_path /camera-recorder/* {
-		@x5_enabled expression `"{$MOTION_LEVELS_X5_ENABLED:0}" == "1"`
-		route {
-			reverse_proxy @x5_enabled {$MOTION_LEVELS_X5_UPSTREAM:127.0.0.1:8040}
-			respond 404
-		}
-	}
-
 	@platform_next {
 		path /_next/*
-		expression {http.request.local.host} == "192.168.1.142"
+		expression {http.request.local.host} == "{{ motion_levels_network.lan.address | regex_replace('/.*$', '') }}"
 	}
 	handle @platform_next {
-		reverse_proxy https://84.7.190.81 {
-			header_up Host platform.motionlevels.obis.dev
+		reverse_proxy {{ motion_levels_platform_origin }} {
+			header_up Host {{ motion_levels_platform_host }}
 			transport http {
 				dial_timeout 10s
-				tls_server_name platform.motionlevels.obis.dev
+				tls_server_name {{ motion_levels_platform_host }}
 			}
 		}
 	}
 
 	@platform_rooms {
 		path /api/rooms/*
-		expression {http.request.local.host} == "192.168.1.142"
+		expression {http.request.local.host} == "{{ motion_levels_network.lan.address | regex_replace('/.*$', '') }}"
 	}
 	handle @platform_rooms {
-		reverse_proxy https://84.7.190.81 {
-			header_up Host platform.motionlevels.obis.dev
+		reverse_proxy {{ motion_levels_platform_origin }} {
+			header_up Host {{ motion_levels_platform_host }}
 			transport http {
 				dial_timeout 10s
-				tls_server_name platform.motionlevels.obis.dev
+				tls_server_name {{ motion_levels_platform_host }}
 			}
 		}
 	}
 
 	@platform_live_floor {
 		path /api/live-floor/*
-		expression {http.request.local.host} == "192.168.1.142"
+		expression {http.request.local.host} == "{{ motion_levels_network.lan.address | regex_replace('/.*$', '') }}"
 	}
 	handle @platform_live_floor {
-		reverse_proxy https://84.7.190.81 {
-			header_up Host platform.motionlevels.obis.dev
+		reverse_proxy {{ motion_levels_platform_origin }} {
+			header_up Host {{ motion_levels_platform_host }}
 			transport http {
 				dial_timeout 10s
-				tls_server_name platform.motionlevels.obis.dev
+				tls_server_name {{ motion_levels_platform_host }}
 			}
 		}
 	}
 
 	handle /motion-levels-icon.png {
-		root * /opt/motion-levels/rebuild/current/apps/player-menu/dist
+		root * {{ motion_levels_install_root }}/current/game-bundles/motion-levels-games/current/menu
 		header Cache-Control "public, max-age=31536000, immutable"
 		file_server
 	}
 
 	handle /motion-levels-icon.webp {
-		root * /opt/motion-levels/rebuild/current/apps/player-menu/dist
+		root * {{ motion_levels_install_root }}/current/game-bundles/motion-levels-games/current/menu
 		header Cache-Control "public, max-age=31536000, immutable"
 		file_server
 	}
 
 	redir /menu /menu/
 	handle_path /menu/* {
-		root * /opt/motion-levels/rebuild/current/apps/player-menu/dist
+		root * {{ motion_levels_install_root }}/current/game-bundles/motion-levels-games/current/menu
 		@menu_assets path /assets/*
 		header @menu_assets Cache-Control "public, max-age=31536000, immutable"
 		@menu_index path / /index.html
@@ -151,7 +148,7 @@
 
 	redir /display /display/
 	handle_path /display/* {
-		root * /opt/motion-levels/rebuild/current/apps/player-display/dist
+		root * {{ motion_levels_install_root }}/current/game-bundles/motion-levels-games/current/display
 		@display_assets path /assets/*
 		header @display_assets Cache-Control "public, max-age=31536000, immutable"
 		@display_index path / /index.html
@@ -162,7 +159,7 @@
 
 	redir /games /games/
 	handle_path /games/* {
-		root * /opt/motion-levels/rebuild/current/game-bundles/motion-levels-games
+		root * {{ motion_levels_install_root }}/current/game-bundles/motion-levels-games
 		header Cache-Control "public, max-age=31536000, immutable"
 		file_server
 	}

@@ -1,0 +1,5 @@
+# Managed by motion-levels-venue Ansible. The enx name is derived from the
+# venue-owned GoPro's stable USB MAC address and survives reconnects.
+allow-hotplug {{ motion_levels_camera.usb.network_interface }}
+iface {{ motion_levels_camera.usb.network_interface }} inet dhcp
+    metric {{ motion_levels_camera.usb.dhcp_metric }}

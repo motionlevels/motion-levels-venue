@@ -1,0 +1,64 @@
+---
+ansible_user: root
+ansible_python_interpreter: /usr/bin/python3
+
+# Native Debian release layout. Mutable data and credentials never live below
+# the atomically switched release directory.
+motion_levels_install_root: /opt/motion-levels/venue
+motion_levels_state_root: /var/lib/motion-levels
+motion_levels_camera_state_root: /var/lib/motion-levels-cameras
+motion_levels_config_root: /etc/motion-levels
+motion_levels_platform_url: https://platform.motionlevels.obis.dev
+motion_levels_platform_origin: https://platform.motionlevels.obis.dev
+motion_levels_platform_host: platform.motionlevels.obis.dev
+motion_levels_camera_uid: 10001
+motion_levels_camera_gid: 10001
+
+motion_levels_runtime_packages:
+  - alsa-utils
+  - caddy
+  - chromium
+  - curl
+  - ffmpeg
+  - ifupdown
+  - jq
+  - libasound2
+  - libudev1
+  - libusb-1.0-0
+  - nodejs
+  - python3
+  - python3-opencv
+  - python3-pip
+  - python3-venv
+  - rclone
+  - ripgrep
+  - rsync
+  - unclutter
+  - usbutils
+  - v4l-utils
+  - x11-xserver-utils
+  - xinit
+  - xserver-xorg
+  - zstd
+
+motion_levels_native_services:
+  - motion-levels-floor-controller.service
+  - motion-levels-venue-runtime.service
+  - motion-levels-venue-supervisor.service
+  - motion-levels-cameras.service
+  - motion-levels-security-recorder.service
+  - motion-levels-camera-helper.service
+  - motion-levels-kiosk.service
+  - motion-levels-hdmi-watchdog.service
+
+motion_levels_retired_services:
+  - motion-levels-game-engine.service
+  - motion-levels-player-menu.service
+  - motion-levels-player-display.service
+  - motion-levels-player-tv.service
+  - motion-levels-camera-recorder.service
+  - motion-levels-venue-containers.service
+  - motion-levels-player-container.service
+  - motion-levels-display-wayland.service
+  - motion-levels-container-firewall.service
+  - motion-levels.service

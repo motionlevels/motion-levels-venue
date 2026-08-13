@@ -1,8 +1,0 @@
-# Dormant compatibility binding for the separately owned X5 recorder stack.
-# The container is absent while motion_levels_x5_enabled=false. When restored,
-# this extra publish address is reachable only from the venue egress bridge and
-# matches the engine/Caddy upstream protected by the host nftables policy.
-services:
-  camera-api:
-    ports:
-      - "172.30.53.1:8040:8040"

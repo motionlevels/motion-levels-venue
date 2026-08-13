@@ -1,0 +1,68 @@
+---
+# Zaragoza · Caracol · Sala 1
+# Complete non-secret venue and hardware identity. Secrets remain on the host
+# in /etc/motion-levels/platform.env and the token files referenced below.
+motion_levels_venue:
+  slug: zaragoza-caracol-1
+  display_name: Zaragoza Caracol 1
+  hostname: motionlevels-1
+  platform_room_id: 47d11be3-8117-4ec1-95d1-87068b0b803b
+  platform_room_slug: motionlevels-1
+  timezone: Europe/Madrid
+
+motion_levels_network:
+  tailscale_ipv4: 100.76.156.89
+  lan:
+    interface: enp2s0
+    address: 192.168.1.142/24
+    gateway: 192.168.1.1
+    subnet: 192.168.1.0/24
+  floor:
+    # Native controller traffic leaves through the host's wired LAN address.
+    # The former .143 value belonged only to the removed container ipvlan.
+    source_address: 192.168.1.142
+    broadcast: 255.255.255.255
+
+motion_levels_display:
+  backend: x11
+  mode: 1920x1080
+  refresh_hz: 60
+  alsa:
+    card: 0
+    device: 5
+
+motion_levels_camera:
+  enabled: true
+  camera_id: gopro-hero12
+  name: GoPro HERO12 Black
+  backend: gopro
+  api_url: http://127.0.0.1:8040
+  api_token_file: /etc/motion-levels/camera-recorder-token
+  platform_token_file: /etc/motion-levels-cameras/platform-token
+  expected_serial: C3501324639939
+  usb:
+    vendor_id: "2672"
+    product_id: "0059"
+    expected_port: "2-2.1"
+    network_interface: enx04574704b11c
+    network_mac: "04:57:47:04:b1:1c"
+    host_address: 172.29.139.52/24
+    dhcp_metric: 8197
+  gopro:
+    base_url: http://172.29.139.51:8080
+    stream_url: udp://0.0.0.0:8554
+    stream_port: 8554
+    archive_settings: "175=1,108=1,2=1,3=8,184=1,183=2,182=1,121=0,135=1,156=100,167=4"
+    test_settings: "175=1,108=1,2=1,3=8,184=1,183=2,182=1,121=3,135=0,156=100,167=4"
+  recording:
+    default_profile: archive-4k-hdr
+    segment_seconds: 300
+    host_recording_enabled: false
+    delete_remote_after_verified_upload: true
+
+motion_levels_security_camera:
+  enabled: true
+  id: "130"
+  label: Cámara frontal
+  role: front
+  retention_days: 14

@@ -1,68 +1,102 @@
 # Motion Levels Venue
 
-Venue-side runtime for Motion Levels, split out of the
-[motion-levels-platform](https://github.com/motionlevels/motion-levels-platform)
-monorepo. The repository owns the venue host and image boundary:
+This repository is the deployment and hardware-integration boundary for a Motion Levels venue. It
+does not implement gameplay, the player menu/display renderer, camera control, or the physical floor
+controller. It pins those source repositories by full Git SHA, assembles their verified native
+outputs locally, and deploys them to Debian with Ansible and systemd.
 
-- `apps/player-menu/` — transitional fallback build for legacy games bundles.
-  The production player-menu source and revision-matched static artifact now
-  live in `motion-levels-games`; this repo retains packaging compatibility.
-- `apps/player-display/` — the floor/TV display frontend.
-- `packages/` — shared code: `core`, `design-tokens`, `floor-view` (TS, used by
-  both frontends), `contracts` (protobuf shared with
-  [motion-levels-controller](https://github.com/motionlevels/motion-levels-controller)).
-- `game-bundles/motion-levels-games/` — pinned games bundle, synced from
-  [motion-levels-games](https://github.com/motionlevels/motion-levels-games)
-  releases via the `Sync Motion Levels games bundle` workflow. Bundle v2 owns
-  the Node venue runtime, player menu, display renderer, playground, and media.
-- `deploy/motionlevels-pc/` — venue container images, Compose model, and host
-  scripts; `ansible/` — venue deploy playbooks.
+Production does not deploy Docker images or wait for a registry publication. Any CI is supplemental
+validation; a manual deployment is built from the exact clean source checkouts selected here.
 
-`motionlevels-1` runs the production controller, TypeScript venue runtime,
-display kiosk, Caddy, and host supervisor as systemd services. Docker remains
-the reproducible build/extraction boundary and the previous Compose release is
-kept as rollback material. The local operator dashboard is served at `/venue/`;
-its `/venue-api/v1/snapshot` contract is also the venue-owned status source for
-the platform sala view.
+## Start here
 
-The old `game-engine/`, `packages/motiongo`, and `content/audio` trees are
-retained only as historical migration material. Production images do not build,
-copy, execute, or mount them, and they must not be used as a fallback.
+- Production hosts: [`ansible/inventory/production/hosts.yml`](ansible/inventory/production/hosts.yml)
+- Zaragoza Caracol Sala 1 configuration:
+  [`ansible/inventory/production/host_vars/motionlevels-1.yml`](ansible/inventory/production/host_vars/motionlevels-1.yml)
+- Shared native defaults:
+  [`ansible/inventory/production/group_vars/all.yml`](ansible/inventory/production/group_vars/all.yml)
+- Exact controller, games, and camera source pins:
+  [`deploy/motionlevels-pc/venue-components.lock.json`](deploy/motionlevels-pc/venue-components.lock.json)
+- Native playbook: [`ansible/playbooks/venue.yml`](ansible/playbooks/venue.yml)
+- Full operator runbook: [`docs/operations/venue-deployment.md`](docs/operations/venue-deployment.md)
 
-## Development
+The production host variables are the canonical place to discover venue identity and non-secret
+hardware configuration: room UUID, host/network addresses, display/audio mode, exact GoPro serial
+and USB identity, recording policy, and security-camera settings. Secret token values remain only on
+the venue host at the file paths referenced by those variables; never put them in Git.
 
-```sh
-# Venue frontends
-npm ci --prefix packages/floor-view
-npm ci --prefix apps/player-menu
-npm ci --prefix apps/player-display
-npm test --prefix apps/player-menu
-npm test --prefix apps/player-display
-npm run dev --prefix apps/player-menu
+## Source ownership
+
+| Concern | Canonical repository |
+| --- | --- |
+| Inventory, Ansible, native release assembly, systemd, Caddy, kiosk, supervisor, hardware wiring | `motion-levels-venue` |
+| Gameplay, TypeScript venue runtime, menu, display renderer, and revision-matched media | `motion-levels-games` |
+| Physical floor controller binary and wire protocols | `motion-levels-controller` |
+| GoPro control, preview, multipart upload, verification, and SD cleanup | `motion-levels-cameras` |
+| Platform, database, object storage, and platform sala view | `motion-levels-platform` |
+
+The old `game-engine/`, `apps/player-menu/`, `apps/player-display/`, `packages/`, `content/`, and
+container/Compose paths found in earlier revisions are historical migration material. They are not
+production implementation, deployment entrypoints, or fallbacks. Do not restore them; make changes
+in the owning source repository.
+
+## Native release model
+
+[`deploy/motionlevels-pc/venue-components.lock.json`](deploy/motionlevels-pc/venue-components.lock.json)
+pins full 40-character revisions for controller, games, and cameras. By default, the builder expects
+clean sibling checkouts at:
+
+```text
+../motion-levels-controller
+../motion-levels-games
+../motion-levels-cameras
 ```
 
-## Releases and deploys
+Override those locations with `MOTION_LEVELS_CONTROLLER_SOURCE`, `MOTION_LEVELS_GAMES_SOURCE`, and
+`MOTION_LEVELS_CAMERAS_SOURCE`. Each checkout must be clean and at the exact locked revision. The
+venue checkout must also be clean because its own full `HEAD` becomes the release identity.
 
-CI on `main` builds and publishes the immutable venue images
-(`ghcr.io/motionlevels/motion-levels-venue-*`) tagged `sha-<venue revision>`
-via the `Container images` workflow. The controller image is pinned separately
-in `deploy/motionlevels-pc/venue-components.lock.json`. Successful image
-publication automatically requests an exact-revision deployment to
-`motionlevels-1`; a scheduled reconciliation retries releases deferred by the
-physical-display safety gate.
+`scripts/build-native-release.sh` builds locally into
+`/tmp/motion-levels-venue-native/releases/<venue-sha>` by default. It produces only derived runtime
+output: the static controller binary, revision-matched games bundle, pinned camera source,
+and venue adapters. `release-manifest.json` records every component revision plus the size and
+SHA-256 of every file. `scripts/verify-native-release.py` verifies that directory before Ansible
+transfers it. Nothing is pulled from a venue image registry.
 
-Deploy venues from a checkout of this repo (the playbook resolves the venue
-revision from `git rev-parse HEAD`, so the images for that commit must be
-published first):
+On `motionlevels-1`, immutable releases live below `/opt/motion-levels/venue/releases/`. The
+`current` and `previous` symlinks provide atomic activation and one-release rollback. Mutable state
+stays under `/var/lib/motion-levels*`; configuration and secrets stay under `/etc/`.
+
+## Deploy production
+
+Install the Ansible dependency once, verify access, inspect the pins, and deploy:
 
 ```sh
-make deploy-venues            # containerized venues (default: motionlevels-1)
+make install-ansible-collections
+make ansible-ping LIMIT=motionlevels-1
+make show-pins
+make deploy-motionlevels-1
+```
+
+The playbook performs the local build and manifest verification itself, stages the exact release,
+switches the native systemd stack, verifies all local HTTP surfaces and the serial-pinned GoPro, and
+automatically restores the previous healthy release if activation fails. It refuses dirty or
+revision-mismatched source trees. There is no CI, container image, or GHCR wait in this path.
+
+Useful operator commands:
+
+```sh
 make status-motionlevels-1
+make health-motionlevels-1
+make release-motionlevels-1
+make logs-motionlevels-1
+make rollback-motionlevels-1
 ```
 
-The venue repository owns its image revision and deployment lifecycle
-independently from the cloud platform. See
-[`docs/operations/venue-deployment.md`](docs/operations/venue-deployment.md)
-for provisioning, validation, activation, and rollback. Games release pinning
-is documented in
+`make build-native-release` can be used as a local preflight. Its final line is the verified release
+directory; pass that path to `make verify-native-release RELEASE_DIR=...` for an explicit second
+verification.
+
+See the [deployment runbook](docs/operations/venue-deployment.md) for secrets, source-pin updates,
+health endpoints, logs, rollback behavior, and adding a venue. Games pinning is described in
 [`docs/operations/games-bundle-sync.md`](docs/operations/games-bundle-sync.md).

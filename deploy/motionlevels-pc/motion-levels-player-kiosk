@@ -61,14 +61,14 @@ truthy_env() {
 # attempted an explicit --mode and swallowed failures, which could leave a
 # connected TV on a phantom default resolution (e.g. 1024x768) with no signal.
 configure_display() {
-  local output mode rate attempt geometry size
+  local output mode rate geometry size
   mode="${MOTION_LEVELS_XRANDR_MODE:-}"
   rate="${MOTION_LEVELS_XRANDR_RATE:-60}"
   # The output may appear a few seconds after X starts (slow EDID, TV powering
   # on), and the modeset sometimes silently leaves X on the 1024x768 dummy
   # default. Retry detection AND the modeset until a real geometry is active, so
   # the TV reliably ends up on a proper resolution instead of a phantom one.
-  for attempt in $(seq 1 15); do
+  for _attempt in $(seq 1 15); do
     output=$(/usr/bin/xrandr --query 2>/dev/null | awk '/ connected/ { print $1; exit }')
     if [ -n "${output}" ]; then
       # Preferred mode first so a connected TV always gets a real signal, then
@@ -143,7 +143,7 @@ CHROME_FLAGS=(
   --disable-session-crashed-bubble
   --disable-translate
   --disable-features=Translate
-  --window-position=0,0
+  "--window-position=0,0"
   --window-size="${MOTION_LEVELS_PLAYER_WINDOW_SIZE}"
   --start-fullscreen
   --check-for-update-interval=31536000
@@ -152,7 +152,7 @@ CHROME_FLAGS=(
 
 # Force the window to cover the whole screen (no WM to maximise it for us).
 if [ -n "${SCREEN_WIDTH:-}" ] && [ -n "${SCREEN_HEIGHT:-}" ]; then
-  CHROME_FLAGS+=( --window-position=0,0 "--window-size=${SCREEN_WIDTH},${SCREEN_HEIGHT}" )
+  CHROME_FLAGS+=( "--window-position=0,0" "--window-size=${SCREEN_WIDTH},${SCREEN_HEIGHT}" )
 fi
 
 # Chromium won't run as root without --no-sandbox

@@ -1,9 +1,0 @@
-{
-  "name": "@motion-levels/design-tokens",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Canonical Motion Levels design tokens (CSS custom properties) shared by the kiosk and operator surfaces.",
-  "files": [
-    "tokens.css"
-  ]
-}

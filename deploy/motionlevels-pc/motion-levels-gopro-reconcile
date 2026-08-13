@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Fail closed on the configured GoPro identity, then restart its native unit."""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+from urllib import request
+
+
+def read_env(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key] = value
+    return values
+
+
+def matching_devices(vendor: str, product: str) -> list[Path]:
+    matches: list[Path] = []
+    for device in Path("/sys/bus/usb/devices").iterdir():
+        try:
+            actual_vendor = (device / "idVendor").read_text(encoding="ascii").strip().lower()
+            actual_product = (device / "idProduct").read_text(encoding="ascii").strip().lower()
+        except OSError:
+            continue
+        if actual_vendor == vendor and actual_product == product:
+            matches.append(device)
+    return matches
+
+
+def main() -> int:
+    values = read_env(Path("/etc/motion-levels-cameras.env"))
+    vendor = values["ML_CAMERAS_USB_VENDOR_ID"].lower()
+    product = values["ML_CAMERAS_USB_PRODUCT_ID"].lower()
+    expected_serial = values["ML_CAMERAS_USB_SERIAL"]
+    base_url = values["ML_CAMERAS_GOPRO_BASE_URL"].rstrip("/")
+    camera_id = values["ML_CAMERAS_CAMERA_ID"]
+    port = int(values.get("ML_CAMERAS_PORT", "8040"))
+    devices = matching_devices(vendor, product)
+    if len(devices) != 1:
+        raise SystemExit(f"expected exactly one {vendor}:{product} GoPro; found {len(devices)}")
+    actual_serial = (devices[0] / "serial").read_text(encoding="utf-8").strip()
+    if actual_serial != expected_serial:
+        raise SystemExit(
+            f"refusing unexpected GoPro serial {actual_serial!r}; expected {expected_serial!r}"
+        )
+
+    deadline = time.monotonic() + int(os.environ.get("GOPRO_WAIT_SECONDS", "90"))
+    while True:
+        try:
+            with request.urlopen(f"{base_url}/gopro/camera/info", timeout=3) as response:
+                if response.status == 200:
+                    break
+        except OSError:
+            pass
+        if time.monotonic() >= deadline:
+            raise SystemExit("GoPro USB network API did not become ready")
+        time.sleep(2)
+
+    subprocess.run(["systemctl", "restart", "motion-levels-cameras.service"], check=True)
+    deadline = time.monotonic() + int(os.environ.get("GOPRO_SNAPSHOT_WAIT_SECONDS", "90"))
+    last_error = ""
+    while True:
+        try:
+            with request.urlopen(f"http://127.0.0.1:{port}/readyz", timeout=5) as response:
+                ready = json.load(response)
+            with request.urlopen(
+                f"http://127.0.0.1:{port}/api/v1/cameras/{camera_id}/snapshot.jpg",
+                timeout=10,
+            ) as response:
+                snapshot = response.read(16 * 1024 * 1024)
+            if (
+                ready.get("cameraConnected")
+                and ready.get("commandReady")
+                and snapshot.startswith(b"\xff\xd8")
+                and snapshot.endswith(b"\xff\xd9")
+            ):
+                print(f"GoPro {expected_serial} is ready and producing JPEG snapshots")
+                return 0
+            last_error = "camera readiness or snapshot validation failed"
+        except (OSError, ValueError) as exc:
+            last_error = str(exc)
+        if time.monotonic() >= deadline:
+            raise SystemExit(f"native GoPro did not become snapshot-ready: {last_error}")
+        time.sleep(2)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

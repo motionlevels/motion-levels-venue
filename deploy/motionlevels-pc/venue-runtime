@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+if [ -n "${MOTION_LEVELS_PLATFORM_TOKEN_FILE:-}" ]; then
+  MOTION_LEVELS_PLATFORM_TOKEN="$(cat "$MOTION_LEVELS_PLATFORM_TOKEN_FILE")"
+  export MOTION_LEVELS_PLATFORM_TOKEN
+fi
+if [ -n "${MOTION_LEVELS_ENGINE_TOKEN_FILE:-}" ]; then
+  MOTION_LEVELS_ENGINE_TOKEN="$(cat "$MOTION_LEVELS_ENGINE_TOKEN_FILE")"
+  export MOTION_LEVELS_ENGINE_TOKEN
+fi
+
+node_binary=${MOTION_LEVELS_NODE_BINARY:-/usr/bin/node}
+games_root=${MOTION_LEVELS_GAMES_ROOT:-/opt/motion-levels/venue/current/game-bundles/motion-levels-games}
+runtime_entry=${MOTION_LEVELS_GAMES_RUNTIME_ENTRY:-}
+if [ -z "$runtime_entry" ]; then
+  runtime_entry="$($node_binary -e '
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const root = process.argv[1];
+    const pin = JSON.parse(fs.readFileSync(path.join(root, "pin.json")));
+    process.stdout.write(path.join(root, pin.bundlePath, "venue/runtime.mjs"));
+  ' "$games_root")"
+fi
+
+exec "$node_binary" "$runtime_entry"

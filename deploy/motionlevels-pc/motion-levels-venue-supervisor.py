@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Any
 from urllib import error, request
 
-
 SCHEMA = "motion-levels-venue-snapshot-v1"
 ENGINE_URL = os.environ.get("MOTION_LEVELS_SUPERVISOR_ENGINE_URL", "http://127.0.0.1:4102").rstrip("/")
 CONTROLLER_URL = os.environ.get("MOTION_LEVELS_SUPERVISOR_CONTROLLER_URL", "http://127.0.0.1:4101").rstrip("/")
@@ -28,7 +27,7 @@ STACK_PATH = Path(os.environ.get("MOTION_LEVELS_STACK_PATH", "/etc/motion-levels
 CONTROLLER_ID_PATH = Path(
     os.environ.get(
         "MOTION_LEVELS_CONTROLLER_ID_FILE",
-        "/opt/motion-levels/rebuild/var/floor-controller/controller-id",
+        "/var/lib/motion-levels/floor-controller/controller-id",
     )
 )
 TOKEN = os.environ.get("MOTION_LEVELS_SUPERVISOR_TOKEN", "").strip()
@@ -40,7 +39,7 @@ SERVICES = tuple(
     value.strip()
     for value in os.environ.get(
         "MOTION_LEVELS_SUPERVISOR_SERVICES",
-        "motion-levels-floor-controller.service,motion-levels-game-engine.service,"
+        "motion-levels-floor-controller.service,motion-levels-venue-runtime.service,"
         "motion-levels-kiosk.service,motion-levels-camera-helper.service,caddy.service",
     ).split(",")
     if value.strip()

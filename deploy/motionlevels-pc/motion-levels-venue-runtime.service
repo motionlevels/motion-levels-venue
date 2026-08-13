@@ -1,0 +1,26 @@
+[Unit]
+Description=Motion Levels TypeScript venue runtime
+After=network-online.target motion-levels-floor-controller.service
+Wants=network-online.target motion-levels-floor-controller.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/motion-levels/venue/current
+EnvironmentFile=/etc/motion-levels/motion-levels.env
+EnvironmentFile=-/etc/motion-levels/platform.env
+Environment=MOTION_LEVELS_CONTROLLER_ADDR=127.0.0.1:4203
+Environment=MOTION_LEVELS_GAMES_ROOT=/opt/motion-levels/venue/current/game-bundles/motion-levels-games
+Environment=MOTION_LEVELS_NODE_BINARY=/usr/bin/node
+Environment=MOTION_LEVELS_CAMERA_RECORDER_TOKEN_FILE=/etc/motion-levels/camera-recorder-token
+ExecStart=/opt/motion-levels/venue/current/deploy/motionlevels-pc/venue-runtime
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/motion-levels
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

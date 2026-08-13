@@ -15,21 +15,11 @@ scratch
 
 # Runtime recording output can grow quickly and should not be committed.
 recordings/
-engine/recordings/
-floor-controller/recordings/
 game-recordings/
-
-# Generated menu/catalog previews are derived runtime media.
-apps/player-menu/src/assets/previews/
 
 # Framework build output and local test artifacts.
 .next/
 test-results/
-
-# Homelab runtime secrets live on the target host and must not be committed.
-deploy/homelab/.env
-deploy/homelab/*.env.local
-deploy/homelab/secrets/
 
 # Claude Design sync tooling and generated bundle output.
 .ds-sync/

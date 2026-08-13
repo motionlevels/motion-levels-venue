@@ -1,179 +1,244 @@
 ---
-- name: Deploy Motion Levels venue stack
+- name: Build the pinned native venue release on the control machine
   hosts: motion_levels_venues
-  gather_facts: true
+  gather_facts: false
+  connection: local
+  become: false
+  any_errors_fatal: true
+  serial: 1
   vars:
     motion_levels_repo_root: "{{ playbook_dir }}/../.."
-    motion_levels_remote_src: "{{ motion_levels_remote_root }}/current"
-    motion_levels_releases_root: "{{ motion_levels_remote_root }}/releases"
-    motion_levels_venue_components_lock_path: "{{ motion_levels_repo_root }}/deploy/motionlevels-pc/venue-components.lock.json"
-    motion_levels_ghcr_username: "{{ lookup('env', 'GHCR_USERNAME') | default('lobis', true) }}"
-    motion_levels_ghcr_token: "{{ lookup('env', 'GHCR_TOKEN') }}"
-    motion_levels_deploy_mode: "{{ lookup('env', 'MOTION_LEVELS_DEPLOY_MODE') | default('all', true) }}"
-    motion_levels_frontend_modes: ["all", "frontends"]
-    motion_levels_runtime_modes: ["all", "runtime"]
-    motion_levels_services:
-      - motion-levels-floor-controller.service
-      - motion-levels-game-engine.service
-      - motion-levels-venue-supervisor.service
-      - motion-levels-security-recorder.service
-      - motion-levels-camera-helper.service
-      - motion-levels-kiosk.service
-      - motion-levels-hdmi-watchdog.service
-    motion_levels_old_services:
-      - motion-levels-player-menu.service
-      - motion-levels-player-display.service
-      - motion-levels-player-tv.service
-      - motion-levels-camera-recorder.service
-      - motion-levels-venue-containers.service
-      - motion-levels-player-container.service
-      - motion-levels-display-wayland.service
-      - motion-levels.service
-    motion_levels_health_urls:
-      - http://127.0.0.1/controller/health
-      - http://127.0.0.1/engine/api/status
-      - http://127.0.0.1/stack.json
-      - http://127.0.0.1/menu/
-      - http://127.0.0.1/display/
-      - http://127.0.0.1:4101/health
-      - http://127.0.0.1:4102/api/status
-      - http://127.0.0.1:4103/health
-      - http://127.0.0.1/venue-api/v1/snapshot
-    motion_levels_frontend_health_urls:
-      - http://127.0.0.1/stack.json
-      - http://127.0.0.1/menu/
-      - http://127.0.0.1/display/
-    motion_levels_common_sync_items:
-      - src: deploy/
-        dest: "{{ motion_levels_remote_src }}/deploy/"
-      - src: game-bundles/
-        dest: "{{ motion_levels_remote_src }}/game-bundles/"
-    motion_levels_runtime_sync_items:
-      - src: go.mod
-        dest: "{{ motion_levels_remote_src }}/"
-      - src: go.sum
-        dest: "{{ motion_levels_remote_src }}/"
-      - src: game-engine/
-        dest: "{{ motion_levels_remote_src }}/game-engine/"
-      - src: packages/
-        dest: "{{ motion_levels_remote_src }}/packages/"
-      - src: content/
-        dest: "{{ motion_levels_remote_src }}/content/"
-      - src: content/
-        dest: "{{ motion_levels_remote_root }}/content/"
-    motion_levels_frontend_sync_items:
-      - src: apps/player-menu/
-        dest: "{{ motion_levels_remote_src }}/apps/player-menu/"
-      - src: apps/player-display/
-        dest: "{{ motion_levels_remote_src }}/apps/player-display/"
-      - src: apps/player-menu/dist/
-        dest: "{{ motion_levels_remote_root }}/apps/player-menu/dist/"
-      - src: apps/player-display/dist/
-        dest: "{{ motion_levels_remote_root }}/apps/player-display/dist/"
-    motion_levels_rsync_opts:
-      - --exclude=node_modules
-      - --exclude=release
-      - --exclude=.vite
-      - --exclude=*.tsbuildinfo
-      - --exclude=recordings
-      - --exclude=game-recordings
-      - --exclude=*.pbstream
-      - --exclude=*.pbstream.*
-      - --exclude=.DS_Store
+    motion_levels_component_lock_path: "{{ motion_levels_repo_root }}/deploy/motionlevels-pc/venue-components.lock.json"
+    motion_levels_local_build_root: "{{ lookup('env', 'MOTION_LEVELS_NATIVE_BUILD_ROOT') | default('/tmp/motion-levels-venue-native', true) }}"
+    motion_levels_component_source_roots:
+      controller: "{{ lookup('env', 'MOTION_LEVELS_CONTROLLER_SOURCE') | default(motion_levels_repo_root ~ '/../motion-levels-controller', true) }}"
+      games: "{{ lookup('env', 'MOTION_LEVELS_GAMES_SOURCE') | default(motion_levels_repo_root ~ '/../motion-levels-games', true) }}"
+      cameras: "{{ lookup('env', 'MOTION_LEVELS_CAMERAS_SOURCE') | default(motion_levels_repo_root ~ '/../motion-levels-cameras', true) }}"
   tasks:
-    - name: Load the immutable venue component lock
+    - name: Load the source component lock
       ansible.builtin.set_fact:
-        motion_levels_venue_components_lock: >-
-          {{ lookup('file', motion_levels_venue_components_lock_path) | from_json }}
+        motion_levels_component_lock: "{{ lookup('file', motion_levels_component_lock_path) | from_json }}"
 
-    - name: Validate the pinned controller component contract
+    - name: Validate venue identity and native source pins
       ansible.builtin.assert:
         that:
-          - motion_levels_venue_components_lock.schema == 'motion-levels-venue-components-v1'
-          - motion_levels_venue_components_lock.components.controller.repository == 'ghcr.io/motionlevels/motion-levels-controller'
-          - motion_levels_venue_components_lock.components.controller.revision is match('^[0-9a-f]{40}$')
-          - motion_levels_venue_components_lock.components.controller.platform == 'linux/amd64'
-          - motion_levels_venue_components_lock.components.controller.protocol == 'v1+v2'
-        fail_msg: >-
-          deploy/motionlevels-pc/venue-components.lock.json must pin the
-          controller repository, full revision, linux/amd64 platform, and v1+v2 protocol.
-      delegate_to: localhost
-      become: false
+          - motion_levels_component_lock.schema == 'motion-levels-venue-components-v2'
+          - motion_levels_component_lock.components.controller.revision is match('^[0-9a-f]{40}$')
+          - motion_levels_component_lock.components.controller.target == 'linux/amd64'
+          - motion_levels_component_lock.components.controller.protocol == 'v1+v2'
+          - motion_levels_component_lock.components.games.revision is match('^[0-9a-f]{40}$')
+          - motion_levels_component_lock.components.cameras.revision is match('^[0-9a-f]{40}$')
+          - motion_levels_venue.slug is match('^[a-z0-9]+(?:-[a-z0-9]+)*$')
+          - motion_levels_venue.platform_room_id is match('^[0-9a-f-]{36}$')
+          - motion_levels_camera.expected_serial | length > 0
+          - motion_levels_camera.usb.vendor_id is match('^[0-9a-f]{4}$')
+          - motion_levels_camera.usb.product_id is match('^[0-9a-f]{4}$')
+          - motion_levels_camera.usb.expected_port is match('^[0-9]+-[0-9]+(?:\.[0-9]+)*$')
+          - motion_levels_camera.usb.network_interface is match('^[a-zA-Z0-9_.:-]+$')
+          - motion_levels_camera.usb.network_mac is match('^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$')
+          - motion_levels_camera.usb.host_address is match('^(?:[0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$')
+          - motion_levels_camera.usb.dhcp_metric | int > 0
+          - motion_levels_camera.gopro.base_url.startswith('http://')
+          - motion_levels_network.floor.source_address == (motion_levels_network.lan.address | regex_replace('/.*$', ''))
+          - motion_levels_camera.api_token_file.startswith('/etc/')
+          - motion_levels_camera.platform_token_file.startswith('/etc/')
+          - (motion_levels_display.alsa.card | int) >= 0
+          - (motion_levels_display.alsa.device | int) >= 0
+        fail_msg: "Venue host vars or deploy/motionlevels-pc/venue-components.lock.json are incomplete."
 
-    - name: Validate venue deploy mode
+    - name: Inspect the configured local component source roots
+      ansible.builtin.stat:
+        path: "{{ item.value }}"
+      register: motion_levels_component_sources
+      loop: "{{ motion_levels_component_source_roots | dict2items }}"
+
+    - name: Require every pinned component source checkout
       ansible.builtin.assert:
         that:
-          - motion_levels_deploy_mode in ["all", "frontends", "runtime"]
-        fail_msg: "motion_levels_deploy_mode must be one of: all, frontends, runtime"
+          - item.stat.exists
+          - item.stat.isdir
+        fail_msg: "The {{ item.item.key }} source checkout is unavailable at {{ item.item.value }}."
+      loop: "{{ motion_levels_component_sources.results }}"
+      loop_control:
+        label: "{{ item.item.key }}"
 
-    - name: Resolve venue bundle revision
+    - name: Resolve the exact venue source revision
       ansible.builtin.command:
         cmd: git rev-parse HEAD
         chdir: "{{ motion_levels_repo_root }}"
-      delegate_to: localhost
-      become: false
-      register: motion_levels_venue_revision
+      register: motion_levels_venue_revision_command
       changed_when: false
 
-    - name: Validate GHCR pull credentials
+    - name: Refuse an uncommitted venue deployment  # noqa command-instead-of-module
+      ansible.builtin.command:
+        cmd: git status --porcelain --untracked-files=normal
+        chdir: "{{ motion_levels_repo_root }}"
+      register: motion_levels_venue_dirty
+      changed_when: false
+      failed_when: motion_levels_venue_dirty.stdout | length > 0
+
+    - name: Build and verify the native source release
+      ansible.builtin.command:
+        cmd: "{{ motion_levels_repo_root }}/scripts/build-native-release.sh"
+        chdir: "{{ motion_levels_repo_root }}"
+      environment:
+        MOTION_LEVELS_NATIVE_BUILD_ROOT: "{{ motion_levels_local_build_root }}"
+        MOTION_LEVELS_CONTROLLER_SOURCE: "{{ motion_levels_component_source_roots.controller }}"
+        MOTION_LEVELS_GAMES_SOURCE: "{{ motion_levels_component_source_roots.games }}"
+        MOTION_LEVELS_CAMERAS_SOURCE: "{{ motion_levels_component_source_roots.cameras }}"
+      register: motion_levels_native_build
+      changed_when: false
+
+    - name: Share immutable release facts
+      ansible.builtin.set_fact:
+        motion_levels_venue_revision: "{{ motion_levels_venue_revision_command.stdout | trim }}"
+        motion_levels_local_release_dir: "{{ motion_levels_native_build.stdout_lines | last }}"
+        motion_levels_remote_release_dir: "{{ motion_levels_install_root }}/releases/{{ motion_levels_venue_revision_command.stdout | trim }}"
+
+- name: Deploy the native Debian venue stack
+  hosts: motion_levels_venues
+  gather_facts: true
+  any_errors_fatal: true
+  serial: 1
+  vars:
+    motion_levels_repo_root: "{{ playbook_dir }}/../.."
+    motion_levels_candidate_dir: "{{ motion_levels_remote_release_dir }}.candidate"
+    motion_levels_idle_games:
+      - loop
+      - animations
+      - salvapantallas
+      - ambient-comet
+      - ambient-pulse
+      - ambient-spark
+    motion_levels_health_urls:
+      - http://127.0.0.1/controller/health
+      - http://127.0.0.1/engine/api/status
+      - http://127.0.0.1/venue-api/v1/snapshot
+      - http://127.0.0.1/menu/
+      - http://127.0.0.1/display/
+      - http://127.0.0.1:8040/readyz
+  pre_tasks:
+    - name: Require Debian 13 amd64 with supported native runtimes
       ansible.builtin.assert:
         that:
-          - motion_levels_ghcr_token | length > 0
-        fail_msg: Set GHCR_TOKEN to a classic GitHub token with read:packages.
-      no_log: true
+          - ansible_facts.os_family == 'Debian'
+          - ansible_facts.distribution_major_version | int >= 13
+          - ansible_facts.architecture == 'x86_64'
+        fail_msg: "Native venue deployment requires Debian 13+ on x86_64."
 
-    - name: Set venue bundle release facts
-      ansible.builtin.set_fact:
-        motion_levels_venue_image: "ghcr.io/motionlevels/motion-levels-venue-bundle:sha-{{ motion_levels_venue_revision.stdout | trim }}"
-        motion_levels_venue_release_dir: "{{ motion_levels_releases_root }}/{{ motion_levels_venue_revision.stdout | trim }}"
-        motion_levels_controller_image: >-
-          {{
-            motion_levels_venue_components_lock.components.controller.repository
-          }}:sha-{{
-            motion_levels_venue_components_lock.components.controller.revision
-          }}
+    - name: Install native host packages
+      ansible.builtin.apt:
+        name: "{{ motion_levels_runtime_packages }}"
+        state: present
+        update_cache: true
 
-    - name: Verify pinned motion-levels-games bundle
-      ansible.builtin.command:
-        cmd: node scripts/verify-motion-levels-games-bundle.mjs
-        chdir: "{{ motion_levels_repo_root }}"
+    - name: Verify native Node and Python versions
+      ansible.builtin.shell: |
+        set -eu
+        node_major="$(node -p 'Number(process.versions.node.split(".")[0])')"
+        python_minor="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+        test "$node_major" -ge 20
+        test "$python_minor" = "3.13"
+      args:
+        executable: /bin/sh
       changed_when: false
-      delegate_to: localhost
-      run_once: true
 
-    - name: Install fixed LAN address helper
+    - name: Verify the configured GoPro identity before camera control
+      ansible.builtin.shell: |
+        set -eu
+        matches=0
+        actual=""
+        actual_port=""
+        for device in /sys/bus/usb/devices/*; do
+          test -r "$device/idVendor" || continue
+          test -r "$device/idProduct" || continue
+          vendor="$(tr -d '[:space:]' < "$device/idVendor")"
+          product="$(tr -d '[:space:]' < "$device/idProduct")"
+          if [ "$vendor" = "{{ motion_levels_camera.usb.vendor_id }}" ] && [ "$product" = "{{ motion_levels_camera.usb.product_id }}" ]; then
+            matches=$((matches + 1))
+            actual="$(tr -d '[:space:]' < "$device/serial")"
+            actual_port="$(basename "$device")"
+          fi
+        done
+        test "$matches" -eq 1
+        test "$actual" = "{{ motion_levels_camera.expected_serial }}"
+        test "$actual_port" = "{{ motion_levels_camera.usb.expected_port }}"
+      args:
+        executable: /bin/sh
+      changed_when: false
+      when: motion_levels_camera.enabled
+
+    - name: List legacy Docker workloads before native cutover
+      ansible.builtin.command:
+        argv:
+          - docker
+          - ps
+          - --all
+          - --format
+          - "{{ '{{' }}.Names{{ '}}' }}"
+      register: motion_levels_legacy_containers
+      changed_when: false
+      failed_when: false
+
+    - name: Refuse to remove Docker when it owns anything except the camera
+      ansible.builtin.assert:
+        that:
+          - motion_levels_legacy_containers.rc != 0 or (motion_levels_legacy_containers.stdout_lines | difference(['motion-levels-cameras']) | length == 0)
+        fail_msg: "Docker still owns non-camera workloads; migrate them before removing Docker."
+
+  tasks:
+    - name: Set the venue hostname
+      ansible.builtin.hostname:
+        name: "{{ motion_levels_venue.hostname }}"
+
+    - name: Read the configured venue timezone
+      ansible.builtin.command:
+        argv:
+          - timedatectl
+          - show
+          - --property=Timezone
+          - --value
+      register: motion_levels_current_timezone
+      changed_when: false
+
+    - name: Set the venue timezone
+      ansible.builtin.command:
+        argv:
+          - timedatectl
+          - set-timezone
+          - "{{ motion_levels_venue.timezone }}"
+      when: motion_levels_current_timezone.stdout | trim != motion_levels_venue.timezone
+      changed_when: true
+
+    - name: Install the venue LAN address helper
       ansible.builtin.copy:
         dest: /usr/local/sbin/motion-levels-lan-ip
+        owner: root
+        group: root
         mode: "0755"
         content: |
           #!/bin/sh
           set -eu
-
-          IFACE="{{ motion_levels_lan_interface }}"
-          IP="{{ motion_levels_lan_ipv4 }}"
-          ADDR="{{ motion_levels_lan_ipv4 | regex_replace('/.*$', '') }}"
-          GATEWAY="{{ motion_levels_lan_gateway | default('') }}"
-
-          if ! ip link show dev "$IFACE" >/dev/null 2>&1; then
-            echo "Interface $IFACE not found" >&2
-            exit 1
+          interface="{{ motion_levels_network.lan.interface }}"
+          address="{{ motion_levels_network.lan.address }}"
+          address_only="{{ motion_levels_network.lan.address | regex_replace('/.*$', '') }}"
+          gateway="{{ motion_levels_network.lan.gateway }}"
+          ip link show dev "$interface" >/dev/null
+          ip link set "$interface" up
+          ip addr show dev "$interface" | grep -q "${address_only}/" || ip addr add "$address" dev "$interface"
+          if ! ip route show default dev "$interface" | grep -q "default via $gateway"; then
+            ip route replace default via "$gateway" dev "$interface" metric 1002
           fi
 
-          ip link set "$IFACE" up
-          ip addr show dev "$IFACE" | grep -q "${ADDR}/" || ip addr add "$IP" dev "$IFACE"
-
-          if [ -n "$GATEWAY" ] && ! ip route show default dev "$IFACE" | grep -q "default via $GATEWAY"; then
-            ip route replace default via "$GATEWAY" dev "$IFACE" metric 1002
-          fi
-      when: motion_levels_lan_interface is defined and motion_levels_lan_ipv4 is defined
-
-    - name: Install fixed LAN address service
+    - name: Install the venue LAN address unit
       ansible.builtin.copy:
         dest: /etc/systemd/system/motion-levels-lan-ip.service
+        owner: root
+        group: root
         mode: "0644"
         content: |
           [Unit]
-          Description=Keep Motion Levels Ethernet LAN address
+          Description=Keep the Motion Levels venue LAN address
           After=network-online.target
           Wants=network-online.target
 
@@ -184,23 +249,8 @@
 
           [Install]
           WantedBy=multi-user.target
-      when: motion_levels_lan_interface is defined and motion_levels_lan_ipv4 is defined
 
-    - name: Enable fixed LAN address service
-      ansible.builtin.systemd_service:
-        name: motion-levels-lan-ip.service
-        daemon_reload: true
-        enabled: true
-        state: started
-      when: motion_levels_lan_interface is defined and motion_levels_lan_ipv4 is defined
-
-    - name: Prevent ARP flux on the venue LAN
-      # The venue PC can end up with both its ethernet and wifi interfaces on
-      # the same 192.168.1.0/24 LAN. With the default arp_ignore/arp_announce
-      # the box answers ARP for an interface address on every interface, so a
-      # LAN client may cache the wifi MAC for the ethernet IP and its traffic
-      # then takes an asymmetric path that switches/clients silently drop. This
-      # makes each interface only answer/announce ARP for its own address.
+    - name: Prevent ARP flux between wired and wireless venue interfaces
       ansible.posix.sysctl:
         name: "{{ item.name }}"
         value: "{{ item.value }}"
@@ -212,707 +262,648 @@
         - { name: net.ipv4.conf.all.arp_ignore, value: "1" }
         - { name: net.ipv4.conf.all.arp_announce, value: "2" }
 
-    - name: Pin the venue LAN address statically in dhcpcd
-      # The venue PC uses dhcpcd. A DHCP lease on the ethernet interface is not
-      # stable (it can land on a different address and wipe any IP added out of
-      # band), so the wired LAN address — the only place /tv and /cameras are
-      # served — is pinned here. This keeps the ethernet interface on the fixed
-      # 192.168.1.142 used by the Caddy host matchers.
-      ansible.builtin.blockinfile:
-        path: /etc/dhcpcd.conf
-        marker: "# {mark} MOTION LEVELS LAN"
-        block: |
-          interface {{ motion_levels_lan_interface }}
-          static ip_address={{ motion_levels_lan_ipv4 }}
-          static routers={{ motion_levels_lan_gateway }}
-          static domain_name_servers={{ motion_levels_lan_gateway }}
-        create: false
-      notify: Reconfigure dhcpcd LAN interface
-      when:
-        - motion_levels_lan_interface is defined
-        - motion_levels_lan_ipv4 is defined
-        - motion_levels_lan_gateway is defined
+    - name: Enable the venue LAN address unit
+      ansible.builtin.systemd_service:
+        name: motion-levels-lan-ip.service
+        daemon_reload: true
+        enabled: true
+        state: started
 
-    - name: Remove legacy venue-local recording files
+    - name: Create native release, state, and configuration directories
       ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner | default('root') }}"
+        group: "{{ item.group | default('root') }}"
+        mode: "{{ item.mode | default('0755') }}"
       loop:
-        - "{{ motion_levels_remote_root }}/var/floor-controller/recordings"
-        - "{{ motion_levels_remote_root }}/var/game-engine/replays"
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+        - { path: "{{ motion_levels_install_root }}" }
+        - { path: "{{ motion_levels_install_root }}/releases" }
+        - { path: "{{ motion_levels_state_root }}" }
+        - { path: "{{ motion_levels_state_root }}/floor-controller" }
+        - { path: "{{ motion_levels_state_root }}/platform-asset-cache" }
+        - { path: "{{ motion_levels_state_root }}/camera-recordings" }
+        - { path: "{{ motion_levels_state_root }}/security-recordings" }
+        - { path: "{{ motion_levels_config_root }}", mode: "0750" }
 
-    - name: Install runtime packages
-      ansible.builtin.apt:
-        name:
-          - caddy
-          - curl
-          - docker.io
-          - ffmpeg
-          - jq
-          - libasound2
-          - libudev1
-          - libusb-1.0-0
-          - python3-opencv
-          - rclone
-          - ripgrep
-          - usbutils
-          - v4l-utils
-          - zstd
-          - xinit
-          - xserver-xorg
-          - x11-xserver-utils
-          - chromium
-          - unclutter
-          - alsa-utils
-        state: present
-        update_cache: true
-      when: ansible_facts.os_family == "Debian"
+    - name: Ensure the camera runtime account exists
+      ansible.builtin.group:
+        name: motion-levels-cameras
+        gid: "{{ motion_levels_camera_gid }}"
+        system: true
+      when: motion_levels_camera.enabled
 
-    - name: Create deployment directories
+    - name: Ensure the camera runtime user exists
+      ansible.builtin.user:
+        name: motion-levels-cameras
+        uid: "{{ motion_levels_camera_uid }}"
+        group: motion-levels-cameras
+        system: true
+        shell: /usr/sbin/nologin
+        home: "{{ motion_levels_camera_state_root }}"
+        create_home: false
+      when: motion_levels_camera.enabled
+
+    - name: Create camera state directories
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory
-        mode: "0755"
+        owner: motion-levels-cameras
+        group: motion-levels-cameras
+        mode: "0750"
       loop:
-        - "{{ motion_levels_remote_root }}"
-        - "{{ motion_levels_releases_root }}"
-        - /etc/motion-levels
-        - /etc/caddy
-        - /var/lib/motion-levels
-        - /var/lib/motion-levels/camera-recordings
-        - /var/lib/motion-levels/security-recordings
-        - "{{ motion_levels_remote_root }}/var/floor-controller"
+        - "{{ motion_levels_camera_state_root }}"
+        - "{{ motion_levels_state_root }}/camera-recordings"
+      when: motion_levels_camera.enabled
 
-    - name: Initialize the engine-owned stable venue identity
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/python3
-          - -c
-          - "import pathlib,sys,uuid; pathlib.Path(sys.argv[1]).write_text(str(uuid.uuid4()) + '\n', encoding='utf-8')"
-          - "{{ motion_levels_remote_root }}/var/floor-controller/controller-id"
-        creates: "{{ motion_levels_remote_root }}/var/floor-controller/controller-id"
+    - name: Check required camera secret files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: motion_levels_camera_secrets
+      loop:
+        - "{{ motion_levels_camera.api_token_file }}"
+        - "{{ motion_levels_camera.platform_token_file }}"
+      when: motion_levels_camera.enabled
 
-    - name: Restrict the stable venue identity
-      ansible.builtin.file:
-        path: "{{ motion_levels_remote_root }}/var/floor-controller/controller-id"
-        state: file
-        owner: root
-        group: root
-        mode: "0644"
-
-    - name: Log Docker into GHCR
-      ansible.builtin.command:
-        cmd: docker login ghcr.io --username "{{ motion_levels_ghcr_username }}" --password-stdin
-        stdin: "{{ motion_levels_ghcr_token }}"
-      changed_when: false
+    - name: Require camera secrets to exist outside Git
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isreg
+          - item.stat.size > 0
+        fail_msg: "Required host secret is missing or empty: {{ item.item }}"
+      loop: "{{ motion_levels_camera_secrets.results | default([]) }}"
       no_log: true
 
-    - name: Pull immutable venue bundle
-      ansible.builtin.command:
-        cmd: docker pull "{{ motion_levels_venue_image }}"
-      register: motion_levels_venue_pull
-      changed_when: "'Downloaded newer image' in motion_levels_venue_pull.stdout"
-
-    - name: Pull the immutable controller image for the native release
-      ansible.builtin.command:
-        cmd: docker pull "{{ motion_levels_controller_image }}"
-      register: motion_levels_controller_pull
-      changed_when: "'Downloaded newer image' in motion_levels_controller_pull.stdout"
-
-    - name: Verify and pin the native controller image digest
-      ansible.builtin.shell: |
-        /usr/bin/python3 - \
-          "{{ motion_levels_controller_image }}" \
-          "{{ motion_levels_venue_components_lock.components.controller.revision }}" \
-          "{{ motion_levels_venue_components_lock.components.controller.platform.split('/', 1)[1] }}" \
-          "{{ motion_levels_venue_components_lock.components.controller.protocol }}" <<'PY'
-        import json
-        import subprocess
-        import sys
-
-        image, expected_revision, expected_architecture, expected_protocol = sys.argv[1:]
-        payload = json.loads(subprocess.check_output(["docker", "image", "inspect", image]))[0]
-        labels = payload.get("Config", {}).get("Labels") or {}
-        revision = labels.get("org.opencontainers.image.revision")
-        if revision != expected_revision:
-            raise SystemExit(f"{image} revision label is {revision!r}, expected {expected_revision!r}")
-        architecture = payload.get("Architecture")
-        if architecture != expected_architecture:
-            raise SystemExit(
-                f"{image} architecture is {architecture!r}, expected {expected_architecture!r}"
-            )
-        protocol = labels.get("io.motionlevels.controller.protocol")
-        if protocol != expected_protocol:
-            raise SystemExit(
-                f"{image} controller protocol is {protocol!r}, expected {expected_protocol!r}"
-            )
-        repository = image.rsplit(":sha-", 1)[0]
-        digests = [
-            value
-            for value in payload.get("RepoDigests") or []
-            if value.startswith(repository + "@sha256:")
-        ]
-        if not digests:
-            raise SystemExit(f"{image} has no matching registry digest")
-        print(digests[0])
-        PY
-      args:
-        executable: /bin/sh
-      register: motion_levels_controller_digest
-      changed_when: false
-
-    - name: Select the verified native controller digest
-      ansible.builtin.set_fact:
-        motion_levels_controller_pinned_image: "{{ motion_levels_controller_digest.stdout | trim }}"
-
-    - name: Extract immutable venue bundle
-      ansible.builtin.shell: |
-        set -eu
-        image="{{ motion_levels_venue_image }}"
-        release_dir="{{ motion_levels_venue_release_dir }}"
-        release_tmp="${release_dir}.tmp"
-        current="{{ motion_levels_remote_root }}/current"
-        container="motion-levels-release-{{ (motion_levels_venue_revision.stdout | trim)[:12] }}"
-        controller_image="{{ motion_levels_controller_pinned_image }}"
-        controller_container="motion-levels-controller-release-{{ motion_levels_venue_components_lock.components.controller.revision[:12] }}"
-        if [ -e "$release_dir/.complete" ]; then
-          echo already-present
-          exit 0
-        fi
-        if [ -L "$current" ] && [ "$(readlink -f "$current")" = "$release_dir" ] && [ -d "$release_dir" ]; then
-          touch "$release_dir/.complete"
-          echo already-active
-          exit 0
-        fi
-        rm -rf "$release_tmp"
-        mkdir -p "$release_tmp"
-        docker rm -f "$container" "$controller_container" >/dev/null 2>&1 || true
-        docker create --name "$container" "$image" >/dev/null
-        docker create --name "$controller_container" "$controller_image" >/dev/null
-        cleanup() {
-          docker rm -f "$container" "$controller_container" >/dev/null 2>&1 || true
-        }
-        trap cleanup EXIT
-        docker cp "$container:/release/." "$release_tmp/"
-        mkdir -p "$release_tmp/bin"
-        docker cp \
-          "$controller_container:/app/bin/motion-levels-controller" \
-          "$release_tmp/bin/floor-controller"
-        chmod 0755 "$release_tmp/bin/floor-controller"
-        touch "$release_tmp/.complete"
-        rm -rf "$release_dir"
-        mv "$release_tmp" "$release_dir"
-      args:
-        executable: /bin/sh
-      register: motion_levels_venue_extract
-      changed_when: motion_levels_venue_extract.stdout | trim not in ['already-present', 'already-active']
-
-    - name: Preserve the legacy host release for first-container rollback
-      ansible.builtin.shell: |
-        set -eu
-        root="{{ motion_levels_remote_root }}"
-        legacy="$root/releases/legacy-pre-container"
-
-        if [ -L "$root/current" ] || [ -e "$legacy/.complete" ]; then
-          echo already-present
-          exit 0
-        fi
-
-        mkdir -p "$legacy/src"
-        for path in bin apps content; do
-          if [ -e "$root/$path" ]; then
-            cp -a "$root/$path" "$legacy/$path"
-          fi
-        done
-        for path in deploy game-bundles; do
-          if [ -e "$root/src/$path" ]; then
-            cp -a "$root/src/$path" "$legacy/src/$path"
-          fi
-        done
-        touch "$legacy/.complete"
-        ln -sfn "$legacy" "$root/previous"
-      args:
-        executable: /bin/sh
-      register: motion_levels_legacy_release
-      changed_when: motion_levels_legacy_release.rc == 0 and motion_levels_legacy_release.stdout != 'already-present'
-
-    - name: Activate venue release atomically
-      ansible.builtin.shell: |
-        set -eu
-        root="{{ motion_levels_remote_root }}"
-        candidate="{{ motion_levels_venue_release_dir }}"
-        active=""
-        if [ -L "$root/current" ]; then
-          active="$(readlink -f "$root/current")"
-        fi
-        if [ "$active" = "$candidate" ]; then
-          echo already-active
-          exit 0
-        fi
-        if [ -n "$active" ]; then
-          ln -sfn "$active" "$root/previous"
-        fi
-        ln -sfn "$candidate" "$root/current"
-        printf '%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "{{ motion_levels_venue_image }}" >> "$root/releases/history.tsv"
-      args:
-        executable: /bin/sh
-      register: motion_levels_venue_activate
-      changed_when: motion_levels_venue_activate.stdout | trim != 'already-active'
-
-    - name: Point local game assets at the pinned bundle
-      ansible.builtin.file:
-        src: "{{ motion_levels_remote_src }}/game-bundles/motion-levels-games/{{ (lookup('file', motion_levels_repo_root ~ '/game-bundles/motion-levels-games/pin.json') | from_json).bundlePath }}"
-        dest: "{{ motion_levels_remote_src }}/game-bundles/motion-levels-games/current"
-        state: link
-        force: true
-
-    - name: Remove retired host-native Insta360 artifacts
+    - name: Allow the native camera account to read its secrets
       ansible.builtin.file:
         path: "{{ item }}"
-        state: absent
+        owner: root
+        group: motion-levels-cameras
+        mode: "0440"
       loop:
-        - /usr/local/bin/motion-levels-insta360
-        - /usr/local/bin/motion-levels-insta360.disabled-by-motion-levels-cameras
-        - /usr/local/bin/motion-levels-x5ctl
-        - /opt/insta360
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+        - "{{ motion_levels_camera.api_token_file }}"
+        - "{{ motion_levels_camera.platform_token_file }}"
+      no_log: true
+      when: motion_levels_camera.enabled
 
-    - name: Install default motion-levels env if missing
-      ansible.builtin.copy:
-        src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/motion-levels.env"
-        dest: /etc/motion-levels/motion-levels.env
-        mode: "0644"
-        remote_src: true
-        force: false
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Ensure platform asset cache env is configured
-      ansible.builtin.lineinfile:
-        path: /etc/motion-levels/motion-levels.env
-        regexp: '^MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR='
-        line: MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR=/var/lib/motion-levels/platform-asset-cache
-        mode: "0644"
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Ensure motion-levels-games runner env is configured
-      ansible.builtin.lineinfile:
-        path: /etc/motion-levels/motion-levels.env
-        regexp: '^MOTION_LEVELS_GAMES_ROOT='
-        line: "MOTION_LEVELS_GAMES_ROOT={{ motion_levels_remote_src }}/game-bundles/motion-levels-games"
-        mode: "0644"
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Ensure controller v2 duplex endpoint is configured
-      ansible.builtin.lineinfile:
-        path: /etc/motion-levels/motion-levels.env
-        regexp: '^MOTION_LEVELS_CONTROLLER_DUPLEX='
-        line: MOTION_LEVELS_CONTROLLER_DUPLEX=127.0.0.1:4203
-        mode: "0644"
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Ensure LED broadcast env is configured
-      ansible.builtin.lineinfile:
-        path: /etc/motion-levels/motion-levels.env
-        regexp: '^MOTION_LEVELS_LED_BROADCAST_IP='
-        line: "MOTION_LEVELS_LED_BROADCAST_IP={{ motion_levels_led_broadcast_ip | default('255.255.255.255') }}"
-        mode: "0644"
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Ensure HDMI audio env is configured
-      ansible.builtin.lineinfile:
-        path: /etc/motion-levels/motion-levels.env
-        regexp: "^{{ item.key }}="
-        line: "{{ item.key }}={{ item.value }}"
-        mode: "0644"
-      loop:
-        - key: MOTION_LEVELS_HDMI_ALSA_DEVICE
-          value: plughw:0,5
-        - key: MOTION_LEVELS_FORCE_ALSA_OUTPUT
-          value: "1"
-        - key: MOTION_LEVELS_HDMI_WATCHDOG_INTERVAL
-          value: "10"
-        - key: MOTION_LEVELS_HDMI_WATCHDOG_FAILURES
-          value: "3"
-        - key: MOTION_LEVELS_HDMI_WATCHDOG_RESTART_COOLDOWN
-          value: "45"
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Install HDMI ALSA dmix config
-      ansible.builtin.copy:
-        src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/asound.conf"
-        dest: /etc/asound.conf
-        mode: "0644"
-        remote_src: true
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Configure the externally owned GoPro recorder integration
-      ansible.builtin.lineinfile:
-        path: /etc/motion-levels/motion-levels.env
-        regexp: "^{{ item.key }}="
-        line: "{{ item.key }}={{ item.value }}"
-        mode: "0644"
-      loop:
-        - key: MOTION_LEVELS_CAMERA_RECORDER_URL
-          value: "{{ motion_levels_native_camera_recorder_url | default('http://127.0.0.1:8040') }}"
-        - key: MOTION_LEVELS_CAMERA_RECORDER_TIMEOUT
-          value: 20s
-        - key: MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS
-          value: "{{ lookup('env', 'MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS') | default('300', true) }}"
-        - key: MOTION_LEVELS_CAMERA_RECORDER_BACKEND
-          value: fake
-        - key: MOTION_LEVELS_CAMERA_RECORDINGS_ROOT
-          value: /var/lib/motion-levels/camera-recordings
-        - key: MOTION_LEVELS_CAMERA_DELETE_LOCAL_AFTER_UPLOAD
-          value: "1"
-        - key: MOTION_LEVELS_CAMERA_HDR_DEFAULT
-          value: "0"
-        - key: MOTION_LEVELS_CAMERA_VIDEO_PROJECTION_DEFAULT
-          value: "360"
-        - key: MOTION_LEVELS_CAMERA_VIDEO_LENS_DEFAULT
-          value: all
-        - key: MOTION_LEVELS_INSTA360_VIDEO_RESOLUTION
-          value: 5.7kplus30
-        - key: MOTION_LEVELS_INSTA360_VIDEO_FRAME_RATE
-          value: "30"
-        - key: MOTION_LEVELS_CAMERA_SESSION_SEGMENT_SECONDS
-          value: "{{ lookup('env', 'MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS') | default('300', true) }}"
-        - key: MOTION_LEVELS_CAMERA_SESSION_MAX_SECONDS
-          value: "7200"
-        - key: MOTION_LEVELS_CAMERA_DELETE_REMOTE_AFTER_DOWNLOAD
-          value: "1"
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Ensure security recorder env is configured
-      ansible.builtin.lineinfile:
-        path: /etc/motion-levels/motion-levels.env
-        regexp: "^{{ item.key }}="
-        line: "{{ item.key }}={{ item.value }}"
-        mode: "0644"
-      loop:
-        - key: MOTION_LEVELS_SECURITY_RECORDER_ENABLED
-          value: "1"
-        - key: MOTION_LEVELS_SECURITY_CAMERA_ID
-          value: "130"
-        - key: MOTION_LEVELS_SECURITY_CAMERA_LABEL
-          value: "Cámara frontal"
-        - key: MOTION_LEVELS_SECURITY_CAMERA_ROLE
-          value: front
-        - key: MOTION_LEVELS_SECURITY_RECORDINGS_ROOT
-          value: /var/lib/motion-levels/security-recordings
-        - key: MOTION_LEVELS_SECURITY_RECORDER_AUDIO
-          value: "0"
-        - key: MOTION_LEVELS_SECURITY_RECORDER_SEGMENT_SECONDS
-          value: "300"
-        - key: MOTION_LEVELS_SECURITY_RECORDER_RETENTION_DAYS
-          value: "14"
-        - key: MOTION_LEVELS_SECURITY_RECORDER_DELETE_LOCAL_AFTER_UPLOAD
-          value: "1"
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Resolve local deployed stack revision
-      ansible.builtin.command:
-        cmd: git rev-parse --short=7 HEAD
-        chdir: "{{ motion_levels_repo_root }}"
-      delegate_to: localhost
-      register: motion_levels_stack_revision
-      changed_when: false
-
-    - name: Resolve local deployed stack commit date
-      ansible.builtin.command:
-        cmd: git show -s --format=%cI HEAD
-        chdir: "{{ motion_levels_repo_root }}"
-      delegate_to: localhost
-      register: motion_levels_stack_commit_at
-      changed_when: false
-
-    - name: Install deployed stack metadata
-      ansible.builtin.copy:
-        dest: /etc/motion-levels/stack.json
-        mode: "0644"
-        content: |
-          {
-            "revision": "{{ motion_levels_stack_revision.stdout }}",
-            "commit_at": "{{ motion_levels_stack_commit_at.stdout }}",
-            "deployed_at": "{{ ansible_facts['date_time']['iso8601'] }}",
-            "target": "{{ inventory_hostname }}"
-          }
-
-    - name: Check platform env exists
+    - name: Inspect the immutable release directory
       ansible.builtin.stat:
-        path: /etc/motion-levels/platform.env
-      register: motion_levels_platform_env
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+        path: "{{ motion_levels_remote_release_dir }}"
+      register: motion_levels_release_directory
 
-    - name: Warn when platform env is missing
-      ansible.builtin.debug:
-        msg: "/etc/motion-levels/platform.env is missing; platform sync and recording uploads need MOTION_LEVELS_PLATFORM_TOKEN."
-      when:
-        - motion_levels_deploy_mode in motion_levels_runtime_modes
-        - not (motion_levels_platform_env.stat.exists | default(false))
+    - name: Inspect the immutable release manifest
+      ansible.builtin.stat:
+        path: "{{ motion_levels_remote_release_dir }}/release-manifest.json"
+      register: motion_levels_release_manifest
 
-    - name: Install Caddy config
-      ansible.builtin.copy:
-        src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/Caddyfile"
-        dest: /etc/caddy/Caddyfile
-        mode: "0644"
-        remote_src: true
-      notify: Restart caddy
-      when: motion_levels_deploy_mode in motion_levels_frontend_modes
+    - name: Inspect the immutable release completion marker
+      ansible.builtin.stat:
+        path: "{{ motion_levels_remote_release_dir }}/.complete"
+      register: motion_levels_release_complete
 
-    - name: Ensure Caddy systemd override directory
-      ansible.builtin.file:
-        path: /etc/systemd/system/caddy.service.d
-        state: directory
-        mode: "0755"
-      when: motion_levels_deploy_mode in motion_levels_frontend_modes
-
-    - name: Remove retired camera recorder Caddy environment
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/motion-levels/caddy.env
-        - /etc/systemd/system/caddy.service.d/motion-levels-env.conf
-      notify:
-        - Reload systemd
-        - Restart caddy
-      when: motion_levels_deploy_mode in motion_levels_frontend_modes
-
-    - name: Install kiosk player script
-      ansible.builtin.copy:
-        src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/motion-levels-player-kiosk"
-        dest: /usr/local/bin/motion-levels-player-kiosk
-        mode: "0755"
-        remote_src: true
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Install HDMI watchdog script
-      ansible.builtin.copy:
-        src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/motion-levels-hdmi-watchdog"
-        dest: /usr/local/bin/motion-levels-hdmi-watchdog
-        mode: "0755"
-        remote_src: true
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Create Chromium managed policy directory
-      ansible.builtin.file:
-        path: /etc/chromium/policies/managed
-        state: directory
-        mode: "0755"
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Install Chromium kiosk policy
-      ansible.builtin.copy:
-        src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/chromium-policy.json"
-        dest: /etc/chromium/policies/managed/motion-levels-kiosk.json
-        mode: "0644"
-        remote_src: true
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Disable old services
-      ansible.builtin.systemd_service:
-        name: "{{ item }}"
-        enabled: false
-        state: stopped
-      loop: "{{ motion_levels_old_services }}"
-      failed_when: false
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Persistently mask retired X5 recorder service
-      ansible.builtin.systemd_service:
-        name: motion-levels-camera-recorder.service
-        enabled: false
-        state: stopped
-        masked: true
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Remove retired frontend static service units
-      ansible.builtin.file:
-        path: "/etc/systemd/system/{{ item }}"
-        state: absent
-      loop:
-        - motion-levels-player-menu.service
-        - motion-levels-player-display.service
-      notify: Reload systemd
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Install systemd service units
-      ansible.builtin.copy:
-        src: "{{ motion_levels_remote_src }}/deploy/motionlevels-pc/{{ item }}"
-        dest: "/etc/systemd/system/{{ item }}"
-        mode: "0644"
-        remote_src: true
-      loop: "{{ motion_levels_services }}"
-      notify: Reload systemd
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Flush unit/config handlers before validation
-      ansible.builtin.meta: flush_handlers
-
-    - name: Enable caddy
-      ansible.builtin.systemd_service:
-        name: caddy
-        enabled: true
-
-    - name: Enable Motion Levels services
-      ansible.builtin.systemd_service:
-        name: "{{ item }}"
-        enabled: true
-      loop: "{{ motion_levels_services }}"
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Validate Caddy config
-      ansible.builtin.command:
-        cmd: caddy validate --config /etc/caddy/Caddyfile
-      changed_when: false
-      when: motion_levels_deploy_mode in motion_levels_frontend_modes
-
-    - name: Ensure caddy is running
-      ansible.builtin.systemd_service:
-        name: caddy
-        state: started
-      when: motion_levels_deploy_mode in motion_levels_frontend_modes
-
-    - name: Ensure Motion Levels services are running
-      ansible.builtin.systemd_service:
-        name: "{{ item }}"
-        state: started
-      loop: "{{ motion_levels_services }}"
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Read game engine state before activating rebuilt services
-      ansible.builtin.uri:
-        url: http://127.0.0.1:4102/api/status
-        status_code: 200
-        return_content: true
-      register: motion_levels_engine_state_before_restart
-      failed_when: false
-      changed_when: false
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
-
-    - name: Decide whether rebuilt services can be activated now
-      ansible.builtin.set_fact:
-        motion_levels_can_restart_now: >-
-          {{
-            motion_levels_engine_state_before_restart.status != 200
+    - name: Refuse a partial immutable release
+      ansible.builtin.assert:
+        that:
+          - >-
+            not motion_levels_release_directory.stat.exists
             or (
-              (motion_levels_engine_state_before_restart.json.currentGame | default('')) in ['loop', 'animations', 'salvapantallas', 'ambient-comet', 'ambient-pulse', 'ambient-spark']
-              and (motion_levels_engine_state_before_restart.json.phase | default('')) in ['idle', 'ambient']
+              motion_levels_release_directory.stat.isdir
+              and (motion_levels_release_manifest.stat.isreg | default(false))
+              and (motion_levels_release_complete.stat.isreg | default(false))
             )
-          }}
-      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+        fail_msg: >-
+          {{ motion_levels_remote_release_dir }} exists without both its verified
+          manifest and .complete marker; inspect it instead of overwriting it.
 
-    - name: Queue rebuilt Motion Levels service activation when venue is idle
-      ansible.builtin.command:
-        cmd: >-
-          systemd-run
-          --unit=motion-levels-release-{{ (motion_levels_venue_revision.stdout | trim)[:12] }}
-          --collect --no-block --
-          /bin/systemctl restart {{ motion_levels_services | join(' ') }}
-      when:
-        - motion_levels_deploy_mode in motion_levels_runtime_modes
-        - motion_levels_can_restart_now | default(false)
-        - motion_levels_venue_activate.changed
-
-    - name: Wait for venue SSH after service activation
-      ansible.builtin.wait_for_connection:
-        timeout: 90
-        sleep: 2
-      when:
-        - motion_levels_deploy_mode in motion_levels_runtime_modes
-        - motion_levels_can_restart_now | default(false)
-        - motion_levels_venue_activate.changed
-
-    - name: Verify activated Motion Levels services
-      ansible.builtin.command:
-        argv: "{{ ['systemctl', 'is-active'] + motion_levels_services }}"
-      register: motion_levels_services_active
-      changed_when: false
-      retries: 30
-      delay: 2
-      until: motion_levels_services_active.rc == 0
-      when:
-        - motion_levels_deploy_mode in motion_levels_runtime_modes
-        - motion_levels_can_restart_now | default(false)
-        - motion_levels_venue_activate.changed
-
-    - name: Keep rebuilt Motion Levels services staged while a session is active
-      ansible.builtin.debug:
-        msg: >-
-          Rebuilt services were staged but not restarted because the engine is running
-          {{ motion_levels_engine_state_before_restart.json.currentGame | default('unknown') }}
-          in {{ motion_levels_engine_state_before_restart.json.phase | default('unknown') }}.
-      when:
-        - motion_levels_deploy_mode in motion_levels_runtime_modes
-        - not (motion_levels_can_restart_now | default(false))
-
-    - name: Wait for local service health
-      ansible.builtin.uri:
-        url: "{{ item }}"
-        status_code: 200
-      register: motion_levels_health
-      until: motion_levels_health.status == 200
-      retries: 80
-      delay: 1
-      loop: "{{ motion_levels_frontend_health_urls if motion_levels_deploy_mode == 'frontends' else motion_levels_health_urls }}"
-      failed_when: false
-
-    - name: Detect failed venue release health checks
-      ansible.builtin.set_fact:
-        motion_levels_release_health_failed: >-
-          {{
-            motion_levels_health.results
-            | selectattr('status', 'ne', 200)
-            | list
-            | length > 0
-          }}
-
-    - name: Roll back failed venue release
-      when: motion_levels_release_health_failed
+    - name: Stage the verified native release
+      when: not motion_levels_release_directory.stat.exists
       block:
-        - name: Restore previous venue release symlink
+        - name: Recreate the candidate directory
+          ansible.builtin.file:
+            path: "{{ motion_levels_candidate_dir }}"
+            state: "{{ item }}"
+            mode: "0755"
+          loop:
+            - absent
+            - directory
+
+        - name: Transfer only built runtime output to the venue
+          ansible.posix.synchronize:
+            src: "{{ motion_levels_local_release_dir }}/"
+            dest: "{{ motion_levels_candidate_dir }}/"
+            archive: true
+            checksum: true
+            delete: true
+
+        - name: Verify the candidate manifest without relying on deployed scripts
+          ansible.builtin.shell: |
+            python3 - "{{ motion_levels_candidate_dir }}" <<'PY'
+            from hashlib import sha256
+            import json
+            from pathlib import Path
+            import sys
+            root = Path(sys.argv[1])
+            manifest = json.loads((root / "release-manifest.json").read_text())
+            assert manifest["schema"] == "motion-levels-native-venue-release-v1"
+            for record in manifest["files"]:
+                path = root / record["path"]
+                payload = path.readlink().as_posix().encode() if path.is_symlink() else path.read_bytes()
+                assert len(payload) == record["bytes"]
+                assert sha256(payload).hexdigest() == record["sha256"]
+            PY
+          args:
+            executable: /bin/sh
+          changed_when: false
+
+        - name: Create the candidate camera virtual environment
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/python3
+              - -m
+              - venv
+              - "{{ motion_levels_candidate_dir }}/venvs/cameras"
+          changed_when: true
+
+        - name: Install exact camera dependencies and verify pinned source
           ansible.builtin.shell: |
             set -eu
-            root="{{ motion_levels_remote_root }}"
-            test -L "$root/previous"
-            previous="$(readlink -f "$root/previous")"
-            ln -sfn "$previous" "$root/current"
-            printf '%s\trollback\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$previous" >> "$root/releases/history.tsv"
+            venv="{{ motion_levels_candidate_dir }}/venvs/cameras"
+            source="{{ motion_levels_candidate_dir }}/components/cameras/source"
+            "$venv/bin/pip" install --disable-pip-version-check \
+              --no-deps --only-binary=:all: --require-hashes \
+              --requirement "{{ motion_levels_candidate_dir }}/components/cameras/requirements-native.lock"
+            PYTHONPATH="$source" "$venv/bin/python" -c \
+              'import motion_levels_cameras; from motion_levels_cameras.main import run'
           args:
             executable: /bin/sh
           changed_when: true
 
-        - name: Restart Caddy after venue rollback
-          ansible.builtin.systemd_service:
-            name: caddy
-            state: restarted
+        - name: Mark the verified candidate complete
+          ansible.builtin.file:
+            path: "{{ motion_levels_candidate_dir }}/.complete"
+            state: touch
+            owner: root
+            group: root
+            mode: "0644"
 
-        - name: Restart runtime services after venue rollback
+        - name: Inspect the candidate completion marker
+          ansible.builtin.stat:
+            path: "{{ motion_levels_candidate_dir }}/.complete"
+          register: motion_levels_candidate_complete
+
+        - name: Require a regular candidate completion marker
+          ansible.builtin.assert:
+            that:
+              - motion_levels_candidate_complete.stat.isreg | default(false)
+            fail_msg: "The native candidate is not complete and cannot be promoted."
+
+        - name: Make the candidate immutable to the camera account
+          ansible.builtin.file:
+            path: "{{ motion_levels_candidate_dir }}"
+            state: directory
+            owner: root
+            group: root
+            recurse: true
+
+        - name: Promote the complete candidate release
+          ansible.builtin.command:
+            argv:
+              - /bin/mv
+              - "{{ motion_levels_candidate_dir }}"
+              - "{{ motion_levels_remote_release_dir }}"
+          changed_when: true
+
+    - name: Initialize the stable venue controller identity
+      ansible.builtin.copy:
+        dest: "{{ motion_levels_state_root }}/floor-controller/controller-id"
+        content: "{{ motion_levels_venue.platform_room_id }}\n"
+        owner: root
+        group: root
+        mode: "0644"
+        force: false
+
+    - name: Render the venue runtime environment
+      ansible.builtin.template:
+        src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels.env.j2"
+        dest: "{{ motion_levels_config_root }}/motion-levels.env"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Render the venue-specific ALSA default device
+      ansible.builtin.template:
+        src: "{{ motion_levels_repo_root }}/ansible/templates/asound.conf.j2"
+        dest: /etc/asound.conf
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Ensure the Chromium managed policy directory exists
+      ansible.builtin.file:
+        path: /etc/chromium/policies/managed
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the venue Chromium kiosk policy
+      ansible.builtin.copy:
+        src: "{{ motion_levels_remote_release_dir }}/deploy/motionlevels-pc/chromium-policy.json"
+        dest: /etc/chromium/policies/managed/motion-levels-kiosk.json
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Render the camera runtime environment
+      ansible.builtin.template:
+        src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels-cameras.env.j2"
+        dest: /etc/motion-levels-cameras.env
+        owner: root
+        group: motion-levels-cameras
+        mode: "0640"
+      when: motion_levels_camera.enabled
+
+    - name: Render the venue-specific Caddy configuration
+      ansible.builtin.template:
+        src: "{{ motion_levels_repo_root }}/deploy/motionlevels-pc/Caddyfile"
+        dest: /etc/caddy/Caddyfile
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install native runtime scripts
+      ansible.builtin.copy:
+        src: "{{ motion_levels_remote_release_dir }}/deploy/motionlevels-pc/{{ item.src }}"
+        dest: "{{ item.dest }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - { src: motion-levels-player-kiosk, dest: /usr/local/bin/motion-levels-player-kiosk }
+        - { src: motion-levels-hdmi-watchdog, dest: /usr/local/bin/motion-levels-hdmi-watchdog }
+        - { src: motion-levels-gopro-reconcile, dest: /usr/local/sbin/motion-levels-gopro-reconcile }
+
+    - name: Install native systemd units from the release
+      ansible.builtin.copy:
+        src: "{{ motion_levels_remote_release_dir }}/deploy/motionlevels-pc/{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      loop: "{{ motion_levels_native_services | reject('equalto', 'motion-levels-cameras.service') | list }}"
+
+    - name: Render the native camera unit
+      ansible.builtin.template:
+        src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels-cameras.service.j2"
+        dest: /etc/systemd/system/motion-levels-cameras.service
+        owner: root
+        group: root
+        mode: "0644"
+      when: motion_levels_camera.enabled
+
+    - name: Render exact-serial GoPro hotplug integration
+      ansible.builtin.template:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - src: "{{ motion_levels_repo_root }}/ansible/templates/72-motion-levels-gopro.rules.j2"
+          dest: /etc/udev/rules.d/72-motion-levels-gopro.rules
+        - src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels-gopro-reconcile.service.j2"
+          dest: /etc/systemd/system/motion-levels-gopro-reconcile.service
+      when: motion_levels_camera.enabled
+
+    - name: Reload exact-serial GoPro hotplug rules
+      ansible.builtin.command:
+        cmd: udevadm control --reload-rules
+      changed_when: false
+      when: motion_levels_camera.enabled
+
+    - name: Ensure the Debian network interface configuration directory exists
+      ansible.builtin.file:
+        path: /etc/network/interfaces.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: motion_levels_camera.enabled
+
+    - name: Install the venue-specific GoPro USB network configuration
+      ansible.builtin.template:
+        src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels-gopro-interface.j2"
+        dest: /etc/network/interfaces.d/gopro
+        owner: root
+        group: root
+        mode: "0644"
+      when: motion_levels_camera.enabled
+
+    - name: Bring up the configured GoPro USB network interface
+      ansible.builtin.command:
+        argv:
+          - ifup
+          - "{{ motion_levels_camera.usb.network_interface }}"
+      register: motion_levels_gopro_ifup
+      changed_when: "'already configured' not in ((motion_levels_gopro_ifup.stdout | default('')) ~ (motion_levels_gopro_ifup.stderr | default('')))"
+      when: motion_levels_camera.enabled
+
+    - name: Verify the GoPro USB network identity and address
+      ansible.builtin.shell: |
+        set -eu
+        interface="{{ motion_levels_camera.usb.network_interface }}"
+        expected_mac="{{ motion_levels_camera.usb.network_mac }}"
+        expected_address="{{ motion_levels_camera.usb.host_address }}"
+        actual_mac="$(tr '[:upper:]' '[:lower:]' < "/sys/class/net/$interface/address")"
+        test "$actual_mac" = "$expected_mac"
+        actual_addresses="$(ip -4 -o address show dev "$interface")"
+        case " $actual_addresses " in
+          *" $expected_address "*) ;;
+          *) echo "expected $expected_address on $interface" >&2; exit 1 ;;
+        esac
+      args:
+        executable: /bin/sh
+      changed_when: false
+      when: motion_levels_camera.enabled
+
+    - name: Verify the exact GoPro through its USB API before cutover
+      ansible.builtin.uri:
+        url: "{{ motion_levels_camera.gopro.base_url }}/gopro/camera/info"
+        return_content: true
+        status_code: 200
+        timeout: 5
+      register: motion_levels_gopro_usb_api
+      retries: 30
+      delay: 2
+      until:
+        - motion_levels_gopro_usb_api.json.serial_number == motion_levels_camera.expected_serial
+      when: motion_levels_camera.enabled
+
+    - name: Read venue state before native cutover
+      ansible.builtin.uri:
+        url: http://127.0.0.1/engine/api/status
+        return_content: true
+        status_code: 200
+        timeout: 5
+      register: motion_levels_cutover_status
+      changed_when: false
+
+    - name: Require an idle venue before disrupting runtime services
+      ansible.builtin.assert:
+        that:
+          - motion_levels_cutover_status.json is mapping
+          - >-
+            (motion_levels_cutover_status.json.currentGame | default('')) in motion_levels_idle_games
+            or (motion_levels_cutover_status.json.currentGame | default('')).startswith('animation-')
+          - (motion_levels_cutover_status.json.phase | default('')) in ['idle', 'ambient']
+          - motion_levels_cutover_status.json.venueSessionId | default('', true) | string | length == 0
+        fail_msg: >-
+          Native cutover refused while the venue is busy or its engine state is
+          unavailable: game={{ motion_levels_cutover_status.json.currentGame | default('unknown') }},
+          phase={{ motion_levels_cutover_status.json.phase | default('unknown') }},
+          venueSessionId={{ motion_levels_cutover_status.json.venueSessionId | default('none', true) }}.
+
+    - name: Activate and health-gate the native release
+      block:
+        - name: Stop the legacy runtime before binding the native runtime port
+          ansible.builtin.systemd_service:
+            name: motion-levels-game-engine.service
+            state: stopped
+          failed_when: false
+
+        - name: Stop the previous Docker camera after the native candidate is complete
+          ansible.builtin.command:
+            cmd: docker stop --time 45 motion-levels-cameras
+          register: motion_levels_old_camera_container
+          changed_when: motion_levels_old_camera_container.rc == 0
+          failed_when: false
+
+        - name: Activate the native venue release atomically
+          ansible.builtin.shell: |
+            set -eu
+            root="{{ motion_levels_install_root }}"
+            candidate="{{ motion_levels_remote_release_dir }}"
+            active=""
+            test -f "$candidate/release-manifest.json"
+            test -f "$candidate/.complete"
+            if [ -L "$root/current" ]; then
+              active="$(readlink -f "$root/current")"
+            fi
+            if [ "$active" = "$candidate" ]; then
+              echo already-active
+              exit 0
+            fi
+            if [ -n "$active" ] && [ -d "$active" ]; then
+              ln -sfn "$active" "$root/previous"
+            fi
+            ln -sfn "$candidate" "$root/current"
+          args:
+            executable: /bin/sh
+          register: motion_levels_release_activation
+          changed_when: motion_levels_release_activation.stdout | trim != 'already-active'
+
+        - name: Install deployed stack metadata
+          ansible.builtin.copy:
+            dest: "{{ motion_levels_config_root }}/stack.json"
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              {
+                "schema": "motion-levels-native-stack-v1",
+                "revision": "{{ motion_levels_venue_revision }}",
+                "deployed_at": "{{ ansible_facts.date_time.iso8601 }}",
+                "venue": "{{ motion_levels_venue.slug }}",
+                "target": "{{ inventory_hostname }}"
+              }
+
+        - name: Reload systemd for the activated release
+          ansible.builtin.systemd_service:
+            daemon_reload: true
+
+        - name: Validate the rendered Caddy configuration
+          ansible.builtin.command:
+            cmd: caddy validate --config /etc/caddy/Caddyfile
+          changed_when: false
+
+        - name: Enable and restart native services
+          ansible.builtin.systemd_service:
+            name: "{{ item }}"
+            enabled: true
+            state: restarted
+          loop: "{{ motion_levels_native_services + ['caddy.service'] }}"
+
+        - name: Verify native service health
+          ansible.builtin.uri:
+            url: "{{ item }}"
+            status_code: 200
+          register: motion_levels_health
+          retries: 60
+          delay: 2
+          until: motion_levels_health.status == 200
+          loop: "{{ motion_levels_health_urls }}"
+
+        - name: Verify the complete venue snapshot
+          ansible.builtin.uri:
+            url: http://127.0.0.1/venue-api/v1/snapshot
+            return_content: true
+            status_code: 200
+          register: motion_levels_venue_snapshot
+          retries: 60
+          delay: 2
+          until:
+            - motion_levels_venue_snapshot.json.ok
+            - motion_levels_venue_snapshot.json.summary.displayHealthy
+            - motion_levels_venue_snapshot.json.summary.cameraDetected
+
+        - name: Verify the exact GoPro through the native service
+          ansible.builtin.uri:
+            url: "{{ motion_levels_camera.api_url }}/api/v1/cameras/{{ motion_levels_camera.camera_id }}/status?refresh=true"
+            return_content: true
+            status_code: 200
+          register: motion_levels_camera_status
+          retries: 30
+          delay: 2
+          until:
+            - motion_levels_camera_status.json.serial == motion_levels_camera.expected_serial
+            - motion_levels_camera_status.json.usb_detected
+            - motion_levels_camera_status.json.command_ready
+          when: motion_levels_camera.enabled
+
+      rescue:
+        - name: Detect a prior native release
+          ansible.builtin.stat:
+            path: "{{ motion_levels_install_root }}/previous"
+          register: motion_levels_previous_release
+
+        - name: Restore the prior native release symlink
+          ansible.builtin.shell: |
+            set -eu
+            previous="$(readlink -f '{{ motion_levels_install_root }}/previous')"
+            test -d "$previous"
+            ln -sfn "$previous" "{{ motion_levels_install_root }}/current"
+          args:
+            executable: /bin/sh
+          changed_when: true
+          when: motion_levels_previous_release.stat.islnk | default(false)
+
+        - name: Restore first-migration legacy service units
+          ansible.builtin.copy:
+            src: "/opt/motion-levels/rebuild/current/deploy/motionlevels-pc/{{ item }}"
+            dest: "/etc/systemd/system/{{ item }}"
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0644"
+          loop:
+            - motion-levels-floor-controller.service
+            - motion-levels-game-engine.service
+            - motion-levels-venue-supervisor.service
+            - motion-levels-security-recorder.service
+            - motion-levels-camera-helper.service
+            - motion-levels-kiosk.service
+            - motion-levels-hdmi-watchdog.service
+          when: not (motion_levels_previous_release.stat.islnk | default(false))
+
+        - name: Restore first-migration legacy Caddy config
+          ansible.builtin.copy:
+            src: /opt/motion-levels/rebuild/current/deploy/motionlevels-pc/Caddyfile
+            dest: /etc/caddy/Caddyfile
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0644"
+          when: not (motion_levels_previous_release.stat.islnk | default(false))
+
+        - name: Reload systemd after rollback
+          ansible.builtin.systemd_service:
+            daemon_reload: true
+
+        - name: Restart the previous native release
           ansible.builtin.systemd_service:
             name: "{{ item }}"
             state: restarted
-          loop: "{{ motion_levels_services }}"
-          when: motion_levels_deploy_mode in motion_levels_runtime_modes
+          loop: "{{ motion_levels_native_services + ['caddy.service'] }}"
+          failed_when: false
+          when: motion_levels_previous_release.stat.islnk | default(false)
 
-        - name: Report failed venue release after rollback
+        - name: Restart the first-migration legacy stack
+          ansible.builtin.systemd_service:
+            name: "{{ item }}"
+            state: restarted
+          loop:
+            - motion-levels-floor-controller.service
+            - motion-levels-game-engine.service
+            - motion-levels-venue-supervisor.service
+            - motion-levels-security-recorder.service
+            - motion-levels-camera-helper.service
+            - motion-levels-kiosk.service
+            - motion-levels-hdmi-watchdog.service
+            - caddy.service
+          failed_when: false
+          when: not (motion_levels_previous_release.stat.islnk | default(false))
+
+        - name: Restore the Docker camera during first-migration rollback
+          ansible.builtin.command:
+            cmd: docker start motion-levels-cameras
+          changed_when: true
+          failed_when: false
+          when: not (motion_levels_previous_release.stat.islnk | default(false))
+
+        - name: Fail after restoring the previous healthy stack
           ansible.builtin.fail:
-            msg: "Venue release {{ motion_levels_venue_revision.stdout | trim }} failed health checks and was rolled back."
+            msg: "Native release {{ motion_levels_venue_revision }} failed health checks and the previous stack was restored."
 
-  handlers:
-    - name: Reconfigure dhcpcd LAN interface
-      # -4 makes the running dhcpcd re-read its config and apply the static
-      # IPv4 profile to the interface; a plain rebind (-n) drops the lease
-      # without reliably applying the new static address.
+    - name: Remove the legacy non-serial GoPro hotplug rule after healthy cutover
+      ansible.builtin.file:
+        path: /etc/udev/rules.d/72-motion-levels-gopro-reconcile.rules
+        state: absent
+      register: motion_levels_legacy_gopro_rule
+      when: motion_levels_camera.enabled
+
+    - name: Reload udev after retiring the legacy GoPro rule
       ansible.builtin.command:
-        cmd: "dhcpcd -4 {{ motion_levels_lan_interface }}"
+        cmd: udevadm control --reload-rules
       changed_when: true
+      when:
+        - motion_levels_camera.enabled
+        - motion_levels_legacy_gopro_rule.changed
 
-    - name: Reload systemd
+    - name: Disable retired native and container services after verified cutover
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      loop: "{{ motion_levels_retired_services }}"
+      failed_when: false
+
+    - name: Remove retired unit files after verified cutover
+      ansible.builtin.file:
+        path: "/etc/systemd/system/{{ item }}"
+        state: absent
+      loop: "{{ motion_levels_retired_services }}"
+
+    - name: Reload systemd after retiring old units
       ansible.builtin.systemd_service:
         daemon_reload: true
 
-    - name: Restart caddy
-      ansible.builtin.systemd_service:
-        name: caddy
-        state: restarted
+    - name: Retain only current and previous native releases
+      ansible.builtin.shell: |
+        set -eu
+        root="{{ motion_levels_install_root }}"
+        current="$(readlink -f "$root/current")"
+        previous=""
+        if [ -L "$root/previous" ]; then previous="$(readlink -f "$root/previous")"; fi
+        for release in "$root"/releases/*; do
+          test -d "$release" || continue
+          [ "$release" = "$current" ] && continue
+          [ -n "$previous" ] && [ "$release" = "$previous" ] && continue
+          rm -rf -- "$release"
+        done
+      args:
+        executable: /bin/sh
+      changed_when: false

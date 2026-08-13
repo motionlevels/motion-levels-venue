@@ -1,11 +1,22 @@
 {
-  "schema": "motion-levels-venue-components-v1",
+  "schema": "motion-levels-venue-components-v2",
   "components": {
     "controller": {
-      "repository": "ghcr.io/motionlevels/motion-levels-controller",
-      "revision": "b6aef1eeb1edc795ab43b81740f838f70135c36b",
-      "platform": "linux/amd64",
+      "repository": "https://github.com/motionlevels/motion-levels-controller.git",
+      "revision": "345dd9f95c24cae5df3d754efb1177b64d759beb",
+      "goVersion": "go1.24.4",
+      "target": "linux/amd64",
       "protocol": "v1+v2"
+    },
+    "games": {
+      "repository": "https://github.com/motionlevels/motion-levels-games.git",
+      "revision": "7b4149f916b3841ce3c7aea8d61921c50d9abfd3",
+      "nodeVersion": "20"
+    },
+    "cameras": {
+      "repository": "https://github.com/motionlevels/motion-levels-cameras.git",
+      "revision": "3bd26557a135c87a3540ffcf10e2109667532a72",
+      "pythonVersion": "3.13"
     }
   }
 }

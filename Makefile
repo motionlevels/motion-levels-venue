@@ -1,8 +1,19 @@
 HOST ?= root@motionlevels-1
 LIMIT ?= motionlevels-1
-DEPLOY_MODE ?= all
-STANDARD_VENUES ?= motionlevels-1
-.PHONY: install-ansible-collections ansible-ping deploy-venues deploy-standard-venues deploy-motionlevels-1 deploy-motionlevels-cloud-1 deploy-frontends-motionlevels-cloud-1 deploy-runtime-motionlevels-cloud-1 status-motionlevels-1 logs-motionlevels-1 restart-motionlevels-1 rollback-motionlevels-1
+RELEASE_DIR ?=
+
+NATIVE_SERVICES = \
+	motion-levels-floor-controller.service \
+	motion-levels-venue-runtime.service \
+	motion-levels-venue-supervisor.service \
+	motion-levels-cameras.service \
+	motion-levels-security-recorder.service \
+	motion-levels-camera-helper.service \
+	motion-levels-kiosk.service \
+	motion-levels-hdmi-watchdog.service \
+	caddy.service
+
+.PHONY: install-ansible-collections ansible-ping show-pins build-native-release verify-native-release deploy-venues deploy-motionlevels-1 status-motionlevels-1 health-motionlevels-1 release-motionlevels-1 logs-motionlevels-1 restart-motionlevels-1 rollback-motionlevels-1
 
 install-ansible-collections:
 	ansible-galaxy collection install -r ansible/requirements.yml
@@ -10,71 +21,38 @@ install-ansible-collections:
 ansible-ping:
 	ansible motion_levels_venues --limit "$(LIMIT)" -m ping
 
-deploy-venues:
-	GHCR_TOKEN="$${GHCR_TOKEN:-$$(gh auth token)}" GHCR_USERNAME="$${GHCR_USERNAME:-lobis}" ansible-playbook ansible/playbooks/venue-containers.yml --limit "$(LIMIT)"
+show-pins:
+	@jq '{schema, components}' deploy/motionlevels-pc/venue-components.lock.json
 
-deploy-standard-venues:
-	@set -eu; \
-	ghcr_token="$${GHCR_TOKEN:-$$(gh auth token)}"; \
-	ghcr_username="$${GHCR_USERNAME:-lobis}"; \
-	deployed=""; \
-	failed=""; \
-	for venue in $(STANDARD_VENUES); do \
-		printf '==> Checking %s\n' "$$venue"; \
-		if ansible motion_levels_venues --limit "$$venue" -m ping >/tmp/motion-levels-$$venue-ping.log 2>&1; then \
-			printf '==> %s reachable\n' "$$venue"; \
-			printf '==> Deploying %s\n' "$$venue"; \
-			segment="$${MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS:-}"; \
-			if [ -z "$$segment" ] && [ -n "$${MOTION_LEVELS_DEPLOYMENT_POLICY_BASE_URL:-}" ]; then \
-				policy_url="$${MOTION_LEVELS_DEPLOYMENT_POLICY_BASE_URL%/}/api/rooms/$$venue/deployment-policy"; \
-				segment="$$(curl -fsS --max-time 10 "$$policy_url" | python3 -c 'import json, sys; payload = json.load(sys.stdin); value = payload.get("cameraRecordingSegmentSeconds"); print(value if isinstance(value, int) else "")' || true)"; \
-			fi; \
-			segment="$${segment:-300}"; \
-			printf '==> %s camera video segment: %ss\n' "$$venue" "$$segment"; \
-			if GHCR_TOKEN="$$ghcr_token" GHCR_USERNAME="$$ghcr_username" MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS="$$segment" ansible-playbook ansible/playbooks/venue-containers.yml --limit "$$venue"; then \
-				deployed="$${deployed:+$$deployed,}$$venue"; \
-			else \
-				printf '==> %s deploy failed; continuing\n' "$$venue"; \
-				failed="$${failed:+$$failed,}$$venue"; \
-			fi; \
-		else \
-			printf '==> %s unavailable; skipping\n' "$$venue"; \
-			sed 's/^/    /' "/tmp/motion-levels-$$venue-ping.log"; \
-		fi; \
-	done; \
-	if [ -n "$$deployed" ]; then \
-		echo "==> Deployed standard venues: $$deployed"; \
-		if [ -n "$$failed" ]; then \
-			echo "==> Some standard venues failed: $$failed"; \
-		fi; \
-		exit 0; \
-	fi; \
-	if [ -n "$$failed" ]; then \
-		echo "==> No standard venues deployed; failed: $$failed"; \
-		exit 1; \
-	fi; \
-	echo "==> No standard venues reachable; venue deploy skipped."
+build-native-release:
+	@scripts/build-native-release.sh
+
+verify-native-release:
+	@test -n "$(RELEASE_DIR)" || { echo "RELEASE_DIR is required" >&2; exit 64; }
+	python3 scripts/verify-native-release.py "$(RELEASE_DIR)"
+
+deploy-venues:
+	ansible-playbook ansible/playbooks/venue.yml --limit "$(LIMIT)"
 
 deploy-motionlevels-1:
-	GHCR_TOKEN="$${GHCR_TOKEN:-$$(gh auth token)}" GHCR_USERNAME="$${GHCR_USERNAME:-lobis}" ansible-playbook ansible/playbooks/venue.yml --limit motionlevels-1
-
-deploy-motionlevels-cloud-1:
-	GHCR_TOKEN="$${GHCR_TOKEN:-$$(gh auth token)}" GHCR_USERNAME="$${GHCR_USERNAME:-lobis}" MOTION_LEVELS_DEPLOY_MODE="$(DEPLOY_MODE)" ansible-playbook ansible/playbooks/venue.yml --limit motionlevels-cloud-1
-
-deploy-frontends-motionlevels-cloud-1:
-	$(MAKE) deploy-motionlevels-cloud-1 DEPLOY_MODE=frontends
-
-deploy-runtime-motionlevels-cloud-1:
-	$(MAKE) deploy-motionlevels-cloud-1 DEPLOY_MODE=runtime
+	$(MAKE) deploy-venues LIMIT=motionlevels-1
 
 status-motionlevels-1:
-	ssh "$(HOST)" 'systemctl --no-pager --full status motion-levels-floor-controller motion-levels-game-engine motion-levels-venue-supervisor motion-levels-kiosk caddy'
+	ssh "$(HOST)" 'systemctl --no-pager --full status $(NATIVE_SERVICES)'
+
+health-motionlevels-1:
+	ssh "$(HOST)" 'set -eu; for url in http://127.0.0.1/controller/health http://127.0.0.1/engine/api/status http://127.0.0.1/venue-api/v1/snapshot http://127.0.0.1/menu/ http://127.0.0.1/display/ http://127.0.0.1:8040/readyz; do printf "%-58s" "$$url"; curl -fsS -o /dev/null "$$url"; echo ok; done; camera_id=$$(sed -n "s/^ML_CAMERAS_CAMERA_ID=//p" /etc/motion-levels-cameras.env | tail -1); expected=$$(sed -n "s/^ML_CAMERAS_USB_SERIAL=//p" /etc/motion-levels-cameras.env | tail -1); test -n "$$camera_id"; test -n "$$expected"; curl -fsS "http://127.0.0.1:8040/api/v1/cameras/$$camera_id/status" | jq -e --arg expected "$$expected" "{serial, usb_detected, command_ready} | select(.serial == \$$expected and .usb_detected == true and .command_ready == true)"'
+
+release-motionlevels-1:
+	ssh "$(HOST)" 'set -eu; root=/opt/motion-levels/venue; printf "current  %s\n" "$$(readlink -f "$$root/current")"; if [ -L "$$root/previous" ]; then printf "previous %s\n" "$$(readlink -f "$$root/previous")"; fi; python3 -m json.tool /etc/motion-levels/stack.json'
 
 logs-motionlevels-1:
-	ssh "$(HOST)" 'journalctl -u motion-levels-floor-controller -u motion-levels-game-engine -u motion-levels-venue-supervisor -u motion-levels-kiosk -n 250 --no-pager'
+	ssh "$(HOST)" 'journalctl $(foreach service,$(NATIVE_SERVICES),-u $(service)) -n 300 --no-pager'
 
 restart-motionlevels-1:
-	ssh "$(HOST)" 'systemctl restart motion-levels-floor-controller motion-levels-game-engine motion-levels-venue-supervisor motion-levels-kiosk'
+	ssh "$(HOST)" 'systemctl restart $(NATIVE_SERVICES)'
 
 rollback-motionlevels-1:
-	ssh "$(HOST)" 'set -eu; previous=$$(readlink -f /opt/motion-levels/rebuild/previous); test -d "$$previous"; ln -sfn "$$previous" /opt/motion-levels/rebuild/current; systemctl restart motion-levels-floor-controller motion-levels-game-engine motion-levels-venue-supervisor motion-levels-kiosk caddy'
+	ssh "$(HOST)" 'set -eu; root=/opt/motion-levels/venue; current=$$(readlink -f "$$root/current"); previous=$$(readlink -f "$$root/previous"); case "$$current" in "$$root"/releases/*) ;; *) exit 65 ;; esac; case "$$previous" in "$$root"/releases/*) ;; *) exit 65 ;; esac; test -f "$$current/release-manifest.json"; test -f "$$previous/release-manifest.json"; test "$$current" != "$$previous"; ln -s "$$previous" "$$root/.current.rollback.$$$$"; mv -Tf "$$root/.current.rollback.$$$$" "$$root/current"; ln -s "$$current" "$$root/.previous.rollback.$$$$"; mv -Tf "$$root/.previous.rollback.$$$$" "$$root/previous"; systemctl daemon-reload; systemctl restart $(NATIVE_SERVICES)'
+	$(MAKE) status-motionlevels-1
+	$(MAKE) health-motionlevels-1

@@ -1,0 +1,37 @@
+[Unit]
+Description=Motion Levels GoPro control and recording service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=motion-levels-cameras
+Group=motion-levels-cameras
+Environment=HOME={{ motion_levels_camera_state_root }}
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH={{ motion_levels_install_root }}/current/components/cameras/source
+EnvironmentFile=/etc/motion-levels-cameras.env
+WorkingDirectory={{ motion_levels_camera_state_root }}
+ExecStart={{ motion_levels_install_root }}/current/venvs/cameras/bin/python -m motion_levels_cameras.main
+Restart=always
+RestartSec=3
+TimeoutStopSec=45
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+ReadWritePaths={{ motion_levels_camera_state_root }} {{ motion_levels_state_root }}/camera-recordings
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target
