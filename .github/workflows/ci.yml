@@ -88,6 +88,10 @@ jobs:
             working-directory: packages/floor-view
             lockfile: packages/floor-view/package-lock.json
             commands: npm run typecheck
+          - name: venue-runtime
+            working-directory: apps/venue-runtime
+            lockfile: apps/venue-runtime/package-lock.json
+            commands: npm test
 
     steps:
       - name: Checkout

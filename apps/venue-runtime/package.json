@@ -1,0 +1,23 @@
+{
+  "name": "@motion-levels/venue-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript venue runtime, introduced behind the Go engine in shadow mode.",
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/main.js",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@motion-levels/core": "file:../../packages/core"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "typescript": "^6.0.3"
+  }
+}
