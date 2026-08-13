@@ -42,6 +42,35 @@ func TestMakeFrameProducesCompleteLogicalBoard(t *testing.T) {
 	}
 }
 
+func TestPrometheusMetricsExposeEngineAndCanonicalStateWithoutSessionLabels(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "salvapantallas"}, nil, nil)
+	runtime.PlayerState(time.Now())
+	runtime.apiMetrics.Observe(http.MethodGet, "/api/status", http.StatusOK, 12*time.Millisecond)
+	handler := gameAPIHandler(runtime)
+	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("metrics status = %d, want 200", response.Code)
+	}
+	body := response.Body.String()
+	for _, expected := range []string{
+		"motion_levels_engine_up 1",
+		"motion_levels_game_state_lifecycle{lifecycle=\"idle\"} 1",
+		"motion_levels_game_state_revision 1",
+		"motion_levels_engine_http_requests_total{method=\"GET\",path=\"/api/status\",status=\"2xx\"} 1",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("metrics missing %q:\n%s", expected, body)
+		}
+	}
+	if strings.Contains(body, "session_id") || strings.Contains(body, "player_name") {
+		t.Fatalf("metrics contain an unbounded identity label:\n%s", body)
+	}
+}
+
 func TestMakeFrameOmitsSessionLineageForAmbientGames(t *testing.T) {
 	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "salvapantallas"}, nil, nil)
 	frame := makeFrame(7, time.Unix(0, 123), 1.25, runtime)

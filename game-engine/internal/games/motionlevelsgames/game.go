@@ -97,11 +97,27 @@ type SnapshotAudio struct {
 }
 
 type RunnerHealth struct {
-	Status          string `json:"status"`
-	SourceRevision  string `json:"sourceRevision"`
-	GameID          string `json:"gameId"`
-	ContentRevision string `json:"contentRevision,omitempty"`
-	LastError       string `json:"lastError,omitempty"`
+	Status          string          `json:"status"`
+	SourceRevision  string          `json:"sourceRevision"`
+	GameID          string          `json:"gameId"`
+	ContentRevision string          `json:"contentRevision,omitempty"`
+	LastError       string          `json:"lastError,omitempty"`
+	Telemetry       RunnerTelemetry `json:"telemetry"`
+}
+
+type RunnerTelemetry struct {
+	UptimeMillis              int64  `json:"uptimeMillis"`
+	RequestsTotal             uint64 `json:"requestsTotal"`
+	ErrorsTotal               uint64 `json:"errorsTotal"`
+	InitTotal                 uint64 `json:"initTotal"`
+	InputTotal                uint64 `json:"inputTotal"`
+	ControlTotal              uint64 `json:"controlTotal"`
+	TickTotal                 uint64 `json:"tickTotal"`
+	StatusTotal               uint64 `json:"statusTotal"`
+	LastMethod                string `json:"lastMethod"`
+	LastRequestDurationMicros int64  `json:"lastRequestDurationMicros"`
+	RSSBytes                  uint64 `json:"rssBytes"`
+	HeapUsedBytes             uint64 `json:"heapUsedBytes"`
 }
 
 type Game struct {
@@ -120,6 +136,7 @@ type Game struct {
 	raw             json.RawMessage
 	pending         []whackamole.Event
 	lastErr         error
+	telemetry       RunnerTelemetry
 }
 
 type runnerRequest struct {
@@ -130,12 +147,13 @@ type runnerRequest struct {
 }
 
 type runnerResponse struct {
-	Version        int         `json:"version"`
-	ID             string      `json:"id"`
-	OK             bool        `json:"ok"`
-	SourceRevision string      `json:"sourceRevision"`
-	State          runnerState `json:"state"`
-	Error          string      `json:"error"`
+	Version        int             `json:"version"`
+	ID             string          `json:"id"`
+	OK             bool            `json:"ok"`
+	SourceRevision string          `json:"sourceRevision"`
+	Telemetry      RunnerTelemetry `json:"telemetry"`
+	State          runnerState     `json:"state"`
+	Error          string          `json:"error"`
 }
 
 type runnerState struct {
@@ -333,7 +351,7 @@ func (g *Game) AudioRefs() niveles.AudioRefs {
 func (g *Game) RunnerHealth() RunnerHealth {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	health := RunnerHealth{Status: "ok", SourceRevision: g.revision, ContentRevision: g.contentRevision, GameID: g.gameID}
+	health := RunnerHealth{Status: "ok", SourceRevision: g.revision, ContentRevision: g.contentRevision, GameID: g.gameID, Telemetry: g.telemetry}
 	if g.lastErr != nil {
 		health.Status = "error"
 		health.LastError = g.lastErr.Error()
@@ -374,6 +392,7 @@ func (g *Game) callLocked(method string, params map[string]any) (runnerState, er
 	if response.Version != 1 || response.ID != id || response.SourceRevision != g.revision {
 		return runnerState{}, fmt.Errorf("invalid motion-levels-games runner response")
 	}
+	g.telemetry = response.Telemetry
 	if !response.OK {
 		return runnerState{}, fmt.Errorf("motion-levels-games runner: %s", response.Error)
 	}

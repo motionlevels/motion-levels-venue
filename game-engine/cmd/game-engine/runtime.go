@@ -85,8 +85,10 @@ type gameRuntime struct {
 	playerStateVersion uint64
 	playerStateBucket  int64
 	playerStateCached  playerExperienceState
+	playerStateUpdated time.Time
 
-	framePerf framePerf
+	framePerf  framePerf
+	apiMetrics apiMetrics
 
 	displayClient           displayClientReport
 	displayClientReceivedAt time.Time
@@ -360,6 +362,7 @@ func (r *gameRuntime) playerState(now time.Time, force bool) playerExperienceSta
 
 	r.playerStateVersion++
 	revision := r.playerStateVersion
+	r.playerStateUpdated = now
 
 	lifecycle := playerExperienceLifecycle(status.CurrentGame, display.Phase, status.Paused)
 	players := display.Players

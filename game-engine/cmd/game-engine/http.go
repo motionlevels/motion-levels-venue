@@ -129,6 +129,7 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 		}
 		writeHealth(w, r, runtime)
 	})
+	mux.HandleFunc("/metrics", engineMetricsHandler(runtime))
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -663,6 +664,9 @@ func withAPILogging(runtime *gameRuntime, next http.Handler) http.Handler {
 		}
 		if runtime != nil && (r.URL.Path != "/api/display-client" || status >= http.StatusBadRequest) {
 			runtime.RecordAPIInteraction(r.Method, r.URL.Path, r.RemoteAddr, status, started)
+		}
+		if runtime != nil {
+			runtime.apiMetrics.Observe(r.Method, r.URL.Path, status, time.Since(started))
 		}
 	})
 }

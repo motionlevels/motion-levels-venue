@@ -28,6 +28,14 @@ The defaults are:
 - desired-state frame rate: `50fps`
 - brightness: `100%`
 
+Prometheus metrics are exposed at `http://127.0.0.1:4102/metrics` (and at
+`/engine/metrics` through the venue Caddy listener). They cover the Go host,
+bounded HTTP routes, frame performance, canonical game lifecycle/state,
+pressure input, menu freshness, Player Display health, recording, and the
+supervised TypeScript runner's request, latency, error, uptime, and memory
+telemetry. Session IDs, player names, kiosk IDs, and controller IDs are never
+used as labels.
+
 ## Games
 
 The primary player menu now lives in `apps/player-menu`. It is a standalone
