@@ -173,7 +173,6 @@
         argv:
           - docker
           - ps
-          - --all
           - --format
           - "{{ '{{' }}.Names{{ '}}' }}"
       register: motion_levels_legacy_containers
