@@ -5,9 +5,50 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
+
+func TestPlayerExperienceSelectorsMatchCompatibilityFixture(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "test", "fixtures", "player-experience-selectors.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Schema string `json:"schema"`
+		Cases  []struct {
+			Name         string   `json:"name"`
+			Game         string   `json:"game"`
+			Phase        string   `json:"phase"`
+			Paused       bool     `json:"paused"`
+			AudioEnabled bool     `json:"audioEnabled"`
+			AudioMuted   bool     `json:"audioMuted"`
+			Lifecycle    string   `json:"lifecycle"`
+			Controls     []string `json:"controls"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	if fixture.Schema != "motion-levels-player-experience-selectors-v1" {
+		t.Fatalf("fixture schema = %q", fixture.Schema)
+	}
+	for _, entry := range fixture.Cases {
+		t.Run(entry.Name, func(t *testing.T) {
+			lifecycle := playerExperienceLifecycle(entry.Game, entry.Phase, entry.Paused)
+			if lifecycle != entry.Lifecycle {
+				t.Fatalf("lifecycle = %q, want %q", lifecycle, entry.Lifecycle)
+			}
+			controls := playerExperienceControls(lifecycle, entry.AudioEnabled, entry.AudioMuted)
+			if !reflect.DeepEqual(controls, entry.Controls) {
+				t.Fatalf("controls = %#v, want %#v", controls, entry.Controls)
+			}
+		})
+	}
+}
 
 func TestPlayerStateIsCanonicalAndMonotonic(t *testing.T) {
 	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, Game: "authored-lava"}, nil, nil)

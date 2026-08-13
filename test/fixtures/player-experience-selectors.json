@@ -1,0 +1,15 @@
+{
+  "schema": "motion-levels-player-experience-selectors-v1",
+  "cases": [
+    { "name": "screensaver idle", "game": "salvapantallas", "phase": "idle", "paused": false, "audioEnabled": true, "audioMuted": false, "lifecycle": "idle", "controls": [] },
+    { "name": "ambient prefix idle", "game": "ambient-custom", "phase": "idle", "paused": false, "audioEnabled": false, "audioMuted": false, "lifecycle": "idle", "controls": [] },
+    { "name": "selected game waiting", "game": "motion-levels-games:lava", "phase": "idle", "paused": false, "audioEnabled": true, "audioMuted": false, "lifecycle": "waiting", "controls": ["pause", "restart", "exit", "narration", "mute", "toggle_mute"] },
+    { "name": "launching", "game": "motion-levels-games:lava", "phase": "loading", "paused": false, "audioEnabled": true, "audioMuted": false, "lifecycle": "launching", "controls": [] },
+    { "name": "countdown", "game": "motion-levels-games:lava", "phase": "countdown", "paused": false, "audioEnabled": true, "audioMuted": false, "lifecycle": "starting", "controls": ["pause", "restart", "exit", "narration", "mute", "toggle_mute"] },
+    { "name": "running without audio", "game": "motion-levels-games:lava", "phase": "running", "paused": false, "audioEnabled": false, "audioMuted": false, "lifecycle": "running", "controls": ["pause", "restart", "exit", "narration"] },
+    { "name": "paused wins over phase", "game": "motion-levels-games:lava", "phase": "running", "paused": true, "audioEnabled": true, "audioMuted": true, "lifecycle": "paused", "controls": ["resume", "restart", "exit", "narration", "unmute", "toggle_mute"] },
+    { "name": "finished", "game": "motion-levels-games:lava", "phase": "completed", "paused": false, "audioEnabled": true, "audioMuted": false, "lifecycle": "finished", "controls": ["pause", "restart", "exit", "narration", "mute", "toggle_mute"] },
+    { "name": "stopping", "game": "motion-levels-games:lava", "phase": "stopping", "paused": false, "audioEnabled": true, "audioMuted": false, "lifecycle": "stopping", "controls": [] },
+    { "name": "error", "game": "motion-levels-games:lava", "phase": "failed", "paused": false, "audioEnabled": true, "audioMuted": false, "lifecycle": "error", "controls": [] }
+  ]
+}
