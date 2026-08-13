@@ -37,7 +37,7 @@ jobs:
       RELEASE_SHA: ${{ inputs.release_sha || github.event.workflow_run.head_sha }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_SHA }}
 
@@ -237,7 +237,7 @@ jobs:
             target: player-runtime
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_SHA }}
 
