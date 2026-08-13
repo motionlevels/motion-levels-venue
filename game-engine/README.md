@@ -3,27 +3,28 @@
 The game engine produces logical board frames and handles game-owned input
 reactions such as score and sound cues.
 
-It streams protobuf `FrameRecord` messages to `floor-controller` and subscribes
-to the controller's protobuf pressure-event stream. It does not know about UDP,
-physical channels, serpentine wiring, browser preview, or frame recording.
+It uses one duplex protobuf connection to the hardware floor adapter: desired
+RGB frames travel towards the floor, while pressure events, actual-presented
+frames, and adapter health travel back. It does not know about UDP, physical
+channels, or serpentine wiring.
 
 Its frame rate controls how often it offers a new desired board state. The
-floor-controller owns the actual hardware, preview, and recording refresh
-cadence.
+floor adapter owns the actual hardware refresh cadence and fail-safe fade. The
+engine owns preview publication, platform identity, sessions, and recording.
 
 ## Run
 
 Start `floor-controller` first, then:
 
 ```sh
-go run ./game-engine/cmd/game-engine -controller 127.0.0.1:4201
+go run ./game-engine/cmd/game-engine -controller-duplex 127.0.0.1:4203
 ```
 
 The defaults are:
 
 - game-engine API: `http://127.0.0.1:4102/api/status`
-- controller frame stream: `127.0.0.1:4201`
-- pressure event stream: `127.0.0.1:4202`
+- preferred duplex floor adapter: `127.0.0.1:4203`
+- temporary v1 rollback streams: frames on `127.0.0.1:4201`, pressure on `127.0.0.1:4202`
 - game: `salvapantallas`
 - desired-state frame rate: `50fps`
 - brightness: `100%`
@@ -35,6 +36,11 @@ pressure input, menu freshness, Player Display health, recording, and the
 supervised TypeScript runner's request, latency, error, uptime, and memory
 telemetry. Session IDs, player names, kiosk IDs, and controller IDs are never
 used as labels.
+
+Browser/test pressure injection belongs to the engine and is absent by
+default. Local development can opt in with `-dev-pressure-simulation`; that
+registers `POST /api/dev/pressure` for logical `{x,y,pressed}` input. Production
+units never set the flag.
 
 ## Games
 
@@ -55,7 +61,7 @@ http://127.0.0.1:4103
 
 Choosing a game updates the running game immediately through the local
 game-engine API at `http://127.0.0.1:4102`. Music is switched with the game, and
-pressure events continue to flow through the same controller stream.
+pressure events continue to flow through the same duplex adapter link.
 
 Games whose IDs start with `motion-levels-games:` run from the verified bundle
 pinned under `game-bundles/motion-levels-games`. The Go engine supervises its
@@ -127,7 +133,7 @@ The replay stream can include:
 - session start/end, including `session_id` and RNG seed
 - accepted menu selections from the game-engine API point of view
 - API interactions observed by the engine
-- pressure inputs received from the floor-controller
+- pressure inputs received from the floor adapter or the explicitly enabled development API
 - game events such as start, hit, miss, and win
 - audio cue intents triggered by the engine
 - periodic player-display snapshots

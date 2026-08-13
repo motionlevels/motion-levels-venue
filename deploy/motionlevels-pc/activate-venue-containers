@@ -260,7 +260,6 @@ health_gate_once() {
   for url in \
     http://127.0.0.1/controller/health \
     http://127.0.0.1/engine/api/health \
-    http://127.0.0.1/controller/status \
     http://127.0.0.1/engine/api/status \
     http://127.0.0.1/stack.json \
     http://127.0.0.1/menu/ \
@@ -274,17 +273,14 @@ import json
 import os
 import urllib.request
 
-with urllib.request.urlopen("http://127.0.0.1/controller/status", timeout=5) as response:
-    status = json.load(response)
+with urllib.request.urlopen("http://127.0.0.1/engine/api/status", timeout=5) as response:
+    engine = json.load(response)
+status = engine.get("floorAdapter") or {}
+assert status.get("connected") is True, "engine cannot see the floor adapter"
+assert status.get("protocol") == "v2", f"floor protocol is {status.get('protocol')}"
 fps = float(status.get("actualFps") or 0)
 assert 48 <= fps <= 52, f"floor actualFps is {fps}"
 assert int(status.get("udpErrorCount") or 0) == 0, "floor has UDP errors"
-assert status.get("gameEngineOnline") is True, "floor cannot see the game engine"
-sync = status.get("sync") or {}
-assert sync.get("status") == "ok", f"floor sync is {sync.get('status')}"
-
-with urllib.request.urlopen("http://127.0.0.1/engine/api/status", timeout=5) as response:
-    engine = json.load(response)
 assert engine.get("currentGame"), "engine has no current game"
 assert engine.get("audioEnabled") is True, "engine audio is disabled"
 
@@ -313,13 +309,6 @@ base = (os.environ.get("MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_URL") or os.env
 with urllib.request.urlopen(base + "/api/healthz", timeout=8) as response:
     assert response.status == 200
 ' >/dev/null || return 1
-    if [ -n "$(manifest_value VENUE_FLOOR_LAN_IPV4 "$manifest")" ]; then
-      # Isolated floor manifests must resolve and reach the platform through
-      # their egress bridge. Legacy host-network manifests lack this marker.
-      /usr/bin/docker exec motion-levels-venue-floor \
-        /usr/bin/curl -fsS --max-time 8 \
-        https://platform.motionlevels.obis.dev/api/healthz >/dev/null || return 1
-    fi
     audio_probe || return 1
   else
     /usr/bin/curl -fsS --max-time 8 http://127.0.0.1:8020/health >/dev/null || return 1

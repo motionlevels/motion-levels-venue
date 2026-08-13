@@ -17,27 +17,12 @@ services:
       MOTION_LEVELS_CONTROLLER_DUPLEX: 0.0.0.0:4203
       MOTION_LEVELS_FLOOR_SOURCE_IP: ${VENUE_FLOOR_LAN_IPV4:?set VENUE_FLOOR_LAN_IPV4}
       MOTION_LEVELS_LED_BROADCAST_IP: ${VENUE_FLOOR_BROADCAST_IPV4:?set VENUE_FLOOR_BROADCAST_IPV4}
-      MOTION_LEVELS_PLATFORM_TOKEN_FILE: /run/secrets/platform-token
-    # The venue router is on-link through floor-hardware, where the netdev
-    # boundary intentionally permits only tile UDP. External resolvers follow
-    # the egress bridge instead and keep DNS off the hardware interface.
-    dns: [1.1.1.1, 1.0.0.1]
     networks:
       core:
         ipv4_address: 172.30.52.10
         aliases: [floor-core]
-      egress:
-        ipv4_address: 172.30.53.10
       floor-hardware:
         ipv4_address: ${VENUE_FLOOR_LAN_IPV4:?set VENUE_FLOOR_LAN_IPV4}
-    volumes:
-      - type: bind
-        source: /opt/motion-levels/rebuild/var/floor-controller
-        target: /var/lib/motion-levels/floor-controller
-      - type: bind
-        source: ${VENUE_CONFIG_ROOT:-/etc/motion-levels/venue}/secrets/platform-token-core
-        target: /run/secrets/platform-token
-        read_only: true
     read_only: true
     cap_drop: [ALL]
     security_opt:

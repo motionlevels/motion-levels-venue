@@ -1004,6 +1004,39 @@ func TestSelectPlatformLevelGameByUUIDIgnoresLoopbackLaunchPlatformURLWhenConfig
 	}
 }
 
+func TestDevelopmentPressureAPIIsExplicitlyDisabledByDefault(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
+	request := httptest.NewRequest(http.MethodPost, "/api/dev/pressure", bytes.NewBufferString(`{"x":2,"y":3,"pressed":true}`))
+	response := httptest.NewRecorder()
+
+	gameAPIHandler(runtime).ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("response = %d, want %d", response.Code, http.StatusNotFound)
+	}
+}
+
+func TestDevelopmentPressureAPIInjectsValidatedLogicalInput(t *testing.T) {
+	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1, DevPressureSimulation: true}, nil, nil)
+	handler := gameAPIHandler(runtime)
+
+	request := httptest.NewRequest(http.MethodPost, "/api/dev/pressure", bytes.NewBufferString(`{"x":2,"y":3,"pressed":true}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("response = %d: %s", response.Code, response.Body.String())
+	}
+	if runtime.Status().LastPressureUnix == 0 {
+		t.Fatal("development pressure did not reach the game runtime")
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/api/dev/pressure", bytes.NewBufferString(`{"x":16,"y":0,"pressed":true}`))
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("out-of-range response = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+}
+
 func TestGameAPIStatusAndSelect(t *testing.T) {
 	runtime := newGameRuntime(config{Brightness: 80, PlayerCount: 1}, nil, nil)
 	server := httptest.NewServer(gameAPIHandler(runtime))

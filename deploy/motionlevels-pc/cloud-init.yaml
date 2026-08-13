@@ -461,7 +461,6 @@ write_files:
       # Tailnet hostname for the platform gateway links (Menu/Display/Controller/Engine).
       # Kept separate from the label so the room can be renamed freely.
       MOTION_LEVELS_CONTROLLER_HOSTNAME=motionlevels-1
-      MOTION_LEVELS_LIVE_PUSH_PLATFORM_URL=https://platform.motionlevels.obis.dev
       MOTION_LEVELS_LIVE_PUSH_FPS=5
       MOTION_LEVELS_LIVE_PUSH_TIMEOUT=10s
 
@@ -538,17 +537,18 @@ write_files:
       :80 {
         encode zstd gzip
 
-        handle_path /controller/* {
+        handle /controller/health {
+          rewrite * /health
           reverse_proxy 127.0.0.1:4101
         }
 
-        handle /controller {
-          rewrite * /
+        handle /controller/metrics {
+          rewrite * /metrics
           reverse_proxy 127.0.0.1:4101
         }
 
-        handle /ws {
-          reverse_proxy 127.0.0.1:4101
+        handle /controller* {
+          respond 404
         }
 
         handle_path /engine/* {
@@ -728,7 +728,6 @@ write_files:
         -recv-port ${MOTION_LEVELS_FLOOR_RECV_PORT} \
         -broadcast-ip ${MOTION_LEVELS_LED_BROADCAST_IP} \
         -broadcast-port ${MOTION_LEVELS_LED_BROADCAST_PORT} \
-        -controller-id-file /opt/motion-levels/rebuild/var/floor-controller/controller-id \
         -refresh-fps ${MOTION_LEVELS_REFRESH_FPS} \
         -engine-fade-delay 2s \
         -engine-fade-duration 3s

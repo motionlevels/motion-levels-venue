@@ -26,12 +26,12 @@
       - motion-levels-camera-recorder.service
       - motion-levels.service
     motion_levels_health_urls:
-      - http://127.0.0.1/controller/status
+      - http://127.0.0.1/controller/health
       - http://127.0.0.1/engine/api/status
       - http://127.0.0.1/stack.json
       - http://127.0.0.1/menu/
       - http://127.0.0.1/display/
-      - http://127.0.0.1:4101/status
+      - http://127.0.0.1:4101/health
       - http://127.0.0.1:4102/api/status
     motion_levels_frontend_health_urls:
       - http://127.0.0.1/stack.json
@@ -274,6 +274,24 @@
         - /var/lib/motion-levels
         - /var/lib/motion-levels/camera-recordings
         - /var/lib/motion-levels/security-recordings
+        - "{{ motion_levels_remote_root }}/var/floor-controller"
+
+    - name: Initialize the engine-owned stable venue identity
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - "import pathlib,sys,uuid; pathlib.Path(sys.argv[1]).write_text(str(uuid.uuid4()) + '\n', encoding='utf-8')"
+          - "{{ motion_levels_remote_root }}/var/floor-controller/controller-id"
+        creates: "{{ motion_levels_remote_root }}/var/floor-controller/controller-id"
+
+    - name: Restrict the stable venue identity
+      ansible.builtin.file:
+        path: "{{ motion_levels_remote_root }}/var/floor-controller/controller-id"
+        state: file
+        owner: root
+        group: root
+        mode: "0644"
 
     - name: Log Docker into GHCR
       ansible.builtin.command:

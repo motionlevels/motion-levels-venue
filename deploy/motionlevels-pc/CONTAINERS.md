@@ -12,7 +12,7 @@ venue polls GitHub or changes image tags itself.
 
 | Component | Runtime | Hardware or host access |
 | --- | --- | --- |
-| Floor controller | `motion-levels-controller` image, UID 10001 | Internal core/egress bridges plus the floor-only ipvlan L2 endpoint; no devices |
+| Floor adapter | `motion-levels-controller` image, UID 10001 | Internal core bridge plus the floor-only ipvlan L2 endpoint; no devices or Internet egress |
 | Game engine | Container, UID 10001 | Internal core and restricted egress bridges plus the audio broker Unix socket; no devices |
 | Camera snapshot helper | Container, UID 10002 | Caddy-only snapshot API bridge plus RTSP to cameras `.128`–`.130` only |
 | Security recorder | Container, UID 10002, private bridge | RTSP to `.130`, HTTPS uploads, recording spool |
@@ -31,17 +31,18 @@ listener only on `192.168.1.142:80`. This keeps the wired-only TV/platform
 routes separated by kernel socket bindings after Docker destination NAT.
 
 The `core` and `display` bridges are internal networks with no routed egress.
-Floor, engine, and Caddy use a separate `egress` bridge whose nftables rules
-permit only their role-specific DNS, platform, object-storage, and dormant X5
-destinations. The snapshot API has a fourth internal bridge shared only by
+Engine and Caddy use a separate `egress` bridge whose nftables rules permit
+only their role-specific DNS, platform, object-storage, and dormant X5
+destinations. The floor adapter cannot resolve DNS or reach the platform. The
+snapshot API has a fourth internal bridge shared only by
 camera-helper and Caddy. Network-scoped aliases (`floor-core`, `engine-core`,
 `camera-helper-api`, and `caddy-display`) keep service discovery on the
 intended network even when a process has multiple attachments.
 
 The floor's only hardware attachment is an internal, gateway-free ipvlan L2
 endpoint at `192.168.1.143` on `enp2s0`. Ipvlan keeps the parent's Ethernet MAC
-while giving the controller its own IP boundary. The controller's HTTP and TCP
-streams are reachable only on the internal core network; IPv4 packet info pins
+while giving the adapter its own IP boundary. Its `/health`, `/metrics`, and
+duplex floor protocol are reachable only on the internal core network; IPv4 packet info pins
 all floor UDP sends to `.143` and `enp2s0`. LED frames deliberately remain
 limited broadcasts to `255.255.255.255:4626`: live tiles include link-local
 addresses, so changing to a `192.168.1.255` directed broadcast would not be
@@ -53,7 +54,8 @@ as defense in depth.
 
 Platform and camera credentials are copied into UID-specific, mode `0400`
 files. They are mounted into only the containers that need them and are not
-included in the Compose environment model.
+included in the Compose environment model. The floor adapter receives no
+platform credential or venue/session identity.
 
 The first venue migration and the camera installer share one host-owned
 camera-recorder operator token at

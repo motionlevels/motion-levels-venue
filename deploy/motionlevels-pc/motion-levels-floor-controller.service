@@ -16,7 +16,6 @@ ExecStart=/opt/motion-levels/rebuild/current/bin/floor-controller \
   -recv-port ${MOTION_LEVELS_FLOOR_RECV_PORT} \
   -broadcast-ip ${MOTION_LEVELS_LED_BROADCAST_IP} \
   -broadcast-port ${MOTION_LEVELS_LED_BROADCAST_PORT} \
-  -controller-id-file /opt/motion-levels/rebuild/var/floor-controller/controller-id \
   -refresh-fps ${MOTION_LEVELS_REFRESH_FPS} \
   -engine-fade-delay 2s \
   -engine-fade-duration 3s

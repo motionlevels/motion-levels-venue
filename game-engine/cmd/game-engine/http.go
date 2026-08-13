@@ -17,8 +17,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lobis/motion-levels/game-engine/internal/animation"
 	"github.com/lobis/motion-levels/game-engine/internal/games/animations"
 	"github.com/lobis/motion-levels/game-engine/internal/games/motionlevelsgames"
+	"github.com/lobis/motion-levels/packages/contracts/inputpb"
 )
 
 var (
@@ -109,6 +111,12 @@ type menuStateRequest struct {
 	Snapshot json.RawMessage `json:"snapshot"`
 }
 
+type devPressureRequest struct {
+	X       int  `json:"x"`
+	Y       int  `json:"y"`
+	Pressed bool `json:"pressed"`
+}
+
 func serveGameAPI(addr string, runtime *gameRuntime) {
 	if addr == "" {
 		return
@@ -137,6 +145,38 @@ func gameAPIHandler(runtime *gameRuntime) http.Handler {
 		}
 		writeJSON(w, runtime.Status())
 	})
+	if runtime.base.DevPressureSimulation {
+		mux.HandleFunc("/api/dev/pressure", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, 4_096)
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			var request devPressureRequest
+			if err := decoder.Decode(&request); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if err := decoder.Decode(&struct{}{}); err != io.EOF {
+				http.Error(w, "request body must contain one JSON object", http.StatusBadRequest)
+				return
+			}
+			if request.X < 0 || request.X >= animation.GridWidth || request.Y < 0 || request.Y >= animation.GridHeight {
+				http.Error(w, "pressure coordinates are outside the logical floor", http.StatusBadRequest)
+				return
+			}
+			now := time.Now()
+			runtime.HandlePressure(&inputpb.PressureEvent{
+				X:         uint32(request.X),
+				Y:         uint32(request.Y),
+				Pressed:   request.Pressed,
+				UnixNanos: now.UnixNano(),
+			}, now)
+			writeJSON(w, map[string]bool{"ok": true})
+		})
+	}
 	mux.HandleFunc("/api/player-state", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

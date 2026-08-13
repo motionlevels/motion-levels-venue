@@ -95,6 +95,7 @@ type config struct {
 	ControllerIDFile             string
 	ControllerLabel              string
 	ControllerHostname           string
+	DevPressureSimulation        bool
 }
 
 var buildRevision = "unknown"
@@ -159,6 +160,7 @@ func main() {
 	flag.StringVar(&cfg.ControllerIDFile, "controller-id-file", "", "file containing the stable controller UUID")
 	flag.StringVar(&cfg.ControllerLabel, "controller-label", os.Getenv("MOTION_LEVELS_CONTROLLER_LABEL"), "human-readable room/venue name shown on the platform (e.g. \"Zaragoza Caracol 1\")")
 	flag.StringVar(&cfg.ControllerHostname, "controller-hostname", os.Getenv("MOTION_LEVELS_CONTROLLER_HOSTNAME"), "tailnet hostname (e.g. motionlevels-1) used for platform gateway links; decoupled from the display label")
+	flag.BoolVar(&cfg.DevPressureSimulation, "dev-pressure-simulation", false, "enable the development-only pressure injection API")
 	flag.Parse()
 
 	cfg.normalize()

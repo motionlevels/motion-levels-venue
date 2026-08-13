@@ -268,6 +268,23 @@
         - { path: /var/lib/motion-levels/platform-asset-cache, owner: "10001", group: "10001" }
         - { path: /var/lib/motion-levels/security-recordings, owner: "10002", group: "10002" }
 
+    - name: Initialize the engine-owned stable venue identity
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - "import pathlib,sys,uuid; pathlib.Path(sys.argv[1]).write_text(str(uuid.uuid4()) + '\n', encoding='utf-8')"
+          - /opt/motion-levels/rebuild/var/floor-controller/controller-id
+        creates: /opt/motion-levels/rebuild/var/floor-controller/controller-id
+
+    - name: Restrict the stable venue identity to the engine service user
+      ansible.builtin.file:
+        path: /opt/motion-levels/rebuild/var/floor-controller/controller-id
+        state: file
+        owner: "10001"
+        group: "10001"
+        mode: "0640"
+
     - name: Verify the existing venue environment is present
       ansible.builtin.stat:
         path: /etc/motion-levels/motion-levels.env

@@ -71,7 +71,7 @@ jobs:
           assert controller.get("repository") == "ghcr.io/motionlevels/motion-levels-controller"
           assert re.fullmatch(r"[0-9a-f]{40}", controller.get("revision", ""))
           assert controller.get("platform") == "linux/amd64"
-          assert controller.get("protocol") == "v1"
+          assert controller.get("protocol") == "v1+v2"
           PY
 
       - name: Resolve the venue Compose model
@@ -104,7 +104,7 @@ jobs:
           VENUE_RENDER_GID=10002
           FLOOR_REVISION=0000000000000000000000000000000000000000
           FLOOR_PLATFORM=linux/amd64
-          FLOOR_PROTOCOL=v1
+          FLOOR_PROTOCOL=v1+v2
           FLOOR_IMAGE=example.invalid/controller:sha-${RELEASE_SHA}
           ENGINE_IMAGE=example.invalid/engine:sha-${RELEASE_SHA}
           CAMERA_HELPER_IMAGE=example.invalid/helper:sha-${RELEASE_SHA}

@@ -3,9 +3,9 @@
   "components": {
     "controller": {
       "repository": "ghcr.io/motionlevels/motion-levels-controller",
-      "revision": "e7cbc4cf1dfa9b4c99bc43ad684ebc828aea511f",
+      "revision": "b6aef1eeb1edc795ab43b81740f838f70135c36b",
       "platform": "linux/amd64",
-      "protocol": "v1"
+      "protocol": "v1+v2"
     }
   }
 }

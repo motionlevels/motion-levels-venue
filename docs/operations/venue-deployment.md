@@ -79,7 +79,7 @@ make status-motionlevels-1
 ```
 
 Failed activation health checks roll back automatically. The manual rollback
-command restores the previously activated manifest; verify engine, controller,
+command restores the previously activated manifest; verify engine, floor adapter,
 player menu, player display, floor output, and audio before declaring recovery
 complete.
 

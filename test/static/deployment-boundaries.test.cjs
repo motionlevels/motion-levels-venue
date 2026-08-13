@@ -71,7 +71,9 @@ test("venue core services are non-root, read-only, capability-dropped containers
   assert.match(compose, /driver: ipvlan[\s\S]*?ipvlan_mode: l2/);
   assert.match(compose, /MOTION_LEVELS_FLOOR_SOURCE_IP: \$\{VENUE_FLOOR_LAN_IPV4:/);
   assert.match(compose, /MOTION_LEVELS_LED_BROADCAST_IP: \$\{VENUE_FLOOR_BROADCAST_IPV4:/);
-  assert.match(compose, /floor:[\s\S]*?dns: \[1\.1\.1\.1, 1\.0\.0\.1\]/);
+  const floorBlock = compose.slice(compose.indexOf("  floor:"), compose.indexOf("  engine:"));
+  assert.doesNotMatch(floorBlock, /\begress:|\bdns:|MOTION_LEVELS_PLATFORM_TOKEN|platform-token/);
+  assert.match(floorBlock, /\bcore:|\bfloor-hardware:/);
   assert.match(compose, /core:[\s\S]*?internal: true[\s\S]*?display:[\s\S]*?internal: true/);
   assert.match(bundleDockerfile, /FROM caddy:2-alpine AS caddy-runtime[\s\S]*?setcap -r \/usr\/bin\/caddy/);
   assert.match(
@@ -114,10 +116,8 @@ test("venue release activation is automated, idle-gated, and rollback-aware", ()
   assert.match(activation, /secret\/config-only/);
   assert.doesNotMatch(activation, /same_revision/);
   assert.match(activation, /motion-levels-venue-security-recorder[\s\S]*\/api\/healthz/);
-  assert.match(
-    activation,
-    /if \[ -n "\$\(manifest_value VENUE_FLOOR_LAN_IPV4 "\$manifest"\)" \]; then[\s\S]*?motion-levels-venue-floor[\s\S]*?platform\.motionlevels\.obis\.dev\/api\/healthz[\s\S]*?\n    fi\n    audio_probe \|\| return 1/,
-  );
+  assert.doesNotMatch(activation, /docker exec motion-levels-venue-floor[\s\S]*?platform\.motionlevels\.obis\.dev/);
+  assert.match(activation, /audio_probe \|\| return 1/);
   assert.match(activation, /http:\/\/127\.0\.0\.1\/controller\/health/);
   assert.match(activation, /http:\/\/127\.0\.0\.1\/engine\/api\/health/);
   assert.doesNotMatch(activation, /http:\/\/127\.0\.0\.1:410[12]/);
@@ -195,7 +195,7 @@ test("controller releases are externally pinned and remain part of atomic venue 
         repository: "ghcr.io/motionlevels/motion-levels-controller",
         revision: lock.components.controller.revision,
         platform: "linux/amd64",
-        protocol: "v1",
+        protocol: "v1+v2",
       },
     },
   });
@@ -344,8 +344,8 @@ test("container, hardware, and Ethernet-only Caddy routes use kernel-visible bou
   assert.match(firewall, /172\.30\.51\.0\/24 reject/);
   assert.match(firewall, /172\.30\.52\.0\/24 reject/);
   assert.match(firewall, /172\.30\.53\.0\/24 reject/);
-  assert.match(firewall, /172\.30\.53\.10 ip daddr \{ 1\.0\.0\.1, 1\.1\.1\.1 \} udp dport 53 accept/);
-  assert.match(firewall, /172\.30\.53\.10 ip daddr \{ 1\.0\.0\.1, 1\.1\.1\.1 \} tcp dport 53 accept/);
+  assert.doesNotMatch(firewall, /172\.30\.53\.10/);
+  assert.match(firewall, /172\.30\.53\.11 ip daddr 84\.7\.190\.81 tcp dport 443 accept/);
   assert.match(firewall, /192\.168\.1\.143[\s\S]*255\.255\.255\.255 udp dport 4626 accept/);
   assert.match(firewall, /iifname "enp2s0" ip daddr 192\.168\.1\.143 udp dport 7800 accept/);
   assert.match(firewall, /table netdev motion_levels_floor/);
