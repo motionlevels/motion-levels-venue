@@ -52,6 +52,10 @@ motion_levels_native_services:
   - motion-levels-hdmi-watchdog.service
 
 motion_levels_retired_services:
+  - motion-levels-hdmi-agent.service
+  - motion-levels-audio-keepalive.service
+  - motion-levels-audio.socket
+  - motion-levels-audio@.service
   - motion-levels-game-engine.service
   - motion-levels-player-menu.service
   - motion-levels-player-display.service

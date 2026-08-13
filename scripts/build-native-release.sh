@@ -110,6 +110,7 @@ mkdir -p "$candidate/components/cameras/source/motion_levels_cameras"
 rsync -a --delete \
   --exclude '__pycache__' \
   --exclude '*.py[cod]' \
+  --exclude 'tests/' \
   "$cameras_root/src/motion_levels_cameras/" \
   "$candidate/components/cameras/source/motion_levels_cameras/"
 install -m 0644 \
@@ -117,7 +118,12 @@ install -m 0644 \
   "$candidate/components/cameras/requirements-native.lock"
 
 # The venue owns only deployment/runtime adapters, operator pages, and units.
-rsync -a "$repo_root/deploy/motionlevels-pc/" "$candidate/deploy/motionlevels-pc/"
+rsync -a \
+  --exclude '__pycache__' \
+  --exclude '*.py[cod]' \
+  --exclude 'tests/' \
+  "$repo_root/deploy/motionlevels-pc/" \
+  "$candidate/deploy/motionlevels-pc/"
 
 python3 - "$candidate" "$venue_revision" "$controller_revision" "$games_revision" "$cameras_revision" <<'PY'
 from __future__ import annotations

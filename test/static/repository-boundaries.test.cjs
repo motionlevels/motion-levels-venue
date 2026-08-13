@@ -83,8 +83,11 @@ test("native releases are assembled from clean pinned sibling checkouts", () => 
   assert.match(build, /components\/cameras\/source\/motion_levels_cameras/);
   assert.match(build, /requirements-native\.lock/);
   assert.match(build, /chmod 0755 "\$candidate"/);
+  assert.match(build, /--exclude '__pycache__'/);
+  assert.match(build, /--exclude '\*\.py\[cod\]'/);
+  assert.match(build, /--exclude 'tests\/'/);
   assert.doesNotMatch(build, /pip wheel|\.whl/);
-  assert.match(build, /rsync -a "\$repo_root\/deploy\/motionlevels-pc\/"/);
+  assert.match(build, /"\$repo_root\/deploy\/motionlevels-pc\/"/);
   assert.doesNotMatch(build, /docker|ghcr\.io|git clone/);
 });
 
@@ -98,12 +101,67 @@ test("the verified native bundle contains the runtime, menu, and complete displa
   assert.match(verify, /bundle\.get\("playerDisplay".*"entry"/);
   assert.match(verify, /bundle\.get\("playerDisplay".*"shellEntry"/);
   assert.match(verify, /native release root must have mode 0755/);
+  assert.match(verify, /development-only Python content is not allowed/);
   assert.match(caddy, /current\/game-bundles\/motion-levels-games\/current\/menu/);
   assert.match(caddy, /current\/game-bundles\/motion-levels-games\/current\/display/);
   assert.match(caddy, /handle_path \/camera-recorder\/\*/);
   assert.match(caddy, /reverse_proxy 127\.0\.0\.1:8040/);
   assert.match(runtime, /venue\/runtime\.mjs/);
   assert.match(runtime, /exec "\$node_binary" "\$runtime_entry"/);
+});
+
+test("native cutover gates precede live replacement and activation is display-aware", () => {
+  const playbook = read("ansible/playbooks/venue.yml");
+  const installLive = read("ansible/tasks/install-native-live.yml");
+  const goproGate = playbook.indexOf("Verify the exact GoPro through its USB API before any live replacement");
+  const idleGate = playbook.indexOf("Require an idle venue before disrupting runtime services");
+  const liveReplacement = playbook.indexOf("Replace live native files inside the rollback boundary");
+  const coreActivation = playbook.indexOf("Enable and restart native core services in dependency order");
+  const caddyActivation = playbook.indexOf("Enable and restart Caddy on the activated release");
+  const displayActivation = playbook.indexOf("Enable and restart the kiosk and hotplug watchdog");
+  const heartbeatGate = playbook.indexOf("Wait for a fresh healthy kiosk heartbeat when a display is connected");
+
+  assert.ok(goproGate >= 0 && goproGate < liveReplacement);
+  assert.ok(idleGate >= 0 && idleGate < liveReplacement);
+  assert.match(installLive, /Render the venue runtime environment/);
+  assert.match(installLive, /Render the venue-specific Caddy configuration/);
+  assert.match(installLive, /Install native systemd units from the release/);
+  assert.match(playbook, /genuinely fresh idle host/);
+  assert.ok(coreActivation >= 0 && coreActivation < caddyActivation);
+  assert.ok(caddyActivation < displayActivation);
+  assert.ok(displayActivation < heartbeatGate);
+  assert.match(playbook, /display-disconnected/);
+  assert.match(playbook, /\^\(HDMI\|DP\|DisplayPort\|DVI\)/);
+  assert.match(playbook, /motion_levels_display\.mode/);
+});
+
+test("rollback stops native units first and restores only a known stack", () => {
+  const playbook = read("ansible/playbooks/venue.yml");
+  const rescue = playbook.indexOf("rescue:", playbook.indexOf("Activate and health-gate the native release"));
+  const stopNative = playbook.indexOf("Stop every native unit before rollback", rescue);
+  const restoreFiles = playbook.indexOf("Restore every pre-existing live file exactly", rescue);
+  const healthCheck = playbook.indexOf("Health-check the restored stack", rescue);
+
+  assert.ok(rescue >= 0);
+  assert.ok(stopNative > rescue && stopNative < restoreFiles);
+  assert.ok(restoreFiles < healthCheck);
+  assert.match(playbook, /motion_levels_pre_cutover_stack == 'native'/);
+  assert.match(playbook, /motion_levels_pre_cutover_stack == 'legacy'/);
+  assert.match(playbook, /motion_levels_pre_cutover_stack != 'native'/);
+  assert.match(playbook, /Refuse to invent a legacy rollback without its source/);
+  assert.match(playbook, /motion_levels_legacy_camera_was_running/);
+});
+
+test("retired display and audio broker units are removed after cutover", () => {
+  const variables = read("ansible/inventory/production/group_vars/all.yml");
+  for (const service of [
+    "motion-levels-hdmi-agent.service",
+    "motion-levels-audio-keepalive.service",
+    "motion-levels-audio.socket",
+    "motion-levels-audio@.service",
+  ]) {
+    assert.match(variables, new RegExp(`^\\s+- ${service.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}$`, "m"));
+  }
 });
 
 test("the native floor adapter is pinned to the venue LAN source address", () => {

@@ -67,6 +67,10 @@ actual = {
 }
 if actual != seen:
     fail(f"native release contains unmanifested files: {sorted(actual - seen)}")
+for path in root.rglob("*"):
+    relative = path.relative_to(root)
+    if path.name == "__pycache__" or path.suffix in {".pyc", ".pyo"} or "tests" in relative.parts:
+        fail(f"development-only Python content is not allowed in a native release: {relative}")
 
 games_revision = str(components["games"])
 bundle_root = root / "game-bundles/motion-levels-games" / games_revision
@@ -102,10 +106,6 @@ for required in (
         fail(f"camera source entry is missing: {required.relative_to(root)}")
 if list(camera_root.rglob("*.whl")):
     fail("camera application wheels are not allowed in a source release")
-for path in camera_source.rglob("*"):
-    if path.name == "__pycache__" or path.suffix in {".pyc", ".pyo"}:
-        fail(f"generated Python cache is not allowed in camera source: {path.relative_to(root)}")
-
 print(
     f"Verified native venue release {manifest['venueRevision']} "
     f"with {len(records)} files"

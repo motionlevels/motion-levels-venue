@@ -110,13 +110,65 @@
       - ambient-comet
       - ambient-pulse
       - ambient-spark
-    motion_levels_health_urls:
+    motion_levels_core_services:
+      - motion-levels-floor-controller.service
+      - motion-levels-venue-runtime.service
+      - motion-levels-venue-supervisor.service
+      - motion-levels-cameras.service
+      - motion-levels-security-recorder.service
+      - motion-levels-camera-helper.service
+    motion_levels_display_services:
+      - motion-levels-kiosk.service
+      - motion-levels-hdmi-watchdog.service
+    motion_levels_legacy_core_services:
+      - motion-levels-floor-controller.service
+      - motion-levels-game-engine.service
+      - motion-levels-venue-supervisor.service
+      - motion-levels-security-recorder.service
+      - motion-levels-camera-helper.service
+    motion_levels_legacy_restore_sources:
+      - Caddyfile
+      - motion-levels-floor-controller.service
+      - motion-levels-game-engine.service
+      - motion-levels-venue-supervisor.service
+      - motion-levels-security-recorder.service
+      - motion-levels-camera-helper.service
+      - motion-levels-kiosk.service
+      - motion-levels-hdmi-watchdog.service
+      - motion-levels-player-kiosk
+      - motion-levels-hdmi-watchdog
+    motion_levels_cutover_conflicting_services:
+      - motion-levels-hdmi-agent.service
+      - motion-levels-audio-keepalive.service
+      - motion-levels-audio.socket
+    motion_levels_managed_live_files:
+      - "{{ motion_levels_config_root }}/motion-levels.env"
+      - "{{ motion_levels_config_root }}/stack.json"
+      - /etc/asound.conf
+      - /etc/motion-levels-cameras.env
+      - /etc/caddy/Caddyfile
+      - /etc/chromium/policies/managed/motion-levels-kiosk.json
+      - /usr/local/bin/motion-levels-player-kiosk
+      - /usr/local/bin/motion-levels-hdmi-watchdog
+      - /usr/local/sbin/motion-levels-gopro-reconcile
+      - /usr/local/sbin/motion-levels-lan-ip
+      - /etc/udev/rules.d/72-motion-levels-gopro.rules
+      - /etc/systemd/system/motion-levels-gopro-reconcile.service
+      - /etc/systemd/system/motion-levels-lan-ip.service
+      - /etc/systemd/system/motion-levels-floor-controller.service
+      - /etc/systemd/system/motion-levels-venue-runtime.service
+      - /etc/systemd/system/motion-levels-venue-supervisor.service
+      - /etc/systemd/system/motion-levels-cameras.service
+      - /etc/systemd/system/motion-levels-security-recorder.service
+      - /etc/systemd/system/motion-levels-camera-helper.service
+      - /etc/systemd/system/motion-levels-kiosk.service
+      - /etc/systemd/system/motion-levels-hdmi-watchdog.service
+    motion_levels_public_health_urls:
       - http://127.0.0.1/controller/health
       - http://127.0.0.1/engine/api/status
-      - http://127.0.0.1/venue-api/v1/snapshot
       - http://127.0.0.1/menu/
       - http://127.0.0.1/display/
-      - http://127.0.0.1:8040/readyz
+    motion_levels_rollback_root: "{{ motion_levels_state_root }}/deploy-rollback/{{ motion_levels_venue_revision }}"
   pre_tasks:
     - name: Require Debian 13 amd64 with supported native runtimes
       ansible.builtin.assert:
@@ -209,46 +261,6 @@
       when: motion_levels_current_timezone.stdout | trim != motion_levels_venue.timezone
       changed_when: true
 
-    - name: Install the venue LAN address helper
-      ansible.builtin.copy:
-        dest: /usr/local/sbin/motion-levels-lan-ip
-        owner: root
-        group: root
-        mode: "0755"
-        content: |
-          #!/bin/sh
-          set -eu
-          interface="{{ motion_levels_network.lan.interface }}"
-          address="{{ motion_levels_network.lan.address }}"
-          address_only="{{ motion_levels_network.lan.address | regex_replace('/.*$', '') }}"
-          gateway="{{ motion_levels_network.lan.gateway }}"
-          ip link show dev "$interface" >/dev/null
-          ip link set "$interface" up
-          ip addr show dev "$interface" | grep -q "${address_only}/" || ip addr add "$address" dev "$interface"
-          if ! ip route show default dev "$interface" | grep -q "default via $gateway"; then
-            ip route replace default via "$gateway" dev "$interface" metric 1002
-          fi
-
-    - name: Install the venue LAN address unit
-      ansible.builtin.copy:
-        dest: /etc/systemd/system/motion-levels-lan-ip.service
-        owner: root
-        group: root
-        mode: "0644"
-        content: |
-          [Unit]
-          Description=Keep the Motion Levels venue LAN address
-          After=network-online.target
-          Wants=network-online.target
-
-          [Service]
-          Type=oneshot
-          ExecStart=/usr/local/sbin/motion-levels-lan-ip
-          RemainAfterExit=yes
-
-          [Install]
-          WantedBy=multi-user.target
-
     - name: Prevent ARP flux between wired and wireless venue interfaces
       ansible.posix.sysctl:
         name: "{{ item.name }}"
@@ -260,13 +272,6 @@
       loop:
         - { name: net.ipv4.conf.all.arp_ignore, value: "1" }
         - { name: net.ipv4.conf.all.arp_announce, value: "2" }
-
-    - name: Enable the venue LAN address unit
-      ansible.builtin.systemd_service:
-        name: motion-levels-lan-ip.service
-        daemon_reload: true
-        enabled: true
-        state: started
 
     - name: Create native release, state, and configuration directories
       ansible.builtin.file:
@@ -474,117 +479,6 @@
               - "{{ motion_levels_remote_release_dir }}"
           changed_when: true
 
-    - name: Initialize the stable venue controller identity
-      ansible.builtin.copy:
-        dest: "{{ motion_levels_state_root }}/floor-controller/controller-id"
-        content: "{{ motion_levels_venue.platform_room_id }}\n"
-        owner: root
-        group: root
-        mode: "0644"
-        force: false
-
-    - name: Render the venue runtime environment
-      ansible.builtin.template:
-        src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels.env.j2"
-        dest: "{{ motion_levels_config_root }}/motion-levels.env"
-        owner: root
-        group: root
-        mode: "0644"
-
-    - name: Render the venue-specific ALSA default device
-      ansible.builtin.template:
-        src: "{{ motion_levels_repo_root }}/ansible/templates/asound.conf.j2"
-        dest: /etc/asound.conf
-        owner: root
-        group: root
-        mode: "0644"
-
-    - name: Ensure the Chromium managed policy directory exists
-      ansible.builtin.file:
-        path: /etc/chromium/policies/managed
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-
-    - name: Install the venue Chromium kiosk policy
-      ansible.builtin.copy:
-        src: "{{ motion_levels_remote_release_dir }}/deploy/motionlevels-pc/chromium-policy.json"
-        dest: /etc/chromium/policies/managed/motion-levels-kiosk.json
-        remote_src: true
-        owner: root
-        group: root
-        mode: "0644"
-
-    - name: Render the camera runtime environment
-      ansible.builtin.template:
-        src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels-cameras.env.j2"
-        dest: /etc/motion-levels-cameras.env
-        owner: root
-        group: motion-levels-cameras
-        mode: "0640"
-      when: motion_levels_camera.enabled
-
-    - name: Render the venue-specific Caddy configuration
-      ansible.builtin.template:
-        src: "{{ motion_levels_repo_root }}/deploy/motionlevels-pc/Caddyfile"
-        dest: /etc/caddy/Caddyfile
-        owner: root
-        group: root
-        mode: "0644"
-
-    - name: Install native runtime scripts
-      ansible.builtin.copy:
-        src: "{{ motion_levels_remote_release_dir }}/deploy/motionlevels-pc/{{ item.src }}"
-        dest: "{{ item.dest }}"
-        remote_src: true
-        owner: root
-        group: root
-        mode: "0755"
-      loop:
-        - { src: motion-levels-player-kiosk, dest: /usr/local/bin/motion-levels-player-kiosk }
-        - { src: motion-levels-hdmi-watchdog, dest: /usr/local/bin/motion-levels-hdmi-watchdog }
-        - { src: motion-levels-gopro-reconcile, dest: /usr/local/sbin/motion-levels-gopro-reconcile }
-
-    - name: Install native systemd units from the release
-      ansible.builtin.copy:
-        src: "{{ motion_levels_remote_release_dir }}/deploy/motionlevels-pc/{{ item }}"
-        dest: "/etc/systemd/system/{{ item }}"
-        remote_src: true
-        owner: root
-        group: root
-        mode: "0644"
-      loop: "{{ motion_levels_native_services | reject('equalto', 'motion-levels-cameras.service') | list }}"
-
-    - name: Render the native camera unit
-      ansible.builtin.template:
-        src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels-cameras.service.j2"
-        dest: /etc/systemd/system/motion-levels-cameras.service
-        owner: root
-        group: root
-        mode: "0644"
-      when: motion_levels_camera.enabled
-
-    - name: Render exact-serial GoPro hotplug integration
-      ansible.builtin.template:
-        src: "{{ item.src }}"
-        dest: "{{ item.dest }}"
-        owner: root
-        group: root
-        mode: "0644"
-      loop:
-        - src: "{{ motion_levels_repo_root }}/ansible/templates/72-motion-levels-gopro.rules.j2"
-          dest: /etc/udev/rules.d/72-motion-levels-gopro.rules
-        - src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels-gopro-reconcile.service.j2"
-          dest: /etc/systemd/system/motion-levels-gopro-reconcile.service
-      when: motion_levels_camera.enabled
-
-    - name: Reload exact-serial GoPro hotplug rules
-      ansible.builtin.command:
-        cmd: udevadm control --reload-rules
-      changed_when: false
-      when: motion_levels_camera.enabled
-
     - name: Ensure the Debian network interface configuration directory exists
       ansible.builtin.file:
         path: /etc/network/interfaces.d
@@ -630,7 +524,7 @@
       changed_when: false
       when: motion_levels_camera.enabled
 
-    - name: Verify the exact GoPro through its USB API before cutover
+    - name: Verify the exact GoPro through its USB API before any live replacement
       ansible.builtin.uri:
         url: "{{ motion_levels_camera.gopro.base_url }}/gopro/camera/info"
         return_content: true
@@ -643,7 +537,103 @@
         - motion_levels_gopro_usb_api.json.serial_number == motion_levels_camera.expected_serial
       when: motion_levels_camera.enabled
 
-    - name: Read venue state before native cutover
+    - name: Resolve the currently active native release before cutover
+      ansible.builtin.shell: |
+        set -eu
+        current="{{ motion_levels_install_root }}/current"
+        test -L "$current"
+        target="$(readlink -f "$current")"
+        test -d "$target"
+        printf '%s\n' "$target"
+      args:
+        executable: /bin/sh
+      register: motion_levels_pre_cutover_native
+      changed_when: false
+      failed_when: false
+
+    - name: Inspect the complete first-migration legacy rollback source
+      ansible.builtin.stat:
+        path: "/opt/motion-levels/rebuild/current/deploy/motionlevels-pc/{{ item }}"
+        follow: true
+      register: motion_levels_legacy_restore_checks
+      loop: "{{ motion_levels_legacy_restore_sources }}"
+
+    - name: Record whether the legacy rollback source is complete
+      ansible.builtin.set_fact:
+        motion_levels_legacy_source_ready: >-
+          {{
+            (
+              motion_levels_legacy_restore_checks.results
+              | selectattr('stat.exists', 'defined')
+              | selectattr('stat.exists')
+              | list
+              | length
+            ) == (motion_levels_legacy_restore_sources | length)
+          }}
+
+    - name: Detect the legacy engine service before cutover
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - --quiet
+          - motion-levels-game-engine.service
+      register: motion_levels_legacy_engine_active
+      changed_when: false
+      failed_when: false
+
+    - name: Detect the native engine service before cutover
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - --quiet
+          - motion-levels-venue-runtime.service
+      register: motion_levels_native_engine_active
+      changed_when: false
+      failed_when: false
+
+    - name: Detect an engine listener before cutover
+      ansible.builtin.shell: |
+        set -o pipefail
+        ss -H -ltn | awk '$4 ~ /:4102$/ { found = 1 } END { exit !found }'
+      args:
+        executable: /bin/bash
+      register: motion_levels_engine_listener
+      changed_when: false
+      failed_when: false
+
+    - name: Detect any active managed venue runtime before cutover
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - --quiet
+          - "{{ item }}"
+      register: motion_levels_pre_cutover_service_states
+      changed_when: false
+      failed_when: false
+      loop: >-
+        {{
+          (
+            motion_levels_core_services
+            + motion_levels_display_services
+            + motion_levels_cutover_conflicting_services
+            + ['motion-levels-game-engine.service']
+          ) | unique | list
+        }}
+
+    - name: Capture active managed venue services
+      ansible.builtin.set_fact:
+        motion_levels_pre_cutover_active_services: >-
+          {{
+            motion_levels_pre_cutover_service_states.results
+            | selectattr('rc', 'equalto', 0)
+            | map(attribute='item')
+            | list
+          }}
+
+    - name: Read venue state before any live replacement
       ansible.builtin.uri:
         url: http://127.0.0.1/engine/api/status
         return_content: true
@@ -651,6 +641,27 @@
         timeout: 5
       register: motion_levels_cutover_status
       changed_when: false
+      failed_when: false
+
+    - name: Require a known engine or a genuinely fresh idle host
+      ansible.builtin.assert:
+        that:
+          - >-
+            (motion_levels_cutover_status.status | default(0) | int) == 200
+            or (
+              motion_levels_legacy_engine_active.rc != 0
+              and motion_levels_native_engine_active.rc != 0
+              and motion_levels_engine_listener.rc != 0
+              and (motion_levels_pre_cutover_active_services | length) == 0
+              and not ('motion-levels-cameras' in (motion_levels_legacy_containers.stdout_lines | default([])))
+            )
+          - >-
+            (motion_levels_cutover_status.status | default(0) | int) != 200
+            or motion_levels_pre_cutover_native.rc == 0
+            or (motion_levels_legacy_engine_active.rc == 0 and motion_levels_legacy_source_ready)
+        fail_msg: >-
+          Native cutover refused because the engine state is unavailable while a
+          listener/service exists, or its rollback provenance is not complete.
 
     - name: Require an idle venue before disrupting runtime services
       ansible.builtin.assert:
@@ -662,17 +673,109 @@
           - (motion_levels_cutover_status.json.phase | default('')) in ['idle', 'ambient']
           - motion_levels_cutover_status.json.venueSessionId | default('', true) | string | length == 0
         fail_msg: >-
-          Native cutover refused while the venue is busy or its engine state is
-          unavailable: game={{ motion_levels_cutover_status.json.currentGame | default('unknown') }},
+          Native cutover refused while the venue is busy: game={{ motion_levels_cutover_status.json.currentGame | default('unknown') }},
           phase={{ motion_levels_cutover_status.json.phase | default('unknown') }},
           venueSessionId={{ motion_levels_cutover_status.json.venueSessionId | default('none', true) }}.
+      when: (motion_levels_cutover_status.status | default(0) | int) == 200
+
+    - name: Classify the pre-cutover stack for rollback
+      ansible.builtin.set_fact:
+        motion_levels_pre_cutover_stack: >-
+          {{
+            'native' if motion_levels_pre_cutover_native.rc == 0
+            else 'legacy' if motion_levels_legacy_engine_active.rc == 0 and motion_levels_legacy_source_ready
+            else 'fresh'
+          }}
+        motion_levels_legacy_camera_was_running: >-
+          {{ 'motion-levels-cameras' in (motion_levels_legacy_containers.stdout_lines | default([])) }}
+
+    - name: Record whether Caddy was active before cutover
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - --quiet
+          - caddy.service
+      register: motion_levels_caddy_was_active
+      changed_when: false
+      failed_when: false
+
+    - name: Record active legacy display and audio services before cutover
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - --quiet
+          - "{{ item }}"
+      register: motion_levels_conflicting_service_states
+      changed_when: false
+      failed_when: false
+      loop: "{{ motion_levels_cutover_conflicting_services }}"
+
+    - name: Capture legacy display and audio services that rollback must restart
+      ansible.builtin.set_fact:
+        motion_levels_pre_cutover_conflicting_services: >-
+          {{
+            motion_levels_conflicting_service_states.results
+            | selectattr('rc', 'equalto', 0)
+            | map(attribute='item')
+            | list
+          }}
+
+    - name: Recreate the exact live-file rollback snapshot directory
+      ansible.builtin.file:
+        path: "{{ motion_levels_rollback_root }}"
+        state: "{{ item }}"
+        owner: root
+        group: root
+        mode: "0700"
+      loop:
+        - absent
+        - directory
+
+    - name: Inspect live files before native replacement
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      register: motion_levels_live_file_stats
+      loop: "{{ motion_levels_managed_live_files }}"
+
+    - name: Snapshot every pre-existing live file for rollback
+      ansible.builtin.copy:
+        src: "{{ item.item }}"
+        dest: "{{ motion_levels_rollback_root }}/{{ item.item | regex_replace('^/', '') | replace('/', '__') }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: preserve
+      loop: "{{ motion_levels_live_file_stats.results }}"
+      when: item.stat.exists
+
+    - name: Initialize the stable venue controller identity
+      ansible.builtin.copy:
+        dest: "{{ motion_levels_state_root }}/floor-controller/controller-id"
+        content: "{{ motion_levels_venue.platform_room_id }}\n"
+        owner: root
+        group: root
+        mode: "0644"
+        force: false
 
     - name: Activate and health-gate the native release
       block:
+        - name: Replace live native files inside the rollback boundary
+          ansible.builtin.import_tasks: ../tasks/install-native-live.yml
+
         - name: Stop the legacy runtime before binding the native runtime port
           ansible.builtin.systemd_service:
             name: motion-levels-game-engine.service
             state: stopped
+          failed_when: false
+
+        - name: Stop legacy display and audio services before native activation
+          ansible.builtin.systemd_service:
+            name: "{{ item }}"
+            state: stopped
+          loop: "{{ motion_levels_cutover_conflicting_services }}"
           failed_when: false
 
         - name: Stop the previous Docker camera after the native candidate is complete
@@ -681,6 +784,7 @@
           register: motion_levels_old_camera_container
           changed_when: motion_levels_old_camera_container.rc == 0
           failed_when: false
+          when: motion_levels_legacy_camera_was_running
 
         - name: Activate the native venue release atomically
           ansible.builtin.shell: |
@@ -725,19 +829,26 @@
           ansible.builtin.systemd_service:
             daemon_reload: true
 
+        - name: Enable the venue LAN address unit
+          ansible.builtin.systemd_service:
+            name: motion-levels-lan-ip.service
+            enabled: true
+            state: started
+
         - name: Validate the rendered Caddy configuration
           ansible.builtin.command:
             cmd: caddy validate --config /etc/caddy/Caddyfile
           changed_when: false
 
-        - name: Enable and restart native services
+        - name: Enable and restart native core services in dependency order
           ansible.builtin.systemd_service:
             name: "{{ item }}"
             enabled: true
             state: restarted
-          loop: "{{ motion_levels_native_services + ['caddy.service'] }}"
+          loop: "{{ motion_levels_core_services }}"
+          when: item != 'motion-levels-cameras.service' or motion_levels_camera.enabled
 
-        - name: Verify native service health
+        - name: Verify native core service health before switching the web boundary
           ansible.builtin.uri:
             url: "{{ item }}"
             status_code: 200
@@ -745,7 +856,88 @@
           retries: 60
           delay: 2
           until: motion_levels_health.status == 200
-          loop: "{{ motion_levels_health_urls }}"
+          loop:
+            - http://127.0.0.1:4101/health
+            - http://127.0.0.1:4102/api/status
+            - http://127.0.0.1:4103/v1/snapshot
+
+        - name: Verify the native camera boundary before switching Caddy
+          ansible.builtin.uri:
+            url: http://127.0.0.1:8040/readyz
+            status_code: 200
+          register: motion_levels_camera_health
+          retries: 60
+          delay: 2
+          until: motion_levels_camera_health.status == 200
+          when: motion_levels_camera.enabled
+
+        - name: Enable and restart Caddy on the activated release
+          ansible.builtin.systemd_service:
+            name: caddy.service
+            enabled: true
+            state: restarted
+
+        - name: Verify the public engine, menu, and display routes before kiosk restart
+          ansible.builtin.uri:
+            url: "{{ item }}"
+            status_code: 200
+          register: motion_levels_public_health
+          retries: 60
+          delay: 2
+          until: motion_levels_public_health.status == 200
+          loop: "{{ motion_levels_public_health_urls }}"
+
+        - name: Enable and restart the kiosk and hotplug watchdog
+          ansible.builtin.systemd_service:
+            name: "{{ item }}"
+            enabled: true
+            state: restarted
+          loop: "{{ motion_levels_display_services }}"
+
+        - name: Gate a connected physical display on the configured mode
+          ansible.builtin.shell: |
+            set -euo pipefail
+            query="$(DISPLAY=:0 /usr/bin/xrandr --query)"
+            connected="$(printf '%s\n' "$query" | awk '$2 == "connected" && $1 ~ /^(HDMI|DP|DisplayPort|DVI)/ { print $1; exit }')"
+            if [ -z "$connected" ]; then
+              echo display-disconnected
+              exit 0
+            fi
+            if printf '%s\n' "$query" | awk -v output="$connected" -v geometry="{{ motion_levels_display.mode }}+" \
+              '$1 == output && $2 == "connected" && index($0, geometry) { found = 1 } END { exit !found }'; then
+              echo display-connected-configured
+              exit 0
+            fi
+            echo "connected output $connected is not active at {{ motion_levels_display.mode }}" >&2
+            exit 1
+          args:
+            executable: /bin/bash
+          environment:
+            DISPLAY: ":0"
+          register: motion_levels_display_gate
+          changed_when: false
+          retries: 30
+          delay: 2
+          until: motion_levels_display_gate.rc == 0
+
+        - name: Wait for a fresh healthy kiosk heartbeat when a display is connected
+          ansible.builtin.uri:
+            url: http://127.0.0.1/engine/api/health
+            return_content: true
+            status_code: 200
+          register: motion_levels_display_health
+          retries: 60
+          delay: 2
+          until:
+            - motion_levels_display_health.json.displayClient.fresh | default(false)
+            - motion_levels_display_health.json.displayClient.healthy | default(false)
+          when: motion_levels_display_gate.stdout | trim == 'display-connected-configured'
+
+        - name: Surface the physical display activation state
+          ansible.builtin.debug:
+            msg: >-
+              Physical display state is {{ motion_levels_display_gate.stdout | trim }};
+              disconnected is valid and the HDMI watchdog remains enabled for hotplug recovery.
 
         - name: Verify the complete venue snapshot
           ansible.builtin.uri:
@@ -757,8 +949,12 @@
           delay: 2
           until:
             - motion_levels_venue_snapshot.json.ok
-            - motion_levels_venue_snapshot.json.summary.displayHealthy
-            - motion_levels_venue_snapshot.json.summary.cameraDetected
+            - >-
+              motion_levels_display_gate.stdout | trim == 'display-disconnected'
+              or motion_levels_venue_snapshot.json.summary.displayHealthy | default(false)
+            - >-
+              not motion_levels_camera.enabled
+              or motion_levels_venue_snapshot.json.summary.cameraDetected | default(false)
 
         - name: Verify the exact GoPro through the native service
           ansible.builtin.uri:
@@ -775,88 +971,165 @@
           when: motion_levels_camera.enabled
 
       rescue:
-        - name: Detect a prior native release
+        - name: Stop every native unit before rollback
+          ansible.builtin.systemd_service:
+            name: "{{ item }}"
+            state: stopped
+          loop: >-
+            {{
+              (motion_levels_display_services | reverse | list)
+              + (motion_levels_core_services | reverse | list)
+              + ['motion-levels-gopro-reconcile.service', 'motion-levels-lan-ip.service']
+            }}
+          failed_when: false
+
+        - name: Stop Caddy before restoring its exact previous configuration
+          ansible.builtin.systemd_service:
+            name: caddy.service
+            state: stopped
+          failed_when: false
+
+        - name: Recheck the first-migration legacy rollback source
           ansible.builtin.stat:
-            path: "{{ motion_levels_install_root }}/previous"
-          register: motion_levels_previous_release
+            path: "/opt/motion-levels/rebuild/current/deploy/motionlevels-pc/{{ item }}"
+            follow: true
+          register: motion_levels_legacy_rollback_checks
+          loop: "{{ motion_levels_legacy_restore_sources }}"
+          when: motion_levels_pre_cutover_stack == 'legacy'
 
-        - name: Restore the prior native release symlink
-          ansible.builtin.shell: |
-            set -eu
-            previous="$(readlink -f '{{ motion_levels_install_root }}/previous')"
-            test -d "$previous"
-            ln -sfn "$previous" "{{ motion_levels_install_root }}/current"
-          args:
-            executable: /bin/sh
+        - name: Refuse to invent a legacy rollback without its source
+          ansible.builtin.assert:
+            that:
+              - >-
+                (
+                  motion_levels_legacy_rollback_checks.results
+                  | selectattr('stat.exists', 'defined')
+                  | selectattr('stat.exists')
+                  | list
+                  | length
+                ) == (motion_levels_legacy_restore_sources | length)
+            fail_msg: "The captured legacy stack cannot be restored because its source is incomplete."
+          when: motion_levels_pre_cutover_stack == 'legacy'
+
+        - name: Remove files introduced by the failed native activation
+          ansible.builtin.file:
+            path: "{{ item.item }}"
+            state: absent
+          loop: "{{ motion_levels_live_file_stats.results }}"
+          when: not item.stat.exists
+
+        - name: Restore every pre-existing live file exactly
+          ansible.builtin.copy:
+            src: "{{ motion_levels_rollback_root }}/{{ item.item | regex_replace('^/', '') | replace('/', '__') }}"
+            dest: "{{ item.item }}"
+            remote_src: true
+            owner: "{{ item.stat.pw_name | default(item.stat.uid) }}"
+            group: "{{ item.stat.gr_name | default(item.stat.gid) }}"
+            mode: "{{ item.stat.mode }}"
+          loop: "{{ motion_levels_live_file_stats.results }}"
+          when: item.stat.exists
+
+        - name: Reload restored GoPro hotplug rules
+          ansible.builtin.command:
+            cmd: udevadm control --reload-rules
+          changed_when: false
+          when: motion_levels_camera.enabled
+
+        - name: Restore the exact prior native release symlink
+          ansible.builtin.command:
+            argv:
+              - ln
+              - -sfn
+              - "{{ motion_levels_pre_cutover_native.stdout | trim }}"
+              - "{{ motion_levels_install_root }}/current"
           changed_when: true
-          when: motion_levels_previous_release.stat.islnk | default(false)
+          when: motion_levels_pre_cutover_stack == 'native'
 
-        - name: Restore first-migration legacy service units
-          ansible.builtin.copy:
-            src: "/opt/motion-levels/rebuild/current/deploy/motionlevels-pc/{{ item }}"
-            dest: "/etc/systemd/system/{{ item }}"
-            remote_src: true
-            owner: root
-            group: root
-            mode: "0644"
-          loop:
-            - motion-levels-floor-controller.service
-            - motion-levels-game-engine.service
-            - motion-levels-venue-supervisor.service
-            - motion-levels-security-recorder.service
-            - motion-levels-camera-helper.service
-            - motion-levels-kiosk.service
-            - motion-levels-hdmi-watchdog.service
-          when: not (motion_levels_previous_release.stat.islnk | default(false))
+        - name: Remove the failed first native release symlink
+          ansible.builtin.file:
+            path: "{{ motion_levels_install_root }}/current"
+            state: absent
+          when: motion_levels_pre_cutover_stack != 'native'
 
-        - name: Restore first-migration legacy Caddy config
-          ansible.builtin.copy:
-            src: /opt/motion-levels/rebuild/current/deploy/motionlevels-pc/Caddyfile
-            dest: /etc/caddy/Caddyfile
-            remote_src: true
-            owner: root
-            group: root
-            mode: "0644"
-          when: not (motion_levels_previous_release.stat.islnk | default(false))
-
-        - name: Reload systemd after rollback
+        - name: Reload systemd after exact rollback
           ansible.builtin.systemd_service:
             daemon_reload: true
 
-        - name: Restart the previous native release
+        - name: Restart legacy display and audio services that were previously active
+          ansible.builtin.systemd_service:
+            name: "{{ item }}"
+            enabled: true
+            state: restarted
+          loop: "{{ motion_levels_pre_cutover_conflicting_services }}"
+
+        - name: Restart the previous native core stack
           ansible.builtin.systemd_service:
             name: "{{ item }}"
             state: restarted
-          loop: "{{ motion_levels_native_services + ['caddy.service'] }}"
-          failed_when: false
-          when: motion_levels_previous_release.stat.islnk | default(false)
+          loop: "{{ motion_levels_core_services }}"
+          when:
+            - motion_levels_pre_cutover_stack == 'native'
+            - item != 'motion-levels-cameras.service' or motion_levels_camera.enabled
 
-        - name: Restart the first-migration legacy stack
+        - name: Restart the first-migration legacy core stack
           ansible.builtin.systemd_service:
             name: "{{ item }}"
             state: restarted
-          loop:
-            - motion-levels-floor-controller.service
-            - motion-levels-game-engine.service
-            - motion-levels-venue-supervisor.service
-            - motion-levels-security-recorder.service
-            - motion-levels-camera-helper.service
-            - motion-levels-kiosk.service
-            - motion-levels-hdmi-watchdog.service
-            - caddy.service
-          failed_when: false
-          when: not (motion_levels_previous_release.stat.islnk | default(false))
+          loop: "{{ motion_levels_legacy_core_services }}"
+          when: motion_levels_pre_cutover_stack == 'legacy'
 
-        - name: Restore the Docker camera during first-migration rollback
+        - name: Restore the Docker camera only when it was running before migration
           ansible.builtin.command:
             cmd: docker start motion-levels-cameras
-          changed_when: true
-          failed_when: false
-          when: not (motion_levels_previous_release.stat.islnk | default(false))
+          register: motion_levels_legacy_camera_restore
+          changed_when: "'already running' not in (motion_levels_legacy_camera_restore.stdout | default(''))"
+          when:
+            - motion_levels_pre_cutover_stack == 'legacy'
+            - motion_levels_legacy_camera_was_running
 
-        - name: Fail after restoring the previous healthy stack
+        - name: Restart Caddy for the restored stack
+          ansible.builtin.systemd_service:
+            name: caddy.service
+            state: restarted
+          when: >-
+            motion_levels_pre_cutover_stack in ['native', 'legacy']
+            or motion_levels_caddy_was_active.rc == 0
+
+        - name: Restart the restored native or legacy display stack
+          ansible.builtin.systemd_service:
+            name: "{{ item }}"
+            state: restarted
+          loop: "{{ motion_levels_display_services }}"
+          when: motion_levels_pre_cutover_stack in ['native', 'legacy']
+
+        - name: Health-check the restored stack
+          ansible.builtin.uri:
+            url: "{{ item }}"
+            status_code: 200
+          register: motion_levels_rollback_health
+          retries: 60
+          delay: 2
+          until: motion_levels_rollback_health.status == 200
+          loop: >-
+            {{
+              motion_levels_public_health_urls
+              + ['http://127.0.0.1/venue-api/v1/snapshot']
+              + (['http://127.0.0.1:8040/readyz'] if motion_levels_camera.enabled else [])
+            }}
+          when: motion_levels_pre_cutover_stack in ['native', 'legacy']
+
+        - name: Fail after restoring or safely halting the previous stack
           ansible.builtin.fail:
-            msg: "Native release {{ motion_levels_venue_revision }} failed health checks and the previous stack was restored."
+            msg: "{{ motion_levels_rollback_failure_message }}"
+          vars:
+            motion_levels_rollback_failure_message: >-
+              Native release {{ motion_levels_venue_revision }} failed health checks.
+              Pre-cutover stack={{ motion_levels_pre_cutover_stack }};
+              {{
+                'the captured stack was restored and health-checked'
+                if motion_levels_pre_cutover_stack in ['native', 'legacy']
+                else 'no previous stack existed, so native units were stopped and the original files were restored'
+              }}.
 
     - name: Remove the legacy non-serial GoPro hotplug rule after healthy cutover
       ansible.builtin.file:
@@ -890,6 +1163,11 @@
     - name: Reload systemd after retiring old units
       ansible.builtin.systemd_service:
         daemon_reload: true
+
+    - name: Remove the successful cutover rollback snapshot
+      ansible.builtin.file:
+        path: "{{ motion_levels_rollback_root }}"
+        state: absent
 
     - name: Retain only current and previous native releases
       ansible.builtin.shell: |

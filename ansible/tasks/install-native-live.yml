@@ -1,0 +1,142 @@
+---
+- name: Install the venue LAN address helper after all cutover gates
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/motion-levels-lan-ip
+    owner: root
+    group: root
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      set -eu
+      interface="{{ motion_levels_network.lan.interface }}"
+      address="{{ motion_levels_network.lan.address }}"
+      address_only="{{ motion_levels_network.lan.address | regex_replace('/.*$', '') }}"
+      gateway="{{ motion_levels_network.lan.gateway }}"
+      ip link show dev "$interface" >/dev/null
+      ip link set "$interface" up
+      ip addr show dev "$interface" | grep -q "${address_only}/" || ip addr add "$address" dev "$interface"
+      if ! ip route show default dev "$interface" | grep -q "default via $gateway"; then
+        ip route replace default via "$gateway" dev "$interface" metric 1002
+      fi
+
+- name: Install the venue LAN address unit after all cutover gates
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/motion-levels-lan-ip.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Keep the Motion Levels venue LAN address
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/motion-levels-lan-ip
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Render the venue runtime environment
+  ansible.builtin.template:
+    src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels.env.j2"
+    dest: "{{ motion_levels_config_root }}/motion-levels.env"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render the venue-specific ALSA default device
+  ansible.builtin.template:
+    src: "{{ motion_levels_repo_root }}/ansible/templates/asound.conf.j2"
+    dest: /etc/asound.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Ensure the Chromium managed policy directory exists
+  ansible.builtin.file:
+    path: /etc/chromium/policies/managed
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the venue Chromium kiosk policy
+  ansible.builtin.copy:
+    src: "{{ motion_levels_remote_release_dir }}/deploy/motionlevels-pc/chromium-policy.json"
+    dest: /etc/chromium/policies/managed/motion-levels-kiosk.json
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render the camera runtime environment
+  ansible.builtin.template:
+    src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels-cameras.env.j2"
+    dest: /etc/motion-levels-cameras.env
+    owner: root
+    group: motion-levels-cameras
+    mode: "0640"
+  when: motion_levels_camera.enabled
+
+- name: Render the venue-specific Caddy configuration
+  ansible.builtin.template:
+    src: "{{ motion_levels_repo_root }}/deploy/motionlevels-pc/Caddyfile"
+    dest: /etc/caddy/Caddyfile
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install native runtime scripts
+  ansible.builtin.copy:
+    src: "{{ motion_levels_remote_release_dir }}/deploy/motionlevels-pc/{{ item.src }}"
+    dest: "{{ item.dest }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - { src: motion-levels-player-kiosk, dest: /usr/local/bin/motion-levels-player-kiosk }
+    - { src: motion-levels-hdmi-watchdog, dest: /usr/local/bin/motion-levels-hdmi-watchdog }
+    - { src: motion-levels-gopro-reconcile, dest: /usr/local/sbin/motion-levels-gopro-reconcile }
+
+- name: Install native systemd units from the release
+  ansible.builtin.copy:
+    src: "{{ motion_levels_remote_release_dir }}/deploy/motionlevels-pc/{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ motion_levels_native_services | reject('equalto', 'motion-levels-cameras.service') | list }}"
+
+- name: Render the native camera unit
+  ansible.builtin.template:
+    src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels-cameras.service.j2"
+    dest: /etc/systemd/system/motion-levels-cameras.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: motion_levels_camera.enabled
+
+- name: Render exact-serial GoPro hotplug integration
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - src: "{{ motion_levels_repo_root }}/ansible/templates/72-motion-levels-gopro.rules.j2"
+      dest: /etc/udev/rules.d/72-motion-levels-gopro.rules
+    - src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels-gopro-reconcile.service.j2"
+      dest: /etc/systemd/system/motion-levels-gopro-reconcile.service
+  when: motion_levels_camera.enabled
+
+- name: Reload exact-serial GoPro hotplug rules
+  ansible.builtin.command:
+    cmd: udevadm control --reload-rules
+  changed_when: false
+  when: motion_levels_camera.enabled
