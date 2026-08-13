@@ -31,6 +31,7 @@ type config struct {
 	HTTPAddr                     string
 	ControllerAddr               string
 	PressureAddr                 string
+	ControllerDuplexAddr         string
 	Game                         string
 	EngineGame                   string
 	GameLabel                    string
@@ -87,12 +88,16 @@ type config struct {
 	MotionLevelsGamesRoot        string
 	MotionLevelsGamesNode        string
 	PlatformSyncInterval         time.Duration
+	LiveFloorFPS                 int
+	LiveFloorTimeout             time.Duration
 	VenueIdleTimeout             time.Duration
 	ControllerID                 string
 	ControllerIDFile             string
 	ControllerLabel              string
 	ControllerHostname           string
 }
+
+var buildRevision = "unknown"
 
 type floorGame interface {
 	Render(now time.Time) []animation.RGB
@@ -104,6 +109,7 @@ func main() {
 	flag.StringVar(&cfg.HTTPAddr, "http", "127.0.0.1:4102", "HTTP address for the game-engine API; empty disables")
 	flag.StringVar(&cfg.ControllerAddr, "controller", "127.0.0.1:4201", "floor-controller frame stream address")
 	flag.StringVar(&cfg.PressureAddr, "pressure-events", "127.0.0.1:4202", "floor-controller pressure event stream address")
+	flag.StringVar(&cfg.ControllerDuplexAddr, "controller-duplex", "127.0.0.1:4203", "preferred floor protocol-v2 duplex stream; empty disables")
 	flag.StringVar(&cfg.Game, "game", "salvapantallas", "game to run: salvapantallas, animations, ambient-comet, ambient-pulse, ambient-spark, parkour, temporada1-niveles, authored-* games, animation-* games, or a platform level-game UUID")
 	flag.StringVar(&cfg.Difficulty, "difficulty", "easy", "difficulty for games that support it: easy, medium, hard, expert")
 	flag.StringVar(&cfg.Level, "level", "starter", "level for games that support level selection")
@@ -146,6 +152,8 @@ func main() {
 	flag.StringVar(&cfg.MotionLevelsGamesRoot, "motion-levels-games-root", nonEmptyEnv("MOTION_LEVELS_GAMES_ROOT", "game-bundles/motion-levels-games"), "pinned motion-levels-games bundle root")
 	flag.StringVar(&cfg.MotionLevelsGamesNode, "motion-levels-games-node", nonEmptyEnv("MOTION_LEVELS_GAMES_NODE", "node"), "Node.js executable for the motion-levels-games runner")
 	flag.DurationVar(&cfg.PlatformSyncInterval, "platform-sync-interval", time.Second, "how often to publish session state to the platform")
+	flag.IntVar(&cfg.LiveFloorFPS, "live-floor-fps", intEnv("MOTION_LEVELS_LIVE_PUSH_FPS", 5), "maximum observed floor snapshots published per second; 0 disables")
+	flag.DurationVar(&cfg.LiveFloorTimeout, "live-floor-timeout", durationEnv("MOTION_LEVELS_LIVE_PUSH_TIMEOUT", 2*time.Second), "HTTP timeout for observed floor publishing")
 	flag.DurationVar(&cfg.VenueIdleTimeout, "venue-session-idle-timeout", defaultVenueIdleLimit, "end the venue session after this much inactivity; 0 keeps the built-in default")
 	flag.StringVar(&cfg.ControllerID, "controller-id", "", "stable controller UUID to attach platform session records to")
 	flag.StringVar(&cfg.ControllerIDFile, "controller-id-file", "", "file containing the stable controller UUID")
@@ -202,6 +210,12 @@ func main() {
 	}()
 
 	runtime := newGameRuntime(cfg, audioPlayer, replayRecorder)
+	liveFloorPublisher, err := newLiveFloorPublisher(cfg)
+	if err != nil {
+		log.Printf("live-floor publisher disabled: %v", err)
+	} else {
+		runtime.SetLiveFloorPublisher(liveFloorPublisher)
+	}
 	runtime.SetCameraRecorder(cameraRecorder)
 	runtime.StartDisplaySnapshotRecording(displaySnapshotInterval(cfg.DisplaySnapshotFPS))
 	startPlatformSync(runtime, cfg)
@@ -245,6 +259,12 @@ func (c *config) normalize() {
 	}
 	if c.DisplaySnapshotFPS < 1 {
 		c.DisplaySnapshotFPS = 1
+	}
+	if c.LiveFloorFPS < 0 {
+		c.LiveFloorFPS = 0
+	}
+	if c.LiveFloorTimeout <= 0 {
+		c.LiveFloorTimeout = 2 * time.Second
 	}
 	if c.CameraRecorderSegmentSeconds < 0 {
 		c.CameraRecorderSegmentSeconds = 0
@@ -408,6 +428,17 @@ func runAudioTest(player *audio.Player, cfg config) error {
 }
 
 func run(cfg config, runtime *gameRuntime) error {
+	if strings.TrimSpace(cfg.ControllerDuplexAddr) != "" {
+		established, err := runDuplexController(cfg, runtime)
+		if established {
+			return err
+		}
+		log.Printf("floor protocol v2 unavailable, falling back to v1: %v", err)
+	}
+	return runLegacyController(cfg, runtime)
+}
+
+func runLegacyController(cfg config, runtime *gameRuntime) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -417,48 +448,61 @@ func run(cfg config, runtime *gameRuntime) error {
 	}
 	defer conn.Close()
 	log.Printf("connected to floor-controller: %s", cfg.ControllerAddr)
-
-	writer := bufio.NewWriterSize(conn, 1<<20)
-	ticker := time.NewTicker(time.Duration(float64(time.Second) / float64(cfg.FPS)))
-	defer ticker.Stop()
-	frameInterval := time.Duration(float64(time.Second) / float64(cfg.FPS))
+	if runtime != nil {
+		runtime.SetFloorAdapterConnectedLegacy()
+		defer runtime.SetFloorAdapterDisconnected()
+	}
 
 	startedAt := time.Now()
 	if runtime != nil && cfg.PressureAddr != "" {
 		go pressureEventLoop(ctx, cfg, runtime, startedAt)
 	}
-	var sequence uint64
-	var lastReplayFrame *recordingpb.FrameRecord
-	for now := range ticker.C {
-		sequence++
-		frame := makeFrame(sequence, now, now.Sub(startedAt).Seconds(), runtime)
-		if replayRecorder, ok := runtime.recorder.(interface {
-			RecordFrame(*recordingpb.FrameRecord) error
-		}); ok {
-			for _, catchUpFrame := range replayCatchUpFrames(lastReplayFrame, frame, frameInterval) {
-				if err := replayRecorder.RecordFrame(catchUpFrame); err != nil {
-					log.Printf("replay catch-up frame: %v", err)
-				}
-				lastReplayFrame = catchUpFrame
-			}
-			sequence = frame.GetSequence()
-			if err := replayRecorder.RecordFrame(frame); err != nil {
-				log.Printf("replay frame: %v", err)
-			}
-			if strings.TrimSpace(frame.GetSessionId()) != "" {
-				lastReplayFrame = cloneFrameRecord(frame)
-			} else {
-				lastReplayFrame = nil
-			}
-		}
+	writer := bufio.NewWriterSize(conn, 1<<20)
+	return streamFrames(ctx, cfg, runtime, startedAt, func(frame *recordingpb.FrameRecord) error {
 		if err := pbstream.Write(writer, frame); err != nil {
 			return err
 		}
-		if err := writer.Flush(); err != nil {
-			return err
+		return writer.Flush()
+	})
+}
+
+func streamFrames(ctx context.Context, cfg config, runtime *gameRuntime, startedAt time.Time, writeFrame func(*recordingpb.FrameRecord) error) error {
+	ticker := time.NewTicker(time.Duration(float64(time.Second) / float64(cfg.FPS)))
+	defer ticker.Stop()
+	frameInterval := time.Duration(float64(time.Second) / float64(cfg.FPS))
+	var sequence uint64
+	var lastReplayFrame *recordingpb.FrameRecord
+	for {
+		select {
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case now := <-ticker.C:
+			sequence++
+			frame := makeFrame(sequence, now, now.Sub(startedAt).Seconds(), runtime)
+			if replayRecorder, ok := runtime.recorder.(interface {
+				RecordFrame(*recordingpb.FrameRecord) error
+			}); ok {
+				for _, catchUpFrame := range replayCatchUpFrames(lastReplayFrame, frame, frameInterval) {
+					if err := replayRecorder.RecordFrame(catchUpFrame); err != nil {
+						log.Printf("replay catch-up frame: %v", err)
+					}
+					lastReplayFrame = catchUpFrame
+				}
+				sequence = frame.GetSequence()
+				if err := replayRecorder.RecordFrame(frame); err != nil {
+					log.Printf("replay frame: %v", err)
+				}
+				if strings.TrimSpace(frame.GetSessionId()) != "" {
+					lastReplayFrame = cloneFrameRecord(frame)
+				} else {
+					lastReplayFrame = nil
+				}
+			}
+			if err := writeFrame(frame); err != nil {
+				return err
+			}
 		}
 	}
-	return nil
 }
 
 func pressureEventLoop(ctx context.Context, cfg config, runtime *gameRuntime, startedAt time.Time) {

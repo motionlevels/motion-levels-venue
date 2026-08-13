@@ -14,6 +14,7 @@ exec /app/bin/game-engine \
   -http "${MOTION_LEVELS_ENGINE_HTTP:-127.0.0.1:4102}" \
   -controller "${MOTION_LEVELS_CONTROLLER_FRAMES:-127.0.0.1:4201}" \
   -pressure-events "${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS:-127.0.0.1:4202}" \
+  -controller-duplex "${MOTION_LEVELS_CONTROLLER_DUPLEX:-127.0.0.1:4203}" \
   -game salvapantallas \
   -fps "${MOTION_LEVELS_ENGINE_FPS:-50}" \
   -brightness "${MOTION_LEVELS_ENGINE_BRIGHTNESS:-100}" \

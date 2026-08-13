@@ -14,6 +14,7 @@ ExecStart=/opt/motion-levels/rebuild/current/bin/game-engine \
   -http ${MOTION_LEVELS_ENGINE_HTTP} \
   -controller ${MOTION_LEVELS_CONTROLLER_FRAMES} \
   -pressure-events ${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS} \
+  -controller-duplex ${MOTION_LEVELS_CONTROLLER_DUPLEX} \
   -game salvapantallas \
   -fps ${MOTION_LEVELS_ENGINE_FPS} \
   -brightness ${MOTION_LEVELS_ENGINE_BRIGHTNESS} \

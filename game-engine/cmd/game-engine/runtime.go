@@ -92,6 +92,8 @@ type gameRuntime struct {
 
 	displayClient           displayClientReport
 	displayClientReceivedAt time.Time
+	floorAdapter            floorAdapterStatus
+	liveFloorPublisher      *liveFloorPublisher
 }
 
 type ambientTouch struct {
@@ -323,6 +325,7 @@ type runtimeStatus struct {
 	SessionID                string                       `json:"sessionId"`
 	LastPressureUnix         int64                        `json:"lastPressureUnix"`
 	PressureStreamConnected  bool                         `json:"pressureStreamConnected"`
+	FloorAdapter             floorAdapterStatus           `json:"floorAdapter"`
 	RNGSeed                  int64                        `json:"rngSeed"`
 	Recorder                 any                          `json:"recorder"`
 	FinishedLevelAttempts    []finishedLevelAttemptStatus `json:"finishedLevelAttempts,omitempty"`
@@ -1171,6 +1174,7 @@ func (r *gameRuntime) statusAt(now time.Time) (runtimeStatus, displayStatus) {
 	sessionID := r.sessionID
 	lastPressureInput := r.lastPressureInput
 	pressureConnected := r.pressureConnected
+	floorAdapter := r.floorAdapter
 	rngSeed := r.rngSeed
 	paused := r.paused
 	game := r.game
@@ -1232,6 +1236,7 @@ func (r *gameRuntime) statusAt(now time.Time) (runtimeStatus, displayStatus) {
 		SessionID:                sessionID,
 		LastPressureUnix:         unixOrZero(lastPressureInput),
 		PressureStreamConnected:  pressureConnected,
+		FloorAdapter:             floorAdapter,
 		RNGSeed:                  rngSeed,
 		Recorder:                 recorderStats,
 		FinishedLevelAttempts:    recentAttempts,

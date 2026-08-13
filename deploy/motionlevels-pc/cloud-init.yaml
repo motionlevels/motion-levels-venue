@@ -448,6 +448,7 @@ write_files:
 
       MOTION_LEVELS_CONTROLLER_FRAMES=127.0.0.1:4201
       MOTION_LEVELS_CONTROLLER_INPUT_EVENTS=127.0.0.1:4202
+      MOTION_LEVELS_CONTROLLER_DUPLEX=127.0.0.1:4203
 
       MOTION_LEVELS_FLOOR_RECV_PORT=7800
       MOTION_LEVELS_LED_BROADCAST_IP=255.255.255.255
@@ -460,8 +461,6 @@ write_files:
       # Tailnet hostname for the platform gateway links (Menu/Display/Controller/Engine).
       # Kept separate from the label so the room can be renamed freely.
       MOTION_LEVELS_CONTROLLER_HOSTNAME=motionlevels-1
-      # Controller frame recording is opt-in; leave upload disabled by default.
-      MOTION_LEVELS_RECORDING_UPLOAD_PLATFORM_URL=
       MOTION_LEVELS_LIVE_PUSH_PLATFORM_URL=https://platform.motionlevels.obis.dev
       MOTION_LEVELS_LIVE_PUSH_FPS=5
       MOTION_LEVELS_LIVE_PUSH_TIMEOUT=10s
@@ -725,6 +724,7 @@ write_files:
         -http ${MOTION_LEVELS_CONTROLLER_HTTP} \
         -frames ${MOTION_LEVELS_CONTROLLER_FRAMES} \
         -input-events ${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS} \
+        -duplex ${MOTION_LEVELS_CONTROLLER_DUPLEX} \
         -recv-port ${MOTION_LEVELS_FLOOR_RECV_PORT} \
         -broadcast-ip ${MOTION_LEVELS_LED_BROADCAST_IP} \
         -broadcast-port ${MOTION_LEVELS_LED_BROADCAST_PORT} \
@@ -763,6 +763,7 @@ write_files:
         -http ${MOTION_LEVELS_ENGINE_HTTP} \
         -controller ${MOTION_LEVELS_CONTROLLER_FRAMES} \
         -pressure-events ${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS} \
+        -controller-duplex ${MOTION_LEVELS_CONTROLLER_DUPLEX} \
         -game salvapantallas \
         -fps ${MOTION_LEVELS_ENGINE_FPS} \
         -brightness ${MOTION_LEVELS_ENGINE_BRIGHTNESS} \

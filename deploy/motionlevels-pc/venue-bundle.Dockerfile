@@ -24,6 +24,7 @@ RUN node ./scripts/install-player-menu-from-games-bundle.mjs \
     --output-root ./player-menu
 
 FROM ${GO_IMAGE} AS runtime-build
+ARG BUILD_REVISION=unknown
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2-dev \
     libudev-dev \
@@ -40,7 +41,7 @@ COPY game-bundles ./game-bundles
 COPY content ./content
 RUN go test ./game-engine/cmd/game-engine \
     && mkdir -p /release/bin \
-    && go build -trimpath -ldflags="-s -w" -o /release/bin/game-engine ./game-engine/cmd/game-engine
+    && go build -trimpath -ldflags="-s -w -X main.buildRevision=${BUILD_REVISION}" -o /release/bin/game-engine ./game-engine/cmd/game-engine
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \

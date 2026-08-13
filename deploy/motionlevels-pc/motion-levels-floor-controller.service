@@ -12,6 +12,7 @@ ExecStart=/opt/motion-levels/rebuild/current/bin/floor-controller \
   -http ${MOTION_LEVELS_CONTROLLER_HTTP} \
   -frames ${MOTION_LEVELS_CONTROLLER_FRAMES} \
   -input-events ${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS} \
+  -duplex ${MOTION_LEVELS_CONTROLLER_DUPLEX} \
   -recv-port ${MOTION_LEVELS_FLOOR_RECV_PORT} \
   -broadcast-ip ${MOTION_LEVELS_LED_BROADCAST_IP} \
   -broadcast-port ${MOTION_LEVELS_LED_BROADCAST_PORT} \

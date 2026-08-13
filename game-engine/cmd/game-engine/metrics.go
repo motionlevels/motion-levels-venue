@@ -151,6 +151,17 @@ func renderEngineMetrics(game *gameRuntime, now time.Time) string {
 		"game", status.CurrentGame, "source_kind", status.SourceKind, "runtime", perf.Runtime)
 	p.metric("motion_levels_engine_session_active", "Whether a non-ambient game session is active.", "gauge", boolMetric(status.SessionID != ""))
 	p.metric("motion_levels_engine_pressure_stream_connected", "Whether controller pressure input is connected.", "gauge", boolMetric(status.PressureStreamConnected))
+	adapter := status.FloorAdapter
+	p.metric("motion_levels_engine_floor_adapter_connected", "Whether the hardware floor adapter transport is connected.", "gauge", boolMetric(adapter.Connected))
+	p.metric("motion_levels_engine_floor_adapter_info", "Connected floor adapter protocol and build revision.", "gauge", 1, "protocol", boundedAdapterProtocol(adapter.Protocol), "revision", adapter.Revision)
+	p.metric("motion_levels_engine_floor_adapter_actual_fps", "Physical presentation rate reported by the floor adapter.", "gauge", adapter.ActualFPS)
+	p.metric("motion_levels_engine_floor_adapter_target_fps", "Physical presentation target reported by the floor adapter.", "gauge", adapter.TargetFPS)
+	p.metric("motion_levels_engine_floor_adapter_desired_frame_age_seconds", "Age of the latest desired frame as observed by the floor adapter.", "gauge", nonNegativeSeconds(adapter.DesiredFrameAgeMillis))
+	p.metric("motion_levels_engine_floor_adapter_presented_frames_total", "Frames presented by the floor adapter.", "counter", adapter.PresentedFrames)
+	p.metric("motion_levels_engine_floor_adapter_udp_send_errors_total", "Physical UDP send errors reported by the floor adapter.", "counter", adapter.UDPErrorCount)
+	p.metric("motion_levels_engine_floor_adapter_fade_ratio", "Safety fade reported in the latest observed floor frame.", "gauge", adapter.FadeRatio)
+	p.metric("motion_levels_engine_floor_adapter_status_age_seconds", "Age of the latest floor adapter status message.", "gauge", unixNanosAge(now, adapter.LastStatusUnixNanos))
+	p.metric("motion_levels_engine_floor_presented_frame_age_seconds", "Age of the latest actually presented floor snapshot.", "gauge", unixNanosAge(now, adapter.LastPresentedUnixNanos))
 	pressureAge := float64(0)
 	if status.LastPressureUnix > 0 {
 		pressureAge = now.Sub(time.Unix(status.LastPressureUnix, 0)).Seconds()
@@ -309,6 +320,33 @@ func unixMillisAge(now time.Time, millis int64) float64 {
 		return 0
 	}
 	return age
+}
+
+func unixNanosAge(now time.Time, nanos int64) float64 {
+	if nanos <= 0 {
+		return 0
+	}
+	age := now.Sub(time.Unix(0, nanos)).Seconds()
+	if age < 0 {
+		return 0
+	}
+	return age
+}
+
+func nonNegativeSeconds(millis int64) float64 {
+	if millis <= 0 {
+		return 0
+	}
+	return float64(millis) / 1000
+}
+
+func boundedAdapterProtocol(protocol string) string {
+	switch protocol {
+	case "v1", "v2":
+		return protocol
+	default:
+		return "none"
+	}
 }
 
 func boolMetric(value bool) int {
