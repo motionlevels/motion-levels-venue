@@ -18039,23 +18039,66 @@ function finiteNumber(value, fallback) {
   return Number.isFinite(number) && number >= 0 ? number : fallback;
 }
 
+// packages/runner/src/telemetry.ts
+import { performance as performance2 } from "node:perf_hooks";
+var methods = ["init", "input", "control", "tick", "status"];
+var RunnerTelemetryCollector = class {
+  startedAt = performance2.now();
+  requestsTotal = 0;
+  errorsTotal = 0;
+  methodTotals = /* @__PURE__ */ new Map();
+  lastMethod = "invalid";
+  lastRequestDurationMicros = 0;
+  observe(method, startedAt, failed2 = false) {
+    this.requestsTotal += 1;
+    if (failed2) this.errorsTotal += 1;
+    if (method !== "invalid") {
+      this.methodTotals.set(method, (this.methodTotals.get(method) ?? 0) + 1);
+    }
+    this.lastMethod = method;
+    this.lastRequestDurationMicros = Math.max(0, Math.round((performance2.now() - startedAt) * 1e3));
+    return this.snapshot();
+  }
+  snapshot() {
+    const memory = process.memoryUsage();
+    const totals = Object.fromEntries(methods.map((method) => [`${method}Total`, this.methodTotals.get(method) ?? 0]));
+    return {
+      uptimeMillis: Math.max(0, Math.round(performance2.now() - this.startedAt)),
+      requestsTotal: this.requestsTotal,
+      errorsTotal: this.errorsTotal,
+      ...totals,
+      lastMethod: this.lastMethod,
+      lastRequestDurationMicros: this.lastRequestDurationMicros,
+      rssBytes: memory.rss,
+      heapUsedBytes: memory.heapUsed
+    };
+  }
+};
+
 // packages/runner/src/runner.ts
-var sourceRevision = true ? "3b651add26e5d3e0a50c7aa9c664cbad84468fc7" : "development";
+var sourceRevision = true ? "1e9bf17c59da8b5c51b3acc4e580852bc00eab76" : "development";
 var session = new RunnerSession();
+var telemetry = new RunnerTelemetryCollector();
 var input = createInterface({ input: process.stdin, crlfDelay: Infinity });
 input.on("line", (line) => {
   let id = "";
+  let method = "invalid";
+  const startedAt = performance.now();
   try {
     const request = JSON.parse(line);
     id = String(request.id || "");
+    if (!isRunnerMethod(request.method)) throw new Error(`unsupported runner method: ${String(request.method)}`);
+    method = request.method;
     if (request.version !== runnerProtocolVersion) throw new Error(`unsupported protocol version: ${request.version}`);
     if (!id) throw new Error("request id is required");
+    const state = session.handle(request);
     const response = {
       version: runnerProtocolVersion,
       id,
       ok: true,
       sourceRevision,
-      state: session.handle(request)
+      telemetry: telemetry.observe(method, startedAt),
+      state
     };
     process.stdout.write(`${JSON.stringify(response)}
 `);
@@ -18065,9 +18108,13 @@ input.on("line", (line) => {
       id,
       ok: false,
       sourceRevision,
+      telemetry: telemetry.observe(method, startedAt, true),
       error: error instanceof Error ? error.message : String(error)
     };
     process.stdout.write(`${JSON.stringify(response)}
 `);
   }
 });
+function isRunnerMethod(value) {
+  return value === "init" || value === "input" || value === "control" || value === "tick" || value === "status";
+}

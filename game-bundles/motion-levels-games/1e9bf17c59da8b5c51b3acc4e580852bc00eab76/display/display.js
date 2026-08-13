@@ -2476,4 +2476,4 @@ Error generating stack: `+a.message+`
     font-size: 56px;
   }
 }
-`,document.head.append(t)}Ez();window.MotionLevelsGamesDisplay={revision:"3b651add26e5d3e0a50c7aa9c664cbad84468fc7",mount:xA,update:xA,unmount:Cz};})();
+`,document.head.append(t)}Ez();window.MotionLevelsGamesDisplay={revision:"1e9bf17c59da8b5c51b3acc4e580852bc00eab76",mount:xA,update:xA,unmount:Cz};})();
