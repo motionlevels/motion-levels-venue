@@ -249,11 +249,13 @@
           - curl
           - docker.io
           - ffmpeg
+          - jq
           - libasound2
           - libudev1
           - libusb-1.0-0
           - python3-opencv
           - rclone
+          - ripgrep
           - usbutils
           - v4l-utils
           - zstd
