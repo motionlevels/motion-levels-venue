@@ -151,6 +151,10 @@ The native service set is:
 - `motion-levels-hdmi-watchdog.service`
 - `caddy.service`
 
+After every native health gate succeeds, the playbook retires old display/audio/container units and
+stops and disables Docker and containerd. Their legacy storage is deliberately preserved until an
+operator explicitly approves reclaiming it; Docker is not a running production dependency.
+
 The camera environment and udev rule are rendered from production host vars. Both the playbook and
 udev reconciliation require the exact GoPro USB vendor, product, and serial; another HERO12 on the
 same port is ignored. Deployment health checks are read-only and never start or stop a recording.

@@ -152,16 +152,30 @@ test("rollback stops native units first and restores only a known stack", () => 
   assert.match(playbook, /motion_levels_legacy_camera_was_running/);
 });
 
-test("retired display and audio broker units are removed after cutover", () => {
+test("retired display, audio, and TV broker units are removed after cutover", () => {
   const variables = read("ansible/inventory/production/group_vars/all.yml");
   for (const service of [
     "motion-levels-hdmi-agent.service",
     "motion-levels-audio-keepalive.service",
     "motion-levels-audio.socket",
     "motion-levels-audio@.service",
+    "motion-levels-tv.service",
   ]) {
     assert.match(variables, new RegExp(`^\\s+- ${service.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}$`, "m"));
   }
+});
+
+test("a verified native cutover disables the retired container runtime", () => {
+  const playbook = read("ansible/playbooks/venue.yml");
+  const cameraGate = playbook.indexOf("Verify the exact GoPro through the native service");
+  const runtimeStop = playbook.indexOf("Stop and disable the retired container runtime");
+
+  assert.ok(cameraGate >= 0 && cameraGate < runtimeStop);
+  assert.match(playbook, /docker\.socket/);
+  assert.match(playbook, /docker\.service/);
+  assert.match(playbook, /containerd\.service/);
+  assert.match(playbook, /Remove successful and stale cutover rollback snapshots/);
+  assert.doesNotMatch(playbook, /state: absent[\s\S]{0,160}\/var\/lib\/docker/);
 });
 
 test("the native camera can traverse to its group-readable API token", () => {

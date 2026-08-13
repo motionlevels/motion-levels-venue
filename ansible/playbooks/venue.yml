@@ -1173,9 +1173,27 @@
       ansible.builtin.systemd_service:
         daemon_reload: true
 
-    - name: Remove the successful cutover rollback snapshot
+    - name: Clear failed state for units retired after healthy cutover
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - reset-failed
+      changed_when: false
+
+    - name: Stop and disable the retired container runtime
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      loop:
+        - docker.socket
+        - docker.service
+        - containerd.service
+      failed_when: false
+
+    - name: Remove successful and stale cutover rollback snapshots
       ansible.builtin.file:
-        path: "{{ motion_levels_rollback_root }}"
+        path: "{{ motion_levels_state_root }}/deploy-rollback"
         state: absent
 
     - name: Retain only current and previous native releases

@@ -60,6 +60,7 @@ motion_levels_retired_services:
   - motion-levels-player-menu.service
   - motion-levels-player-display.service
   - motion-levels-player-tv.service
+  - motion-levels-tv.service
   - motion-levels-camera-recorder.service
   - motion-levels-venue-containers.service
   - motion-levels-player-container.service
