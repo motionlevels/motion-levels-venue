@@ -1,9 +1,9 @@
 {
   "schema": "motion-levels-games-bundle-v2",
   "contractVersion": 2,
-  "sourceRevision": "1125f5e317d10bd166f781685ab857c938778005",
+  "sourceRevision": "da1c51da4cf08a3c2f3f3305096295bdd226e4d5",
   "sdkFps": 50,
-  "artifactDigest": "4b4c267275f6e833eb8ad49c41ba01f99cb8ded31fa742b1e3ec3f28a63d18ed",
+  "artifactDigest": "431b71f8cfc1e7602384f48d7e8ced94a6033a896ff59f0032e492ea261250d0",
   "venueRuntime": {
     "entry": "venue/runtime.mjs",
     "apiProtocolVersion": 1,
@@ -81,7 +81,7 @@
     },
     {
       "path": "display/display.js",
-      "sha256": "86f9192a6924cabd490800107243f907a0ee7fc015f103879eb0420b63492655",
+      "sha256": "4980b6ee970f808f97264b8e24cc29adc88d2ddb9dc5488d82d32be2b98eed81",
       "bytes": 622452
     },
     {
@@ -1385,8 +1385,8 @@
       "bytes": 251542
     },
     {
-      "path": "playground/assets/player-menu/index-BMMAgFgK.js",
-      "sha256": "6cf986bda2a0bd5501f6f0e096321759d83a992ff59918d7142376fbe0ddb35b",
+      "path": "playground/assets/player-menu/index-Dwr-swJP.js",
+      "sha256": "0473f5068cef2afce56e9bf0657e6eec9659619f5d558273e68f757281bd6867",
       "bytes": 382621
     },
     {
@@ -1481,13 +1481,13 @@
     },
     {
       "path": "playground/player-menu/index.html",
-      "sha256": "e6bc10c0e25073ffbfcb5399448b6e1989aaa630ba5ba2e0278b71b6ec0cee58",
+      "sha256": "700a30a6418eb5f9bd934e6d25598231a8cf4b9e07a08d7cbafe84b4250303c5",
       "bytes": 955
     },
     {
       "path": "venue/runtime.mjs",
-      "sha256": "142d8d8d3ef59e46ee7a29b2ea5c245664ad4e836f91a490919f22c8983843ea",
-      "bytes": 432115
+      "sha256": "515e5617a93b9b7d9195b036f3495a1b7af4172a4be51a72ea3129aa705f2d12",
+      "bytes": 433213
     }
   ]
 }

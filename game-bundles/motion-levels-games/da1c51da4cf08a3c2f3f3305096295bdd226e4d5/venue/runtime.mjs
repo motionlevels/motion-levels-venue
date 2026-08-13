@@ -10073,12 +10073,14 @@ var pressureBitsetBytes = floorWidth * floorHeight / 8;
 var maxDelimitedMessageBytes = 64 * 1024;
 function encodeRuntimeMessage(message) {
   const payload = message.type === "hello" ? encodeRuntimeHello(message.hello) : encodeRuntimeFrame(message.frame);
-  return fieldBytes(message.type === "hello" ? 1 : 2, payload);
+  return fieldBytes(message.type === "hello" ? 1 : 3, payload);
 }
 function decodeControllerMessage(bytes) {
   const envelope = oneofEnvelope(bytes, "controller message");
-  if (envelope.field === 1) return { type: "hello", hello: decodeControllerHello(envelope.payload) };
-  if (envelope.field === 2) return { type: "pressureChange", pressureChange: decodePressureChange(envelope.payload) };
+  if (envelope.field === 2) return { type: "hello", hello: decodeControllerHello(envelope.payload) };
+  if (envelope.field === 4) return { type: "pressureChange", pressureChange: decodePressureChange(envelope.payload) };
+  if (envelope.field === 5) return decodePresentedFrame(envelope.payload);
+  if (envelope.field === 6) return { type: "status" };
   throw new Error(`unknown controller message field: ${envelope.field}`);
 }
 function encodeDelimited(payload) {
@@ -10119,15 +10121,14 @@ function validateControllerHello(hello) {
   if (hello.width !== floorWidth || hello.height !== floorHeight) {
     throw new Error(`unsupported controller floor: ${hello.width}x${hello.height}`);
   }
-  if (hello.pressed.byteLength !== pressureBitsetBytes) {
-    throw new Error(`controller pressure bitset must be ${pressureBitsetBytes} bytes`);
-  }
   if (!hello.controllerId.trim() || hello.controllerId.length > 256) throw new Error("controller id is invalid");
   if (!Number.isInteger(hello.refreshFps) || hello.refreshFps <= 0) throw new Error("controller refresh fps is invalid");
 }
 function validateRuntimeFrame(frame) {
+  if (frame.width !== floorWidth || frame.height !== floorHeight) {
+    throw new Error(`runtime frame must be ${floorWidth}x${floorHeight}`);
+  }
   if (frame.rgb.byteLength !== floorRgbBytes) throw new Error(`runtime frame must contain ${floorRgbBytes} RGB bytes`);
-  if (frame.sessionId.length > 256 || frame.venueSessionId.length > 256) throw new Error("session id exceeds limit");
 }
 function pressureAt(bitset, x, y) {
   const index = y * floorWidth + x;
@@ -10145,9 +10146,9 @@ function encodeRuntimeFrame(value) {
   return concat([
     fieldVarint(1, value.sequence),
     fieldVarint(2, value.unixNanos),
-    fieldBytes(3, value.rgb),
-    fieldString(4, value.sessionId),
-    fieldString(5, value.venueSessionId)
+    fieldVarint(3, value.width),
+    fieldVarint(4, value.height),
+    fieldBytes(5, value.rgb)
   ]);
 }
 function decodeControllerHello(bytes) {
@@ -10157,11 +10158,26 @@ function decodeControllerHello(bytes) {
     controllerId: stringField(fields, 2),
     width: numberField(fields, 3),
     height: numberField(fields, 4),
-    refreshFps: numberField(fields, 5),
-    pressureSequence: bigintField(fields, 6),
-    pressed: bytesField(fields, 7)
+    refreshFps: numberField(fields, 5)
   };
   return hello;
+}
+function decodePresentedFrame(bytes) {
+  const fields = fieldsByNumber(bytes);
+  const width = numberField(fields, 4);
+  const height = numberField(fields, 5);
+  const pressureBits = bytesField(fields, 7);
+  if (width !== floorWidth || height !== floorHeight) {
+    throw new Error(`unsupported presented floor: ${width}x${height}`);
+  }
+  if (pressureBits.byteLength !== pressureBitsetBytes) {
+    throw new Error(`presented pressure bitset must be ${pressureBitsetBytes} bytes`);
+  }
+  return {
+    type: "presentedFrame",
+    pressureBits,
+    presentedUnixNanos: bigintField(fields, 3)
+  };
 }
 function decodePressureChange(bytes) {
   const fields = fieldsByNumber(bytes);
@@ -10179,7 +10195,7 @@ function decodePressureChange(bytes) {
 }
 function oneofEnvelope(bytes, label) {
   const fields = fieldsByNumber(bytes);
-  const candidates = [...fields.entries()].filter(([field2]) => field2 === 1 || field2 === 2);
+  const candidates = [...fields.entries()].filter(([field2]) => field2 >= 1 && field2 <= 6);
   if (candidates.length !== 1 || candidates[0]?.[1].length !== 1) throw new Error(`${label} must contain exactly one payload`);
   const [field, values] = candidates[0];
   return { field, payload: bytesValue(values[0], `${label} payload`) };
@@ -10379,7 +10395,6 @@ var ControllerClient = class {
     const message = decodeControllerMessage(payload);
     if (message.type === "hello") {
       validateControllerHello(message.hello);
-      this.resyncPressure(message.hello.pressed, message.hello.pressureSequence);
       this.helloReceived = true;
       this.controllerIdValue = message.hello.controllerId;
       this.reconnectMillis = 250;
@@ -10391,10 +10406,16 @@ var ControllerClient = class {
       }
       return;
     }
+    if (message.type === "presentedFrame") {
+      if (!this.helloReceived) throw new Error("controller hello must precede presented frames");
+      this.resyncPressure(message.pressureBits, this.pressureSequence, message.presentedUnixNanos);
+      return;
+    }
+    if (message.type === "status") return;
     if (!this.helloReceived) throw new Error("controller hello must precede pressure changes");
     if (message.pressureChange.sequence <= this.pressureSequence) return;
     if (pressureSequenceHasGap(this.pressureSequence, message.pressureChange.sequence)) {
-      throw new Error(`pressure sequence gap: ${this.pressureSequence} -> ${message.pressureChange.sequence}`);
+      this.options.log?.(`pressure sequence gap: ${this.pressureSequence} -> ${message.pressureChange.sequence}`);
     }
     this.pressureSequence = message.pressureChange.sequence;
     const { x, y, pressed, unixNanos, sequence } = message.pressureChange;
@@ -10402,8 +10423,8 @@ var ControllerClient = class {
     setPressure(this.pressed, x, y, pressed);
     this.options.onPressure({ x, y, pressed, unixNanos, sequence });
   }
-  resyncPressure(authoritative, sequence) {
-    for (const input of reconcilePressure(this.pressed, authoritative, sequence)) this.options.onPressure(input);
+  resyncPressure(authoritative, sequence, unixNanos) {
+    for (const input of reconcilePressure(this.pressed, authoritative, sequence, unixNanos)) this.options.onPressure(input);
     this.pressed = authoritative.slice();
     this.pressureSequence = sequence;
   }
@@ -10800,13 +10821,17 @@ var VenueRuntime = class {
     const ageMillis = seen ? Math.max(0, Date.now() - this.displayClientReceivedUnixMillis) : 0;
     const currentGame = String(this.status().currentGame ?? "");
     const matchesCurrentGame = seen && report.currentGame === currentGame;
-    const revisionMatches = seen && report.expectedRevision === report.loadedRevision && report.loadedRevision === this.options.sourceRevision;
     const fresh = seen && ageMillis <= 15e3;
+    const lastFeedUnixMillis = Number(report.lastFeedUnixMillis ?? 0);
+    const feedFresh = Number.isFinite(lastFeedUnixMillis) && lastFeedUnixMillis > 0 && Date.now() - lastFeedUnixMillis <= 15e3;
+    const connected = report.connected === true || report.feedTransport === "poll" && feedFresh;
+    const idleDisplay = currentGame === "salvapantallas";
+    const revisionMatches = seen && report.expectedRevision === report.loadedRevision && (idleDisplay ? report.loadedRevision === "" : report.loadedRevision === this.options.sourceRevision);
     return {
       ...report,
       seen,
       fresh,
-      healthy: fresh && report.connected === true && report.renderStatus === "ready" && matchesCurrentGame && revisionMatches,
+      healthy: fresh && connected && report.renderStatus === "ready" && matchesCurrentGame && revisionMatches,
       matchesCurrentGame,
       revisionMatches,
       receivedUnixMillis: this.displayClientReceivedUnixMillis,
@@ -10830,9 +10855,9 @@ var VenueRuntime = class {
     this.controller.sendFrame({
       sequence: this.frameSequence,
       unixNanos: BigInt(Date.now()) * 1000000n,
-      rgb: frameToRgb(frame, this.options.brightness ?? 1),
-      sessionId: this.gameSessionId,
-      venueSessionId: this.selection?.venueSessionId ?? ""
+      width: FLOOR_COLS,
+      height: FLOOR_ROWS,
+      rgb: frameToRgb(frame, this.options.brightness ?? 1)
     });
     if (now - this.lastDisplayPublishedAt >= 250) {
       this.lastDisplayPublishedAt = now;
@@ -11200,7 +11225,7 @@ var runtime = new VenueRuntime({
 function sourceRevision() {
   const environment = process.env.MOTION_LEVELS_GAMES_SOURCE_REVISION?.trim();
   if (environment) return environment;
-  if (true) return "1125f5e317d10bd166f781685ab857c938778005";
+  if (true) return "da1c51da4cf08a3c2f3f3305096295bdd226e4d5";
   return execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 }
 var address = parseHttpAddress(process.env.MOTION_LEVELS_ENGINE_HTTP?.trim() || "127.0.0.1:4102");

@@ -33,6 +33,10 @@ test("runtime and proxy use separate read-only copies of one engine token", () =
 test("venue runtime owns no audio or physical controller device boundary", () => {
   const compose = read("deploy/motionlevels-pc/docker-compose.yml");
   const engine = compose.slice(compose.indexOf("  engine:"), compose.indexOf("  camera-helper:"));
-  assert.match(engine, /MOTION_LEVELS_CONTROLLER_ADDR: floor-core:4201/);
+  const nativeService = read("deploy/motionlevels-pc/motion-levels-game-engine.service");
+  const nativePlaybook = read("ansible/playbooks/venue.yml");
+  assert.match(engine, /MOTION_LEVELS_CONTROLLER_ADDR: floor-core:4203/);
+  assert.match(nativeService, /MOTION_LEVELS_CONTROLLER_ADDR=127\.0\.0\.1:4203/);
+  assert.match(nativePlaybook, /MOTION_LEVELS_CONTROLLER_DUPLEX=127\.0\.0\.1:4203/);
   assert.doesNotMatch(engine, /MOTION_LEVELS_AUDIO|\/dev\/|floor-hardware|LED_BROADCAST/);
 });

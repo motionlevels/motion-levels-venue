@@ -771,7 +771,7 @@ write_files:
       WorkingDirectory=/opt/motion-levels/rebuild/current
       EnvironmentFile=/etc/motion-levels/motion-levels.env
       EnvironmentFile=-/etc/motion-levels/platform.env
-      Environment=MOTION_LEVELS_CONTROLLER_ADDR=127.0.0.1:4201
+      Environment=MOTION_LEVELS_CONTROLLER_ADDR=127.0.0.1:4203
       Environment=MOTION_LEVELS_GAMES_ROOT=/opt/motion-levels/rebuild/current/game-bundles/motion-levels-games
       Environment=MOTION_LEVELS_NODE_BINARY=/opt/motion-levels/rebuild/current/bin/node
       Environment=MOTION_LEVELS_CAMERA_RECORDER_TOKEN_FILE=/etc/motion-levels/camera-recorder-token

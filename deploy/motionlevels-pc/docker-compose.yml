@@ -56,7 +56,7 @@ services:
     env_file:
       - ${VENUE_RUNTIME_ENV:-/etc/motion-levels/venue/runtime.env}
     environment:
-      MOTION_LEVELS_CONTROLLER_ADDR: floor-core:4201
+      MOTION_LEVELS_CONTROLLER_ADDR: floor-core:4203
       MOTION_LEVELS_ENGINE_HTTP: 0.0.0.0:4102
       MOTION_LEVELS_ENGINE_TOKEN_FILE: /run/secrets/engine-token
       MOTION_LEVELS_PLATFORM_TOKEN_FILE: /run/secrets/platform-token

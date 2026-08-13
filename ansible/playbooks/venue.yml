@@ -501,6 +501,14 @@
         mode: "0644"
       when: motion_levels_deploy_mode in motion_levels_runtime_modes
 
+    - name: Ensure controller v2 duplex endpoint is configured
+      ansible.builtin.lineinfile:
+        path: /etc/motion-levels/motion-levels.env
+        regexp: '^MOTION_LEVELS_CONTROLLER_DUPLEX='
+        line: MOTION_LEVELS_CONTROLLER_DUPLEX=127.0.0.1:4203
+        mode: "0644"
+      when: motion_levels_deploy_mode in motion_levels_runtime_modes
+
     - name: Ensure LED broadcast env is configured
       ansible.builtin.lineinfile:
         path: /etc/motion-levels/motion-levels.env
