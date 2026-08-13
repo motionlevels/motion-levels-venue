@@ -1,0 +1,67 @@
+{
+  "gameId": "meteor-dodge",
+  "scenario": {
+    "seed": 137,
+    "playerCount": 1,
+    "difficulty": "medium",
+    "actions": [
+      {
+        "atMillis": 100,
+        "type": "press",
+        "x": 8,
+        "y": 16
+      },
+      {
+        "atMillis": 2150,
+        "type": "release",
+        "x": 8,
+        "y": 16
+      }
+    ],
+    "captureStartMillis": 2200,
+    "frameCount": 18,
+    "frameIntervalMillis": 120
+  },
+  "assets": {
+    "thumbnailSmall": {
+      "file": "meteor-dodge-thumbnail-small.webp",
+      "width": 256,
+      "height": 128,
+      "mimeType": "image/webp",
+      "bytes": 742,
+      "sha256": "6e42862768d97bef2297a30e24cb2753a3dabb315c2dd7316e5e4cc915af5716"
+    },
+    "thumbnail": {
+      "file": "meteor-dodge-thumbnail.webp",
+      "width": 1024,
+      "height": 512,
+      "mimeType": "image/webp",
+      "bytes": 2990,
+      "sha256": "4c78cc6e4c5785c9bd0d9d7f8bf23eb5b9bad873582854016a322998f2ace85e"
+    },
+    "animation": {
+      "file": "meteor-dodge-preview.webp",
+      "width": 512,
+      "height": 256,
+      "mimeType": "image/webp",
+      "bytes": 5494,
+      "sha256": "6b6251be263ac8f42f90be0dbd200f82a2b81e27b99e1732b6887d29d040bdd5"
+    },
+    "playerDisplay": {
+      "file": "meteor-dodge-player-display.webp",
+      "width": 1280,
+      "height": 720,
+      "mimeType": "image/webp",
+      "bytes": 37180,
+      "sha256": "7f9fba5481fb0de0528126bc18b23e8cae43be9dc34cc7d1d688c51471a7d4ac"
+    },
+    "playerDisplayAnimation": {
+      "file": "meteor-dodge-player-display-animation.webp",
+      "width": 640,
+      "height": 360,
+      "mimeType": "image/webp",
+      "bytes": 57284,
+      "sha256": "bece5d9523fac887c4d0a51439c2f18b924a1d7d10ef252e971c55e1407060c7"
+    }
+  }
+}
