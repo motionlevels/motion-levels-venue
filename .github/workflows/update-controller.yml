@@ -9,8 +9,8 @@ on:
         type: string
 
 permissions:
-  actions: write
   contents: write
+  actions: write
 
 concurrency:
   group: controller-pin-update
