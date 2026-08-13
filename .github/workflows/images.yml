@@ -49,6 +49,7 @@ jobs:
             deploy/motionlevels-pc/motion-levels-display-agent \
             deploy/motionlevels-pc/motion-levels-hdmi-agent \
             deploy/motionlevels-pc/motion-levels-player-container \
+            deploy/motionlevels-pc/venue-caddy \
             deploy/motionlevels-pc/venue-game-engine \
             scripts/request-venue-deployment.sh
           python3 -m py_compile \
@@ -81,6 +82,8 @@ jobs:
           : >"${config_root}/runtime.env"
           : >"${config_root}/secrets/platform-token-core"
           : >"${config_root}/secrets/camera-recorder-token-core"
+          : >"${config_root}/secrets/engine-token-core"
+          : >"${config_root}/secrets/engine-token-caddy"
           : >"${config_root}/secrets/platform-token-security"
           : >"${config_root}/secrets/tapo-password"
           cat >"${config_root}/candidate.env" <<EOF

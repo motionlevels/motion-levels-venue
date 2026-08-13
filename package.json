@@ -4,7 +4,6 @@
     "test:static": "node --test test/static/*.test.cjs",
     "check:player-menu": "npm --prefix apps/player-menu test && npm --prefix apps/player-menu run build",
     "check:player-display": "npm --prefix apps/player-display run build",
-    "check:venue-runtime": "npm --prefix apps/venue-runtime test",
     "check:cloud-init-mirrors": "node scripts/sync-cloud-init-runtime-files.mjs --check",
     "sync:cloud-init-mirrors": "node scripts/sync-cloud-init-runtime-files.mjs --sync",
     "verify:games-bundle": "node scripts/verify-motion-levels-games-bundle.mjs"

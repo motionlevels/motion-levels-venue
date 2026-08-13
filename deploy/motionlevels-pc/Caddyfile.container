@@ -16,7 +16,9 @@
 	}
 
 	handle_path /engine/* {
-		reverse_proxy engine-core:4102
+		reverse_proxy engine-core:4102 {
+			header_up X-Motion-Levels-Engine-Token "{$MOTION_LEVELS_ENGINE_TOKEN}"
+		}
 	}
 
 	# Snapshot data remains reachable through Tailscale for the platform, but

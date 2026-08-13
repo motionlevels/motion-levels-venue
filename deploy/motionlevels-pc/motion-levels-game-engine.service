@@ -1,42 +1,19 @@
 [Unit]
-Description=Motion Levels game engine
-After=network-online.target sound.target motion-levels-floor-controller.service
-Wants=network-online.target sound.target motion-levels-floor-controller.service
+Description=Motion Levels TypeScript venue runtime
+After=network-online.target motion-levels-floor-controller.service
+Wants=network-online.target motion-levels-floor-controller.service
 
 [Service]
 Type=simple
 WorkingDirectory=/opt/motion-levels/rebuild/current
 EnvironmentFile=/etc/motion-levels/motion-levels.env
 EnvironmentFile=-/etc/motion-levels/platform.env
-RuntimeDirectory=motion-levels-game-engine
-RuntimeDirectoryMode=0755
-ExecStart=/opt/motion-levels/rebuild/current/bin/game-engine \
-  -http ${MOTION_LEVELS_ENGINE_HTTP} \
-  -controller ${MOTION_LEVELS_CONTROLLER_FRAMES} \
-  -pressure-events ${MOTION_LEVELS_CONTROLLER_INPUT_EVENTS} \
-  -controller-duplex ${MOTION_LEVELS_CONTROLLER_DUPLEX} \
-  -game salvapantallas \
-  -fps ${MOTION_LEVELS_ENGINE_FPS} \
-  -brightness ${MOTION_LEVELS_ENGINE_BRIGHTNESS} \
-  -audio=true \
-  -audio-player aplay-raw \
-  -audio-assets /opt/motion-levels/rebuild/current/content/audio \
-  -record-replay /run/motion-levels-game-engine/replays \
-  -replay-keep-local=false \
-  -replay-keyframe-interval 5s \
-  -replay-zstd-path /usr/bin/zstd \
-  -display-snapshot-fps ${MOTION_LEVELS_DISPLAY_SNAPSHOT_FPS} \
-  -camera-recorder-url=${MOTION_LEVELS_CAMERA_RECORDER_URL} \
-  -camera-recorder-segment-seconds ${MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS} \
-  -platform-url ${MOTION_LEVELS_PLATFORM_URL} \
-  -platform-asset-cache ${MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR} \
-  -platform-sync-interval 1s \
-  -controller-label "${MOTION_LEVELS_CONTROLLER_LABEL}" \
-  -controller-hostname ${MOTION_LEVELS_CONTROLLER_HOSTNAME} \
-  -controller-id-file /opt/motion-levels/rebuild/var/floor-controller/controller-id
+Environment=MOTION_LEVELS_CONTROLLER_ADDR=127.0.0.1:4201
+Environment=MOTION_LEVELS_GAMES_ROOT=/opt/motion-levels/rebuild/current/game-bundles/motion-levels-games
+Environment=MOTION_LEVELS_NODE_BINARY=/opt/motion-levels/rebuild/current/bin/node
+ExecStart=/opt/motion-levels/rebuild/current/deploy/motionlevels-pc/venue-game-engine
 Restart=always
 RestartSec=2
-Environment=GOMAXPROCS=2
 
 [Install]
 WantedBy=multi-user.target

@@ -30,15 +30,13 @@ test("games release sync works without GitHub CLI on the self-hosted runner", ()
   assert.doesNotMatch(workflow, /\bgh (?:release|workflow)\b/);
 });
 
-test("CI supplies native and browser dependencies without privileged runner setup", () => {
+test("CI supplies browser dependencies without reviving the native game runtime", () => {
   const workflow = readRepoFile(".github/workflows/ci.yml");
 
-  assert.match(workflow, /golang:1\.24-bookworm/);
   assert.match(workflow, /mcr\.microsoft\.com\/playwright:v1\.62\.1-noble/);
   assert.match(workflow, /--user "\$\(id -u\):\$\(id -g\)"/);
-  assert.match(workflow, /--volume "\$GITHUB_WORKSPACE:\/workspace:ro"/);
-  assert.match(workflow, /git config --global --add safe\.directory \/workspace/);
-  assert.doesNotMatch(workflow, /sudo apt-get|playwright install --with-deps/);
+  assert.match(workflow, /--volume "\$GITHUB_WORKSPACE:\/workspace"/);
+  assert.doesNotMatch(workflow, /golang:|go test|go build|motion-go-seeds|sudo apt-get|playwright install --with-deps/);
 });
 
 test("venue core services are non-root, read-only, capability-dropped containers", () => {
@@ -117,7 +115,8 @@ test("venue release activation is automated, idle-gated, and rollback-aware", ()
   assert.doesNotMatch(activation, /same_revision/);
   assert.match(activation, /motion-levels-venue-security-recorder[\s\S]*\/api\/healthz/);
   assert.doesNotMatch(activation, /docker exec motion-levels-venue-floor[\s\S]*?platform\.motionlevels\.obis\.dev/);
-  assert.match(activation, /audio_probe \|\| return 1/);
+  assert.doesNotMatch(activation, /audio_probe|reset_audio_broker|stop_audio_broker/);
+  assert.doesNotMatch(service, /motion-levels-audio/);
   assert.match(activation, /http:\/\/127\.0\.0\.1\/controller\/health/);
   assert.match(activation, /http:\/\/127\.0\.0\.1\/engine\/api\/health/);
   assert.doesNotMatch(activation, /http:\/\/127\.0\.0\.1:410[12]/);
@@ -281,51 +280,14 @@ test("host hardware is split across exact audio, display, and HDMI boundaries", 
   assert.doesNotMatch(inventory, /motion_levels_(?:platform|website|postgres|object_storage):/);
 });
 
-test("venue audio reset is ordered and covers container rollback paths", () => {
+test("venue runtime activation is independent from the retired audio broker", () => {
   const activation = readRepoFile("deploy/motionlevels-pc/activate-venue-containers");
-  const stopBroker = activation.slice(
-    activation.indexOf("stop_audio_broker()"),
-    activation.indexOf("reset_audio_broker()"),
-  );
-  const rollback = activation.slice(
-    activation.indexOf("rollback()"),
-    activation.indexOf("restart_runtime()"),
-  );
-  const activate = activation.slice(
-    activation.indexOf("activate()"),
-    activation.indexOf("rollback()"),
-  );
-  const restart = activation.slice(activation.indexOf("restart_runtime()"));
-
-  assert.match(activation, /systemctl is-active --quiet motion-levels-audio-keepalive\.service/);
-  assert.match(
-    activation,
-    /systemctl reload-or-restart motion-levels-container-firewall\.service/,
-  );
-  assert.match(activation, /systemctl --job-mode=ignore-dependencies stop motion-levels-audio\.socket/);
-  assert.match(activation, /systemctl stop 'motion-levels-audio@\*\.service'/);
-  assert.ok(stopBroker.indexOf("motion-levels-audio.socket") < stopBroker.indexOf("motion-levels-audio@*.service"));
-  assert.ok(stopBroker.indexOf("motion-levels-audio@*.service") < stopBroker.indexOf("motion-levels-audio-keepalive.service"));
-  assert.match(
-    rollback,
-    /reset_audio_broker[\s\S]*?compose "\$previous" up[\s\S]*?reset_audio_broker[\s\S]*?compose "\$current" up/,
-  );
-  assert.match(
-    activate,
-    /compose "\$rollback_manifest" stop --timeout 120 engine[\s\S]*?stop_native[\s\S]*?reset_audio_broker/,
-  );
-  assert.match(
-    restart,
-    /systemctl stop motion-levels-venue-containers\.service[\s\S]*?reset_audio_broker[\s\S]*?systemctl start motion-levels-venue-containers\.service/,
-  );
-  assert.match(
-    activation,
-    /systemctl list-units --failed --no-legend 'motion-levels-audio@\*\.service'/,
-  );
-  assert.doesNotMatch(
-    activation,
-    /systemctl --failed --no-legend 'motion-levels-audio@\*\.service'/,
-  );
+  const service = readRepoFile("deploy/motionlevels-pc/motion-levels-venue-containers.service");
+  const compose = readRepoFile("deploy/motionlevels-pc/docker-compose.yml");
+  assert.doesNotMatch(activation, /motion-levels-audio|audio_probe|reset_audio_broker|stop_audio_broker/);
+  assert.doesNotMatch(service, /motion-levels-audio/);
+  assert.doesNotMatch(compose.slice(compose.indexOf("  engine:"), compose.indexOf("  camera-helper:")), /motion-levels-audio|\/dev\/snd/);
+  assert.match(activation, /systemctl reload-or-restart motion-levels-container-firewall\.service/);
 });
 
 test("container, hardware, and Ethernet-only Caddy routes use kernel-visible boundaries", () => {
@@ -387,15 +349,13 @@ test("venue Caddy and cloud-init expose local TV and camera proxy routes", () =>
   assert.doesNotMatch(cloudInitSource, /deploy\/homelab\/create-motionlevels-venue-vm\.sh/);
 });
 
-test("venue game-engine carries the bounded external recording segment policy", () => {
+test("security recorder carries the bounded external recording segment policy", () => {
   const makefileSource = readRepoFile("Makefile");
-  const playbookSource = readRepoFile("ansible/playbooks/venue.yml");
-  const gameEngineServiceSource = readRepoFile(
-    "deploy/motionlevels-pc/motion-levels-game-engine.service",
-  );
+  const playbookSource = readRepoFile("ansible/playbooks/venue-containers.yml");
+  const recorderSource = readRepoFile("deploy/motionlevels-pc/motion-levels-security-recorder.py");
 
-  assert.match(playbookSource, /default\('300', true\)/);
-  assert.match(gameEngineServiceSource, /-camera-recorder-segment-seconds \$\{MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS\}/);
+  assert.match(playbookSource, /MOTION_LEVELS_SECURITY_RECORDER_SEGMENT_SECONDS/);
+  assert.match(recorderSource, /MOTION_LEVELS_SECURITY_RECORDER_SEGMENT_SECONDS/);
   assert.match(makefileSource, /deployment-policy/);
   assert.match(makefileSource, /MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS="\$\$segment"/);
 });

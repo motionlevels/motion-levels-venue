@@ -346,6 +346,9 @@
         values["MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS"] = str(
             {{ motion_levels_camera_recorder_segment_seconds | default(300) | int }}
         )
+        values["MOTION_LEVELS_SECURITY_RECORDER_SEGMENT_SECONDS"] = values[
+            "MOTION_LEVELS_CAMERA_RECORDER_SEGMENT_SECONDS"
+        ]
 
         platform_token = values.get("MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_TOKEN") or values.get("MOTION_LEVELS_PLATFORM_TOKEN") or ""
         camera_password = (
@@ -355,6 +358,18 @@
             or ""
         )
         camera_recorder_secret = Path("/etc/motion-levels/camera-recorder-token")
+        engine_token_secret = Path("/etc/motion-levels/engine-token")
+        engine_token = values.get("MOTION_LEVELS_ENGINE_TOKEN") or ""
+        if not engine_token and engine_token_secret.exists():
+            engine_token = engine_token_secret.read_text(encoding="utf-8").strip()
+        if not engine_token:
+            engine_token = secrets.token_urlsafe(48)
+        engine_token_tmp = engine_token_secret.with_suffix(".tmp")
+        engine_token_tmp.write_text(engine_token, encoding="utf-8")
+        os.chown(engine_token_tmp, 0, 0)
+        os.chmod(engine_token_tmp, 0o400)
+        os.replace(engine_token_tmp, engine_token_secret)
+
         camera_recorder_token = ""
         if inventory_camera_recorder_url:
             camera_recorder_token = values.get("MOTION_LEVELS_CAMERA_RECORDER_TOKEN") or ""
@@ -385,6 +400,8 @@
         secret_specs = [
             ("platform-token-core", platform_token, 10001, 10001),
             ("camera-recorder-token-core", camera_recorder_token, 10001, 10001),
+            ("engine-token-core", engine_token, 10001, 10001),
+            ("engine-token-caddy", engine_token, 10003, 10003),
             ("platform-token-security", platform_token, 10002, 10002),
             ("tapo-password", camera_password, 10002, 10002),
         ]

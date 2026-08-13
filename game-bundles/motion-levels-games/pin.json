@@ -1,8 +1,8 @@
 {
   "schema": "motion-levels-games-pin-v1",
-  "sourceRevision": "1e9bf17c59da8b5c51b3acc4e580852bc00eab76",
-  "artifactDigest": "3f36e00ada797ffe910a5067463f76b66ce5a69d8d5a3da6faafd20a8cf3ae95",
-  "bundlePath": "1e9bf17c59da8b5c51b3acc4e580852bc00eab76",
-  "releaseTag": "games-v1.10.5",
-  "previousRevision": "e0a9f323af203ffa5f5bf39d88e2f3c975627a71"
+  "sourceRevision": "1125f5e317d10bd166f781685ab857c938778005",
+  "artifactDigest": "4b4c267275f6e833eb8ad49c41ba01f99cb8ded31fa742b1e3ec3f28a63d18ed",
+  "bundlePath": "1125f5e317d10bd166f781685ab857c938778005",
+  "releaseTag": "games-v2.0.0",
+  "previousRevision": "1e9bf17c59da8b5c51b3acc4e580852bc00eab76"
 }

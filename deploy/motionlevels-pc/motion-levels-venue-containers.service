@@ -1,7 +1,7 @@
 [Unit]
 Description=Motion Levels pinned venue containers
-Requires=docker.service motion-levels-audio.socket motion-levels-container-firewall.service
-After=docker.service motion-levels-audio.socket motion-levels-container-firewall.service network-online.target tailscaled.service
+Requires=docker.service motion-levels-container-firewall.service
+After=docker.service motion-levels-container-firewall.service network-online.target tailscaled.service
 Wants=network-online.target tailscaled.service
 ConditionPathExists=/etc/motion-levels/venue/current.env
 

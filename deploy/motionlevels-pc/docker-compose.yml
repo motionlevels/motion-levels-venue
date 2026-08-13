@@ -48,8 +48,6 @@ services:
     pull_policy: never
     container_name: motion-levels-venue-engine
     user: "10001:10001"
-    group_add:
-      - ${VENUE_AUDIO_GID:?set VENUE_AUDIO_GID}
     init: true
     restart: unless-stopped
     depends_on:
@@ -58,14 +56,9 @@ services:
     env_file:
       - ${VENUE_RUNTIME_ENV:-/etc/motion-levels/venue/runtime.env}
     environment:
-      MOTION_LEVELS_AUDIO_SOCKET: /run/motion-levels-audio/audio.sock
-      MOTION_LEVELS_CAMERA_RECORDER_TOKEN_FILE: /run/secrets/camera-recorder-token
-      MOTION_LEVELS_CONTROLLER_FRAMES: floor-core:4201
-      MOTION_LEVELS_CONTROLLER_INPUT_EVENTS: floor-core:4202
-      MOTION_LEVELS_CONTROLLER_DUPLEX: floor-core:4203
+      MOTION_LEVELS_CONTROLLER_ADDR: floor-core:4201
       MOTION_LEVELS_ENGINE_HTTP: 0.0.0.0:4102
-      MOTION_LEVELS_GAMES_ROOT: /app/game-bundles/motion-levels-games
-      MOTION_LEVELS_PLATFORM_ASSET_CACHE_DIR: /var/lib/motion-levels/platform-asset-cache
+      MOTION_LEVELS_ENGINE_TOKEN_FILE: /run/secrets/engine-token
       MOTION_LEVELS_PLATFORM_TOKEN_FILE: /run/secrets/platform-token
     networks:
       core:
@@ -75,23 +68,12 @@ services:
         ipv4_address: 172.30.53.11
     volumes:
       - type: bind
-        source: /run/motion-levels-audio
-        target: /run/motion-levels-audio
-        read_only: true
-      - type: bind
-        source: /opt/motion-levels/rebuild/var/floor-controller
-        target: /var/lib/motion-levels/floor-controller
-        read_only: true
-      - type: bind
-        source: /var/lib/motion-levels/platform-asset-cache
-        target: /var/lib/motion-levels/platform-asset-cache
-      - type: bind
         source: ${VENUE_CONFIG_ROOT:-/etc/motion-levels/venue}/secrets/platform-token-core
         target: /run/secrets/platform-token
         read_only: true
       - type: bind
-        source: ${VENUE_CONFIG_ROOT:-/etc/motion-levels/venue}/secrets/camera-recorder-token-core
-        target: /run/secrets/camera-recorder-token
+        source: ${VENUE_CONFIG_ROOT:-/etc/motion-levels/venue}/secrets/engine-token-core
+        target: /run/secrets/engine-token
         read_only: true
     read_only: true
     cap_drop: [ALL]
@@ -99,9 +81,8 @@ services:
       - no-new-privileges=true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
-      - /run/motion-levels-game-engine:rw,noexec,nosuid,nodev,size=640m,uid=10001,gid=10001
     pids_limit: 512
-    mem_limit: 1792m
+    mem_limit: 1024m
     healthcheck:
       test: [CMD, curl, -fsS, http://127.0.0.1:4102/api/health]
       interval: 5s
@@ -218,6 +199,7 @@ services:
       camera-helper:
         condition: service_healthy
     environment:
+      MOTION_LEVELS_ENGINE_TOKEN_FILE: /run/secrets/engine-token
       MOTION_LEVELS_X5_ENABLED: ${MOTION_LEVELS_X5_ENABLED:-0}
       MOTION_LEVELS_X5_UPSTREAM: ${MOTION_LEVELS_X5_UPSTREAM:-http://172.30.53.1:8040}
     ports:
@@ -239,6 +221,10 @@ services:
       - type: bind
         source: /etc/motion-levels/venue-public
         target: /srv/runtime
+        read_only: true
+      - type: bind
+        source: ${VENUE_CONFIG_ROOT:-/etc/motion-levels/venue}/secrets/engine-token-caddy
+        target: /run/secrets/engine-token
         read_only: true
     read_only: true
     cap_drop: [ALL]

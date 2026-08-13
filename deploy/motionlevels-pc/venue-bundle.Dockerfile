@@ -1,5 +1,4 @@
 ARG NODE_IMAGE=node:24-bookworm-slim
-ARG GO_IMAGE=golang:1.24-bookworm
 
 FROM ${NODE_IMAGE} AS frontends
 WORKDIR /workspace
@@ -23,44 +22,22 @@ RUN node ./scripts/install-player-menu-from-games-bundle.mjs \
     --fallback-root ./fallback \
     --output-root ./player-menu
 
-FROM ${GO_IMAGE} AS runtime-build
-ARG BUILD_REVISION=unknown
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libasound2-dev \
-    libudev-dev \
-    libusb-1.0-0-dev \
-    nodejs \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
+FROM ${NODE_IMAGE} AS games-bundle
 WORKDIR /workspace
-COPY go.mod go.sum ./
-RUN go mod download
-COPY game-engine ./game-engine
-COPY packages ./packages
-COPY game-bundles ./game-bundles
-COPY content ./content
-RUN go test ./game-engine/cmd/game-engine \
-    && mkdir -p /release/bin \
-    && go build -trimpath -ldflags="-s -w -X main.buildRevision=${BUILD_REVISION}" -o /release/bin/game-engine ./game-engine/cmd/game-engine
+COPY game-bundles/motion-levels-games ./vendor
+RUN node -e 'const fs=require("node:fs"); const pin=JSON.parse(fs.readFileSync("./vendor/pin.json")); fs.cpSync(`./vendor/${pin.bundlePath}`, "./bundle", {recursive:true})'
 
-FROM debian:bookworm-slim AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    libasound2 \
-    libudev1 \
-    libusb-1.0-0 \
-    zstd \
-    && rm -rf /var/lib/apt/lists/*
+FROM ${NODE_IMAGE} AS runtime
 ARG BUILD_REVISION=unknown
 ARG BUILD_CREATED_AT=
 LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-venue"
 LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
-COPY --from=runtime-build /release /release
+RUN mkdir -p /release/bin \
+    && cp /usr/local/bin/node /release/bin/node
 COPY --from=player-menu-assets /workspace/player-menu /release/apps/player-menu/dist
 COPY --from=frontends /workspace/apps/player-display/dist /release/apps/player-display/dist
 COPY game-bundles /release/game-bundles
-COPY content /release/content
 COPY deploy/motionlevels-pc /release/deploy/motionlevels-pc
 CMD ["sleep", "infinity"]
 
@@ -68,9 +45,6 @@ FROM ${NODE_IMAGE} AS engine-runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    libasound2 \
-    socat \
-    zstd \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 motionlevels \
     && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent motionlevels
@@ -79,15 +53,11 @@ ARG BUILD_CREATED_AT=
 LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-levels-venue"
 LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
-COPY --from=runtime-build /release/bin/game-engine /app/bin/game-engine
-COPY game-bundles /app/game-bundles
-COPY content /app/content
-COPY deploy/motionlevels-pc/aplay-raw /usr/local/bin/aplay
+COPY --from=games-bundle /workspace/bundle /app/games
 COPY deploy/motionlevels-pc/venue-game-engine /usr/local/bin/venue-game-engine
-RUN /bin/sh -n /usr/local/bin/aplay \
-    && /bin/sh -n /usr/local/bin/venue-game-engine \
-    && find /app/content /app/game-bundles -type d -exec chmod a+rx {} + \
-    && find /app/content /app/game-bundles -type f -exec chmod a+r {} +
+RUN /bin/sh -n /usr/local/bin/venue-game-engine \
+    && find /app/games -type d -exec chmod a+rx {} + \
+    && find /app/games -type f -exec chmod a+r {} +
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/venue-game-engine"]
 
@@ -142,12 +112,15 @@ LABEL org.opencontainers.image.source="https://github.com/motionlevels/motion-le
 LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED_AT}"
 COPY deploy/motionlevels-pc/Caddyfile.container /etc/caddy/Caddyfile
+COPY deploy/motionlevels-pc/venue-caddy /usr/local/bin/venue-caddy
 COPY --from=player-menu-assets /workspace/player-menu /srv/player-menu
 COPY --from=frontends /workspace/apps/player-display/dist /srv/player-display
 COPY game-bundles/motion-levels-games /srv/games
 COPY deploy/motionlevels-pc/cameras.html /srv/venue/cameras.html
-RUN caddy validate --config /etc/caddy/Caddyfile
+RUN /bin/sh -n /usr/local/bin/venue-caddy \
+    && caddy validate --config /etc/caddy/Caddyfile
 USER 10003:10003
+ENTRYPOINT ["/usr/local/bin/venue-caddy"]
 
 FROM debian:trixie-slim AS player-runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \

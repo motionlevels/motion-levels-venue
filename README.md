@@ -2,34 +2,30 @@
 
 Venue-side runtime for Motion Levels, split out of the
 [motion-levels-platform](https://github.com/motionlevels/motion-levels-platform)
-monorepo. Everything that runs on a venue PC lives here:
+monorepo. The repository owns the venue host and image boundary:
 
-- `game-engine/` — the Go game engine (HTTP API on `:4102`), including the
-  authored native games and the motion-go seed generator.
 - `apps/player-menu/` — transitional fallback build for legacy games bundles.
   The production player-menu source and revision-matched static artifact now
-  live in `motion-levels-games`; this repo retains the kiosk shell, runtime
-  adapter implementation, and deployment.
+  live in `motion-levels-games`; this repo retains packaging compatibility.
 - `apps/player-display/` — the floor/TV display frontend.
 - `packages/` — shared code: `core`, `design-tokens`, `floor-view` (TS, used by
   both frontends), `contracts` (protobuf shared with
-  [motion-levels-controller](https://github.com/motionlevels/motion-levels-controller)),
-  and `motiongo` (Go SDK for motion-go games).
+  [motion-levels-controller](https://github.com/motionlevels/motion-levels-controller)).
 - `game-bundles/motion-levels-games/` — pinned games bundle, synced from
   [motion-levels-games](https://github.com/motionlevels/motion-levels-games)
-  releases via the `Sync Motion Levels games bundle` workflow.
-- `content/audio/` — audio assets served by the engine.
+  releases via the `Sync Motion Levels games bundle` workflow. Bundle v2 owns
+  the Node venue runtime, player menu, display renderer, playground, and media.
 - `deploy/motionlevels-pc/` — venue container images, Compose model, and host
   scripts; `ansible/` — venue deploy playbooks.
+
+The old `game-engine/`, `packages/motiongo`, and `content/audio` trees are
+retained only as historical migration material. Production images do not build,
+copy, execute, or mount them, and they must not be used as a fallback.
 
 ## Development
 
 ```sh
-# Engine
-go test ./...
-go run ./game-engine/cmd/game-engine
-
-# Player menu (talks to the engine on :4102)
+# Venue frontends
 npm ci --prefix packages/floor-view
 npm ci --prefix apps/player-menu
 npm ci --prefix apps/player-display
@@ -37,45 +33,6 @@ npm test --prefix apps/player-menu
 npm test --prefix apps/player-display
 npm run dev --prefix apps/player-menu
 ```
-
-## Cross-repo mirrors
-
-The native games under `game-engine/internal/games/authored/nativegames` are
-the source of truth for motion-go games. Generated TypeScript seeds live in
-`game-engine/internal/games/authored/seeds` and are verified by tests and CI
-(`motion-go-seeds -check`).
-
-The platform repo keeps copies under `platform/app/src/lib/seed`. After
-changing an authored game:
-
-```sh
-make sync-platform-seeds PLATFORM_DIR=../motion-levels
-```
-
-then commit the refreshed seeds in the platform repo.
-
-This repo is also canonical for `packages/`, `go.mod`/`go.sum`, and
-`content/audio/`. The platform keeps mirrors because its application and image
-build consume them directly. Check or synchronize every mirror with:
-
-```sh
-make check-platform-mirrors PLATFORM_DIR=../motion-levels
-make sync-platform-mirrors PLATFORM_DIR=../motion-levels
-```
-
-The sync command changes the platform checkout, so review and commit both repos
-separately. `game-bundles/` is not copied by this command: platform and venue
-pin the same published games release through their own sync workflows.
-
-Audio generation belongs here with the canonical assets. For example:
-
-```sh
-scripts/generate-elevenlabs-narration.sh
-```
-
-Set `ELEVENLABS_API_KEY`, or put it in the ignored
-`.secrets/elevenlabs.env` file. Pass an output path and `ELEVENLABS_TEXT` to
-generate a different narration.
 
 ## Releases and deploys
 
