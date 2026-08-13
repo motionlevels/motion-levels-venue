@@ -31,13 +31,13 @@ jobs:
       GAMES_REPOSITORY: motionlevels/motion-levels-games
     steps:
       - name: Checkout venue main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: main
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 

@@ -38,7 +38,7 @@ jobs:
       VENUE_AUTO_DEPLOY_URL: ${{ vars.VENUE_AUTO_DEPLOY_URL || 'https://platform.motionlevels.obis.dev/api/venue/auto-deploy' }}
     steps:
       - name: Checkout the exact venue release
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.VENUE_DEPLOY_REVISION }}
 
