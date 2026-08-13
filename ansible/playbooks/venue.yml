@@ -463,6 +463,7 @@
             state: directory
             owner: root
             group: root
+            mode: "u=rwX,go=rX"
             recurse: true
 
         - name: Promote the complete candidate release

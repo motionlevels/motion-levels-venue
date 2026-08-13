@@ -19,6 +19,8 @@ if len(sys.argv) != 2:
     fail("usage: verify-native-release.py <release-directory>")
 
 root = Path(sys.argv[1]).resolve()
+if root.stat().st_mode & 0o777 != 0o755:
+    fail("native release root must have mode 0755")
 manifest_path = root / "release-manifest.json"
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 if manifest.get("schema") != "motion-levels-native-venue-release-v1":

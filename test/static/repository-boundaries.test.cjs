@@ -82,6 +82,7 @@ test("native releases are assembled from clean pinned sibling checkouts", () => 
   assert.match(build, /npm run verify:bundle/);
   assert.match(build, /components\/cameras\/source\/motion_levels_cameras/);
   assert.match(build, /requirements-native\.lock/);
+  assert.match(build, /chmod 0755 "\$candidate"/);
   assert.doesNotMatch(build, /pip wheel|\.whl/);
   assert.match(build, /rsync -a "\$repo_root\/deploy\/motionlevels-pc\/"/);
   assert.doesNotMatch(build, /docker|ghcr\.io|git clone/);
@@ -96,6 +97,7 @@ test("the verified native bundle contains the runtime, menu, and complete displa
   assert.match(verify, /bundle\.get\("playerMenu"/);
   assert.match(verify, /bundle\.get\("playerDisplay".*"entry"/);
   assert.match(verify, /bundle\.get\("playerDisplay".*"shellEntry"/);
+  assert.match(verify, /native release root must have mode 0755/);
   assert.match(caddy, /current\/game-bundles\/motion-levels-games\/current\/menu/);
   assert.match(caddy, /current\/game-bundles\/motion-levels-games\/current\/display/);
   assert.match(caddy, /handle_path \/camera-recorder\/\*/);

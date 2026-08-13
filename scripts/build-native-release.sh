@@ -64,6 +64,10 @@ fi
 candidate="$(mktemp -d "$build_root/.release-${venue_revision:0:12}.XXXXXX")"
 cleanup() { rm -rf "$candidate"; }
 trap cleanup EXIT
+# mktemp intentionally creates a private directory. The completed release is
+# served by Caddy and executed by dedicated system users, so its root must be
+# traversable after promotion without making any mutable state world-writable.
+chmod 0755 "$candidate"
 mkdir -p \
   "$candidate/bin" \
   "$candidate/components/controller" \
