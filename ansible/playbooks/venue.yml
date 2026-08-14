@@ -912,12 +912,102 @@
           until: motion_levels_public_health.status == 200
           loop: "{{ motion_levels_public_health_urls }}"
 
+        - name: Verify the public runtime games revision before kiosk restart
+          ansible.builtin.uri:
+            url: http://127.0.0.1/engine/api/status
+            return_content: true
+            status_code: 200
+          register: motion_levels_runtime_revision_health
+          retries: 60
+          delay: 2
+          until:
+            - motion_levels_runtime_revision_health.status == 200
+            - >-
+              (motion_levels_runtime_revision_health.json | default({})).get('sourceRevision', '')
+              == motion_levels_component_lock.components.games.revision
+
+        - name: Verify the player menu build revision before kiosk restart
+          ansible.builtin.uri:
+            url: http://127.0.0.1/menu/build.json
+            return_content: true
+            status_code: 200
+          register: motion_levels_menu_revision_health
+          retries: 60
+          delay: 2
+          until:
+            - motion_levels_menu_revision_health.status == 200
+            - >-
+              (motion_levels_menu_revision_health.json | default({})).get('gamesSourceRevision', '')
+              == motion_levels_component_lock.components.games.revision
+
+        - name: Verify the player display build revision before kiosk restart
+          ansible.builtin.uri:
+            url: http://127.0.0.1/display/build.json
+            return_content: true
+            status_code: 200
+          register: motion_levels_display_revision_health
+          retries: 60
+          delay: 2
+          until:
+            - motion_levels_display_revision_health.status == 200
+            - >-
+              (motion_levels_display_revision_health.json | default({})).get('gamesSourceRevision', '')
+              == motion_levels_component_lock.components.games.revision
+
+        - name: Record the current player display page before kiosk restart
+          ansible.builtin.uri:
+            url: http://127.0.0.1/engine/api/display-client
+            return_content: true
+            status_code: 200
+          register: motion_levels_previous_player_display
+          changed_when: false
+          failed_when: false
+
         - name: Enable and restart the kiosk and hotplug watchdog
           ansible.builtin.systemd_service:
             name: "{{ item }}"
             enabled: true
             state: restarted
           loop: "{{ motion_levels_display_services }}"
+
+        - name: Verify the activated player display rendered the locked games revision
+          ansible.builtin.uri:
+            url: http://127.0.0.1/engine/api/display-client
+            return_content: true
+            status_code: 200
+          register: motion_levels_player_display_health
+          retries: 60
+          delay: 2
+          until:
+            - motion_levels_player_display_health.status == 200
+            - motion_levels_player_display_health.json.fresh | default(false) | bool
+            - motion_levels_player_display_health.json.healthy | default(false) | bool
+            - motion_levels_player_display_health.json.renderStatus | default('') == 'ready'
+            - >-
+              motion_levels_player_display_health.json.expectedRevision | default('')
+              == motion_levels_component_lock.components.games.revision
+            - >-
+              motion_levels_player_display_health.json.loadedRevision | default('')
+              == motion_levels_component_lock.components.games.revision
+            - >-
+              motion_levels_player_display_health.json.shellRevision | default('')
+              == motion_levels_component_lock.components.games.revision
+            - (motion_levels_player_display_health.json.receivedUnixMillis | default(0) | int) > 0
+            - (motion_levels_player_display_health.json.lastPaintUnixMillis | default(0) | int) > 0
+            - >-
+              (motion_levels_player_display_health.json.pageLoadedUnixMillis | default(0) | int)
+              >
+              (
+                motion_levels_previous_player_display.get('json', {}).get('pageLoadedUnixMillis', 0)
+                | int
+              )
+            - >-
+              (
+                (
+                  (motion_levels_player_display_health.json.receivedUnixMillis | default(0) | int)
+                  - (motion_levels_player_display_health.json.lastPaintUnixMillis | default(0) | int)
+                ) | abs
+              ) <= 15000
 
         - name: Verify the complete venue snapshot
           ansible.builtin.uri:

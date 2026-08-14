@@ -144,6 +144,8 @@
 		root * {{ motion_levels_install_root }}/current/game-bundles/motion-levels-games/current/menu
 		@menu_assets path /assets/*
 		header @menu_assets Cache-Control "public, max-age=31536000, immutable"
+		@menu_build path /build.json
+		header @menu_build Cache-Control "no-store, max-age=0, must-revalidate"
 		@menu_index path / /index.html
 		header @menu_index Cache-Control "no-cache"
 		try_files {path} {path}/ /index.html
@@ -155,6 +157,8 @@
 		root * {{ motion_levels_install_root }}/current/game-bundles/motion-levels-games/current/display
 		@display_assets path /assets/*
 		header @display_assets Cache-Control "public, max-age=31536000, immutable"
+		@display_build path /build.json
+		header @display_build Cache-Control "no-store, max-age=0, must-revalidate"
 		@display_index path / /index.html
 		header @display_index Cache-Control "no-cache"
 		try_files {path} {path}/ /index.html
