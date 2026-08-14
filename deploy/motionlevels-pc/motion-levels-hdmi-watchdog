@@ -48,16 +48,112 @@ log() {
   printf 'motion-levels-hdmi-watchdog: %s\n' "$*"
 }
 
+validated_integer() {
+  local value="$1"
+  local fallback="$2"
+  local minimum="$3"
+  local maximum="$4"
+  local label="$5"
+
+  if [[ "${value}" =~ ^[0-9]+$ && ${#value} -le 9 ]] \
+    && (( 10#${value} >= minimum && 10#${value} <= maximum )); then
+    printf '%s' "$((10#${value}))"
+    return 0
+  fi
+
+  log "invalid ${label} '${value}'; using ${fallback}" >&2
+  printf '%s' "${fallback}"
+}
+
 MOTION_LEVELS_XRANDR_MODE="$(env_file_value MOTION_LEVELS_XRANDR_MODE)"
 MOTION_LEVELS_XRANDR_RATE="$(env_file_value MOTION_LEVELS_XRANDR_RATE 60)"
+MOTION_LEVELS_XRANDR_OUTPUT="$(env_file_value MOTION_LEVELS_XRANDR_OUTPUT)"
 MOTION_LEVELS_PLAYER_URL="$(env_file_value MOTION_LEVELS_PLAYER_URL http://127.0.0.1/display/)"
 MOTION_LEVELS_FORCE_ALSA_OUTPUT="$(env_file_value MOTION_LEVELS_FORCE_ALSA_OUTPUT 0)"
-POLL_SECONDS="$(env_file_value MOTION_LEVELS_HDMI_WATCHDOG_INTERVAL 10)"
-RESTART_COOLDOWN_SECONDS="$(env_file_value MOTION_LEVELS_HDMI_WATCHDOG_RESTART_COOLDOWN 45)"
-FAILURES_BEFORE_RESTART="$(env_file_value MOTION_LEVELS_HDMI_WATCHDOG_FAILURES 3)"
+POLL_SECONDS="$(validated_integer "$(env_file_value MOTION_LEVELS_HDMI_WATCHDOG_INTERVAL 10)" 10 1 3600 MOTION_LEVELS_HDMI_WATCHDOG_INTERVAL)"
+RESTART_COOLDOWN_SECONDS="$(validated_integer "$(env_file_value MOTION_LEVELS_HDMI_WATCHDOG_RESTART_COOLDOWN 45)" 45 0 86400 MOTION_LEVELS_HDMI_WATCHDOG_RESTART_COOLDOWN)"
+FAILURES_BEFORE_RESTART="$(validated_integer "$(env_file_value MOTION_LEVELS_HDMI_WATCHDOG_FAILURES 3)" 3 1 100 MOTION_LEVELS_HDMI_WATCHDOG_FAILURES)"
 
 last_restart=0
 failure_count=0
+display_state_initialized=0
+last_display_output=""
+last_display_geometry=""
+restart_pending_reason=""
+
+query_display() {
+  /usr/bin/xrandr --query --props 2>/dev/null || true
+}
+
+display_output_from_query() {
+  local query="$1"
+  local preferred_output="${2:-}"
+  awk -v preferred="${preferred_output}" '
+    $2 == "connected" {
+      if (first_connected == "") {
+        first_connected = $1
+      }
+      active = 0
+      for (field = 3; field <= NF; field += 1) {
+        if ($field ~ /^[0-9]+x[0-9]+[+-][0-9]+[+-][0-9]+/) {
+          active = 1
+          break
+        }
+      }
+      if ($1 == preferred) {
+        preferred_connected = $1
+      }
+      if (active && first_active == "") {
+        first_active = $1
+      }
+    }
+    END {
+      if (preferred_connected != "") {
+        print preferred_connected
+      } else if (first_active != "") {
+        print first_active
+      } else if (first_connected != "") {
+        print first_connected
+      }
+    }
+  ' <<<"${query}"
+}
+
+active_geometry_for_output() {
+  local query="$1"
+  local output="$2"
+  awk -v output="${output}" '
+    $1 == output && $2 == "connected" {
+      for (field = 3; field <= NF; field += 1) {
+        if ($field ~ /^[0-9]+x[0-9]+[+-][0-9]+[+-][0-9]+/) {
+          print $field
+          exit
+        }
+      }
+    }
+  ' <<<"${query}"
+}
+
+display_geometry_is_usable() {
+  local geometry="$1"
+  local size="${geometry%%[+-]*}"
+  local expected_size="${MOTION_LEVELS_XRANDR_MODE:-}"
+
+  [ -n "${geometry}" ] \
+    && [ "${size}" != "1024x768" ] \
+    && [[ "${geometry}" == *+0+0 ]] \
+    && { [ -z "${expected_size}" ] || [ "${size}" = "${expected_size}" ]; }
+}
+
+audio_state_for_output() {
+  local query="$1"
+  local output="$2"
+  awk -v output="${output}" '
+    $1 == output && $2 == "connected" { in_output = 1; next }
+    in_output && /^[^[:space:]]/ { in_output = 0 }
+    in_output && $1 == "audio:" { print $2; exit }
+  ' <<<"${query}"
+}
 
 set_hdmi_audio_on() {
   local output="$1"
@@ -80,9 +176,9 @@ configure_display() {
   local mode="${MOTION_LEVELS_XRANDR_MODE:-}"
   local rate="${MOTION_LEVELS_XRANDR_RATE:-60}"
 
-  /usr/bin/xrandr --output "${output}" --auto --primary 2>/dev/null || true
+  /usr/bin/xrandr --output "${output}" --auto --primary --pos 0x0 2>/dev/null || true
   if [ -n "${mode}" ]; then
-    /usr/bin/xrandr --output "${output}" --mode "${mode}" --rate "${rate}" 2>/dev/null || true
+    /usr/bin/xrandr --output "${output}" --mode "${mode}" --rate "${rate}" --primary --pos 0x0 2>/dev/null || true
   fi
 }
 
@@ -91,10 +187,47 @@ chromium_running() {
     pgrep -f "/usr/lib/chromium/chromium .*${MOTION_LEVELS_PLAYER_URL}" >/dev/null 2>&1
 }
 
-restart_kiosk_if_needed() {
+restart_kiosk() {
   local reason="$1"
   local now
   now="$(date +%s)"
+
+  if [ $((now - last_restart)) -lt "${RESTART_COOLDOWN_SECONDS}" ]; then
+    log "${reason}; restart cooling down"
+    return 1
+  fi
+
+  log "${reason}; restarting motion-levels-kiosk.service"
+  last_restart="${now}"
+  if systemctl restart motion-levels-kiosk.service; then
+    failure_count=0
+    return 0
+  else
+    log "${reason}; failed to restart motion-levels-kiosk.service"
+    return 1
+  fi
+}
+
+queue_kiosk_restart() {
+  restart_pending_reason="$1"
+}
+
+attempt_pending_kiosk_restart() {
+  local reason
+
+  if [ -z "${restart_pending_reason}" ]; then
+    return 0
+  fi
+
+  reason="${restart_pending_reason}"
+  if restart_kiosk "${reason}"; then
+    restart_pending_reason=""
+  fi
+  return 0
+}
+
+restart_kiosk_if_needed() {
+  local reason="$1"
 
   failure_count=$((failure_count + 1))
   if [ "${failure_count}" -lt "${FAILURES_BEFORE_RESTART}" ]; then
@@ -102,84 +235,104 @@ restart_kiosk_if_needed() {
     return 0
   fi
 
-  if [ $((now - last_restart)) -lt "${RESTART_COOLDOWN_SECONDS}" ]; then
-    log "${reason}; restart cooling down"
-    return 0
-  fi
-
-  log "${reason}; restarting motion-levels-kiosk.service"
-  systemctl restart motion-levels-kiosk.service || true
-  last_restart="${now}"
-  failure_count=0
+  queue_kiosk_restart "${reason}"
+  attempt_pending_kiosk_restart
 }
 
-while true; do
-  xrandr_output="$(/usr/bin/xrandr --query 2>/dev/null || true)"
-  output="$(printf '%s\n' "${xrandr_output}" | awk '/ connected/ { print $1; exit }')"
+watchdog_check() {
+  local xrandr_output output geometry original_geometry audio_state geometry_repaired
+  local previous_output previous_geometry state_was_initialized state_changed
+
+  previous_output="${last_display_output}"
+  previous_geometry="${last_display_geometry}"
+  state_was_initialized="${display_state_initialized}"
+
+  xrandr_output="$(query_display)"
+  output="$(display_output_from_query "${xrandr_output}" "${MOTION_LEVELS_XRANDR_OUTPUT}")"
 
   if [ -z "${xrandr_output}" ]; then
     restart_kiosk_if_needed "X display is unavailable"
-    sleep "${POLL_SECONDS}"
-    continue
+    return 0
   fi
 
   if [ -z "${output}" ]; then
     failure_count=0
+    display_state_initialized=1
+    last_display_output=""
+    last_display_geometry=""
     log "no HDMI/DP output connected"
-    sleep "${POLL_SECONDS}"
-    continue
+    return 0
   fi
 
-  geometry="$(printf '%s\n' "${xrandr_output}" | grep -oE '[0-9]+x[0-9]+\+0\+0' | head -1)"
-  size="${geometry%%+*}"
-  audio_state="$(printf '%s\n' "${xrandr_output}" | awk -v output="${output}" '
-    $1 == output && $2 == "connected" { in_output = 1; next }
-    in_output && /^[^[:space:]]/ { in_output = 0 }
-    in_output && $1 == "audio:" { print $2; exit }
-  ')"
+  geometry="$(active_geometry_for_output "${xrandr_output}" "${output}")"
+  original_geometry="${geometry}"
+  audio_state="$(audio_state_for_output "${xrandr_output}" "${output}")"
+  geometry_repaired=0
 
-  if [ -z "${geometry}" ] || [ "${size}" = "1024x768" ]; then
+  if ! display_geometry_is_usable "${geometry}"; then
     log "repairing HDMI geometry '${geometry:-none}' on ${output}"
     configure_display "${output}"
-    xrandr_output="$(/usr/bin/xrandr --query 2>/dev/null || true)"
-    geometry="$(printf '%s\n' "${xrandr_output}" | grep -oE '[0-9]+x[0-9]+\+0\+0' | head -1)"
-    size="${geometry%%+*}"
-    audio_state="$(printf '%s\n' "${xrandr_output}" | awk -v output="${output}" '
-      $1 == output && $2 == "connected" { in_output = 1; next }
-      in_output && /^[^[:space:]]/ { in_output = 0 }
-      in_output && $1 == "audio:" { print $2; exit }
-    ')"
+    geometry_repaired=1
+    xrandr_output="$(query_display)"
+    geometry="$(active_geometry_for_output "${xrandr_output}" "${output}")"
+    audio_state="$(audio_state_for_output "${xrandr_output}" "${output}")"
   fi
 
   if truthy_env "${MOTION_LEVELS_FORCE_ALSA_OUTPUT}" && [ -n "${audio_state}" ] && [ "${audio_state}" != "on" ]; then
     log "repairing HDMI audio state '${audio_state}' on ${output}"
     set_hdmi_audio_on "${output}"
-    xrandr_output="$(/usr/bin/xrandr --query 2>/dev/null || true)"
-    audio_state="$(printf '%s\n' "${xrandr_output}" | awk -v output="${output}" '
-      $1 == output && $2 == "connected" { in_output = 1; next }
-      in_output && /^[^[:space:]]/ { in_output = 0 }
-      in_output && $1 == "audio:" { print $2; exit }
-    ')"
+    xrandr_output="$(query_display)"
+    audio_state="$(audio_state_for_output "${xrandr_output}" "${output}")"
   fi
 
-  if [ -z "${geometry}" ] || [ "${size}" = "1024x768" ]; then
+  if ! display_geometry_is_usable "${geometry}"; then
+    display_state_initialized=1
+    last_display_output="${output}"
+    last_display_geometry="${geometry}"
     restart_kiosk_if_needed "bad HDMI geometry '${geometry:-none}' on ${output}"
-    sleep "${POLL_SECONDS}"
-    continue
+    return 0
+  fi
+
+  state_changed=0
+  if [ "${state_was_initialized}" -eq 1 ] \
+    && { [ "${previous_output}" != "${output}" ] || [ "${previous_geometry}" != "${geometry}" ]; }; then
+    state_changed=1
+  fi
+  display_state_initialized=1
+  last_display_output="${output}"
+  last_display_geometry="${geometry}"
+
+  if [ "${geometry_repaired}" -eq 1 ]; then
+    queue_kiosk_restart "HDMI geometry changed from '${original_geometry:-none}' to '${geometry}' on ${output}"
+  elif [ "${state_changed}" -eq 1 ]; then
+    queue_kiosk_restart "display changed from '${previous_output:-none} ${previous_geometry:-none}' to '${output} ${geometry}'"
+  fi
+
+  if [ -n "${restart_pending_reason}" ]; then
+    attempt_pending_kiosk_restart
+    return 0
   fi
 
   if truthy_env "${MOTION_LEVELS_FORCE_ALSA_OUTPUT}" && [ -n "${audio_state}" ] && [ "${audio_state}" != "on" ]; then
     restart_kiosk_if_needed "HDMI audio state is '${audio_state}' on ${output}"
-    sleep "${POLL_SECONDS}"
-    continue
+    return 0
   fi
 
   if ! chromium_running; then
     restart_kiosk_if_needed "Chromium kiosk is not running"
-    sleep "${POLL_SECONDS}"
-    continue
+    return 0
   fi
 
   failure_count=0
-  sleep "${POLL_SECONDS}"
-done
+}
+
+main() {
+  while true; do
+    watchdog_check
+    sleep "${POLL_SECONDS}"
+  done
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
