@@ -293,6 +293,33 @@ test("motionlevels-1 passes its default GoPro recording profile to the camera se
   );
 });
 
+test("motionlevels-1 stages camera media locally within explicit disk limits", () => {
+  const hostVars = read("ansible/inventory/production/host_vars/motionlevels-1.yml");
+  const environment = read("ansible/templates/motion-levels-cameras.env.j2");
+  const playbook = read("ansible/playbooks/venue.yml");
+
+  assert.match(
+    hostVars,
+    /media:\n\s+# Stage[\s\S]*?transfer_mode: local-first\n\s+spool_max_bytes: 21474836480\n\s+min_free_bytes: 16106127360/,
+  );
+  assert.match(
+    environment,
+    /^ML_CAMERAS_MEDIA_TRANSFER_MODE=\{\{ motion_levels_camera\.media\.transfer_mode \}\}$/m,
+  );
+  assert.match(
+    environment,
+    /^ML_CAMERAS_MEDIA_SPOOL_MAX_BYTES=\{\{ motion_levels_camera\.media\.spool_max_bytes \}\}$/m,
+  );
+  assert.match(
+    environment,
+    /^ML_CAMERAS_MEDIA_MIN_FREE_BYTES=\{\{ motion_levels_camera\.media\.min_free_bytes \}\}$/m,
+  );
+  assert.match(playbook, /motion_levels_camera\.media\.transfer_mode in \['direct-first', 'local-first'\]/);
+  assert.match(playbook, /motion_levels_camera\.media\.spool_max_bytes \| int > 0/);
+  assert.match(playbook, /motion_levels_camera\.media\.min_free_bytes \| int > 0/);
+  assert.doesNotMatch(environment, /^ML_CAMERAS_MEDIA_(?:SPOOL_MAX|MIN_FREE)_BYTES=[0-9]+$/m);
+});
+
 test("the native floor adapter is pinned to the venue LAN source address", () => {
   const hostVars = read("ansible/inventory/production/host_vars/motionlevels-1.yml");
   const environment = read("ansible/templates/motion-levels.env.j2");

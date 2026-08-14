@@ -41,6 +41,12 @@ motion_levels_camera:
   api_url: http://127.0.0.1:8040
   api_token_file: /etc/motion-levels/camera-recorder-token
   platform_token_file: /etc/motion-levels-cameras/platform-token
+  media:
+    # Stage managed GoPro masters on the venue disk before durable object upload.
+    # The 15 GiB reserve remains available to the OS if S3 is unavailable.
+    transfer_mode: local-first
+    spool_max_bytes: 21474836480
+    min_free_bytes: 16106127360
   twitch:
     stream_key_file: /etc/motion-levels-cameras/twitch-stream-key
     ingest_url: rtmps://ingest.global-contribute.live-video.net/app
