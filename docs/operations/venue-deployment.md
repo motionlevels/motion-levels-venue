@@ -142,7 +142,9 @@ rule remain installed and enabled, and the HDMI watchdog remains active, so supp
 reconciled automatically when it appears later.
 
 `/etc/motion-levels/stack.json` records this as `deployment_health_contract: software-only` and
-`hardware_state_contract: observed-not-gated` for operator and platform diagnostics.
+`hardware_state_contract: observed-not-gated`. A non-secret copy is served with `no-store` at
+`/stack.json` for operator and platform diagnostics; Caddy never receives access to the protected
+configuration directory.
 
 The only camera-specific pre-cutover safety check is workload state: Ansible refuses to terminate an
 actively recording capture. Durable queued or retrying uploads do not block deployment and resume

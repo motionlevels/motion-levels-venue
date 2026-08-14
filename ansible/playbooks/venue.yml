@@ -144,6 +144,7 @@
     motion_levels_managed_live_files:
       - "{{ motion_levels_config_root }}/motion-levels.env"
       - "{{ motion_levels_config_root }}/stack.json"
+      - "{{ motion_levels_state_root }}/public/stack.json"
       - /etc/asound.conf
       - /etc/motion-levels-cameras.env
       - /etc/caddy/Caddyfile
@@ -259,6 +260,7 @@
         - { path: "{{ motion_levels_install_root }}" }
         - { path: "{{ motion_levels_install_root }}/releases" }
         - { path: "{{ motion_levels_state_root }}" }
+        - { path: "{{ motion_levels_state_root }}/public" }
         - { path: "{{ motion_levels_state_root }}/floor-controller" }
         - { path: "{{ motion_levels_state_root }}/platform-asset-cache" }
         - { path: "{{ motion_levels_state_root }}/camera-recordings" }
@@ -774,6 +776,15 @@
                 "hardware_state_contract": "observed-not-gated"
               }
 
+        - name: Publish non-secret deployed stack metadata
+          ansible.builtin.copy:
+            src: "{{ motion_levels_config_root }}/stack.json"
+            dest: "{{ motion_levels_state_root }}/public/stack.json"
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0644"
+
         - name: Reload systemd for the activated release
           ansible.builtin.systemd_service:
             daemon_reload: true
@@ -793,11 +804,23 @@
           failed_when: false
           when: motion_levels_camera.enabled
 
-        - name: Enable the venue LAN address unit
+        - name: Enable and restart the venue LAN address reconciler
           ansible.builtin.systemd_service:
             name: motion-levels-lan-ip.service
             enabled: true
-            state: started
+            state: restarted
+
+        - name: Verify the venue LAN address reconciler process
+          ansible.builtin.command:
+            argv:
+              - systemctl
+              - show
+              - motion-levels-lan-ip.service
+              - --property=SubState
+              - --value
+          register: motion_levels_lan_reconciler_substate
+          changed_when: false
+          failed_when: motion_levels_lan_reconciler_substate.stdout | trim != 'running'
 
         - name: Validate the rendered Caddy configuration
           ansible.builtin.command:

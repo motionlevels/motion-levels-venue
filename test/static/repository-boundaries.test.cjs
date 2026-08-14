@@ -132,6 +132,7 @@ test("native cutover safety precedes live replacement and services activate in d
 
 test("hardware state is observable at runtime but never gates deployment", () => {
   const ansibleConfig = read("ansible.cfg");
+  const caddy = read("deploy/motionlevels-pc/Caddyfile");
   const playbook = read("ansible/playbooks/venue.yml");
   const safety = read("ansible/tasks/verify-camera-cutover-safety.yml");
   const udev = read("ansible/templates/72-motion-levels-gopro.rules.j2");
@@ -148,6 +149,9 @@ test("hardware state is observable at runtime but never gates deployment", () =>
   assert.match(playbook, /mediaPipelineConfigured/);
   assert.match(playbook, /"deployment_health_contract": "software-only"/);
   assert.match(playbook, /"hardware_state_contract": "observed-not-gated"/);
+  assert.match(playbook, /Publish non-secret deployed stack metadata/);
+  assert.match(playbook, /motion_levels_state_root \}\}\/public\/stack\.json/);
+  assert.match(caddy, /handle \/stack\.json[\s\S]*motion_levels_state_root \}\}\/public[\s\S]*Cache-Control "no-store"/);
   assert.doesNotMatch(playbook, /\bifup\b/);
   assert.match(playbook, /Queue exact GoPro hotplug reconciliation without gating activation[\s\S]*timeout[\s\S]*udevadm[\s\S]*failed_when: false/);
   assert.match(safety, /\/capture/);
@@ -229,12 +233,15 @@ test("a verified native cutover disables the retired container runtime", () => {
 test("cold boot retries optional floor networking and bounds recorder shutdown", () => {
   const floorService = read("deploy/motionlevels-pc/motion-levels-floor-controller.service");
   const installLive = read("ansible/tasks/install-native-live.yml");
+  const playbook = read("ansible/playbooks/venue.yml");
   const recorderService = read("deploy/motionlevels-pc/motion-levels-security-recorder.service");
   const recorder = read("deploy/motionlevels-pc/motion-levels-security-recorder.py");
 
   assert.match(floorService, /^After=.*motion-levels-lan-ip\.service$/m);
   assert.match(floorService, /^Wants=.*motion-levels-lan-ip\.service$/m);
   assert.doesNotMatch(floorService, /^Requires=motion-levels-lan-ip\.service$/m);
+  assert.match(playbook, /Enable and restart the venue LAN address reconciler[\s\S]*state: restarted/);
+  assert.match(playbook, /Verify the venue LAN address reconciler process[\s\S]*SubState[\s\S]*running/);
   assert.match(installLive, /while :; do[\s\S]*ip link show dev "\$interface"[\s\S]*sleep 10/);
   assert.match(installLive, /Type=simple[\s\S]*Restart=always/);
   assert.match(recorderService, /^TimeoutStopSec=20$/m);

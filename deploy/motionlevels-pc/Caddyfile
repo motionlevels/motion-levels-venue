@@ -165,7 +165,8 @@
 	}
 
 	handle /stack.json {
-		root * /etc/motion-levels
+		root * {{ motion_levels_state_root }}/public
+		header Cache-Control "no-store"
 		file_server
 	}
 
