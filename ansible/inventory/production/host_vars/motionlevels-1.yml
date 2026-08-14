@@ -25,6 +25,7 @@ motion_levels_network:
 
 motion_levels_display:
   backend: x11
+  output: HDMI-1
   mode: 1920x1080
   refresh_hz: 60
   alsa:

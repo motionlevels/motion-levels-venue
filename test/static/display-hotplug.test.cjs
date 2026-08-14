@@ -1,0 +1,298 @@
+const assert = require("node:assert/strict");
+const { spawnSync } = require("node:child_process");
+const path = require("node:path");
+const test = require("node:test");
+
+const repoRoot = path.resolve(__dirname, "../..");
+const watchdog = path.join(repoRoot, "deploy/motionlevels-pc/motion-levels-hdmi-watchdog");
+const kiosk = path.join(repoRoot, "deploy/motionlevels-pc/motion-levels-player-kiosk");
+
+function runSourcedScript(script, body) {
+  const result = spawnSync("bash", ["-c", `set -euo pipefail\nsource "$DISPLAY_SCRIPT"\n${body}`], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: { ...process.env, DISPLAY_SCRIPT: script },
+  });
+
+  assert.equal(
+    result.status,
+    0,
+    `sourced display script failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+  );
+  return result;
+}
+
+const parsingChecks = String.raw`
+fixture="$(printf '%s\n' \
+  'Screen 0: minimum 320 x 200, current 1280 x 720, maximum 16384 x 16384' \
+  'DP-1 connected primary 1280x720+0+0 (normal left inverted right x axis y axis)' \
+  '   1280x720      60.00*' \
+  'HDMI-1 connected (normal left inverted right x axis y axis)' \
+  '   1920x1080     60.00 +' \
+  'HDMI-2 disconnected (normal left inverted right x axis y axis)')"
+
+inactive_geometry="$(active_geometry_for_output "$fixture" HDMI-1)"
+active_geometry="$(active_geometry_for_output "$fixture" DP-1)"
+default_output="$(display_output_from_query "$fixture")"
+preferred_output="$(display_output_from_query "$fixture" HDMI-1)"
+test -z "$inactive_geometry"
+test "$active_geometry" = '1280x720+0+0'
+test "$default_output" = DP-1
+test "$preferred_output" = HDMI-1
+MOTION_LEVELS_XRANDR_MODE=1920x1080
+display_geometry_is_usable '1920x1080+0+0'
+! display_geometry_is_usable '3840x2160+0+0'
+! display_geometry_is_usable '1920x1080+1920+0'
+
+# A missing X server must be a normal empty observation, not a strict-mode exit.
+query_display >/dev/null
+`;
+
+test("display parsers tolerate an inactive connected output under strict shell mode", () => {
+  runSourcedScript(watchdog, parsingChecks);
+  runSourcedScript(kiosk, parsingChecks);
+});
+
+test("watchdog repairs a connected output with no active geometry", () => {
+  runSourcedScript(watchdog, String.raw`
+display_configured=0
+kiosk_restarts=0
+MOTION_LEVELS_XRANDR_OUTPUT=HDMI-1
+inactive_query() {
+  printf '%s\n' \
+    'Screen 0: minimum 320 x 200, current 1024 x 768, maximum 16384 x 16384' \
+    'HDMI-1 connected primary (normal left inverted right x axis y axis)' \
+    '   1920x1080     60.00 +'
+}
+active_query() {
+  printf '%s\n' \
+    'Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 16384 x 16384' \
+    'HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)' \
+    '   1920x1080     60.00* +' \
+    '    audio: on'
+}
+query_display() {
+  if (( display_configured )); then active_query; else inactive_query; fi
+}
+configure_display() {
+  test "$1" = HDMI-1
+  display_configured=1
+}
+systemctl() {
+  test "$1" = restart
+  test "$2" = motion-levels-kiosk.service
+  kiosk_restarts=$((kiosk_restarts + 1))
+}
+chromium_running() { return 0; }
+
+watchdog_check
+test "$display_configured" -eq 1
+test "$kiosk_restarts" -eq 1
+test "$failure_count" -eq 0
+`);
+});
+
+test("watchdog moves an offset TV to the kiosk origin and reloads Chromium", () => {
+  runSourcedScript(watchdog, String.raw`
+display_configured=0
+kiosk_restarts=0
+MOTION_LEVELS_XRANDR_OUTPUT=HDMI-1
+query_display() {
+  if (( display_configured )); then
+    printf '%s\n' \
+      'Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 16384 x 16384' \
+      'HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)'
+  else
+    printf '%s\n' \
+      'Screen 0: minimum 320 x 200, current 3840 x 1080, maximum 16384 x 16384' \
+      'DP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)' \
+      'HDMI-1 connected 1920x1080+1920+0 (normal left inverted right x axis y axis)'
+  fi
+}
+configure_display() {
+  test "$1" = HDMI-1
+  display_configured=1
+}
+systemctl() {
+  test "$1" = restart
+  test "$2" = motion-levels-kiosk.service
+  kiosk_restarts=$((kiosk_restarts + 1))
+}
+chromium_running() { return 0; }
+
+watchdog_check
+test "$display_configured" -eq 1
+test "$kiosk_restarts" -eq 1
+`);
+});
+
+test("watchdog reloads Chromium when an already-active TV reconnects", () => {
+  runSourcedScript(watchdog, String.raw`
+display_connected=0
+kiosk_restarts=0
+MOTION_LEVELS_XRANDR_MODE=1920x1080
+MOTION_LEVELS_XRANDR_OUTPUT=HDMI-1
+query_display() {
+  if (( display_connected )); then
+    printf '%s\n' \
+      'Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 16384 x 16384' \
+      'HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)'
+  else
+    printf '%s\n' \
+      'Screen 0: minimum 320 x 200, current 1024 x 768, maximum 16384 x 16384' \
+      'HDMI-1 disconnected primary (normal left inverted right x axis y axis)'
+  fi
+}
+configure_display() { return 99; }
+systemctl() {
+  kiosk_restarts=$((kiosk_restarts + 1))
+}
+chromium_running() { return 0; }
+
+watchdog_check
+display_connected=1
+watchdog_check
+test "$kiosk_restarts" -eq 1
+test -z "$restart_pending_reason"
+`);
+});
+
+test("watchdog retains a reconnect reload while restart cooldown is active", () => {
+  runSourcedScript(watchdog, String.raw`
+display_connected=0
+kiosk_restarts=0
+MOTION_LEVELS_XRANDR_MODE=1920x1080
+MOTION_LEVELS_XRANDR_OUTPUT=HDMI-1
+query_display() {
+  if (( display_connected )); then
+    printf '%s\n' \
+      'Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 16384 x 16384' \
+      'HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)'
+  else
+    printf '%s\n' \
+      'Screen 0: minimum 320 x 200, current 1024 x 768, maximum 16384 x 16384' \
+      'HDMI-1 disconnected primary (normal left inverted right x axis y axis)'
+  fi
+}
+systemctl() { kiosk_restarts=$((kiosk_restarts + 1)); }
+chromium_running() { return 0; }
+
+watchdog_check
+display_connected=1
+last_restart="$(date +%s)"
+watchdog_check
+test "$kiosk_restarts" -eq 0
+test -n "$restart_pending_reason"
+last_restart=0
+watchdog_check
+test "$kiosk_restarts" -eq 1
+test -z "$restart_pending_reason"
+`);
+});
+
+test("watchdog retries a pending reload after systemctl fails", () => {
+  runSourcedScript(watchdog, String.raw`
+display_connected=0
+restart_attempts=0
+MOTION_LEVELS_XRANDR_MODE=1920x1080
+MOTION_LEVELS_XRANDR_OUTPUT=HDMI-1
+RESTART_COOLDOWN_SECONDS=0
+query_display() {
+  if (( display_connected )); then
+    printf '%s\n' \
+      'Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 16384 x 16384' \
+      'HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)'
+  else
+    printf '%s\n' \
+      'Screen 0: minimum 320 x 200, current 1024 x 768, maximum 16384 x 16384' \
+      'HDMI-1 disconnected primary (normal left inverted right x axis y axis)'
+  fi
+}
+systemctl() {
+  restart_attempts=$((restart_attempts + 1))
+  test "$restart_attempts" -gt 1
+}
+chromium_running() { return 0; }
+
+watchdog_check
+display_connected=1
+watchdog_check
+test "$restart_attempts" -eq 1
+test -n "$restart_pending_reason"
+watchdog_check
+test "$restart_attempts" -eq 2
+test -z "$restart_pending_reason"
+`);
+});
+
+test("watchdog counts a persistent inactive mode instead of crashing", () => {
+  const result = runSourcedScript(watchdog, String.raw`
+query_display() {
+  printf '%s\n' \
+    'Screen 0: minimum 320 x 200, current 1024 x 768, maximum 16384 x 16384' \
+    'HDMI-1 connected primary (normal left inverted right x axis y axis)' \
+    '   1920x1080     60.00 +'
+}
+configure_display() { return 0; }
+chromium_running() { return 0; }
+FAILURES_BEFORE_RESTART=3
+
+watchdog_check
+test "$failure_count" -eq 1
+`);
+
+  assert.match(result.stdout, /bad HDMI geometry 'none' on HDMI-1; failure 1\/3/);
+});
+
+test("kiosk launcher retries the connected-but-inactive TV until modesetting succeeds", () => {
+  const result = runSourcedScript(kiosk, String.raw`
+display_configured=0
+MOTION_LEVELS_XRANDR_MODE=1920x1080
+MOTION_LEVELS_XRANDR_RATE=60
+MOTION_LEVELS_XRANDR_OUTPUT=HDMI-1
+query_display() {
+  if (( display_configured )); then
+    printf '%s\n' \
+      'Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 16384 x 16384' \
+      'HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)'
+  else
+    printf '%s\n' \
+      'Screen 0: minimum 320 x 200, current 1024 x 768, maximum 16384 x 16384' \
+      'HDMI-1 connected primary (normal left inverted right x axis y axis)' \
+      '   1920x1080     60.00 +'
+  fi
+}
+apply_display_mode() {
+  test "$1" = HDMI-1
+  test "$2" = 1920x1080
+  test "$3" = 60
+  display_configured=1
+}
+sleep() { return 0; }
+
+configure_display
+test "$display_configured" -eq 1
+`);
+
+  assert.match(result.stdout, /Display configured: HDMI-1 1920x1080\+0\+0/);
+});
+
+test("kiosk launcher exhausts retries cleanly while X is unavailable", () => {
+  const result = runSourcedScript(kiosk, String.raw`
+query_display() { return 0; }
+sleep() { return 0; }
+configure_display
+`);
+
+  assert.match(result.stdout, /could not configure a connected display after retries/);
+});
+
+test("watchdog rejects unsafe timing values without overflowing shell arithmetic", () => {
+  runSourcedScript(watchdog, String.raw`
+test "$(validated_integer 0008 10 1 3600 interval 2>/dev/null)" = 8
+test "$(validated_integer 0 10 1 3600 interval 2>/dev/null)" = 10
+test "$(validated_integer -1 10 1 3600 interval 2>/dev/null)" = 10
+test "$(validated_integer 99999999999999999999 10 1 3600 interval 2>/dev/null)" = 10
+test "$(validated_integer 3601 10 1 3600 interval 2>/dev/null)" = 10
+`);
+});

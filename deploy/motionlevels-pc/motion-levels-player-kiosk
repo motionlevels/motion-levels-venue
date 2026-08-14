@@ -42,6 +42,7 @@ env_file_value() {
 
 MOTION_LEVELS_XRANDR_MODE="$(env_file_value MOTION_LEVELS_XRANDR_MODE)"
 MOTION_LEVELS_XRANDR_RATE="$(env_file_value MOTION_LEVELS_XRANDR_RATE 60)"
+MOTION_LEVELS_XRANDR_OUTPUT="$(env_file_value MOTION_LEVELS_XRANDR_OUTPUT)"
 MOTION_LEVELS_PLAYER_PROFILE="$(env_file_value MOTION_LEVELS_PLAYER_PROFILE /var/lib/motion-levels/rebuild-player-chromium)"
 MOTION_LEVELS_PLAYER_URL="$(env_file_value MOTION_LEVELS_PLAYER_URL http://127.0.0.1/display/)"
 MOTION_LEVELS_FORCE_ALSA_OUTPUT="$(env_file_value MOTION_LEVELS_FORCE_ALSA_OUTPUT 0)"
@@ -55,31 +56,104 @@ truthy_env() {
   esac
 }
 
+query_display() {
+  /usr/bin/xrandr --query 2>/dev/null || true
+}
+
+display_output_from_query() {
+  local query="$1"
+  local preferred_output="${2:-}"
+  awk -v preferred="${preferred_output}" '
+    $2 == "connected" {
+      if (first_connected == "") {
+        first_connected = $1
+      }
+      active = 0
+      for (field = 3; field <= NF; field += 1) {
+        if ($field ~ /^[0-9]+x[0-9]+[+-][0-9]+[+-][0-9]+/) {
+          active = 1
+          break
+        }
+      }
+      if ($1 == preferred) {
+        preferred_connected = $1
+      }
+      if (active && first_active == "") {
+        first_active = $1
+      }
+    }
+    END {
+      if (preferred_connected != "") {
+        print preferred_connected
+      } else if (first_active != "") {
+        print first_active
+      } else if (first_connected != "") {
+        print first_connected
+      }
+    }
+  ' <<<"${query}"
+}
+
+active_geometry_for_output() {
+  local query="$1"
+  local output="$2"
+  awk -v output="${output}" '
+    $1 == output && $2 == "connected" {
+      for (field = 3; field <= NF; field += 1) {
+        if ($field ~ /^[0-9]+x[0-9]+[+-][0-9]+[+-][0-9]+/) {
+          print $field
+          exit
+        }
+      }
+    }
+  ' <<<"${query}"
+}
+
+display_geometry_is_usable() {
+  local geometry="$1"
+  local size="${geometry%%[+-]*}"
+  local expected_size="${MOTION_LEVELS_XRANDR_MODE:-}"
+
+  [ -n "${geometry}" ] \
+    && [ "${size}" != "1024x768" ] \
+    && [[ "${geometry}" == *+0+0 ]] \
+    && { [ -z "${expected_size}" ] || [ "${size}" = "${expected_size}" ]; }
+}
+
+apply_display_mode() {
+  local output="$1"
+  local mode="$2"
+  local rate="$3"
+
+  /usr/bin/xrandr --output "${output}" --auto --primary --pos 0x0 2>/dev/null || true
+  if [ -n "${mode}" ]; then
+    /usr/bin/xrandr --output "${output}" --mode "${mode}" --rate "${rate}" --primary --pos 0x0 2>/dev/null || true
+  fi
+}
+
 # 2. Enable and configure the connected display output.
 # Whenever an output (HDMI/DP) is connected we want the player visible on it,
 # so always bring the output up at its preferred mode first. Previously we only
 # attempted an explicit --mode and swallowed failures, which could leave a
 # connected TV on a phantom default resolution (e.g. 1024x768) with no signal.
 configure_display() {
-  local output mode rate geometry size
+  local xrandr_output output mode rate geometry
   mode="${MOTION_LEVELS_XRANDR_MODE:-}"
   rate="${MOTION_LEVELS_XRANDR_RATE:-60}"
   # The output may appear a few seconds after X starts (slow EDID, TV powering
   # on), and the modeset sometimes silently leaves X on the 1024x768 dummy
   # default. Retry detection AND the modeset until a real geometry is active, so
   # the TV reliably ends up on a proper resolution instead of a phantom one.
-  for _attempt in $(seq 1 15); do
-    output=$(/usr/bin/xrandr --query 2>/dev/null | awk '/ connected/ { print $1; exit }')
+  for ((_attempt = 1; _attempt <= 15; _attempt += 1)); do
+    xrandr_output="$(query_display)"
+    output="$(display_output_from_query "${xrandr_output}" "${MOTION_LEVELS_XRANDR_OUTPUT}")"
     if [ -n "${output}" ]; then
       # Preferred mode first so a connected TV always gets a real signal, then
       # the configured mode on top if it is available.
-      /usr/bin/xrandr --output "${output}" --auto --primary 2>/dev/null || true
-      if [ -n "${mode}" ]; then
-        /usr/bin/xrandr --output "${output}" --mode "${mode}" --rate "${rate}" 2>/dev/null || true
-      fi
-      geometry="$(/usr/bin/xrandr --query 2>/dev/null | grep -oE '[0-9]+x[0-9]+\+0\+0' | head -1)"
-      size="${geometry%%+*}"
-      if [ -n "${geometry}" ] && [ "${size}" != "1024x768" ]; then
+      apply_display_mode "${output}" "${mode}" "${rate}"
+      xrandr_output="$(query_display)"
+      geometry="$(active_geometry_for_output "${xrandr_output}" "${output}")"
+      if display_geometry_is_usable "${geometry}"; then
         echo "Display configured: ${output} ${geometry}"
         return 0
       fi
@@ -88,15 +162,15 @@ configure_display() {
   done
   echo "Warning: could not configure a connected display after retries; leaving X at its default."
 }
-configure_display
 
 configure_audio_output() {
-  local output control
+  local xrandr_output output control
   if ! truthy_env "${MOTION_LEVELS_FORCE_ALSA_OUTPUT}"; then
     return 0
   fi
 
-  output=$(/usr/bin/xrandr --query 2>/dev/null | awk '/ connected/ { print $1; exit }')
+  xrandr_output="$(query_display)"
+  output="$(display_output_from_query "${xrandr_output}" "${MOTION_LEVELS_XRANDR_OUTPUT}")"
   if [ -n "${output}" ]; then
     /usr/bin/xrandr --output "${output}" --set audio on 2>/dev/null || true
   fi
@@ -112,56 +186,68 @@ configure_audio_output() {
     /usr/sbin/alsactl store >/dev/null 2>&1 || true
   fi
 }
-configure_audio_output
 
-# Capture the active screen geometry so Chromium can be forced to fill it. There
-# is no window manager under this bare xinit session, so --kiosk alone keeps the
-# Chromium window at its previously saved size; an explicit --window-size makes
-# the player cover the whole TV even after the output resolution changes.
-SCREEN_GEOMETRY="$(/usr/bin/xrandr --query 2>/dev/null | grep -oE '[0-9]+x[0-9]+\+0\+0' | head -1 || true)"
-SCREEN_SIZE="${SCREEN_GEOMETRY%%+*}"
-SCREEN_WIDTH="${SCREEN_SIZE%x*}"
-SCREEN_HEIGHT="${SCREEN_SIZE#*x}"
+main() {
+  local screen_query screen_output screen_geometry screen_size screen_width screen_height
+  local user_data_dir target_url
+  local -a chrome_flags
 
-# 3. Ensure player user data directory exists
-USER_DATA_DIR="${MOTION_LEVELS_PLAYER_PROFILE}"
-mkdir -p "${USER_DATA_DIR}"
+  configure_display
+  configure_audio_output
 
-# 4. Hide mouse cursor if unclutter is available
-if command -v /usr/bin/unclutter >/dev/null 2>&1; then
-  /usr/bin/unclutter -idle 0.1 -root &
+  # Capture the active screen geometry so Chromium can be forced to fill it. There
+  # is no window manager under this bare xinit session, so --kiosk alone keeps the
+  # Chromium window at its previously saved size; an explicit --window-size makes
+  # the player cover the whole TV even after the output resolution changes.
+  screen_query="$(query_display)"
+  screen_output="$(display_output_from_query "${screen_query}" "${MOTION_LEVELS_XRANDR_OUTPUT}")"
+  screen_geometry="$(active_geometry_for_output "${screen_query}" "${screen_output}")"
+  screen_size="${screen_geometry%%[+-]*}"
+  screen_width="${screen_size%x*}"
+  screen_height="${screen_size#*x}"
+
+  # 3. Ensure player user data directory exists
+  user_data_dir="${MOTION_LEVELS_PLAYER_PROFILE}"
+  mkdir -p "${user_data_dir}"
+
+  # 4. Hide mouse cursor if unclutter is available
+  if command -v /usr/bin/unclutter >/dev/null 2>&1; then
+    /usr/bin/unclutter -idle 0.1 -root &
+  fi
+
+  # 5. Build Chromium arguments
+  chrome_flags=(
+    --kiosk
+    --no-first-run
+    --new-window
+    --user-data-dir="${user_data_dir}"
+    --noerrdialogs
+    --disable-infobars
+    --disable-session-crashed-bubble
+    --disable-translate
+    --disable-features=Translate
+    "--window-position=0,0"
+    --window-size="${MOTION_LEVELS_PLAYER_WINDOW_SIZE}"
+    --start-fullscreen
+    --check-for-update-interval=31536000
+    --autoplay-policy=no-user-gesture-required
+  )
+
+  # Force the window to cover the whole screen (no WM to maximise it for us).
+  if [ -n "${screen_width:-}" ] && [ -n "${screen_height:-}" ]; then
+    chrome_flags+=( "--window-position=0,0" "--window-size=${screen_width},${screen_height}" )
+  fi
+
+  # Chromium won't run as root without --no-sandbox
+  if [ "$(id -u)" -eq 0 ]; then
+    chrome_flags+=( --no-sandbox )
+  fi
+
+  target_url="${MOTION_LEVELS_PLAYER_URL}"
+  echo "Starting Chromium kiosk pointing to ${target_url}..."
+  exec /usr/bin/chromium "${chrome_flags[@]}" --app="${target_url}"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
 fi
-
-# 5. Build Chromium arguments
-CHROME_FLAGS=(
-  --kiosk
-  --no-first-run
-  --new-window
-  --user-data-dir="${USER_DATA_DIR}"
-  --noerrdialogs
-  --disable-infobars
-  --disable-session-crashed-bubble
-  --disable-translate
-  --disable-features=Translate
-  "--window-position=0,0"
-  --window-size="${MOTION_LEVELS_PLAYER_WINDOW_SIZE}"
-  --start-fullscreen
-  --check-for-update-interval=31536000
-  --autoplay-policy=no-user-gesture-required
-)
-
-# Force the window to cover the whole screen (no WM to maximise it for us).
-if [ -n "${SCREEN_WIDTH:-}" ] && [ -n "${SCREEN_HEIGHT:-}" ]; then
-  CHROME_FLAGS+=( "--window-position=0,0" "--window-size=${SCREEN_WIDTH},${SCREEN_HEIGHT}" )
-fi
-
-# Chromium won't run as root without --no-sandbox
-if [ "$(id -u)" -eq 0 ]; then
-  CHROME_FLAGS+=( --no-sandbox )
-fi
-
-# Determine target URL
-TARGET_URL="${MOTION_LEVELS_PLAYER_URL}"
-
-echo "Starting Chromium kiosk pointing to ${TARGET_URL}..."
-exec /usr/bin/chromium "${CHROME_FLAGS[@]}" --app="${TARGET_URL}"
