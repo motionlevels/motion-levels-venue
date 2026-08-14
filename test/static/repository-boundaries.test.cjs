@@ -131,6 +131,7 @@ test("native cutover safety precedes live replacement and services activate in d
 });
 
 test("hardware state is observable at runtime but never gates deployment", () => {
+  const ansibleConfig = read("ansible.cfg");
   const playbook = read("ansible/playbooks/venue.yml");
   const safety = read("ansible/tasks/verify-camera-cutover-safety.yml");
   const udev = read("ansible/templates/72-motion-levels-gopro.rules.j2");
@@ -145,6 +146,8 @@ test("hardware state is observable at runtime but never gates deployment", () =>
   assert.match(playbook, /Verify native camera service health independently of hardware/);
   assert.match(playbook, /http:\/\/127\.0\.0\.1:8040\/healthz/);
   assert.match(playbook, /mediaPipelineConfigured/);
+  assert.match(playbook, /"deployment_health_contract": "software-only"/);
+  assert.match(playbook, /"hardware_state_contract": "observed-not-gated"/);
   assert.doesNotMatch(playbook, /\bifup\b/);
   assert.match(playbook, /Queue exact GoPro hotplug reconciliation without gating activation[\s\S]*timeout[\s\S]*udevadm[\s\S]*failed_when: false/);
   assert.match(safety, /\/capture/);
@@ -153,6 +156,9 @@ test("hardware state is observable at runtime but never gates deployment", () =>
   assert.doesNotMatch(safety, /idVendor|idProduct|expected_serial|\/readyz/);
   assert.match(udev, /ATTR\{serial\}=="\{\{ motion_levels_camera\.expected_serial \}\}"/);
   assert.doesNotMatch(makefile, /\/readyz|usb_detected|command_ready/);
+  assert.match(ansibleConfig, /ControlMaster=no/);
+  assert.match(ansibleConfig, /ServerAliveInterval=10/);
+  assert.match(ansibleConfig, /ServerAliveCountMax=3/);
 });
 
 test("rollback stops native units first and restores only a known stack", () => {

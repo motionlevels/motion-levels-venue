@@ -19,7 +19,9 @@ Four Git revisions define a release:
 
 The production host file is
 [`ansible/inventory/production/hosts.yml`](../../ansible/inventory/production/hosts.yml), and
-`ansible.cfg` selects it by default.
+`ansible.cfg` selects it by default. It deliberately opens independent SSH connections with bounded
+connect and keepalive timeouts; a stale multiplexed control socket must not strand a deployment
+halfway through a loop.
 
 Do not put secrets in host vars. The production camera configuration references these host-only,
 non-empty files:
@@ -138,6 +140,9 @@ logs. A missing or unhealthy device can therefore leave the venue operational st
 rolling back an otherwise valid software release. The camera service and its serial-specific udev
 rule remain installed and enabled, and the HDMI watchdog remains active, so supported hardware is
 reconciled automatically when it appears later.
+
+`/etc/motion-levels/stack.json` records this as `deployment_health_contract: software-only` and
+`hardware_state_contract: observed-not-gated` for operator and platform diagnostics.
 
 The only camera-specific pre-cutover safety check is workload state: Ansible refuses to terminate an
 actively recording capture. Durable queued or retrying uploads do not block deployment and resume

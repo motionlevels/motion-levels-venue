@@ -769,7 +769,9 @@
                 "revision": "{{ motion_levels_venue_revision }}",
                 "deployed_at": "{{ ansible_facts.date_time.iso8601 }}",
                 "venue": "{{ motion_levels_venue.slug }}",
-                "target": "{{ inventory_hostname }}"
+                "target": "{{ inventory_hostname }}",
+                "deployment_health_contract": "software-only",
+                "hardware_state_contract": "observed-not-gated"
               }
 
         - name: Reload systemd for the activated release
