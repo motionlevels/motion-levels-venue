@@ -229,17 +229,23 @@ http://127.0.0.1/venue-api/v1/snapshot
 http://127.0.0.1/menu/
 http://127.0.0.1/menu/build.json
 http://127.0.0.1/display/
+http://127.0.0.1/display/build.json
 http://127.0.0.1:8040/healthz
 ```
 
-The gate also requires `sourceRevision` from `/engine/api/status` and `gamesSourceRevision` from
-`/menu/build.json` to equal the full games SHA in `venue-components.lock.json`. The kiosk is restarted
-only after those two independently served surfaces converge. Caddy serves `build.json` with
-`no-store, max-age=0, must-revalidate`; unversioned menu icons use revalidation rather than immutable
-caching. These endpoints prove that the deployed software is running, reachable, and revision
-matched. They do not require a connected camera, display, or floor. `/readyz` and the venue snapshot
-remain useful operational signals: they may report a disconnected or otherwise invalid peripheral
-without failing deployment.
+Before Chromium is restarted, the runtime status and both player build manifests must declare the
+full games SHA pinned in `venue-components.lock.json`. Caddy serves the build manifests with
+`no-store, max-age=0, must-revalidate`; hashed assets remain immutable, while unversioned menu icons
+must revalidate. The playbook then records the previous player page,
+restarts the kiosk, and waits for `/engine/api/display-client` to report a newer page load, the exact
+shell and renderer revisions, a ready renderer, and a recent paint. This makes every successful
+venue deployment an automatic, verified TV reload rather than a process-only restart.
+
+These endpoints prove that the deployed software and Chromium render loop are running and
+revision-matched. They do not require a connected camera, display, or floor, and a recent browser
+paint is still only the closest software proxy for pixels visible on the physical panel. `/readyz`
+and the venue snapshot remain useful operational signals: they may report a disconnected or
+otherwise invalid peripheral without failing deployment.
 
 For focused investigation:
 
