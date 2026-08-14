@@ -110,6 +110,14 @@ test("the verified native bundle contains the runtime, menu, and complete displa
   assert.match(runtime, /exec "\$node_binary" "\$runtime_entry"/);
 });
 
+test("Caddy leaves engine event streams uncompressed", () => {
+  const caddy = read("deploy/motionlevels-pc/Caddyfile");
+
+  assert.match(caddy, /@compressible not path \/engine\/api\/\*\/events/);
+  assert.match(caddy, /encode @compressible zstd gzip/);
+  assert.doesNotMatch(caddy, /^\s*encode zstd gzip\s*$/m);
+});
+
 test("native cutover safety precedes live replacement and services activate in dependency order", () => {
   const playbook = read("ansible/playbooks/venue.yml");
   const installLive = read("ansible/tasks/install-native-live.yml");
@@ -272,6 +280,17 @@ test("the Twitch stream key stays in a host-owned file", () => {
   assert.doesNotMatch(environment, /^ML_CAMERAS_TWITCH_STREAM_KEY=/m);
   assert.match(playbook, /motion_levels_camera\.twitch\.stream_key_file/);
   assert.match(playbook, /group: motion-levels-cameras\n\s+mode: "0440"/);
+});
+
+test("motionlevels-1 passes its default GoPro recording profile to the camera service", () => {
+  const hostVars = read("ansible/inventory/production/host_vars/motionlevels-1.yml");
+  const environment = read("ansible/templates/motion-levels-cameras.env.j2");
+
+  assert.match(hostVars, /recording:\n\s+default_profile: hero12-test-2026-08-13/);
+  assert.match(
+    environment,
+    /^ML_CAMERAS_GOPRO_DEFAULT_RECORDING_PROFILE=\{\{ motion_levels_camera\.recording\.default_profile \}\}$/m,
+  );
 });
 
 test("the native floor adapter is pinned to the venue LAN source address", () => {

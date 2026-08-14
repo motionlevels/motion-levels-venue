@@ -1,5 +1,9 @@
 :80 {
-	encode zstd gzip
+	# Compress normal HTTP responses, but never SSE. Compressing the engine's
+	# event streams buffers their small writes and forces kiosk clients onto
+	# the low-frequency polling fallback.
+	@compressible not path /engine/api/*/events
+	encode @compressible zstd gzip
 
 	handle /controller/health {
 		rewrite * /health
