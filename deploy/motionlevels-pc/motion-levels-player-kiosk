@@ -232,6 +232,9 @@ main() {
     --start-fullscreen
     --check-for-update-interval=31536000
     --autoplay-policy=no-user-gesture-required
+    --disable-background-timer-throttling
+    --disable-backgrounding-occluded-windows
+    --disable-renderer-backgrounding
   )
 
   # Route Chromium directly to the inventory-owned HDMI PCM. /etc/asound.conf

@@ -7,7 +7,7 @@ Wants=network-online.target sound.target motion-levels-kiosk.service
 Type=simple
 EnvironmentFile=/etc/motion-levels/motion-levels.env
 Environment=DISPLAY=:0
-Environment=XDG_RUNTIME_DIR=/run/user/0
+Environment=XDG_RUNTIME_DIR=/run/motion-levels-kiosk
 WorkingDirectory=/var/lib/motion-levels
 ExecStart=/usr/local/bin/motion-levels-hdmi-watchdog
 Restart=always

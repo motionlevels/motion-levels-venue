@@ -187,6 +187,32 @@ chromium_running() {
     pgrep -f "/usr/lib/chromium/chromium .*${MOTION_LEVELS_PLAYER_URL}" >/dev/null 2>&1
 }
 
+fetch_display_client() {
+  /usr/bin/curl --fail --silent --show-error --max-time 3 \
+    http://127.0.0.1:4102/api/display-client
+}
+
+display_client_healthy() {
+  local payload
+  payload="$(fetch_display_client)" || return 1
+  printf '%s' "${payload}" | /usr/bin/python3 -c '
+import json
+import sys
+
+try:
+    status = json.load(sys.stdin)
+except (json.JSONDecodeError, OSError, TypeError, ValueError):
+    raise SystemExit(1)
+raise SystemExit(
+    0
+    if isinstance(status, dict)
+    and status.get("fresh") is True
+    and status.get("healthy") is True
+    else 1
+)
+'
+}
+
 restart_kiosk() {
   local reason="$1"
   local now
@@ -235,8 +261,12 @@ restart_kiosk_if_needed() {
     return 0
   fi
 
-  queue_kiosk_restart "${reason}"
-  attempt_pending_kiosk_restart
+  # This condition is re-evaluated on every poll. Do not leave a sticky
+  # restart behind during cooldown: the renderer may recover before the next
+  # check. Persistent pending restarts are reserved for one-shot display
+  # topology changes, which cannot be rediscovered after the state snapshot
+  # advances.
+  restart_kiosk "${reason}" || true
 }
 
 watchdog_check() {
@@ -320,6 +350,11 @@ watchdog_check() {
 
   if ! chromium_running; then
     restart_kiosk_if_needed "Chromium kiosk is not running"
+    return 0
+  fi
+
+  if ! display_client_healthy; then
+    restart_kiosk_if_needed "player display heartbeat is unhealthy"
     return 0
   fi
 

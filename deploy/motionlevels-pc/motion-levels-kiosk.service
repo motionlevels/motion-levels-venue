@@ -8,7 +8,10 @@ Conflicts=getty@tty7.service display-manager.service motion-levels-player-tv.ser
 Type=simple
 EnvironmentFile=/etc/motion-levels/motion-levels.env
 Environment=DISPLAY=:0
-Environment=XDG_RUNTIME_DIR=/run/user/0
+RuntimeDirectory=motion-levels-kiosk
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=restart
+Environment=XDG_RUNTIME_DIR=/run/motion-levels-kiosk
 WorkingDirectory=/var/lib/motion-levels
 ExecStart=/usr/bin/xinit /usr/local/bin/motion-levels-player-kiosk -- :0 vt7 -nolisten tcp -s 0 -dpms
 Restart=always

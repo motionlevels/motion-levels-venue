@@ -182,6 +182,12 @@ The native service set is:
 - `motion-levels-hdmi-watchdog.service`
 - `caddy.service`
 
+The kiosk does not use root's login-scoped `/run/user/0`. systemd owns
+`/run/motion-levels-kiosk` through `RuntimeDirectory=motion-levels-kiosk`, preserves it across
+automatic kiosk restarts, and supplies it to Chromium as `XDG_RUNTIME_DIR`. The HDMI watchdog uses
+the same stable runtime path. Opening or closing an SSH login therefore cannot remove Chromium's
+runtime directory while the kiosk is running.
+
 After every native health gate succeeds, the playbook retires old display/audio/container units and
 stops and disables Docker and containerd. It then removes only the allowlisted legacy container
 helpers and manifest/config roots that could reactivate Compose or rewrite the retired
@@ -247,10 +253,21 @@ paint is still only the closest software proxy for pixels visible on the physica
 and the venue snapshot remain useful operational signals: they may report a disconnected or
 otherwise invalid peripheral without failing deployment.
 
+Runtime recovery is stricter than deployment activation. Once HDMI geometry, HDMI audio state, and
+the Chromium process are present, `motion-levels-hdmi-watchdog` reads
+`http://127.0.0.1:4102/api/display-client` with a bounded timeout. Both `fresh` and `healthy` must be
+JSON `true`; a stale heartbeat, an unreachable endpoint, or malformed JSON counts as an unhealthy
+check. A healthy response clears the accumulated failures. Repeated unhealthy checks reach
+`MOTION_LEVELS_HDMI_WATCHDOG_FAILURES` and restart only `motion-levels-kiosk.service`, subject to
+`MOTION_LEVELS_HDMI_WATCHDOG_RESTART_COOLDOWN`. This recovers a live Chromium process whose renderer,
+display feed, or heartbeat has stopped without turning browser readiness into a deployment gate.
+
 For focused investigation:
 
 ```sh
 ssh root@motionlevels-1 'journalctl -u motion-levels-venue-runtime.service -n 200 --no-pager'
+ssh root@motionlevels-1 'journalctl -u motion-levels-kiosk.service -u motion-levels-hdmi-watchdog.service -n 200 --no-pager'
+ssh root@motionlevels-1 'curl -fsS http://127.0.0.1:4102/api/display-client | jq'
 ssh root@motionlevels-1 'journalctl -u motion-levels-cameras.service -u motion-levels-gopro-reconcile.service -n 200 --no-pager'
 ssh root@motionlevels-1 'curl -fsS http://127.0.0.1/venue-api/v1/snapshot | jq'
 ssh root@motionlevels-1 'curl -fsS http://127.0.0.1:8040/api/v1/cameras/gopro-hero12/status | jq'

@@ -84,6 +84,7 @@ systemctl() {
   kiosk_restarts=$((kiosk_restarts + 1))
 }
 chromium_running() { return 0; }
+display_client_healthy() { return 0; }
 
 watchdog_check
 test "$display_configured" -eq 1
@@ -119,6 +120,7 @@ systemctl() {
   kiosk_restarts=$((kiosk_restarts + 1))
 }
 chromium_running() { return 0; }
+display_client_healthy() { return 0; }
 
 watchdog_check
 test "$display_configured" -eq 1
@@ -148,6 +150,7 @@ systemctl() {
   kiosk_restarts=$((kiosk_restarts + 1))
 }
 chromium_running() { return 0; }
+display_client_healthy() { return 0; }
 
 watchdog_check
 display_connected=1
@@ -176,6 +179,7 @@ query_display() {
 }
 systemctl() { kiosk_restarts=$((kiosk_restarts + 1)); }
 chromium_running() { return 0; }
+display_client_healthy() { return 0; }
 
 watchdog_check
 display_connected=1
@@ -213,6 +217,7 @@ systemctl() {
   test "$restart_attempts" -gt 1
 }
 chromium_running() { return 0; }
+display_client_healthy() { return 0; }
 
 watchdog_check
 display_connected=1
@@ -235,6 +240,7 @@ query_display() {
 }
 configure_display() { return 0; }
 chromium_running() { return 0; }
+display_client_healthy() { return 0; }
 FAILURES_BEFORE_RESTART=3
 
 watchdog_check
@@ -242,6 +248,151 @@ test "$failure_count" -eq 1
 `);
 
   assert.match(result.stdout, /bad HDMI geometry 'none' on HDMI-1; failure 1\/3/);
+});
+
+const activeWatchdogFixture = String.raw`
+kiosk_restarts=0
+query_display() {
+  printf '%s\n' \
+    'Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 16384 x 16384' \
+    'HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)' \
+    '   1920x1080     60.00* +' \
+    '    audio: on'
+}
+chromium_running() { return 0; }
+systemctl() {
+  test "$1" = restart
+  test "$2" = motion-levels-kiosk.service
+  kiosk_restarts=$((kiosk_restarts + 1))
+}
+`;
+
+test("watchdog accepts a fresh healthy player-display heartbeat", () => {
+  runSourcedScript(watchdog, String.raw`
+${activeWatchdogFixture}
+fetch_display_client() {
+  printf '%s\n' '{"fresh":true,"healthy":true}'
+}
+FAILURES_BEFORE_RESTART=3
+failure_count=2
+
+watchdog_check
+test "$failure_count" -eq 0
+test "$kiosk_restarts" -eq 0
+`);
+});
+
+test("watchdog restarts the kiosk after repeated stale player-display heartbeats", () => {
+  const result = runSourcedScript(watchdog, String.raw`
+${activeWatchdogFixture}
+fetch_display_client() {
+  printf '%s\n' '{"fresh":false,"healthy":false}'
+}
+FAILURES_BEFORE_RESTART=2
+RESTART_COOLDOWN_SECONDS=0
+
+watchdog_check
+test "$failure_count" -eq 1
+test "$kiosk_restarts" -eq 0
+watchdog_check
+test "$failure_count" -eq 0
+test "$kiosk_restarts" -eq 1
+`);
+
+  assert.match(result.stdout, /player display heartbeat is unhealthy; failure 1\/2/);
+  assert.match(result.stdout, /player display heartbeat is unhealthy; restarting motion-levels-kiosk\.service/);
+});
+
+test("watchdog treats malformed player-display status as unhealthy", () => {
+  const result = runSourcedScript(watchdog, String.raw`
+${activeWatchdogFixture}
+fetch_display_client() {
+  printf '%s\n' '{not-json'
+}
+FAILURES_BEFORE_RESTART=3
+
+watchdog_check
+test "$failure_count" -eq 1
+test "$kiosk_restarts" -eq 0
+`);
+
+  assert.match(result.stdout, /player display heartbeat is unhealthy; failure 1\/3/);
+});
+
+test("watchdog treats non-object and unreachable player-display status as unhealthy without tracebacks", () => {
+  for (const fetchBody of [
+    "printf '%s\\n' '[]'",
+    "printf '%s\\n' 'null'",
+    "return 1",
+  ]) {
+    const result = runSourcedScript(watchdog, String.raw`
+${activeWatchdogFixture}
+fetch_display_client() {
+  ${fetchBody}
+}
+FAILURES_BEFORE_RESTART=3
+
+watchdog_check
+test "$failure_count" -eq 1
+test "$kiosk_restarts" -eq 0
+`);
+
+    assert.doesNotMatch(result.stderr, /Traceback|AttributeError/u);
+    assert.match(result.stdout, /player display heartbeat is unhealthy; failure 1\/3/);
+  }
+});
+
+test("watchdog clears heartbeat failures after the player display recovers", () => {
+  runSourcedScript(watchdog, String.raw`
+${activeWatchdogFixture}
+display_client_state=stale
+fetch_display_client() {
+  if [ "$display_client_state" = healthy ]; then
+    printf '%s\n' '{"fresh":true,"healthy":true}'
+  else
+    printf '%s\n' '{"fresh":false,"healthy":false}'
+  fi
+}
+FAILURES_BEFORE_RESTART=3
+
+watchdog_check
+test "$failure_count" -eq 1
+display_client_state=healthy
+watchdog_check
+test "$failure_count" -eq 0
+display_client_state=stale
+watchdog_check
+test "$failure_count" -eq 1
+test "$kiosk_restarts" -eq 0
+`);
+});
+
+test("watchdog cancels a heartbeat restart when the display recovers during cooldown", () => {
+  runSourcedScript(watchdog, String.raw`
+${activeWatchdogFixture}
+display_client_state=stale
+fetch_display_client() {
+  if [ "$display_client_state" = healthy ]; then
+    printf '%s\n' '{"fresh":true,"healthy":true}'
+  else
+    printf '%s\n' '{"fresh":false,"healthy":false}'
+  fi
+}
+FAILURES_BEFORE_RESTART=1
+RESTART_COOLDOWN_SECONDS=60
+last_restart="$(date +%s)"
+
+watchdog_check
+test "$failure_count" -eq 1
+test "$kiosk_restarts" -eq 0
+test -z "$restart_pending_reason"
+display_client_state=healthy
+last_restart=0
+watchdog_check
+test "$failure_count" -eq 0
+test "$kiosk_restarts" -eq 0
+test -z "$restart_pending_reason"
+`);
 });
 
 test("kiosk launcher retries the connected-but-inactive TV until modesetting succeeds", () => {
