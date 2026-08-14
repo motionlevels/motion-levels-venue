@@ -58,10 +58,15 @@ After deployment, confirm the active venue release, engine status, menu, and dis
 
 ```sh
 make release-motionlevels-1
-ssh root@motionlevels-1 'curl -fsS http://127.0.0.1/engine/api/status | jq'
+ssh root@motionlevels-1 'curl -fsS http://127.0.0.1/engine/api/status | jq .sourceRevision'
+ssh root@motionlevels-1 'curl -fsS http://127.0.0.1/menu/build.json | jq .gamesSourceRevision'
 ssh root@motionlevels-1 'curl -fsS -o /dev/null http://127.0.0.1/menu/'
 ssh root@motionlevels-1 'curl -fsS -o /dev/null http://127.0.0.1/display/'
 ```
+
+The deployment gate performs both revision comparisons against the locked games SHA before it
+restarts the kiosk. A mismatch rolls activation back instead of presenting a new menu with an old
+runtime, or an old menu with a new runtime.
 
 Launch representative games only after the passive health checks pass. Confirm floor output, input
 events, display media, and audio with an operator present at the venue.

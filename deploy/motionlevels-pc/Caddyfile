@@ -129,13 +129,13 @@
 
 	handle /motion-levels-icon.png {
 		root * {{ motion_levels_install_root }}/current/game-bundles/motion-levels-games/current/menu
-		header Cache-Control "public, max-age=31536000, immutable"
+		header Cache-Control "no-cache, max-age=0, must-revalidate"
 		file_server
 	}
 
 	handle /motion-levels-icon.webp {
 		root * {{ motion_levels_install_root }}/current/game-bundles/motion-levels-games/current/menu
-		header Cache-Control "public, max-age=31536000, immutable"
+		header Cache-Control "no-cache, max-age=0, must-revalidate"
 		file_server
 	}
 
@@ -144,6 +144,8 @@
 		root * {{ motion_levels_install_root }}/current/game-bundles/motion-levels-games/current/menu
 		@menu_assets path /assets/*
 		header @menu_assets Cache-Control "public, max-age=31536000, immutable"
+		@menu_build path /build.json
+		header @menu_build Cache-Control "no-store, max-age=0, must-revalidate"
 		@menu_index path / /index.html
 		header @menu_index Cache-Control "no-cache"
 		try_files {path} {path}/ /index.html

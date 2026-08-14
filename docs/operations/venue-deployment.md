@@ -148,7 +148,9 @@ reconciled automatically when it appears later.
 `/etc/motion-levels/stack.json` records this as `deployment_health_contract: software-only` and
 `hardware_state_contract: observed-not-gated`. A non-secret copy is served with `no-store` at
 `/stack.json` for operator and platform diagnostics; Caddy never receives access to the protected
-configuration directory.
+configuration directory. The same document publishes the full locked revisions for the controller,
+games, and cameras components, so operators can distinguish the venue deployment revision from the
+source revisions assembled into it.
 
 The only camera-specific pre-cutover safety check is workload state: Ansible refuses to terminate an
 active capture, host recording, or Twitch broadcast. Durable queued or retrying uploads do not block
@@ -162,9 +164,11 @@ Ansible stages the verified output at
 the host, creates the camera venv using the exact hash-pinned dependencies, and promotes the complete
 directory to `/opt/motion-levels/venue/releases/<venue-sha>`.
 
-Activation records the former release in `/opt/motion-levels/venue/previous` and atomically selects
-the candidate through `/opt/motion-levels/venue/current`. systemd services execute only through
-`current`; state and recordings are not placed in a release directory.
+Activation records the former release in `/opt/motion-levels/venue/previous` and selects the
+candidate through `/opt/motion-levels/venue/current`. Both names are replaced with temporary
+symlinks created in the same directory followed by `mv -Tf`, so readers observe either the old or
+new link rather than an unlink/recreate gap. systemd services execute only through `current`; state
+and recordings are not placed in a release directory.
 
 The native service set is:
 
@@ -223,13 +227,19 @@ http://127.0.0.1/controller/health
 http://127.0.0.1/engine/api/status
 http://127.0.0.1/venue-api/v1/snapshot
 http://127.0.0.1/menu/
+http://127.0.0.1/menu/build.json
 http://127.0.0.1/display/
 http://127.0.0.1:8040/healthz
 ```
 
-These endpoints prove that the deployed software is running and reachable. They do not require a
-connected camera, display, or floor. `/readyz` and the venue snapshot remain useful operational
-signals: they may report a disconnected or otherwise invalid peripheral without failing deployment.
+The gate also requires `sourceRevision` from `/engine/api/status` and `gamesSourceRevision` from
+`/menu/build.json` to equal the full games SHA in `venue-components.lock.json`. The kiosk is restarted
+only after those two independently served surfaces converge. Caddy serves `build.json` with
+`no-store, max-age=0, must-revalidate`; unversioned menu icons use revalidation rather than immutable
+caching. These endpoints prove that the deployed software is running, reachable, and revision
+matched. They do not require a connected camera, display, or floor. `/readyz` and the venue snapshot
+remain useful operational signals: they may report a disconnected or otherwise invalid peripheral
+without failing deployment.
 
 For focused investigation:
 

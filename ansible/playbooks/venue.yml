@@ -773,7 +773,13 @@
             set -eu
             root="{{ motion_levels_install_root }}"
             candidate="{{ motion_levels_remote_release_dir }}"
+            current_link="$root/.current.$$.tmp"
+            previous_link="$root/.previous.$$.tmp"
             active=""
+            cleanup_links() {
+              rm -f "$current_link" "$previous_link"
+            }
+            trap cleanup_links 0 1 2 15
             test -f "$candidate/release-manifest.json"
             test -f "$candidate/.complete"
             if [ -L "$root/current" ]; then
@@ -784,9 +790,11 @@
               exit 0
             fi
             if [ -n "$active" ] && [ -d "$active" ]; then
-              ln -sfn "$active" "$root/previous"
+              ln -s "$active" "$previous_link"
+              mv -Tf "$previous_link" "$root/previous"
             fi
-            ln -sfn "$candidate" "$root/current"
+            ln -s "$candidate" "$current_link"
+            mv -Tf "$current_link" "$root/current"
           args:
             executable: /bin/sh
           register: motion_levels_release_activation
@@ -805,6 +813,19 @@
                 "deployed_at": "{{ ansible_facts.date_time.iso8601 }}",
                 "venue": "{{ motion_levels_venue.slug }}",
                 "target": "{{ inventory_hostname }}",
+                "components": {
+                  "controller": {
+                    "revision": "{{ motion_levels_component_lock.components.controller.revision }}",
+                    "platform": "{{ motion_levels_component_lock.components.controller.target }}",
+                    "protocol": "{{ motion_levels_component_lock.components.controller.protocol }}"
+                  },
+                  "games": {
+                    "revision": "{{ motion_levels_component_lock.components.games.revision }}"
+                  },
+                  "cameras": {
+                    "revision": "{{ motion_levels_component_lock.components.cameras.revision }}"
+                  }
+                },
                 "deployment_health_contract": "software-only",
                 "hardware_state_contract": "observed-not-gated"
               }
@@ -911,6 +932,34 @@
           delay: 2
           until: motion_levels_public_health.status == 200
           loop: "{{ motion_levels_public_health_urls }}"
+
+        - name: Verify the public runtime games revision before kiosk restart
+          ansible.builtin.uri:
+            url: http://127.0.0.1/engine/api/status
+            return_content: true
+            status_code: 200
+          register: motion_levels_runtime_revision_health
+          retries: 60
+          delay: 2
+          until:
+            - motion_levels_runtime_revision_health.status == 200
+            - >-
+              (motion_levels_runtime_revision_health.json | default({})).get('sourceRevision', '')
+              == motion_levels_component_lock.components.games.revision
+
+        - name: Verify the player menu build revision before kiosk restart
+          ansible.builtin.uri:
+            url: http://127.0.0.1/menu/build.json
+            return_content: true
+            status_code: 200
+          register: motion_levels_menu_revision_health
+          retries: 60
+          delay: 2
+          until:
+            - motion_levels_menu_revision_health.status == 200
+            - >-
+              (motion_levels_menu_revision_health.json | default({})).get('gamesSourceRevision', '')
+              == motion_levels_component_lock.components.games.revision
 
         - name: Enable and restart the kiosk and hotplug watchdog
           ansible.builtin.systemd_service:
