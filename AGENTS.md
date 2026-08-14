@@ -93,8 +93,10 @@ small focused changes and push them promptly. Resolve conflicts deliberately.
 
 ## Commit identity
 
-Commits from this machine use **Motion Levels <noreply@motionlevels.com>** from the global Git
-configuration. Leave that identity unchanged unless explicitly instructed otherwise.
+Commits created by people or agents on Luis's local Mac use the standard local identity
+**Luis Antonio Obis Aparicio <luis.antonio.obis@gmail.com>**. Do not override it with the Motion
+Levels bot identity. Reserve **Motion Levels <noreply@motionlevels.com>** for CI, service accounts,
+and other actual bot contexts.
 
 ## Infrastructure hostnames
 
