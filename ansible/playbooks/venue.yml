@@ -39,6 +39,7 @@
           - motion_levels_camera.usb.host_address is match('^(?:[0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$')
           - motion_levels_camera.usb.dhcp_metric | int > 0
           - motion_levels_camera.gopro.base_url.startswith('http://')
+          - motion_levels_camera.gopro.rotation_degrees | int in [0, 90, 180, 270]
           - motion_levels_network.floor.source_address == (motion_levels_network.lan.address | regex_replace('/.*$', ''))
           - motion_levels_camera.api_token_file.startswith('/etc/')
           - motion_levels_camera.platform_token_file.startswith('/etc/')

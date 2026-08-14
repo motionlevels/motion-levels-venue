@@ -60,6 +60,7 @@ motion_levels_camera:
     base_url: http://172.29.139.51:8080
     stream_url: udp://0.0.0.0:8554
     stream_port: 8554
+    rotation_degrees: 180
     archive_settings: "175=1,108=1,2=1,3=8,184=1,183=2,182=1,121=0,135=1,156=100,167=4"
     test_settings: "175=1,108=1,2=1,3=8,184=1,183=2,182=1,121=3,135=0,156=100,167=4"
   recording:
