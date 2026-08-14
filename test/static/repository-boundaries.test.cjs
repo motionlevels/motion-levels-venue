@@ -346,3 +346,28 @@ test("every active native host unit has a venue-owned source", () => {
     assert.equal(fs.existsSync(path.join(repoRoot, source)), true, `${service} has no release source`);
   }
 });
+
+test("the supervisor durably syncs canonical history and streams run replays", () => {
+  const supervisor = read("deploy/motionlevels-pc/motion-levels-venue-supervisor.py");
+  const environment = read("ansible/templates/motion-levels.env.j2");
+  const playbook = read("ansible/playbooks/venue.yml");
+
+  assert.match(supervisor, /motion-levels-session-history-sync-v1/);
+  assert.match(supervisor, /\/api\/ingest\/session-history\/v1/);
+  assert.match(supervisor, /\/api\/history\/v1/);
+  assert.match(supervisor, /\/api\/recording-uploads\/init/);
+  assert.match(supervisor, /\/api\/recording-uploads\/complete/);
+  assert.match(supervisor, /x-motion-levels-engine-token/);
+  assert.match(supervisor, /x-amz-meta-sha256/);
+  assert.match(supervisor, /while chunk := source\.read\(1024 \* 1024\)/);
+  assert.doesNotMatch(supervisor, /\.read_bytes\(\)/);
+  assert.doesNotMatch(supervisor, /Path\([^\n]*localPath/);
+  assert.match(environment, /^MOTION_LEVELS_SESSION_SYNC_ENABLED=1$/m);
+  assert.match(environment, /^MOTION_LEVELS_ENGINE_TOKEN_FILE=\/etc\/motion-levels\/camera-recorder-token$/m);
+  assert.match(environment, /^MOTION_LEVELS_REPLAY_MAX_LOCAL_BYTES=536870912$/m);
+  assert.match(environment, /MOTION_LEVELS_SESSION_SYNC_STATE_PATH=\{\{ motion_levels_state_root \}\}\/session-sync\/state\.json/);
+  assert.match(environment, /MOTION_LEVELS_SESSION_SYNC_TEMP_DIR=\{\{ motion_levels_state_root \}\}\/session-sync\/artifacts/);
+  assert.match(supervisor, /\.replay-upload-/);
+  assert.match(supervisor, /SESSION_SYNC_STALE_TEMP_SECONDS/);
+  assert.match(playbook, /motion_levels_state_root \}\}\/session-sync/);
+});

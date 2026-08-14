@@ -276,6 +276,8 @@
         - { path: "{{ motion_levels_state_root }}/public" }
         - { path: "{{ motion_levels_state_root }}/floor-controller" }
         - { path: "{{ motion_levels_state_root }}/platform-asset-cache" }
+        - { path: "{{ motion_levels_state_root }}/session-sync", mode: "0750" }
+        - { path: "{{ motion_levels_state_root }}/session-sync/artifacts", mode: "0750" }
         - { path: "{{ motion_levels_state_root }}/camera-recordings" }
         - { path: "{{ motion_levels_state_root }}/security-recordings" }
         - { path: "{{ motion_levels_config_root }}", mode: "0750" }

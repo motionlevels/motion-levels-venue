@@ -3,11 +3,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import hmac
+import http.client
 import json
 import os
 import socket
+import stat
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -17,7 +21,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib import error, request
+from urllib import error, parse, request
 
 SCHEMA = "motion-levels-venue-snapshot-v1"
 ENGINE_URL = os.environ.get("MOTION_LEVELS_SUPERVISOR_ENGINE_URL", "http://127.0.0.1:4102").rstrip("/")
@@ -35,6 +39,55 @@ CAMERA_TOKEN_PATH = Path(os.environ.get("MOTION_LEVELS_CAMERA_RECORDER_TOKEN_FIL
 PLATFORM_URL = os.environ.get("MOTION_LEVELS_PLATFORM_URL", "").strip().rstrip("/")
 PLATFORM_TOKEN_PATH = Path(os.environ.get("MOTION_LEVELS_PLATFORM_TOKEN_FILE", "/etc/motion-levels/platform-token"))
 PLATFORM_INTERVAL = max(2, float(os.environ.get("MOTION_LEVELS_PLATFORM_SYNC_INTERVAL", "5")))
+ENGINE_TOKEN_PATH = Path(os.environ.get("MOTION_LEVELS_ENGINE_TOKEN_FILE", "/etc/motion-levels/engine-token"))
+SESSION_SYNC_SCHEMA = "motion-levels-session-history-sync-v1"
+SESSION_HISTORY_SCHEMA = "motion-levels-session-history-v1"
+SESSION_SYNC_ENABLED = os.environ.get("MOTION_LEVELS_SESSION_SYNC_ENABLED", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
+SESSION_SYNC_INTERVAL = max(2.0, float(os.environ.get("MOTION_LEVELS_SESSION_SYNC_INTERVAL", "15")))
+SESSION_SYNC_MAX_BACKOFF = max(
+    SESSION_SYNC_INTERVAL,
+    float(os.environ.get("MOTION_LEVELS_SESSION_SYNC_MAX_BACKOFF", "300")),
+)
+SESSION_SYNC_FULL_SWEEP_SECONDS = max(
+    SESSION_SYNC_INTERVAL,
+    float(os.environ.get("MOTION_LEVELS_SESSION_SYNC_FULL_SWEEP_SECONDS", "3600")),
+)
+SESSION_SYNC_RETRY_SECONDS = max(
+    SESSION_SYNC_INTERVAL,
+    float(os.environ.get("MOTION_LEVELS_SESSION_SYNC_RETRY_SECONDS", "300")),
+)
+SESSION_SYNC_PAGE_LIMIT = max(1, min(100, int(os.environ.get("MOTION_LEVELS_SESSION_SYNC_PAGE_LIMIT", "25"))))
+SESSION_SYNC_RECENT_LIMIT = max(1, min(25, int(os.environ.get("MOTION_LEVELS_SESSION_SYNC_RECENT_LIMIT", "5"))))
+SESSION_SYNC_EVENT_LIMIT = max(1, min(500, int(os.environ.get("MOTION_LEVELS_SESSION_SYNC_EVENT_LIMIT", "250"))))
+SESSION_SYNC_MAX_ARTIFACT_BYTES = max(
+    1,
+    int(os.environ.get("MOTION_LEVELS_SESSION_SYNC_MAX_ARTIFACT_BYTES", "536870912")),
+)
+SESSION_SYNC_ARTIFACT_TIMEOUT = max(
+    10.0,
+    float(os.environ.get("MOTION_LEVELS_SESSION_SYNC_ARTIFACT_TIMEOUT", "120")),
+)
+SESSION_SYNC_STATE_PATH = Path(
+    os.environ.get(
+        "MOTION_LEVELS_SESSION_SYNC_STATE_PATH",
+        "/var/lib/motion-levels/session-sync/state.json",
+    )
+)
+SESSION_SYNC_TEMP_DIR = Path(
+    os.environ.get(
+        "MOTION_LEVELS_SESSION_SYNC_TEMP_DIR",
+        str(SESSION_SYNC_STATE_PATH.parent / "artifacts"),
+    )
+)
+SESSION_SYNC_STALE_TEMP_SECONDS = max(
+    3_600.0,
+    float(os.environ.get("MOTION_LEVELS_SESSION_SYNC_STALE_TEMP_SECONDS", "86400")),
+)
 SERVICES = tuple(
     value.strip()
     for value in os.environ.get(
@@ -44,6 +97,17 @@ SERVICES = tuple(
     ).split(",")
     if value.strip()
 )
+SESSION_SYNC_OBSERVABILITY_LOCK = threading.Lock()
+SESSION_SYNC_OBSERVABILITY: dict[str, Any] = {
+    "lastAttemptAt": None,
+    "lastSuccessAt": None,
+    "consecutiveFailures": 0,
+    "backoffSeconds": 0,
+    "retryAt": None,
+    "pendingVisitCount": 0,
+    "visitsInBackoff": 0,
+    "nextVisitRetryAt": None,
+}
 
 
 def utc_now() -> str:
@@ -59,6 +123,43 @@ def read_secret(path: Path) -> str:
 
 def platform_token() -> str:
     return os.environ.get("MOTION_LEVELS_PLATFORM_TOKEN", "").strip() or read_secret(PLATFORM_TOKEN_PATH)
+
+
+def engine_token() -> str:
+    return (
+        os.environ.get("MOTION_LEVELS_ENGINE_TOKEN", "").strip()
+        or read_secret(ENGINE_TOKEN_PATH)
+        or read_secret(CAMERA_TOKEN_PATH)
+    )
+
+
+def publish_session_sync_observability(**updates: Any) -> None:
+    with SESSION_SYNC_OBSERVABILITY_LOCK:
+        SESSION_SYNC_OBSERVABILITY.update(updates)
+
+
+def session_sync_observability() -> dict[str, Any]:
+    with SESSION_SYNC_OBSERVABILITY_LOCK:
+        status = dict(SESSION_SYNC_OBSERVABILITY)
+    pending = non_negative_integer(status.get("pendingVisitCount")) or 0
+    visits_in_backoff = non_negative_integer(status.get("visitsInBackoff")) or 0
+    consecutive = non_negative_integer(status.get("consecutiveFailures")) or 0
+    backoff_seconds = max(0.0, float(status.get("backoffSeconds") or 0))
+    return {
+        "enabled": SESSION_SYNC_ENABLED,
+        "configured": bool(PLATFORM_URL and platform_token() and engine_token()),
+        "lastAttemptAt": optional_text(status.get("lastAttemptAt")),
+        "lastSuccessAt": optional_text(status.get("lastSuccessAt")),
+        "pendingVisitCount": pending,
+        "failure": {
+            "active": consecutive > 0 or pending > 0,
+            "consecutiveAttempts": consecutive,
+            "visitsInBackoff": visits_in_backoff,
+            "backoffSeconds": backoff_seconds,
+            "retryAt": optional_text(status.get("retryAt")),
+            "nextVisitRetryAt": optional_text(status.get("nextVisitRetryAt")),
+        },
+    }
 
 
 def read_json_file(path: Path) -> dict[str, Any]:
@@ -77,6 +178,9 @@ def fetch_json(url: str, *, method: str = "GET", payload: dict[str, Any] | None 
     camera_token = read_secret(CAMERA_TOKEN_PATH)
     if camera_token and url.startswith(CAMERA_URL):
         headers["authorization"] = f"Bearer {camera_token}"
+    history_token = engine_token()
+    if history_token and url.startswith(f"{ENGINE_URL}/api/history/"):
+        headers["x-motion-levels-engine-token"] = history_token
     response = request.urlopen(request.Request(url, data=body, headers=headers, method=method), timeout=timeout)
     raw = response.read(4 * 1024 * 1024)
     value = json.loads(raw or b"{}")
@@ -198,6 +302,9 @@ def build_snapshot() -> dict[str, Any]:
         "display": display,
         "displayConnection": physical_display,
         "camera": probes["camera"],
+        # Upload/backoff is operational telemetry, never a software or
+        # physical activation gate. Local history remains durable offline.
+        "sessionSync": session_sync_observability(),
         "summary": {
             "game": engine.get("currentGame") if isinstance(engine, dict) else None,
             "phase": engine.get("phase") if isinstance(engine, dict) else None,
@@ -250,6 +357,456 @@ def post_platform(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     )
     value = json.loads(response.read(1024 * 1024) or b"{}")
     return value if isinstance(value, dict) else {"ok": True}
+
+
+def history_url(path: str, query: dict[str, Any] | None = None) -> str:
+    suffix = path if path.startswith("/") else f"/{path}"
+    url = f"{ENGINE_URL}/api/history/v1{suffix}"
+    clean_query = {key: value for key, value in (query or {}).items() if value is not None and value != ""}
+    return f"{url}?{parse.urlencode(clean_query)}" if clean_query else url
+
+
+def list_history_sessions(*, status: str, limit: int, cursor: str | None = None) -> dict[str, Any]:
+    payload = fetch_json(
+        history_url("/sessions", {"status": status, "limit": limit, "cursor": cursor}),
+        timeout=10,
+    )
+    require_history_schema(payload)
+    if not isinstance(payload.get("sessions"), list):
+        raise ValueError("session history list is missing sessions")
+    return payload
+
+
+def get_history_visit(visit_id: str) -> dict[str, Any]:
+    payload = fetch_json(history_url(f"/sessions/{path_segment(visit_id)}"), timeout=10)
+    require_history_schema(payload)
+    visit = payload.get("session")
+    if not isinstance(visit, dict) or visit.get("id") != visit_id:
+        raise ValueError(f"session history returned the wrong visit for {visit_id}")
+    return visit
+
+
+def get_history_events(visit_id: str) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    cursor: str | None = None
+    observed_cursors: set[str] = set()
+    while True:
+        payload = fetch_json(
+            history_url(
+                f"/sessions/{path_segment(visit_id)}/events",
+                {"limit": SESSION_SYNC_EVENT_LIMIT, "cursor": cursor},
+            ),
+            timeout=10,
+        )
+        require_history_schema(payload)
+        if payload.get("sessionId") != visit_id or not isinstance(payload.get("events"), list):
+            raise ValueError(f"session history returned invalid events for {visit_id}")
+        page = payload["events"]
+        if any(not isinstance(event, dict) for event in page):
+            raise ValueError(f"session history returned a non-object event for {visit_id}")
+        events.extend(page)
+        next_cursor = payload.get("nextCursor")
+        if next_cursor is None:
+            break
+        if not isinstance(next_cursor, str) or not next_cursor or next_cursor in observed_cursors:
+            raise ValueError(f"session history returned an invalid event cursor for {visit_id}")
+        observed_cursors.add(next_cursor)
+        cursor = next_cursor
+    return events
+
+
+def require_history_schema(payload: dict[str, Any]) -> None:
+    if payload.get("schema") != SESSION_HISTORY_SCHEMA:
+        raise ValueError(f"unsupported session history schema: {payload.get('schema')!r}")
+
+
+def path_segment(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text or len(text) > 255:
+        raise ValueError("session history identifier is invalid")
+    return parse.quote(text, safe="")
+
+
+def replay_upload_candidate(recording: Any) -> bool:
+    if not isinstance(recording, dict):
+        return False
+    return (
+        recording.get("backend") == "venue-runtime-replay"
+        and recording.get("scope") == "run"
+        and recording.get("status") in {"pending_upload", "partial"}
+        and isinstance(recording.get("localPath"), str)
+        and not recording.get("remoteUrl")
+    )
+
+
+def replay_init_payload(visit: dict[str, Any], recording: dict[str, Any]) -> dict[str, Any]:
+    visit_id = required_text(visit.get("id"), "visit id")
+    selection_id = required_text(recording.get("selectionId"), "replay selection id")
+    run_id = required_text(recording.get("runId"), "replay run id")
+    asset_id = required_text(recording.get("id"), "replay asset id")
+    if asset_id != f"run-replay-{run_id}":
+        raise ValueError(f"replay asset id does not match run id: {asset_id}")
+    sha256 = required_sha256(recording.get("sha256"))
+    byte_size = required_positive_integer(recording.get("byteSize"), "replay byteSize")
+    file_name = required_text(recording.get("fileName"), "replay fileName")
+    content_type = required_text(recording.get("contentType"), "replay contentType")
+    metadata = recording.get("metadata") if isinstance(recording.get("metadata"), dict) else {}
+    encoded_metadata = json.dumps(metadata, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if len(encoded_metadata) > 65_536:
+        raise ValueError(f"replay metadata is too large for asset {asset_id}")
+    controller_id = str(visit.get("controllerId") or read_secret(CONTROLLER_ID_PATH)).strip()
+    if not controller_id:
+        raise ValueError(f"controller id is unavailable for replay {asset_id}")
+    payload: dict[str, Any] = {
+        "artifactKind": "gameplay_replay",
+        "controllerId": controller_id,
+        "controllerLabel": os.environ.get("MOTION_LEVELS_CONTROLLER_LABEL", "").strip() or socket.gethostname(),
+        "controllerHostname": os.environ.get("MOTION_LEVELS_CONTROLLER_HOSTNAME", "").strip() or socket.gethostname(),
+        "visitId": visit_id,
+        "selectionId": selection_id,
+        "runId": run_id,
+        "assetId": asset_id,
+        "fileName": file_name,
+        "contentType": content_type,
+        "compression": str(metadata.get("compression") or "gzip"),
+        "byteSize": byte_size,
+        "sha256": sha256,
+        "artifactStatus": required_text(recording.get("status"), "replay artifact status"),
+        "metadata": metadata,
+        "startedAt": iso_from_unix_millis(recording.get("startedAtUnixMillis")),
+        "endedAt": iso_from_unix_millis(recording.get("endedAtUnixMillis")),
+        "frameCount": metadata_bigint(metadata, "frameCount"),
+        "firstSequence": metadata_bigint(metadata, "firstPresentationSequence"),
+        "lastSequence": metadata_bigint(metadata, "lastPresentationSequence"),
+    }
+    capture_id = optional_text(recording.get("captureId"))
+    if capture_id:
+        payload["captureId"] = capture_id
+    return {key: value for key, value in payload.items() if value is not None and value != ""}
+
+
+def download_replay_artifact(visit_id: str, recording: dict[str, Any]) -> Path:
+    token = engine_token()
+    if not token:
+        raise RuntimeError("engine token is unavailable for replay download")
+    run_id = required_text(recording.get("runId"), "replay run id")
+    expected_size = required_positive_integer(recording.get("byteSize"), "replay byteSize")
+    expected_sha256 = required_sha256(recording.get("sha256"))
+    if expected_size > SESSION_SYNC_MAX_ARTIFACT_BYTES:
+        raise ValueError(f"replay artifact exceeds the local upload limit: {expected_size}")
+
+    temporary_root = session_sync_temp_dir()
+    temporary_root.mkdir(parents=True, exist_ok=True, mode=0o750)
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".replay-upload-{safe_file_part(run_id)}-",
+        suffix=".mlrun.jsonl.gz",
+        dir=temporary_root,
+    )
+    temporary = Path(temporary_name)
+    digest = hashlib.sha256()
+    downloaded = 0
+    replay_url = history_url(
+        f"/sessions/{path_segment(visit_id)}/runs/{path_segment(run_id)}/replay"
+    )
+    try:
+        replay_request = request.Request(
+            replay_url,
+            headers={"accept": required_text(recording.get("contentType"), "replay contentType"), "x-motion-levels-engine-token": token},
+            method="GET",
+        )
+        with os.fdopen(file_descriptor, "wb") as output, request.urlopen(
+            replay_request,
+            timeout=SESSION_SYNC_ARTIFACT_TIMEOUT,
+        ) as response:
+            content_length = response.headers.get("content-length")
+            if content_length and int(content_length) != expected_size:
+                raise RuntimeError(
+                    f"replay download size changed: expected {expected_size}, got {content_length}"
+                )
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                downloaded += len(chunk)
+                if downloaded > SESSION_SYNC_MAX_ARTIFACT_BYTES:
+                    raise RuntimeError("replay download exceeded the local upload limit")
+                digest.update(chunk)
+                output.write(chunk)
+            output.flush()
+            os.fsync(output.fileno())
+        if downloaded != expected_size:
+            raise RuntimeError(f"replay download size mismatch: expected {expected_size}, got {downloaded}")
+        actual_sha256 = digest.hexdigest()
+        if actual_sha256 != expected_sha256:
+            raise RuntimeError(
+                f"replay download sha256 mismatch: expected {expected_sha256}, got {actual_sha256}"
+            )
+        return temporary
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def put_artifact(upload_url: str, path: Path, content_type: str, sha256: str) -> None:
+    target = parse.urlsplit(upload_url)
+    if target.scheme not in {"http", "https"} or not target.hostname:
+        raise ValueError("platform returned an invalid replay upload URL")
+    connection_type = http.client.HTTPSConnection if target.scheme == "https" else http.client.HTTPConnection
+    connection = connection_type(target.hostname, target.port, timeout=SESSION_SYNC_ARTIFACT_TIMEOUT)
+    request_target = target.path or "/"
+    if target.query:
+        request_target += f"?{target.query}"
+    try:
+        connection.putrequest("PUT", request_target, skip_accept_encoding=True)
+        connection.putheader("content-type", content_type)
+        connection.putheader("content-length", str(path.stat().st_size))
+        connection.putheader("x-amz-meta-sha256", sha256)
+        connection.putheader("user-agent", "motion-levels-venue-session-sync/1")
+        connection.endheaders()
+        with path.open("rb") as source:
+            while chunk := source.read(1024 * 1024):
+                connection.send(chunk)
+        response = connection.getresponse()
+        detail = response.read(64 * 1024).decode("utf-8", errors="replace")
+        if response.status < 200 or response.status >= 300:
+            raise RuntimeError(f"replay upload failed with HTTP {response.status}: {detail[:1000]}")
+    finally:
+        connection.close()
+
+
+def update_engine_recording(visit_id: str, recording: dict[str, Any]) -> dict[str, Any]:
+    return fetch_json(
+        history_url(f"/sessions/{path_segment(visit_id)}/recordings"),
+        method="POST",
+        payload=recording,
+        timeout=10,
+    )
+
+
+def upload_replay_artifact(visit: dict[str, Any], recording: dict[str, Any]) -> bool:
+    if not replay_upload_candidate(recording):
+        return False
+    visit_id = required_text(visit.get("id"), "visit id")
+    init_payload = replay_init_payload(visit, recording)
+    artifact_path = download_replay_artifact(visit_id, recording)
+    try:
+        initialized = post_platform("/api/recording-uploads/init", init_payload)
+        if initialized.get("ok") is False:
+            raise RuntimeError(str(initialized.get("error") or "platform rejected replay upload init"))
+        upload_id = required_text(initialized.get("uploadId"), "platform replay upload id")
+        upload_url = optional_text(initialized.get("uploadUrl"))
+        if upload_url:
+            put_artifact(
+                upload_url,
+                artifact_path,
+                required_text(recording.get("contentType"), "replay contentType"),
+                required_sha256(recording.get("sha256")),
+            )
+        elif initialized.get("alreadyComplete") is not True:
+            raise RuntimeError("platform replay upload init did not return uploadUrl")
+
+        complete_payload = {
+            "uploadId": upload_id,
+            "byteSize": required_positive_integer(recording.get("byteSize"), "replay byteSize"),
+            "sha256": required_sha256(recording.get("sha256")),
+            "startedAt": iso_from_unix_millis(recording.get("startedAtUnixMillis")),
+            "endedAt": iso_from_unix_millis(recording.get("endedAtUnixMillis")),
+        }
+        metadata = recording.get("metadata") if isinstance(recording.get("metadata"), dict) else {}
+        for source_key, target_key in (
+            ("frameCount", "frameCount"),
+            ("firstPresentationSequence", "firstSequence"),
+            ("lastPresentationSequence", "lastSequence"),
+        ):
+            value = metadata_bigint(metadata, source_key)
+            if value is not None:
+                complete_payload[target_key] = value
+        completed = post_platform(
+            "/api/recording-uploads/complete",
+            {key: value for key, value in complete_payload.items() if value is not None},
+        )
+        if completed.get("ok") is False:
+            raise RuntimeError(str(completed.get("error") or "platform rejected replay upload completion"))
+
+        recording_row = completed.get("recording") if isinstance(completed.get("recording"), dict) else {}
+        download_url = (
+            optional_text(completed.get("downloadUrl"))
+            or optional_text(recording_row.get("downloadUrl"))
+            or optional_text(recording_row.get("download_url"))
+            or f"{PLATFORM_URL}/api/recording-objects/{parse.quote(upload_id, safe='')}/download"
+        )
+        platform_metadata = {
+            "schema": "motion-levels-replay-upload-v1",
+            "uploadId": upload_id,
+            "bucket": initialized.get("bucket"),
+            "objectKey": initialized.get("objectKey"),
+            "uploadedAt": utc_now(),
+        }
+        updated = dict(recording)
+        updated["status"] = "complete"
+        updated["remoteUrl"] = download_url
+        updated["downloadUrl"] = download_url
+        updated["metadata"] = {**metadata, "platformUpload": platform_metadata}
+        response = update_engine_recording(visit_id, updated)
+        require_history_schema(response)
+        persisted = response.get("recording")
+        if not isinstance(persisted, dict) or persisted.get("id") != updated["id"] or persisted.get("status") != "complete":
+            raise RuntimeError("venue runtime did not confirm the completed replay asset")
+        return True
+    finally:
+        artifact_path.unlink(missing_ok=True)
+
+
+def post_canonical_visit(visit: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
+    visit_id = required_text(visit.get("id"), "visit id")
+    controller_id = str(visit.get("controllerId") or read_secret(CONTROLLER_ID_PATH)).strip()
+    if not controller_id:
+        raise ValueError(f"controller id is unavailable for visit {visit_id}")
+    result = post_platform(
+        "/api/ingest/session-history/v1",
+        {
+            "schema": SESSION_SYNC_SCHEMA,
+            "controllerId": controller_id,
+            "controllerLabel": os.environ.get("MOTION_LEVELS_CONTROLLER_LABEL", "").strip() or socket.gethostname(),
+            "controllerHostname": os.environ.get("MOTION_LEVELS_CONTROLLER_HOSTNAME", "").strip() or socket.gethostname(),
+            "visit": visit,
+            "events": events,
+            "sentAt": utc_now(),
+        },
+    )
+    if result.get("ok") is False:
+        raise RuntimeError(str(result.get("error") or f"platform rejected canonical visit {visit_id}"))
+    return result
+
+
+def sync_history_visit(visit_id: str) -> dict[str, Any]:
+    # Read the append-only journal first, then its manifest. A transition that
+    # lands between these reads can make the manifest newer than this event
+    # batch (filled on the next idempotent sync), but never gives Platform an
+    # event sequence newer than visit.lastSequence.
+    events = get_history_events(visit_id)
+    visit = get_history_visit(visit_id)
+    post_canonical_visit(visit, events)
+
+    needs_artifact_retry = False
+    uploaded = False
+    for recording in visit.get("recordings", []):
+        if not replay_upload_candidate(recording):
+            continue
+        try:
+            uploaded = upload_replay_artifact(visit, recording) or uploaded
+        except (OSError, TypeError, ValueError, RuntimeError, error.URLError, http.client.HTTPException) as exc:
+            needs_artifact_retry = True
+            print(
+                f"canonical replay upload failed visit={visit_id} asset={recording.get('id')} error={exc}",
+                flush=True,
+            )
+
+    if uploaded:
+        events = get_history_events(visit_id)
+        visit = get_history_visit(visit_id)
+        post_canonical_visit(visit, events)
+    if needs_artifact_retry:
+        raise RuntimeError(f"one or more replay artifacts remain queued for visit {visit_id}")
+    return {
+        "updatedAtUnixMillis": non_negative_integer(visit.get("updatedAtUnixMillis")) or 0,
+        "lastSequence": non_negative_integer(visit.get("lastSequence")) or 0,
+        "needsArtifactRetry": needs_artifact_retry,
+    }
+
+
+def iso_from_unix_millis(value: Any) -> str | None:
+    millis = non_negative_integer(value)
+    if millis is None:
+        return None
+    return datetime.fromtimestamp(millis / 1000, timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def required_text(value: Any, label: str) -> str:
+    text = optional_text(value)
+    if not text:
+        raise ValueError(f"{label} is required")
+    return text
+
+
+def optional_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
+
+
+def non_negative_integer(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number >= 0 else None
+
+
+def required_positive_integer(value: Any, label: str) -> int:
+    number = non_negative_integer(value)
+    if number is None or number <= 0:
+        raise ValueError(f"{label} must be a positive integer")
+    return number
+
+
+def required_sha256(value: Any) -> str:
+    text = optional_text(value)
+    if not text or len(text) != 64 or any(character not in "0123456789abcdefABCDEF" for character in text):
+        raise ValueError("replay sha256 is invalid")
+    return text.lower()
+
+
+def metadata_bigint(metadata: dict[str, Any], key: str) -> str | None:
+    value = metadata.get(key)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int) and value >= 0:
+        return str(value)
+    if isinstance(value, str) and value.isdigit():
+        return value.lstrip("0") or "0"
+    return None
+
+
+def safe_file_part(value: str) -> str:
+    return "".join(character if character.isalnum() or character in "-_." else "-" for character in value)[:120] or "replay"
+
+
+def session_sync_temp_dir() -> Path:
+    state_root = SESSION_SYNC_STATE_PATH.parent.resolve(strict=False)
+    temporary_root = SESSION_SYNC_TEMP_DIR.resolve(strict=False)
+    if temporary_root == state_root or state_root not in temporary_root.parents:
+        raise ValueError("session sync temp directory must be below the dedicated sync state directory")
+    return temporary_root
+
+
+def cleanup_stale_replay_temps(now: float | None = None) -> int:
+    """Remove only uploader-owned regular files after a conservative age."""
+    try:
+        temporary_root = session_sync_temp_dir()
+        temporary_root.mkdir(parents=True, exist_ok=True, mode=0o750)
+        entries = list(temporary_root.iterdir())
+    except (OSError, ValueError):
+        return 0
+    cutoff = (time.time() if now is None else now) - SESSION_SYNC_STALE_TEMP_SECONDS
+    removed = 0
+    for path in entries:
+        if not path.name.startswith(".replay-upload-") or not path.name.endswith(".mlrun.jsonl.gz"):
+            continue
+        try:
+            metadata = path.lstat()
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_mtime > cutoff:
+                continue
+            path.unlink()
+            removed += 1
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            print(f"stale replay temp cleanup failed path={path.name} error={exc}", flush=True)
+    return removed
 
 
 def iso_from_unix(value: Any) -> str | None:
@@ -309,6 +866,268 @@ def venue_payload(status: dict[str, Any], *, ended: bool = False) -> dict[str, A
 def ambient_game(value: Any) -> bool:
     game = str(value or "").lower()
     return game in {"loop", "animations", "salvapantallas", "ambient-comet", "ambient-pulse", "ambient-spark"} or game.startswith("animation-")
+
+
+def default_session_sync_state() -> dict[str, Any]:
+    return {
+        "schema": "motion-levels-session-sync-state-v1",
+        "endedSweepCursor": None,
+        "endedSweepAfterUnixMillis": 0,
+        "failures": {},
+        "pendingVisitIds": [],
+        "sessions": {},
+    }
+
+
+def load_session_sync_state() -> dict[str, Any]:
+    candidate = read_json_file(SESSION_SYNC_STATE_PATH)
+    if candidate.get("schema") != "motion-levels-session-sync-state-v1":
+        return default_session_sync_state()
+    sessions = candidate.get("sessions")
+    failures = candidate.get("failures")
+    pending = candidate.get("pendingVisitIds")
+    return {
+        "schema": "motion-levels-session-sync-state-v1",
+        "endedSweepCursor": optional_text(candidate.get("endedSweepCursor")),
+        "endedSweepAfterUnixMillis": non_negative_integer(candidate.get("endedSweepAfterUnixMillis")) or 0,
+        "failures": failures if isinstance(failures, dict) else {},
+        "pendingVisitIds": [
+            value for value in (pending if isinstance(pending, list) else [])
+            if isinstance(value, str) and value.strip()
+        ][:100],
+        "sessions": sessions if isinstance(sessions, dict) else {},
+    }
+
+
+def save_session_sync_state(state: dict[str, Any]) -> None:
+    parent = SESSION_SYNC_STATE_PATH.parent
+    parent.mkdir(parents=True, exist_ok=True, mode=0o750)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{SESSION_SYNC_STATE_PATH.name}.",
+        suffix=".tmp",
+        dir=parent,
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            json.dump(state, output, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+            output.write("\n")
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, SESSION_SYNC_STATE_PATH)
+        directory_descriptor = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_descriptor)
+        finally:
+            os.close(directory_descriptor)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+class CanonicalSessionSync:
+    """Push durable runtime history and run replays to Platform.
+
+    Local cursors only reduce work. Every Platform write remains idempotent and
+    periodic full sweeps resend the complete visit and event history, so
+    deleting this local state cannot lose a session.
+    """
+
+    def __init__(self) -> None:
+        self.state = load_session_sync_state()
+        self.last_error_at = 0.0
+        self.last_temp_cleanup_at = 0.0
+        self._publish_state()
+
+    def once(self) -> None:
+        publish_session_sync_observability(lastAttemptAt=utc_now())
+        if not PLATFORM_URL or not platform_token():
+            raise RuntimeError("platform credentials are unavailable for canonical session sync")
+        if not engine_token():
+            raise RuntimeError("engine token is unavailable for canonical session sync")
+
+        now = time.time()
+        if now - self.last_temp_cleanup_at >= 3_600:
+            cleanup_stale_replay_temps(now)
+            self.last_temp_cleanup_at = now
+
+        attempted: set[str] = set()
+        for visit_id in list(self.state.get("pendingVisitIds", [])):
+            self._attempt(visit_id, attempted)
+
+        self._sync_active(attempted)
+        self._sync_recent_ended(attempted)
+        self._advance_ended_sweep(attempted)
+        self._prune_state()
+        save_session_sync_state(self.state)
+        self._publish_state(
+            lastSuccessAt=utc_now(),
+            consecutiveFailures=0,
+            backoffSeconds=0,
+            retryAt=None,
+        )
+
+    def _sync_active(self, attempted: set[str]) -> None:
+        cursor: str | None = None
+        observed_cursors: set[str] = set()
+        while True:
+            page = list_history_sessions(status="active", limit=SESSION_SYNC_PAGE_LIMIT, cursor=cursor)
+            for summary in page["sessions"]:
+                visit_id = summary_visit_id(summary)
+                self._attempt(visit_id, attempted)
+            next_cursor = page.get("nextCursor")
+            if next_cursor is None:
+                return
+            if not isinstance(next_cursor, str) or not next_cursor or next_cursor in observed_cursors:
+                raise ValueError("session history returned an invalid active-session cursor")
+            observed_cursors.add(next_cursor)
+            cursor = next_cursor
+
+    def _sync_recent_ended(self, attempted: set[str]) -> None:
+        page = list_history_sessions(status="ended", limit=SESSION_SYNC_RECENT_LIMIT)
+        now_millis = int(time.time() * 1000)
+        sessions = self.state.setdefault("sessions", {})
+        for summary in page["sessions"]:
+            visit_id = summary_visit_id(summary)
+            saved = sessions.get(visit_id) if isinstance(sessions.get(visit_id), dict) else {}
+            updated_at = non_negative_integer(summary.get("updatedAtUnixMillis")) or 0
+            saved_updated_at = non_negative_integer(saved.get("updatedAtUnixMillis")) or 0
+            last_synced_at = non_negative_integer(saved.get("lastSyncedAtUnixMillis")) or 0
+            due = (
+                updated_at > saved_updated_at
+                or saved.get("needsArtifactRetry") is True
+                or now_millis - last_synced_at >= int(SESSION_SYNC_RETRY_SECONDS * 1000)
+            )
+            if due:
+                self._attempt(visit_id, attempted)
+
+    def _advance_ended_sweep(self, attempted: set[str]) -> None:
+        now_millis = int(time.time() * 1000)
+        cursor = optional_text(self.state.get("endedSweepCursor"))
+        sweep_after = non_negative_integer(self.state.get("endedSweepAfterUnixMillis")) or 0
+        if not cursor and now_millis < sweep_after:
+            return
+        try:
+            page = list_history_sessions(status="ended", limit=SESSION_SYNC_PAGE_LIMIT, cursor=cursor)
+        except error.HTTPError as exc:
+            if not cursor or exc.code not in {400, 404}:
+                raise
+            # A removed local visit can invalidate an opaque cursor. Starting
+            # the idempotent sweep again is safer than stranding the backlog.
+            cursor = None
+            self.state["endedSweepCursor"] = None
+            page = list_history_sessions(status="ended", limit=SESSION_SYNC_PAGE_LIMIT)
+        for summary in page["sessions"]:
+            self._attempt(summary_visit_id(summary), attempted)
+        next_cursor = page.get("nextCursor")
+        if next_cursor is not None and (not isinstance(next_cursor, str) or not next_cursor):
+            raise ValueError("session history returned an invalid ended-session cursor")
+        self.state["endedSweepCursor"] = next_cursor
+        if next_cursor is None:
+            self.state["endedSweepAfterUnixMillis"] = now_millis + int(SESSION_SYNC_FULL_SWEEP_SECONDS * 1000)
+
+    def _attempt(self, visit_id: str, attempted: set[str]) -> bool:
+        if visit_id in attempted:
+            return visit_id not in self.state.get("pendingVisitIds", [])
+        attempted.add(visit_id)
+        failures = self.state.setdefault("failures", {})
+        failure = failures.get(visit_id) if isinstance(failures.get(visit_id), dict) else {}
+        retry_at = non_negative_integer(failure.get("retryAtUnixMillis")) or 0
+        if int(time.time() * 1000) < retry_at:
+            return False
+        try:
+            result = sync_history_visit(visit_id)
+        except (OSError, TypeError, ValueError, RuntimeError, error.URLError, http.client.HTTPException) as exc:
+            pending = self.state.setdefault("pendingVisitIds", [])
+            if visit_id not in pending:
+                pending.append(visit_id)
+                del pending[: max(0, len(pending) - 100)]
+            failure_count = (non_negative_integer(failure.get("count")) or 0) + 1
+            retry_seconds = min(
+                SESSION_SYNC_MAX_BACKOFF,
+                SESSION_SYNC_INTERVAL * (2 ** min(failure_count - 1, 8)),
+            )
+            failures[visit_id] = {
+                "count": failure_count,
+                "retryAtUnixMillis": int(time.time() * 1000 + retry_seconds * 1000),
+            }
+            now = time.monotonic()
+            if now - self.last_error_at >= 60:
+                print(f"canonical session sync failed visit={visit_id} error={exc}", flush=True)
+                self.last_error_at = now
+            self._publish_state()
+            return False
+
+        pending = self.state.setdefault("pendingVisitIds", [])
+        self.state["pendingVisitIds"] = [candidate for candidate in pending if candidate != visit_id]
+        failures.pop(visit_id, None)
+        self.state.setdefault("sessions", {})[visit_id] = {
+            **result,
+            "lastSyncedAtUnixMillis": int(time.time() * 1000),
+        }
+        self._publish_state()
+        return True
+
+    def _prune_state(self) -> None:
+        pending = set(self.state.get("pendingVisitIds", []))
+        failures = self.state.get("failures")
+        if isinstance(failures, dict):
+            self.state["failures"] = {visit_id: value for visit_id, value in failures.items() if visit_id in pending}
+        sessions = self.state.get("sessions")
+        if not isinstance(sessions, dict) or len(sessions) <= 5000:
+            return
+        ordered = sorted(
+            sessions.items(),
+            key=lambda item: non_negative_integer(item[1].get("lastSyncedAtUnixMillis")) or 0
+            if isinstance(item[1], dict) else 0,
+            reverse=True,
+        )
+        self.state["sessions"] = dict(ordered[:5000])
+
+    def _publish_state(self, **updates: Any) -> None:
+        pending = self.state.get("pendingVisitIds")
+        failures = self.state.get("failures")
+        now_millis = int(time.time() * 1000)
+        retry_times = [
+            retry_at
+            for value in (failures.values() if isinstance(failures, dict) else [])
+            if isinstance(value, dict)
+            if (retry_at := non_negative_integer(value.get("retryAtUnixMillis"))) is not None
+            if retry_at > now_millis
+        ]
+        publish_session_sync_observability(
+            pendingVisitCount=len(pending) if isinstance(pending, list) else 0,
+            visitsInBackoff=len(retry_times),
+            nextVisitRetryAt=iso_from_unix_millis(min(retry_times)) if retry_times else None,
+            **updates,
+        )
+
+    def run(self) -> None:
+        failures = 0
+        while True:
+            try:
+                self.once()
+                failures = 0
+                delay = SESSION_SYNC_INTERVAL
+            except (OSError, TypeError, ValueError, RuntimeError, error.URLError, http.client.HTTPException) as exc:
+                failures += 1
+                delay = min(SESSION_SYNC_MAX_BACKOFF, SESSION_SYNC_INTERVAL * (2 ** min(failures - 1, 8)))
+                self._publish_state(
+                    consecutiveFailures=failures,
+                    backoffSeconds=delay,
+                    retryAt=iso_from_unix_millis(int((time.time() + delay) * 1000)),
+                )
+                now = time.monotonic()
+                if now - self.last_error_at >= 60:
+                    print(f"canonical session sync unavailable; retrying in {delay:g}s: {exc}", flush=True)
+                    self.last_error_at = now
+            time.sleep(delay)
+
+
+def summary_visit_id(summary: Any) -> str:
+    if not isinstance(summary, dict):
+        raise ValueError("session history returned a non-object summary")
+    return required_text(summary.get("id"), "session summary id")
 
 
 class PlatformHeartbeat:
@@ -410,6 +1229,8 @@ def main() -> None:
     port = int(os.environ.get("MOTION_LEVELS_SUPERVISOR_PORT", "4103"))
     server = ThreadingHTTPServer((bind, port), Handler)
     threading.Thread(target=PlatformHeartbeat().run, daemon=True).start()
+    if SESSION_SYNC_ENABLED:
+        threading.Thread(target=CanonicalSessionSync().run, daemon=True).start()
     print(f"venue supervisor listening at http://{bind}:{port}", flush=True)
     server.serve_forever()
 

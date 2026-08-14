@@ -34,7 +34,9 @@ The last file contains the Twitch **stream key**, not a Helix API or OAuth token
 a protected local file without placing its value in Git, inventory, shell history, or the rendered
 environment. The venue playbook refuses deployment when any file is absent or empty and normalizes
 camera-secret ownership to `root:motion-levels-cameras` mode `0440`. Other platform secrets remain
-in `/etc/motion-levels/platform.env`.
+in `/etc/motion-levels/platform.env`. The existing camera-recorder token also authenticates the
+supervisor's loopback-only session-history and replay reads; this does not add a new host secret, and
+a dedicated `MOTION_LEVELS_ENGINE_TOKEN_FILE` in `platform.env` can override that default.
 
 ## Release assembly
 
@@ -188,6 +190,25 @@ automatic kiosk restarts, and supplies it to Chromium as `XDG_RUNTIME_DIR`. The 
 the same stable runtime path. Opening or closing an SSH login therefore cannot remove Chromium's
 runtime directory while the kiosk is running.
 
+The venue supervisor keeps the legacy live heartbeat during the canonical-session migration and,
+independently, pushes the runtime-owned `motion-levels-session-history-v1` visits to Platform. The
+canonical sync is safe to retry: it pages every local visit and event journal, periodically performs
+a full resend, and relies on Platform upserts keyed by controller, visit, and event sequence. Its
+cursor under `/var/lib/motion-levels/session-sync/state.json` is only an optimization and may be
+removed without losing local session history.
+
+Every finished run replay is read back through the authenticated venue-runtime history API, checked
+against its declared byte size and SHA-256, streamed to the Platform recording upload URL, and only
+then marked complete in the local visit manifest. Interrupted runs with a partial but valid replay
+follow the same durable path. Failed transfers retain the local gzip artifact and are retried; the
+supervisor never reads a replay into memory as one large byte string and never trusts the
+`RecordingAsset.localPath` as an arbitrary filesystem path. Interrupted uploader temporaries are
+isolated under `/var/lib/motion-levels/session-sync/artifacts`; the supervisor removes only its own
+filename pattern after a 24-hour safety window. The games runtime caps finalized local replay files
+at 512 MiB via `MOTION_LEVELS_REPLAY_MAX_LOCAL_BYTES`; it may prune only the oldest asset that the
+supervisor has already marked `complete` with a remote URL, and retains every pending, partial, or
+otherwise unverified local artifact.
+
 After every native health gate succeeds, the playbook retires old display/audio/container units and
 stops and disables Docker and containerd. It then removes only the allowlisted legacy container
 helpers and manifest/config roots that could reactivate Compose or rewrite the retired
@@ -261,6 +282,11 @@ check. A healthy response clears the accumulated failures. Repeated unhealthy ch
 `MOTION_LEVELS_HDMI_WATCHDOG_FAILURES` and restart only `motion-levels-kiosk.service`, subject to
 `MOTION_LEVELS_HDMI_WATCHDOG_RESTART_COOLDOWN`. This recovers a live Chromium process whose renderer,
 display feed, or heartbeat has stopped without turning browser readiness into a deployment gate.
+
+The snapshot's `sessionSync` block similarly reports whether canonical sync is enabled/configured,
+its last attempt and success, pending-visit count, and bounded retry/backoff counters. Those fields
+never contain tokens, paths, payloads, or raw errors, and a queued/offline Platform transfer never
+changes the snapshot's `ok` health result.
 
 For focused investigation:
 
