@@ -1,0 +1,34 @@
+---
+- name: Refuse to interrupt an active camera capture during cutover
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if systemctl is-active --quiet motion-levels-cameras.service; then
+      curl -fsS --max-time 10 "{{ motion_levels_camera.api_url }}/api/v1/cameras/{{ motion_levels_camera.camera_id }}/capture" \
+        | jq -e \
+          '.active == false and .loopActive == false and .interruptible == false' \
+          >/dev/null
+      curl -fsS --max-time 10 "{{ motion_levels_camera.api_url }}/api/v1/cameras/{{ motion_levels_camera.camera_id }}/host-recording" \
+        | jq -e '.active == false' >/dev/null
+    fi
+
+    database="{{ motion_levels_camera_state_root }}/state.db"
+    if [ -f "$database" ]; then
+      python3 - "$database" <<'PY'
+    import sqlite3
+    import sys
+
+    connection = sqlite3.connect(sys.argv[1])
+    try:
+        count = connection.execute(
+            "SELECT COUNT(*) FROM service_state WHERE key = 'active_recording_clip'"
+        ).fetchone()[0]
+    finally:
+        connection.close()
+    if count != 0:
+        raise SystemExit("active_recording_clip is still present")
+    PY
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+  when: motion_levels_camera.enabled

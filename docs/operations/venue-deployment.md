@@ -95,7 +95,6 @@ The native playbook requires:
 - Debian 13 or newer on x86-64;
 - Node.js 20 or newer and Python 3.13;
 - SSH access as the inventory user (`root` in production);
-- the exact configured GoPro attached with serial `C3501324639939` for `motionlevels-1`;
 - both protected camera token files already present on the host;
 - the controller, games, and camera source checkouts available on the control machine.
 
@@ -128,34 +127,21 @@ Compose model, or legacy container helpers from older revisions. The native play
 bounded first-cutover safety check for an old camera container; that migration guard is not a
 container deployment mechanism.
 
-### Intentional camera-off maintenance
+### Hardware-independent activation
 
-Normal deployment always requires the exact configured camera online. When that camera is
-intentionally powered off and cannot be reached physically, an existing native venue may be updated
-with a one-deployment acknowledgement. First verify that no recording or upload work is expected,
-then run from the clean, committed venue revision being deployed:
+No extra variable or acknowledgement is required when a peripheral is unavailable. Ansible does not
+probe or certify the GoPro, TV, floor panels, pressure sensors, HDMI mode, or browser heartbeat as a
+condition of activation. It validates the installed software processes and HTTP surfaces only.
 
-```sh
-venue_revision="$(git rev-parse HEAD)"
-ansible-playbook ansible/playbooks/venue.yml --limit motionlevels-1 \
-  --extra-vars "motion_levels_camera_offline_maintenance_ack=CAMERA-OFFLINE:motionlevels-1:C3501324639939:${venue_revision}"
-```
+Peripheral state remains visible through the venue UI, the platform sala view, service metrics, and
+logs. A missing or unhealthy device can therefore leave the venue operational state degraded without
+rolling back an otherwise valid software release. The camera service and its serial-specific udev
+rule remain installed and enabled, and the HDMI watchdog remains active, so supported hardware is
+reconciled automatically when it appears later.
 
-Never place this value in host or group variables. The acknowledgement is valid only for that host,
-configured serial, and exact venue commit. Before live replacement, immediately before cutover,
-after camera-service restart, after full health, and after any rollback, Ansible proves that:
-
-- the expected USB device, port, and network interface are physically absent;
-- the native camera service is active and enabled but `/readyz` remains fail-closed;
-- preview, managed capture, host recording, and looping are inactive;
-- the expected serial remains in durable state;
-- there are zero pending media jobs, no active clip record, and no spool entries.
-
-This exception does not disable camera configuration, the serial-specific udev rule, or the service.
-When the same GoPro is later powered on at its configured port, normal hotplug reconciliation brings
-it online. `/etc/motion-levels/stack.json` records `camera_health_mode: offline-maintenance` for this
-activation. A typo, another serial, another target, another venue commit, a connected-but-unhealthy
-camera, or any pending media work is rejected.
+The only camera-specific pre-cutover safety check is workload state: Ansible refuses to terminate an
+actively recording capture. Durable queued or retrying uploads do not block deployment and resume
+from their persisted state after restart.
 
 ## What activation changes
 
@@ -188,15 +174,18 @@ mutable state under `/var/lib/motion-levels*`, and `/var/lib/docker` are never p
 Docker storage is deliberately preserved until an operator explicitly approves reclaiming it;
 Docker is not a running production dependency.
 
-The floor controller is ordered after `motion-levels-lan-ip.service`, so its configured UDP source
-address exists before the controller binds on a cold boot. The security recorder stops accepting
-new upload work on `SIGTERM`, finalizes or boundedly terminates its `ffmpeg` child, and has a 20-second
-systemd stop ceiling. Individual platform requests are capped at 10 seconds; an interrupted or
-failed upload keeps its local segment for retry on the next start.
+`motion-levels-lan-ip.service` continuously reconciles the configured floor source address without
+failing when its interface is absent. The floor controller stays online with `floor_output` marked
+unavailable and retries only that exact source address; it never falls back to another interface.
+The security recorder stops accepting new upload work on `SIGTERM`, finalizes or boundedly
+terminates its `ffmpeg` child, and has a 20-second systemd stop ceiling. Individual platform requests
+are capped at 10 seconds; an interrupted or failed upload keeps its local segment for retry on the
+next start.
 
-The camera environment and udev rule are rendered from production host vars. Both the playbook and
-udev reconciliation require the exact GoPro USB vendor, product, and serial; another HERO12 on the
-same port is ignored. Deployment health checks are read-only and never start or stop a recording.
+The camera environment and udev rule are rendered from production host vars. Runtime reconciliation
+requires the exact GoPro USB vendor, product, and serial; another HERO12 is ignored by the control
+service. Deployment does not inspect that hardware identity. Health checks are read-only and never
+start or stop a recording.
 
 ## Health and observability
 
@@ -221,11 +210,12 @@ http://127.0.0.1/engine/api/status
 http://127.0.0.1/venue-api/v1/snapshot
 http://127.0.0.1/menu/
 http://127.0.0.1/display/
-http://127.0.0.1:8040/readyz
+http://127.0.0.1:8040/healthz
 ```
 
-It also requests the camera's read-only refreshed status and requires the configured serial,
-`usb_detected=true`, and `command_ready=true`.
+These endpoints prove that the deployed software is running and reachable. They do not require a
+connected camera, display, or floor. `/readyz` and the venue snapshot remain useful operational
+signals: they may report a disconnected or otherwise invalid peripheral without failing deployment.
 
 For focused investigation:
 

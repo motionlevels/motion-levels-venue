@@ -3,7 +3,7 @@
   "components": {
     "controller": {
       "repository": "https://github.com/motionlevels/motion-levels-controller.git",
-      "revision": "345dd9f95c24cae5df3d754efb1177b64d759beb",
+      "revision": "c9bc2b88cabd736e49a6348d04c882a66813973c",
       "goVersion": "go1.24.4",
       "target": "linux/amd64",
       "protocol": "v1+v2"

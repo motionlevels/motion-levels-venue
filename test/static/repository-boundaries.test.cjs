@@ -110,18 +110,17 @@ test("the verified native bundle contains the runtime, menu, and complete displa
   assert.match(runtime, /exec "\$node_binary" "\$runtime_entry"/);
 });
 
-test("native cutover gates precede live replacement and activation is display-aware", () => {
+test("native cutover safety precedes live replacement and services activate in dependency order", () => {
   const playbook = read("ansible/playbooks/venue.yml");
   const installLive = read("ansible/tasks/install-native-live.yml");
-  const goproGate = playbook.indexOf("Verify the exact GoPro through its USB API before any live replacement");
+  const captureGate = playbook.indexOf("Refuse to interrupt an active camera capture during cutover");
   const idleGate = playbook.indexOf("Require an idle venue before disrupting runtime services");
   const liveReplacement = playbook.indexOf("Replace live native files inside the rollback boundary");
   const coreActivation = playbook.indexOf("Enable and restart native core services in dependency order");
   const caddyActivation = playbook.indexOf("Enable and restart Caddy on the activated release");
   const displayActivation = playbook.indexOf("Enable and restart the kiosk and hotplug watchdog");
-  const heartbeatGate = playbook.indexOf("Wait for a fresh healthy kiosk heartbeat when a display is connected");
 
-  assert.ok(goproGate >= 0 && goproGate < liveReplacement);
+  assert.ok(captureGate >= 0 && captureGate < liveReplacement);
   assert.ok(idleGate >= 0 && idleGate < liveReplacement);
   assert.match(installLive, /Render the venue runtime environment/);
   assert.match(installLive, /Render the venue-specific Caddy configuration/);
@@ -129,63 +128,31 @@ test("native cutover gates precede live replacement and activation is display-aw
   assert.match(playbook, /genuinely fresh idle host/);
   assert.ok(coreActivation >= 0 && coreActivation < caddyActivation);
   assert.ok(caddyActivation < displayActivation);
-  assert.ok(displayActivation < heartbeatGate);
-  assert.match(playbook, /display-disconnected/);
-  assert.match(playbook, /\^\(HDMI\|DP\|DisplayPort\|DVI\)/);
-  assert.match(playbook, /motion_levels_display\.mode/);
 });
 
-test("camera-offline maintenance is one-deployment, exact, and fail-closed", () => {
+test("hardware state is observable at runtime but never gates deployment", () => {
   const playbook = read("ansible/playbooks/venue.yml");
-  const helper = read("ansible/tasks/verify-camera-offline-maintenance.yml");
+  const safety = read("ansible/tasks/verify-camera-cutover-safety.yml");
+  const udev = read("ansible/templates/72-motion-levels-gopro.rules.j2");
+  const makefile = read("Makefile");
   const groupVars = read("ansible/inventory/production/group_vars/all.yml");
   const hostVars = read("ansible/inventory/production/host_vars/motionlevels-1.yml");
-  const liveReplacement = playbook.indexOf("Replace live native files inside the rollback boundary");
-  const preCutoverCheck = playbook.indexOf("Reverify camera-offline maintenance immediately before cutover");
-  const postHealthCheck = playbook.indexOf("Reverify camera-offline maintenance after complete venue health");
-  const runtimeStop = playbook.indexOf("Stop and disable the retired container runtime");
 
-  assert.match(
-    playbook,
-    /== 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'\n\s+~ motion_levels_camera\.expected_serial ~ ':' ~ motion_levels_venue_revision/,
-  );
-  assert.match(playbook, /motion_levels_camera_offline_maintenance_ack: ""/);
-  assert.equal(groupVars.includes("motion_levels_camera_offline_maintenance_ack"), false);
-  assert.equal(hostVars.includes("motion_levels_camera_offline_maintenance_ack"), false);
-  assert.equal((playbook.match(/verify-camera-offline-maintenance\.yml/g) || []).length, 5);
-  assert.ok(preCutoverCheck >= 0 && preCutoverCheck < liveReplacement);
-  assert.ok(postHealthCheck > liveReplacement && postHealthCheck < runtimeStop);
-  assert.match(playbook, /camera_health_mode/);
-  assert.match(playbook, /offline-maintenance/);
-  assert.doesNotMatch(playbook, /^\s*motion_levels_camera_offline_maintenance:\s*/m);
-  assert.doesNotMatch(playbook, /when:\s+motion_levels_camera_offline_maintenance\s*$/m);
-  assert.ok(
-    (playbook.match(/[!=]= 'CAMERA-OFFLINE:' ~ inventory_hostname/g) || []).length >= 12,
-    "every exception gate must compare the exact acknowledgement directly",
-  );
-  assert.match(playbook, /motion_levels_camera_offline_maintenance_ack[\s\S]*cameraDetected/);
-  assert.match(playbook, /http:\/\/127\.0\.0\.1:8040\/healthz[\s\S]*motion_levels_camera_offline_maintenance_ack[\s\S]*http:\/\/127\.0\.0\.1:8040\/readyz/);
-
-  for (const evidence of [
-    "existing complete native release",
-    "physically absent",
-    "is-active --quiet motion-levels-cameras.service",
-    "is-enabled --quiet motion-levels-cameras.service",
-    "/healthz",
-    "/readyz",
-    "/status?refresh=true",
-    "/capture",
-    "/host-recording",
-    "/api/v1/media/jobs?limit=1000",
-    "pendingMediaJobs",
-    "active_recording_clip",
-    "camera media spool is not empty",
-  ]) {
-    assert.match(helper, new RegExp(evidence.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const source of [playbook, groupVars, hostVars]) {
+    assert.doesNotMatch(source, /CAMERA-OFFLINE|camera_offline_maintenance|offline-maintenance/);
   }
-  assert.match(helper, /test "\$matches" -eq 0/);
-  assert.match(helper, /motion_levels_camera\.expected_serial/);
-  assert.match(helper, /rejectattr\('state', 'equalto', 'complete'\)/);
+  assert.doesNotMatch(playbook, /\/readyz|status\?refresh=true|cameraDetected|displayHealthy|xrandr/);
+  assert.match(playbook, /Verify native camera service health independently of hardware/);
+  assert.match(playbook, /http:\/\/127\.0\.0\.1:8040\/healthz/);
+  assert.match(playbook, /mediaPipelineConfigured/);
+  assert.doesNotMatch(playbook, /\bifup\b/);
+  assert.match(playbook, /Queue exact GoPro hotplug reconciliation without gating activation[\s\S]*timeout[\s\S]*udevadm[\s\S]*failed_when: false/);
+  assert.match(safety, /\/capture/);
+  assert.match(safety, /\/host-recording/);
+  assert.match(safety, /active_recording_clip/);
+  assert.doesNotMatch(safety, /idVendor|idProduct|expected_serial|\/readyz/);
+  assert.match(udev, /ATTR\{serial\}=="\{\{ motion_levels_camera\.expected_serial \}\}"/);
+  assert.doesNotMatch(makefile, /\/readyz|usb_detected|command_ready/);
 });
 
 test("rollback stops native units first and restores only a known stack", () => {
@@ -221,7 +188,7 @@ test("retired display, audio, and TV broker units are removed after cutover", ()
 test("a verified native cutover disables the retired container runtime", () => {
   const playbook = read("ansible/playbooks/venue.yml");
   const variables = read("ansible/inventory/production/group_vars/all.yml");
-  const cameraGate = playbook.indexOf("Verify the exact GoPro through the native service");
+  const cameraGate = playbook.indexOf("Verify native camera service health independently of hardware");
   const runtimeStop = playbook.indexOf("Stop and disable the retired container runtime");
   const controlCleanup = playbook.indexOf("Remove the retired container control plane after verified cutover");
 
@@ -253,13 +220,17 @@ test("a verified native cutover disables the retired container runtime", () => {
   assert.doesNotMatch(playbook, /state: absent[\s\S]{0,160}\/var\/lib\/docker/);
 });
 
-test("cold boot orders the floor adapter after LAN assignment and bounds recorder shutdown", () => {
+test("cold boot retries optional floor networking and bounds recorder shutdown", () => {
   const floorService = read("deploy/motionlevels-pc/motion-levels-floor-controller.service");
+  const installLive = read("ansible/tasks/install-native-live.yml");
   const recorderService = read("deploy/motionlevels-pc/motion-levels-security-recorder.service");
   const recorder = read("deploy/motionlevels-pc/motion-levels-security-recorder.py");
 
   assert.match(floorService, /^After=.*motion-levels-lan-ip\.service$/m);
-  assert.match(floorService, /^Requires=motion-levels-lan-ip\.service$/m);
+  assert.match(floorService, /^Wants=.*motion-levels-lan-ip\.service$/m);
+  assert.doesNotMatch(floorService, /^Requires=motion-levels-lan-ip\.service$/m);
+  assert.match(installLive, /while :; do[\s\S]*ip link show dev "\$interface"[\s\S]*sleep 10/);
+  assert.match(installLive, /Type=simple[\s\S]*Restart=always/);
   assert.match(recorderService, /^TimeoutStopSec=20$/m);
   assert.match(recorderService, /^KillMode=control-group$/m);
   assert.match(recorder, /min\(10\.0, float\(os\.environ\.get\("MOTION_LEVELS_SECURITY_RECORDER_PLATFORM_TIMEOUT_SECONDS"/);

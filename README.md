@@ -79,14 +79,14 @@ make deploy-motionlevels-1
 ```
 
 The playbook performs the local build and manifest verification itself, stages the exact release,
-switches the native systemd stack, verifies all local HTTP surfaces and the serial-pinned GoPro, and
+switches the native systemd stack, verifies the software services and local HTTP surfaces, and
 automatically restores the previous healthy release if activation fails. It refuses dirty or
 revision-mismatched source trees. There is no CI, container image, or GHCR wait in this path.
 
-If a known camera is intentionally powered off, the runbook documents a one-deployment
-camera-offline maintenance acknowledgement. It is scoped to the target host, configured serial, and
-exact venue revision; the default path still requires the camera online. Never persist that
-acknowledgement in inventory.
+Physical peripherals never gate deployment. A powered-off GoPro, disconnected TV, or unavailable
+floor is reported by the venue and platform as an operational state after activation. The configured
+identity still makes camera control fail closed for an unexpected device; udev, the HDMI watchdog,
+and floor-network reconciliation recover automatically when the expected hardware appears later.
 
 Useful operator commands:
 

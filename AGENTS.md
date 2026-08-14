@@ -54,11 +54,16 @@ Use `make deploy-motionlevels-1` for production and the status/log/rollback targ
 the README. The playbook's health gates and rollback are part of the release contract; do not
 replace them with ad-hoc SSH copying or service restarts.
 
+Deployment health is software-only. Physical camera, display, floor, sensor, USB, HDMI, and network
+adapter presence, identity, signal, or readiness must never be an Ansible activation or rollback
+condition. Report unavailable hardware as degraded runtime state and keep the corresponding service
+and hotplug/retry mechanism active so it can recover later.
+
 ## Camera safety
 
 Camera status checks must remain read-only. Never record, stop, photograph, delete media, or alter a
-profile during deployment verification. The GoPro must match the venue's exact serial before the
-native camera service is considered ready. Preserve the camera service's multipart upload,
+profile during deployment verification. Runtime control must require the venue's exact GoPro serial,
+but presence and readiness never gate deployment. Preserve the camera service's multipart upload,
 object-verification-before-delete, and workflow-owned SD cleanup boundaries.
 
 ## Deployment target preference
@@ -77,8 +82,8 @@ make show-pins
 ```
 
 The native build additionally verifies all four clean source revisions and the generated release
-manifest. Hardware validation starts with systemd status, journal logs, HTTP health endpoints, and a
-read-only camera status request.
+manifest. Diagnose hardware separately after deployment through systemd status, journal logs,
+service metrics, the venue snapshot, and read-only status requests.
 
 ## Multiple parties share this repo
 

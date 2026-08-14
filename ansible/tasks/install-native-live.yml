@@ -7,17 +7,23 @@
     mode: "0755"
     content: |
       #!/bin/sh
-      set -eu
+      set -u
       interface="{{ motion_levels_network.lan.interface }}"
       address="{{ motion_levels_network.lan.address }}"
       address_only="{{ motion_levels_network.lan.address | regex_replace('/.*$', '') }}"
       gateway="{{ motion_levels_network.lan.gateway }}"
-      ip link show dev "$interface" >/dev/null
-      ip link set "$interface" up
-      ip addr show dev "$interface" | grep -q "${address_only}/" || ip addr add "$address" dev "$interface"
-      if ! ip route show default dev "$interface" | grep -q "default via $gateway"; then
-        ip route replace default via "$gateway" dev "$interface" metric 1002
-      fi
+      while :; do
+        if ip link show dev "$interface" >/dev/null 2>&1; then
+          ip link set "$interface" up >/dev/null 2>&1 || true
+          if ! ip addr show dev "$interface" | grep -q "${address_only}/"; then
+            ip addr add "$address" dev "$interface" >/dev/null 2>&1 || true
+          fi
+          if ! ip route show default dev "$interface" | grep -q "default via $gateway"; then
+            ip route replace default via "$gateway" dev "$interface" metric 1002 >/dev/null 2>&1 || true
+          fi
+        fi
+        sleep 10
+      done
 
 - name: Install the venue LAN address unit after all cutover gates
   ansible.builtin.copy:
@@ -32,9 +38,10 @@
       Wants=network-online.target
 
       [Service]
-      Type=oneshot
+      Type=simple
       ExecStart=/usr/local/sbin/motion-levels-lan-ip
-      RemainAfterExit=yes
+      Restart=always
+      RestartSec=2
 
       [Install]
       WantedBy=multi-user.target

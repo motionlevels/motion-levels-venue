@@ -41,7 +41,7 @@ status-motionlevels-1:
 	ssh "$(HOST)" 'systemctl --no-pager --full status $(NATIVE_SERVICES)'
 
 health-motionlevels-1:
-	ssh "$(HOST)" 'set -eu; for url in http://127.0.0.1/controller/health http://127.0.0.1/engine/api/status http://127.0.0.1/venue-api/v1/snapshot http://127.0.0.1/menu/ http://127.0.0.1/display/ http://127.0.0.1:8040/readyz; do printf "%-58s" "$$url"; curl -fsS -o /dev/null "$$url"; echo ok; done; camera_id=$$(sed -n "s/^ML_CAMERAS_CAMERA_ID=//p" /etc/motion-levels-cameras.env | tail -1); expected=$$(sed -n "s/^ML_CAMERAS_USB_SERIAL=//p" /etc/motion-levels-cameras.env | tail -1); test -n "$$camera_id"; test -n "$$expected"; curl -fsS "http://127.0.0.1:8040/api/v1/cameras/$$camera_id/status" | jq -e --arg expected "$$expected" "{serial, usb_detected, command_ready} | select(.serial == \$$expected and .usb_detected == true and .command_ready == true)"'
+	ssh "$(HOST)" 'set -eu; for url in http://127.0.0.1/controller/health http://127.0.0.1/engine/api/status http://127.0.0.1/venue-api/v1/snapshot http://127.0.0.1/menu/ http://127.0.0.1/display/ http://127.0.0.1:8040/healthz; do printf "%-58s" "$$url"; curl -fsS -o /dev/null "$$url"; echo ok; done'
 
 release-motionlevels-1:
 	ssh "$(HOST)" 'set -eu; root=/opt/motion-levels/venue; printf "current  %s\n" "$$(readlink -f "$$root/current")"; if [ -L "$$root/previous" ]; then printf "previous %s\n" "$$(readlink -f "$$root/previous")"; fi; python3 -m json.tool /etc/motion-levels/stack.json'

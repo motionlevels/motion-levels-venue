@@ -1,8 +1,7 @@
 [Unit]
 Description=Motion Levels floor controller
 After=network-online.target motion-levels-lan-ip.service
-Wants=network-online.target
-Requires=motion-levels-lan-ip.service
+Wants=network-online.target motion-levels-lan-ip.service
 
 [Service]
 Type=simple

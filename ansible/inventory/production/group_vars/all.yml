@@ -69,7 +69,7 @@ motion_levels_retired_services:
   - motion-levels.service
 
 # Exact legacy container control plane removed only after the native release
-# passes every hardware and HTTP health gate. These paths are intentionally
+# passes its software service and HTTP health gates. These paths are intentionally
 # separate from native releases/state and Docker's preserved storage.
 motion_levels_retired_container_control_paths:
   - /usr/local/sbin/motion-levels-venue-containers

@@ -169,7 +169,6 @@
       - http://127.0.0.1/menu/
       - http://127.0.0.1/display/
     motion_levels_rollback_root: "{{ motion_levels_state_root }}/deploy-rollback/{{ motion_levels_venue_revision }}"
-    motion_levels_camera_offline_maintenance_ack: ""
   pre_tasks:
     - name: Require Debian 13 amd64 with supported native runtimes
       ansible.builtin.assert:
@@ -178,29 +177,6 @@
           - ansible_facts.distribution_major_version | int >= 13
           - ansible_facts.architecture == 'x86_64'
         fail_msg: "Native venue deployment requires Debian 13+ on x86_64."
-
-    - name: Validate the one-deployment camera-offline maintenance acknowledgement
-      ansible.builtin.assert:
-        that:
-          - >-
-            motion_levels_camera_offline_maintenance_ack == ''
-            or motion_levels_camera_offline_maintenance_ack
-            == 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-            ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
-          - >-
-            motion_levels_camera_offline_maintenance_ack == ''
-            or motion_levels_camera.enabled
-        fail_msg: >-
-          Camera-offline maintenance requires the exact target, serial, and venue
-          revision acknowledgement CAMERA-OFFLINE:{{ inventory_hostname }}:{{
-          motion_levels_camera.expected_serial }}:{{ motion_levels_venue_revision }}.
-
-    - name: Verify safe camera-offline maintenance before any host mutation
-      ansible.builtin.import_tasks: ../tasks/verify-camera-offline-maintenance.yml
-      when: >-
-        motion_levels_camera_offline_maintenance_ack
-        == 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-        ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
 
     - name: Install native host packages
       ansible.builtin.apt:
@@ -218,36 +194,6 @@
       args:
         executable: /bin/sh
       changed_when: false
-
-    - name: Verify the configured GoPro identity before camera control
-      ansible.builtin.shell: |
-        set -eu
-        matches=0
-        actual=""
-        actual_port=""
-        for device in /sys/bus/usb/devices/*; do
-          test -r "$device/idVendor" || continue
-          test -r "$device/idProduct" || continue
-          vendor="$(tr -d '[:space:]' < "$device/idVendor")"
-          product="$(tr -d '[:space:]' < "$device/idProduct")"
-          if [ "$vendor" = "{{ motion_levels_camera.usb.vendor_id }}" ] && [ "$product" = "{{ motion_levels_camera.usb.product_id }}" ]; then
-            matches=$((matches + 1))
-            actual="$(tr -d '[:space:]' < "$device/serial")"
-            actual_port="$(basename "$device")"
-          fi
-        done
-        test "$matches" -eq 1
-        test "$actual" = "{{ motion_levels_camera.expected_serial }}"
-        test "$actual_port" = "{{ motion_levels_camera.usb.expected_port }}"
-      args:
-        executable: /bin/sh
-      changed_when: false
-      when:
-        - motion_levels_camera.enabled
-        - >-
-          motion_levels_camera_offline_maintenance_ack
-          != 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-          ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
 
     - name: List legacy Docker workloads before native cutover
       ansible.builtin.command:
@@ -535,61 +481,6 @@
         mode: "0644"
       when: motion_levels_camera.enabled
 
-    - name: Bring up the configured GoPro USB network interface
-      ansible.builtin.command:
-        argv:
-          - ifup
-          - "{{ motion_levels_camera.usb.network_interface }}"
-      register: motion_levels_gopro_ifup
-      changed_when: "'already configured' not in ((motion_levels_gopro_ifup.stdout | default('')) ~ (motion_levels_gopro_ifup.stderr | default('')))"
-      when:
-        - motion_levels_camera.enabled
-        - >-
-          motion_levels_camera_offline_maintenance_ack
-          != 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-          ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
-
-    - name: Verify the GoPro USB network identity and address
-      ansible.builtin.shell: |
-        set -eu
-        interface="{{ motion_levels_camera.usb.network_interface }}"
-        expected_mac="{{ motion_levels_camera.usb.network_mac }}"
-        expected_address="{{ motion_levels_camera.usb.host_address }}"
-        actual_mac="$(tr '[:upper:]' '[:lower:]' < "/sys/class/net/$interface/address")"
-        test "$actual_mac" = "$expected_mac"
-        actual_addresses="$(ip -4 -o address show dev "$interface")"
-        case " $actual_addresses " in
-          *" $expected_address "*) ;;
-          *) echo "expected $expected_address on $interface" >&2; exit 1 ;;
-        esac
-      args:
-        executable: /bin/sh
-      changed_when: false
-      when:
-        - motion_levels_camera.enabled
-        - >-
-          motion_levels_camera_offline_maintenance_ack
-          != 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-          ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
-
-    - name: Verify the exact GoPro through its USB API before any live replacement
-      ansible.builtin.uri:
-        url: "{{ motion_levels_camera.gopro.base_url }}/gopro/camera/info"
-        return_content: true
-        status_code: 200
-        timeout: 5
-      register: motion_levels_gopro_usb_api
-      retries: 30
-      delay: 2
-      until:
-        - motion_levels_gopro_usb_api.json.serial_number == motion_levels_camera.expected_serial
-      when:
-        - motion_levels_camera.enabled
-        - >-
-          motion_levels_camera_offline_maintenance_ack
-          != 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-          ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
-
     - name: Resolve the currently active native release before cutover
       ansible.builtin.shell: |
         set -eu
@@ -731,12 +622,8 @@
           venueSessionId={{ motion_levels_cutover_status.json.venueSessionId | default('none', true) }}.
       when: (motion_levels_cutover_status.status | default(0) | int) == 200
 
-    - name: Reverify camera-offline maintenance immediately before cutover
-      ansible.builtin.import_tasks: ../tasks/verify-camera-offline-maintenance.yml
-      when: >-
-        motion_levels_camera_offline_maintenance_ack
-        == 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-        ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
+    - name: Refuse to interrupt an active camera capture during cutover
+      ansible.builtin.import_tasks: ../tasks/verify-camera-cutover-safety.yml
 
     - name: Classify the pre-cutover stack for rollback
       ansible.builtin.set_fact:
@@ -882,19 +769,27 @@
                 "revision": "{{ motion_levels_venue_revision }}",
                 "deployed_at": "{{ ansible_facts.date_time.iso8601 }}",
                 "venue": "{{ motion_levels_venue.slug }}",
-                "target": "{{ inventory_hostname }}",
-                "camera_health_mode": "{{
-                  'offline-maintenance'
-                  if motion_levels_camera_offline_maintenance_ack
-                    == 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-                    ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
-                  else 'online-required'
-                }}"
+                "target": "{{ inventory_hostname }}"
               }
 
         - name: Reload systemd for the activated release
           ansible.builtin.systemd_service:
             daemon_reload: true
+
+        - name: Queue exact GoPro hotplug reconciliation without gating activation
+          ansible.builtin.command:
+            argv:
+              - timeout
+              - "5"
+              - udevadm
+              - trigger
+              - --action=change
+              - --subsystem-match=usb
+              - "--attr-match=idVendor={{ motion_levels_camera.usb.vendor_id }}"
+              - "--attr-match=idProduct={{ motion_levels_camera.usb.product_id }}"
+          changed_when: false
+          failed_when: false
+          when: motion_levels_camera.enabled
 
         - name: Enable the venue LAN address unit
           ansible.builtin.systemd_service:
@@ -928,27 +823,19 @@
             - http://127.0.0.1:4102/api/status
             - http://127.0.0.1:4103/v1/snapshot
 
-        - name: Verify the native camera boundary before switching Caddy
+        - name: Verify native camera service health independently of hardware
           ansible.builtin.uri:
-            url: http://127.0.0.1:8040/readyz
+            url: http://127.0.0.1:8040/healthz
+            return_content: true
             status_code: 200
           register: motion_levels_camera_health
           retries: 60
           delay: 2
-          until: motion_levels_camera_health.status == 200
-          when:
-            - motion_levels_camera.enabled
-            - >-
-              motion_levels_camera_offline_maintenance_ack
-              != 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-              ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
-
-        - name: Verify fail-closed camera-offline maintenance after native restart
-          ansible.builtin.import_tasks: ../tasks/verify-camera-offline-maintenance.yml
-          when: >-
-            motion_levels_camera_offline_maintenance_ack
-            == 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-            ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
+          until:
+            - motion_levels_camera_health.status == 200
+            - motion_levels_camera_health.json.ok | default(false) | bool
+            - motion_levels_camera_health.json.mediaPipelineConfigured | default(false) | bool
+          when: motion_levels_camera.enabled
 
         - name: Enable and restart Caddy on the activated release
           ansible.builtin.systemd_service:
@@ -973,51 +860,6 @@
             state: restarted
           loop: "{{ motion_levels_display_services }}"
 
-        - name: Gate a connected physical display on the configured mode
-          ansible.builtin.shell: |
-            set -euo pipefail
-            query="$(DISPLAY=:0 /usr/bin/xrandr --query)"
-            connected="$(printf '%s\n' "$query" | awk '$2 == "connected" && $1 ~ /^(HDMI|DP|DisplayPort|DVI)/ { print $1; exit }')"
-            if [ -z "$connected" ]; then
-              echo display-disconnected
-              exit 0
-            fi
-            if printf '%s\n' "$query" | awk -v output="$connected" -v geometry="{{ motion_levels_display.mode }}+" \
-              '$1 == output && $2 == "connected" && index($0, geometry) { found = 1 } END { exit !found }'; then
-              echo display-connected-configured
-              exit 0
-            fi
-            echo "connected output $connected is not active at {{ motion_levels_display.mode }}" >&2
-            exit 1
-          args:
-            executable: /bin/bash
-          environment:
-            DISPLAY: ":0"
-          register: motion_levels_display_gate
-          changed_when: false
-          retries: 30
-          delay: 2
-          until: motion_levels_display_gate.rc == 0
-
-        - name: Wait for a fresh healthy kiosk heartbeat when a display is connected
-          ansible.builtin.uri:
-            url: http://127.0.0.1/engine/api/health
-            return_content: true
-            status_code: 200
-          register: motion_levels_display_health
-          retries: 60
-          delay: 2
-          until:
-            - motion_levels_display_health.json.displayClient.fresh | default(false)
-            - motion_levels_display_health.json.displayClient.healthy | default(false)
-          when: motion_levels_display_gate.stdout | trim == 'display-connected-configured'
-
-        - name: Surface the physical display activation state
-          ansible.builtin.debug:
-            msg: >-
-              Physical display state is {{ motion_levels_display_gate.stdout | trim }};
-              disconnected is valid and the HDMI watchdog remains enabled for hotplug recovery.
-
         - name: Verify the complete venue snapshot
           ansible.builtin.uri:
             url: http://127.0.0.1/venue-api/v1/snapshot
@@ -1026,43 +868,7 @@
           register: motion_levels_venue_snapshot
           retries: 60
           delay: 2
-          until:
-            - motion_levels_venue_snapshot.json.ok
-            - >-
-              motion_levels_display_gate.stdout | trim == 'display-disconnected'
-              or motion_levels_venue_snapshot.json.summary.displayHealthy | default(false)
-            - >-
-              not motion_levels_camera.enabled
-              or motion_levels_camera_offline_maintenance_ack
-                == 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-                ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
-              or motion_levels_venue_snapshot.json.summary.cameraDetected | default(false)
-
-        - name: Verify the exact GoPro through the native service
-          ansible.builtin.uri:
-            url: "{{ motion_levels_camera.api_url }}/api/v1/cameras/{{ motion_levels_camera.camera_id }}/status?refresh=true"
-            return_content: true
-            status_code: 200
-          register: motion_levels_camera_status
-          retries: 30
-          delay: 2
-          until:
-            - motion_levels_camera_status.json.serial == motion_levels_camera.expected_serial
-            - motion_levels_camera_status.json.usb_detected
-            - motion_levels_camera_status.json.command_ready
-          when:
-            - motion_levels_camera.enabled
-            - >-
-              motion_levels_camera_offline_maintenance_ack
-              != 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-              ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
-
-        - name: Reverify camera-offline maintenance after complete venue health
-          ansible.builtin.import_tasks: ../tasks/verify-camera-offline-maintenance.yml
-          when: >-
-            motion_levels_camera_offline_maintenance_ack
-            == 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-            ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
+          until: motion_levels_venue_snapshot.status == 200
 
       rescue:
         - name: Stop every native unit before rollback
@@ -1208,28 +1014,9 @@
             {{
               motion_levels_public_health_urls
               + ['http://127.0.0.1/venue-api/v1/snapshot']
-              + (
-                [
-                  'http://127.0.0.1:8040/healthz'
-                  if motion_levels_camera_offline_maintenance_ack
-                    == 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-                    ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
-                  else 'http://127.0.0.1:8040/readyz'
-                ]
-                if motion_levels_camera.enabled
-                else []
-              )
+              + (['http://127.0.0.1:8040/healthz'] if motion_levels_camera.enabled else [])
             }}
           when: motion_levels_pre_cutover_stack in ['native', 'legacy']
-
-        - name: Reverify camera-offline maintenance after native rollback
-          ansible.builtin.import_tasks: ../tasks/verify-camera-offline-maintenance.yml
-          when:
-            - motion_levels_pre_cutover_stack == 'native'
-            - >-
-              motion_levels_camera_offline_maintenance_ack
-              == 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'
-              ~ motion_levels_camera.expected_serial ~ ':' ~ motion_levels_venue_revision
 
         - name: Fail after restoring or safely halting the previous stack
           ansible.builtin.fail:
