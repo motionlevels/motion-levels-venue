@@ -63,10 +63,10 @@ SESSION_SYNC_RETRY_SECONDS = max(
 )
 SESSION_SYNC_PAGE_LIMIT = max(1, min(100, int(os.environ.get("MOTION_LEVELS_SESSION_SYNC_PAGE_LIMIT", "25"))))
 SESSION_SYNC_RECENT_LIMIT = max(1, min(25, int(os.environ.get("MOTION_LEVELS_SESSION_SYNC_RECENT_LIMIT", "5"))))
-SESSION_SYNC_EVENT_LIMIT = max(1, min(500, int(os.environ.get("MOTION_LEVELS_SESSION_SYNC_EVENT_LIMIT", "250"))))
+SESSION_SYNC_EVENT_LIMIT = max(1, min(250, int(os.environ.get("MOTION_LEVELS_SESSION_SYNC_EVENT_LIMIT", "250"))))
 SESSION_SYNC_MAX_ARTIFACT_BYTES = max(
     1,
-    int(os.environ.get("MOTION_LEVELS_SESSION_SYNC_MAX_ARTIFACT_BYTES", "536870912")),
+    int(os.environ.get("MOTION_LEVELS_SESSION_SYNC_MAX_ARTIFACT_BYTES", "67108864")),
 )
 SESSION_SYNC_ARTIFACT_TIMEOUT = max(
     10.0,
@@ -386,33 +386,55 @@ def get_history_visit(visit_id: str) -> dict[str, Any]:
     return visit
 
 
-def get_history_events(visit_id: str) -> list[dict[str, Any]]:
-    events: list[dict[str, Any]] = []
-    cursor: str | None = None
-    observed_cursors: set[str] = set()
-    while True:
-        payload = fetch_json(
-            history_url(
-                f"/sessions/{path_segment(visit_id)}/events",
-                {"limit": SESSION_SYNC_EVENT_LIMIT, "cursor": cursor},
-            ),
-            timeout=10,
-        )
-        require_history_schema(payload)
-        if payload.get("sessionId") != visit_id or not isinstance(payload.get("events"), list):
-            raise ValueError(f"session history returned invalid events for {visit_id}")
-        page = payload["events"]
-        if any(not isinstance(event, dict) for event in page):
-            raise ValueError(f"session history returned a non-object event for {visit_id}")
-        events.extend(page)
-        next_cursor = payload.get("nextCursor")
-        if next_cursor is None:
+def get_history_event_batch(
+    visit_id: str,
+    *,
+    after_sequence: int,
+    snapshot_last_sequence: int,
+) -> list[dict[str, Any]]:
+    """Read one bounded, snapshot-scoped journal page from the venue runtime."""
+    if after_sequence < 0 or snapshot_last_sequence < after_sequence:
+        raise ValueError(f"invalid event sequence bounds for {visit_id}")
+    remaining = snapshot_last_sequence - after_sequence
+    if remaining == 0:
+        return []
+    limit = min(SESSION_SYNC_EVENT_LIMIT, remaining)
+    payload = fetch_json(
+        history_url(
+            f"/sessions/{path_segment(visit_id)}/events",
+            {"limit": limit, "afterSequence": after_sequence},
+        ),
+        timeout=10,
+    )
+    require_history_schema(payload)
+    if payload.get("sessionId") != visit_id or not isinstance(payload.get("events"), list):
+        raise ValueError(f"session history returned invalid events for {visit_id}")
+    page = payload["events"]
+    if len(page) > limit or any(not isinstance(event, dict) for event in page):
+        raise ValueError(f"session history returned an invalid event batch for {visit_id}")
+
+    bounded: list[dict[str, Any]] = []
+    expected_sequence = after_sequence + 1
+    for event in page:
+        sequence = strict_non_negative_integer(event.get("sequence"))
+        if sequence is None:
+            raise ValueError(f"session history returned an invalid event sequence for {visit_id}")
+        if sequence > snapshot_last_sequence:
+            # The journal advanced after the immutable snapshot was read. A
+            # later sync will publish the new snapshot and these new events.
             break
-        if not isinstance(next_cursor, str) or not next_cursor or next_cursor in observed_cursors:
-            raise ValueError(f"session history returned an invalid event cursor for {visit_id}")
-        observed_cursors.add(next_cursor)
-        cursor = next_cursor
-    return events
+        if sequence != expected_sequence:
+            raise ValueError(
+                f"session history event sequence is not contiguous for {visit_id}: "
+                f"expected {expected_sequence}, got {sequence}"
+            )
+        bounded.append(event)
+        expected_sequence += 1
+    if not bounded:
+        raise RuntimeError(
+            f"session history did not return sequence {after_sequence + 1} for {visit_id}"
+        )
+    return bounded
 
 
 def require_history_schema(payload: dict[str, Any]) -> None:
@@ -430,13 +452,87 @@ def path_segment(value: Any) -> str:
 def replay_upload_candidate(recording: Any) -> bool:
     if not isinstance(recording, dict):
         return False
-    return (
+    candidate = (
         recording.get("backend") == "venue-runtime-replay"
         and recording.get("scope") == "run"
         and recording.get("status") in {"pending_upload", "partial"}
         and isinstance(recording.get("localPath"), str)
         and not recording.get("remoteUrl")
     )
+    if not candidate:
+        return False
+    run_id = optional_text(recording.get("runId"))
+    asset_id = optional_text(recording.get("id"))
+    # The unsegmented asset remains readable through the legacy engine route,
+    # but new cloud delivery is exclusively the bounded multipart contract.
+    return not run_id or asset_id != f"run-replay-{run_id}"
+
+
+def replay_part_metadata(recording: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    run_id = required_text(recording.get("runId"), "replay run id")
+    asset_id = required_text(recording.get("id"), "replay asset id")
+    metadata = recording.get("metadata")
+    if not isinstance(metadata, dict):
+        raise ValueError(f"replay metadata is unavailable for asset {asset_id}")
+    part_index = strict_non_negative_integer(metadata.get("partIndex"))
+    if part_index is None or part_index > 999_999:
+        raise ValueError(f"replay partIndex is invalid for asset {asset_id}")
+    run_digest = hashlib.sha256(run_id.encode("utf-8")).hexdigest()
+    expected_asset_id = f"run-replay-{run_digest}-part-{part_index:06d}"
+    if asset_id != expected_asset_id:
+        raise ValueError(f"replay asset id does not match run id and partIndex: {asset_id}")
+    expected_file_name = f"{asset_id}.mlrun.jsonl.gz"
+    if recording.get("fileName") != expected_file_name:
+        raise ValueError(f"replay fileName does not match asset id: {asset_id}")
+    if recording.get("localPath") != f"replays/{expected_file_name}":
+        raise ValueError(f"replay localPath does not match asset id: {asset_id}")
+    if recording.get("contentType") != "application/vnd.motion-levels.run-replay+jsonl":
+        raise ValueError(f"replay contentType is invalid for asset {asset_id}")
+    if metadata.get("schema") != "motion-levels-run-replay-v1":
+        raise ValueError(f"replay metadata schema is invalid for asset {asset_id}")
+    if strict_non_negative_integer(metadata.get("contractVersion")) != 1:
+        raise ValueError(f"replay contractVersion is invalid for asset {asset_id}")
+    if metadata.get("compression") != "gzip":
+        raise ValueError(f"replay compression is invalid for asset {asset_id}")
+    if strict_non_negative_integer(metadata.get("runFrameOffset")) is None:
+        raise ValueError(f"replay runFrameOffset is invalid for asset {asset_id}")
+    is_final_part = metadata.get("isFinalPart")
+    if not isinstance(is_final_part, bool):
+        raise ValueError(f"replay isFinalPart is invalid for asset {asset_id}")
+    partial = metadata.get("partial")
+    if not isinstance(partial, bool):
+        raise ValueError(f"replay partial flag is invalid for asset {asset_id}")
+    if is_final_part:
+        part_count = strict_positive_integer(metadata.get("partCount"))
+        if part_count != part_index + 1:
+            raise ValueError(f"replay final partCount is invalid for asset {asset_id}")
+    elif "partCount" in metadata:
+        raise ValueError(f"replay non-final part declares partCount: {asset_id}")
+    if not is_final_part and partial:
+        raise ValueError(f"replay non-final part cannot be partial: {asset_id}")
+    if (recording.get("status") == "partial") != partial:
+        raise ValueError(f"replay status and partial metadata disagree for asset {asset_id}")
+    return metadata, part_index
+
+
+def ordered_replay_candidates(visit: dict[str, Any]) -> list[dict[str, Any]]:
+    recordings = visit.get("recordings")
+    candidates = [
+        recording
+        for recording in (recordings if isinstance(recordings, list) else [])
+        if replay_upload_candidate(recording)
+    ]
+
+    def sort_key(recording: dict[str, Any]) -> tuple[str, int, str]:
+        metadata = recording.get("metadata") if isinstance(recording.get("metadata"), dict) else {}
+        part_index = strict_non_negative_integer(metadata.get("partIndex"))
+        return (
+            str(recording.get("runId") or ""),
+            part_index if part_index is not None else 1_000_000,
+            str(recording.get("id") or ""),
+        )
+
+    return sorted(candidates, key=sort_key)
 
 
 def replay_init_payload(visit: dict[str, Any], recording: dict[str, Any]) -> dict[str, Any]:
@@ -444,13 +540,11 @@ def replay_init_payload(visit: dict[str, Any], recording: dict[str, Any]) -> dic
     selection_id = required_text(recording.get("selectionId"), "replay selection id")
     run_id = required_text(recording.get("runId"), "replay run id")
     asset_id = required_text(recording.get("id"), "replay asset id")
-    if asset_id != f"run-replay-{run_id}":
-        raise ValueError(f"replay asset id does not match run id: {asset_id}")
+    metadata, _part_index = replay_part_metadata(recording)
     sha256 = required_sha256(recording.get("sha256"))
     byte_size = required_positive_integer(recording.get("byteSize"), "replay byteSize")
     file_name = required_text(recording.get("fileName"), "replay fileName")
     content_type = required_text(recording.get("contentType"), "replay contentType")
-    metadata = recording.get("metadata") if isinstance(recording.get("metadata"), dict) else {}
     encoded_metadata = json.dumps(metadata, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     if len(encoded_metadata) > 65_536:
         raise ValueError(f"replay metadata is too large for asset {asset_id}")
@@ -490,6 +584,8 @@ def download_replay_artifact(visit_id: str, recording: dict[str, Any]) -> Path:
     if not token:
         raise RuntimeError("engine token is unavailable for replay download")
     run_id = required_text(recording.get("runId"), "replay run id")
+    asset_id = required_text(recording.get("id"), "replay asset id")
+    replay_part_metadata(recording)
     expected_size = required_positive_integer(recording.get("byteSize"), "replay byteSize")
     expected_sha256 = required_sha256(recording.get("sha256"))
     if expected_size > SESSION_SYNC_MAX_ARTIFACT_BYTES:
@@ -498,7 +594,7 @@ def download_replay_artifact(visit_id: str, recording: dict[str, Any]) -> Path:
     temporary_root = session_sync_temp_dir()
     temporary_root.mkdir(parents=True, exist_ok=True, mode=0o750)
     file_descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".replay-upload-{safe_file_part(run_id)}-",
+        prefix=f".replay-upload-{safe_file_part(asset_id)}-",
         suffix=".mlrun.jsonl.gz",
         dir=temporary_root,
     )
@@ -506,7 +602,8 @@ def download_replay_artifact(visit_id: str, recording: dict[str, Any]) -> Path:
     digest = hashlib.sha256()
     downloaded = 0
     replay_url = history_url(
-        f"/sessions/{path_segment(visit_id)}/runs/{path_segment(run_id)}/replay"
+        f"/sessions/{path_segment(visit_id)}/runs/{path_segment(run_id)}"
+        f"/replay/{path_segment(asset_id)}"
     )
     try:
         replay_request = request.Request(
@@ -679,20 +776,48 @@ def post_canonical_visit(visit: dict[str, Any], events: list[dict[str, Any]]) ->
     return result
 
 
+def platform_event_high_water(result: dict[str, Any], visit_id: str) -> int:
+    sequence = strict_non_negative_integer(result.get("lastStoredEventSequence"))
+    if sequence is None or sequence > 9_007_199_254_740_991:
+        raise ValueError(f"platform returned an invalid event high-water mark for {visit_id}")
+    return sequence
+
+
+def sync_visit_snapshot_events(visit: dict[str, Any]) -> int:
+    """Publish one immutable snapshot, then stream only its missing events."""
+    visit_id = required_text(visit.get("id"), "visit id")
+    snapshot_last_sequence = strict_non_negative_integer(visit.get("lastSequence"))
+    if snapshot_last_sequence is None:
+        raise ValueError(f"session history snapshot is missing lastSequence for {visit_id}")
+
+    result = post_canonical_visit(visit, [])
+    after_sequence = platform_event_high_water(result, visit_id)
+    while after_sequence < snapshot_last_sequence:
+        events = get_history_event_batch(
+            visit_id,
+            after_sequence=after_sequence,
+            snapshot_last_sequence=snapshot_last_sequence,
+        )
+        last_sent_sequence = strict_non_negative_integer(events[-1].get("sequence"))
+        if last_sent_sequence is None:
+            raise ValueError(f"session history returned an invalid final event for {visit_id}")
+        result = post_canonical_visit(visit, events)
+        next_sequence = platform_event_high_water(result, visit_id)
+        if next_sequence <= after_sequence or next_sequence < last_sent_sequence:
+            raise RuntimeError(f"platform event high-water mark did not advance for {visit_id}")
+        after_sequence = next_sequence
+    return after_sequence
+
+
 def sync_history_visit(visit_id: str) -> dict[str, Any]:
-    # Read the append-only journal first, then its manifest. A transition that
-    # lands between these reads can make the manifest newer than this event
-    # batch (filled on the next idempotent sync), but never gives Platform an
-    # event sequence newer than visit.lastSequence.
-    events = get_history_events(visit_id)
+    # Freeze the manifest first. Events appended after this read are excluded
+    # by its lastSequence and will be delivered with the next snapshot.
     visit = get_history_visit(visit_id)
-    post_canonical_visit(visit, events)
+    sync_visit_snapshot_events(visit)
 
     needs_artifact_retry = False
     uploaded = False
-    for recording in visit.get("recordings", []):
-        if not replay_upload_candidate(recording):
-            continue
+    for recording in ordered_replay_candidates(visit):
         try:
             uploaded = upload_replay_artifact(visit, recording) or uploaded
         except (OSError, TypeError, ValueError, RuntimeError, error.URLError, http.client.HTTPException) as exc:
@@ -703,9 +828,8 @@ def sync_history_visit(visit_id: str) -> dict[str, Any]:
             )
 
     if uploaded:
-        events = get_history_events(visit_id)
         visit = get_history_visit(visit_id)
-        post_canonical_visit(visit, events)
+        sync_visit_snapshot_events(visit)
     if needs_artifact_retry:
         raise RuntimeError(f"one or more replay artifacts remain queued for visit {visit_id}")
     return {
@@ -744,6 +868,17 @@ def non_negative_integer(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return number if number >= 0 else None
+
+
+def strict_non_negative_integer(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def strict_positive_integer(value: Any) -> int | None:
+    number = strict_non_negative_integer(value)
+    return number if number is not None and number > 0 else None
 
 
 def required_positive_integer(value: Any, label: str) -> int:

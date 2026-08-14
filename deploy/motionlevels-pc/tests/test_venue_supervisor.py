@@ -212,57 +212,146 @@ HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis
         self.assertEqual(post.call_args_list[2].args[1]["status"], "ended")
         self.assertEqual(post.call_args_list[3].args[1]["status"], "ended")
 
-    def test_canonical_event_reader_follows_every_opaque_cursor(self):
+    def test_canonical_event_reader_uses_after_sequence_and_snapshot_bound(self):
         visit_id = "22222222-2222-4222-8222-222222222222"
-        first = {
+        response = {
             "schema": SUPERVISOR.SESSION_HISTORY_SCHEMA,
             "sessionId": visit_id,
-            "events": [{"id": "event-1", "sequence": 1}],
-            "nextCursor": "opaque cursor+/=",
+            "events": [
+                {"id": "event-8", "sequence": 8},
+                {"id": "event-9", "sequence": 9},
+            ],
         }
-        second = {
-            "schema": SUPERVISOR.SESSION_HISTORY_SCHEMA,
-            "sessionId": visit_id,
-            "events": [{"id": "event-2", "sequence": 2}],
-            "nextCursor": None,
-        }
-        with mock.patch.object(SUPERVISOR, "fetch_json", side_effect=[first, second]) as fetch:
-            events = SUPERVISOR.get_history_events(visit_id)
+        with mock.patch.object(SUPERVISOR, "fetch_json", return_value=response) as fetch:
+            events = SUPERVISOR.get_history_event_batch(
+                visit_id,
+                after_sequence=7,
+                snapshot_last_sequence=9,
+            )
 
-        self.assertEqual([event["sequence"] for event in events], [1, 2])
-        self.assertIn("cursor=opaque+cursor%2B%2F%3D", fetch.call_args_list[1].args[0])
+        self.assertEqual([event["sequence"] for event in events], [8, 9])
+        self.assertIn("afterSequence=7", fetch.call_args.args[0])
+        self.assertIn("limit=2", fetch.call_args.args[0])
+        self.assertNotIn("cursor=", fetch.call_args.args[0])
 
-    def test_canonical_sync_reads_events_before_manifest_during_a_transition(self):
-        visit_id = "22222222-2222-4222-8222-222222222222"
-        order = []
+    def test_canonical_sync_posts_snapshot_then_each_bounded_event_batch(self):
+        visit = self.visit_fixture(last_sequence=501)
+        read_after = []
 
-        def events(_visit_id):
-            order.append("events")
-            return [{"id": "event-1", "sequence": 1}]
+        def read_batch(_visit_id, *, after_sequence, snapshot_last_sequence):
+            read_after.append((after_sequence, snapshot_last_sequence))
+            end = min(snapshot_last_sequence, after_sequence + 250)
+            return [
+                {"id": f"event-{sequence}", "sequence": sequence}
+                for sequence in range(after_sequence + 1, end + 1)
+            ]
 
-        def visit(_visit_id):
-            order.append("visit")
-            # Event 2 landed after the event page was read. It is safe for the
-            # manifest to be ahead; the next idempotent pass fills that event.
+        def post(_visit, events):
             return {
-                "schema": SUPERVISOR.SESSION_HISTORY_SCHEMA,
-                "id": visit_id,
-                "controllerId": "33333333-3333-4333-8333-333333333333",
-                "lastSequence": 2,
-                "updatedAtUnixMillis": 2_000,
-                "recordings": [],
+                "ok": True,
+                "lastStoredEventSequence": events[-1]["sequence"] if events else 0,
             }
 
         with (
-            mock.patch.object(SUPERVISOR, "get_history_events", side_effect=events),
-            mock.patch.object(SUPERVISOR, "get_history_visit", side_effect=visit),
-            mock.patch.object(SUPERVISOR, "post_canonical_visit") as post,
+            mock.patch.object(SUPERVISOR, "get_history_event_batch", side_effect=read_batch),
+            mock.patch.object(SUPERVISOR, "post_canonical_visit", side_effect=post) as publish,
         ):
-            SUPERVISOR.sync_history_visit(visit_id)
+            high_water = SUPERVISOR.sync_visit_snapshot_events(visit)
 
-        self.assertEqual(order, ["events", "visit"])
-        self.assertEqual(post.call_args.args[0]["lastSequence"], 2)
-        self.assertEqual([event["sequence"] for event in post.call_args.args[1]], [1])
+        self.assertEqual(high_water, 501)
+        self.assertEqual([len(call.args[1]) for call in publish.call_args_list], [0, 250, 250, 1])
+        self.assertTrue(all(call.args[0] is visit for call in publish.call_args_list))
+        self.assertEqual(read_after, [(0, 501), (250, 501), (500, 501)])
+
+    def test_canonical_sync_resumes_from_server_high_water_after_mid_batch_failure(self):
+        visit = self.visit_fixture(last_sequence=300)
+        stored_sequence = 0
+        fail_once = True
+        read_after = []
+
+        def read_batch(_visit_id, *, after_sequence, snapshot_last_sequence):
+            read_after.append(after_sequence)
+            end = min(snapshot_last_sequence, after_sequence + 250)
+            return [
+                {"id": f"event-{sequence}", "sequence": sequence}
+                for sequence in range(after_sequence + 1, end + 1)
+            ]
+
+        def post(_visit, events):
+            nonlocal stored_sequence, fail_once
+            if not events:
+                return {"ok": True, "lastStoredEventSequence": stored_sequence}
+            if events[0]["sequence"] == 251 and fail_once:
+                fail_once = False
+                raise RuntimeError("platform unavailable mid-history")
+            stored_sequence = max(stored_sequence, events[-1]["sequence"])
+            return {"ok": True, "lastStoredEventSequence": stored_sequence}
+
+        with (
+            mock.patch.object(SUPERVISOR, "get_history_event_batch", side_effect=read_batch),
+            mock.patch.object(SUPERVISOR, "post_canonical_visit", side_effect=post),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "unavailable mid-history"):
+                SUPERVISOR.sync_visit_snapshot_events(visit)
+            self.assertEqual(SUPERVISOR.sync_visit_snapshot_events(visit), 300)
+
+        self.assertEqual(stored_sequence, 300)
+        self.assertEqual(read_after, [0, 250, 250])
+
+    def test_canonical_sync_restart_needs_no_local_event_cursor(self):
+        visit = self.visit_fixture(last_sequence=300)
+        self.assertFalse(any("event" in key.lower() for key in SUPERVISOR.default_session_sync_state()))
+
+        with (
+            mock.patch.object(
+                SUPERVISOR,
+                "get_history_event_batch",
+                return_value=[
+                    {"id": f"event-{sequence}", "sequence": sequence}
+                    for sequence in range(251, 301)
+                ],
+            ) as read_batch,
+            mock.patch.object(
+                SUPERVISOR,
+                "post_canonical_visit",
+                side_effect=[
+                    {"ok": True, "lastStoredEventSequence": 250},
+                    {"ok": True, "lastStoredEventSequence": 300},
+                ],
+            ),
+        ):
+            self.assertEqual(SUPERVISOR.sync_visit_snapshot_events(visit), 300)
+
+        self.assertEqual(read_batch.call_args.kwargs["after_sequence"], 250)
+
+    def test_canonical_sync_defers_events_newer_than_the_snapshot(self):
+        visit = self.visit_fixture(last_sequence=2)
+        post_bodies = []
+
+        def post(_visit, events):
+            post_bodies.append(events)
+            return {
+                "ok": True,
+                "lastStoredEventSequence": events[-1]["sequence"] if events else 0,
+            }
+
+        with (
+            mock.patch.object(SUPERVISOR, "get_history_visit", return_value=visit) as snapshot,
+            mock.patch.object(
+                SUPERVISOR,
+                "get_history_event_batch",
+                return_value=[
+                    {"id": "event-1", "sequence": 1},
+                    {"id": "event-2", "sequence": 2},
+                ],
+            ) as read_batch,
+            mock.patch.object(SUPERVISOR, "post_canonical_visit", side_effect=post),
+        ):
+            SUPERVISOR.sync_history_visit(visit["id"])
+
+        snapshot.assert_called_once_with(visit["id"])
+        self.assertEqual(read_batch.call_args.kwargs["snapshot_last_sequence"], 2)
+        self.assertEqual([event["sequence"] for body in post_bodies for event in body], [1, 2])
 
     def test_replay_init_uses_only_canonical_ids_and_maps_presentation_sequences(self):
         visit, recording = self.replay_fixture(status="pending_upload")
@@ -275,6 +364,10 @@ HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis
         self.assertEqual(payload["assetId"], recording["id"])
         self.assertEqual(payload["artifactStatus"], "pending_upload")
         self.assertEqual(payload["metadata"], recording["metadata"])
+        self.assertEqual(payload["metadata"]["partIndex"], 0)
+        self.assertEqual(payload["metadata"]["runFrameOffset"], 0)
+        self.assertTrue(payload["metadata"]["isFinalPart"])
+        self.assertEqual(payload["metadata"]["partCount"], 1)
         self.assertEqual(payload["firstSequence"], "10")
         self.assertEqual(payload["lastSequence"], "19")
         self.assertNotIn("sessionId", payload)
@@ -283,6 +376,116 @@ HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis
     def test_partial_run_replay_is_an_upload_candidate(self):
         _visit, recording = self.replay_fixture(status="partial")
         self.assertTrue(SUPERVISOR.replay_upload_candidate(recording))
+        SUPERVISOR.replay_part_metadata(recording)
+
+    def test_legacy_single_replay_is_read_only_not_an_upload_candidate(self):
+        _visit, recording = self.replay_fixture(status="pending_upload")
+        recording["id"] = f"run-replay-{recording['runId']}"
+        recording["fileName"] = f"{recording['runId']}.mlrun.jsonl.gz"
+        recording["localPath"] = f"replays/{recording['fileName']}"
+
+        self.assertFalse(SUPERVISOR.replay_upload_candidate(recording))
+
+    def test_multipart_assets_are_sorted_and_a_failed_part_does_not_block_later_parts(self):
+        visit, part_two = self.replay_fixture(
+            status="pending_upload",
+            part_index=2,
+            run_frame_offset=20_000,
+            is_final=True,
+        )
+        _visit, part_zero = self.replay_fixture(
+            status="pending_upload",
+            part_index=0,
+            run_frame_offset=0,
+            is_final=False,
+        )
+        _visit, part_one = self.replay_fixture(
+            status="pending_upload",
+            part_index=1,
+            run_frame_offset=10_000,
+            is_final=False,
+        )
+        visit["recordings"] = [part_two, part_zero, part_one]
+
+        def upload(_visit, recording):
+            if recording["metadata"]["partIndex"] == 0:
+                raise RuntimeError("part zero unavailable")
+            return True
+
+        with (
+            mock.patch.object(SUPERVISOR, "get_history_visit", side_effect=[visit, visit]),
+            mock.patch.object(SUPERVISOR, "sync_visit_snapshot_events", return_value=0),
+            mock.patch.object(SUPERVISOR, "upload_replay_artifact", side_effect=upload) as uploader,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "replay artifacts remain queued"):
+                SUPERVISOR.sync_history_visit(visit["id"])
+
+        self.assertEqual(
+            [call.args[1]["metadata"]["partIndex"] for call in uploader.call_args_list],
+            [0, 1, 2],
+        )
+
+    def test_replay_part_contract_recomputes_run_hash_and_rejects_invalid_metadata(self):
+        _visit, recording = self.replay_fixture(status="pending_upload")
+        recording["id"] = recording["id"].replace("-part-", "0-part-", 1)
+        with self.assertRaisesRegex(ValueError, "does not match run id and partIndex"):
+            SUPERVISOR.replay_part_metadata(recording)
+
+        _visit, non_final = self.replay_fixture(
+            status="pending_upload",
+            part_index=0,
+            is_final=False,
+        )
+        non_final["metadata"]["partCount"] = 1
+        with self.assertRaisesRegex(ValueError, "non-final part declares partCount"):
+            SUPERVISOR.replay_part_metadata(non_final)
+
+    def test_replay_download_uses_exact_asset_url_and_recomputes_sha(self):
+        visit, recording = self.replay_fixture(status="pending_upload")
+        payload = b"bounded-multipart-replay"
+        recording["byteSize"] = len(payload)
+        recording["sha256"] = hashlib.sha256(payload).hexdigest()
+        response = mock.MagicMock()
+        response.headers = {"content-length": str(len(payload))}
+        response.read.side_effect = [payload, b""]
+        response.__enter__.return_value = response
+
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "session-sync" / "state.json"
+            temp_root = state_path.parent / "artifacts"
+            with (
+                mock.patch.object(SUPERVISOR, "SESSION_SYNC_STATE_PATH", state_path),
+                mock.patch.object(SUPERVISOR, "SESSION_SYNC_TEMP_DIR", temp_root),
+                mock.patch.object(SUPERVISOR, "engine_token", return_value="engine-token"),
+                mock.patch.object(SUPERVISOR.request, "urlopen", return_value=response) as urlopen,
+            ):
+                downloaded = SUPERVISOR.download_replay_artifact(visit["id"], recording)
+                self.assertEqual(downloaded.read_bytes(), payload)
+                downloaded.unlink()
+
+        requested = urlopen.call_args.args[0]
+        self.assertEqual(
+            requested.full_url,
+            f"{SUPERVISOR.ENGINE_URL}/api/history/v1/sessions/{visit['id']}"
+            f"/runs/{recording['runId']}/replay/{recording['id']}",
+        )
+        self.assertEqual(requested.headers["X-motion-levels-engine-token"], "engine-token")
+
+        recording["sha256"] = "0" * 64
+        second_response = mock.MagicMock()
+        second_response.headers = {"content-length": str(len(payload))}
+        second_response.read.side_effect = [payload, b""]
+        second_response.__enter__.return_value = second_response
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "session-sync" / "state.json"
+            with (
+                mock.patch.object(SUPERVISOR, "SESSION_SYNC_STATE_PATH", state_path),
+                mock.patch.object(SUPERVISOR, "SESSION_SYNC_TEMP_DIR", state_path.parent / "artifacts"),
+                mock.patch.object(SUPERVISOR, "engine_token", return_value="engine-token"),
+                mock.patch.object(SUPERVISOR.request, "urlopen", return_value=second_response),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "sha256 mismatch"):
+                    SUPERVISOR.download_replay_artifact(visit["id"], recording)
 
     def test_replay_upload_marks_engine_complete_only_after_platform_completion(self):
         visit, recording = self.replay_fixture(status="pending_upload")
@@ -415,7 +618,7 @@ HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis
                 SUPERVISOR.put_artifact(
                     "https://objects.example/replay?signature=abc",
                     artifact,
-                    "application/vnd.motionlevels.run-replay+jsonl",
+                    "application/vnd.motion-levels.run-replay+jsonl",
                     "a" * 64,
                 )
 
@@ -505,36 +708,59 @@ HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis
         self.assertEqual([call.args[0] for call in visit.call_args_list], ["visit-active-1", "visit-active-2"])
 
     @staticmethod
-    def replay_fixture(*, status):
-        run_id = "55555555-5555-4555-8555-555555555555"
-        visit = {
+    def visit_fixture(*, last_sequence=0):
+        return {
             "schema": SUPERVISOR.SESSION_HISTORY_SCHEMA,
             "id": "22222222-2222-4222-8222-222222222222",
             "controllerId": "33333333-3333-4333-8333-333333333333",
+            "lastSequence": last_sequence,
+            "updatedAtUnixMillis": 2_000,
+            "recordings": [],
         }
+
+    @classmethod
+    def replay_fixture(
+        cls,
+        *,
+        status,
+        part_index=0,
+        run_frame_offset=0,
+        is_final=True,
+    ):
+        run_id = "55555555-5555-4555-8555-555555555555"
+        run_digest = hashlib.sha256(run_id.encode("utf-8")).hexdigest()
+        asset_id = f"run-replay-{run_digest}-part-{part_index:06d}"
+        visit = cls.visit_fixture()
         recording = {
-            "id": f"run-replay-{run_id}",
+            "id": asset_id,
             "scope": "run",
             "status": status,
             "selectionId": "44444444-4444-4444-8444-444444444444",
             "runId": run_id,
             "linkedRunIds": [run_id],
             "backend": "venue-runtime-replay",
-            "localPath": f"replays/{run_id}.mlrun.jsonl.gz",
-            "fileName": f"{run_id}.mlrun.jsonl.gz",
-            "contentType": "application/vnd.motionlevels.run-replay+jsonl",
+            "localPath": f"replays/{asset_id}.mlrun.jsonl.gz",
+            "fileName": f"{asset_id}.mlrun.jsonl.gz",
+            "contentType": "application/vnd.motion-levels.run-replay+jsonl",
             "byteSize": 123,
             "sha256": "a" * 64,
             "startedAtUnixMillis": 1_000,
             "endedAtUnixMillis": 2_000,
             "metadata": {
                 "schema": "motion-levels-run-replay-v1",
+                "contractVersion": 1,
                 "compression": "gzip",
+                "partIndex": part_index,
+                "runFrameOffset": run_frame_offset,
+                "isFinalPart": is_final,
+                "partial": status == "partial",
                 "frameCount": 10,
                 "firstPresentationSequence": 10,
                 "lastPresentationSequence": 19,
             },
         }
+        if is_final:
+            recording["metadata"]["partCount"] = part_index + 1
         return visit, recording
 
 

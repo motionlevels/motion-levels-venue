@@ -192,22 +192,29 @@ runtime directory while the kiosk is running.
 
 The venue supervisor keeps the legacy live heartbeat during the canonical-session migration and,
 independently, pushes the runtime-owned `motion-levels-session-history-v1` visits to Platform. The
-canonical sync is safe to retry: it pages every local visit and event journal, periodically performs
-a full resend, and relies on Platform upserts keyed by controller, visit, and event sequence. Its
-cursor under `/var/lib/motion-levels/session-sync/state.json` is only an optimization and may be
-removed without losing local session history.
+canonical sync is safe to retry: it posts an immutable visit snapshot first, uses Platform's
+contiguous `lastStoredEventSequence` high-water mark, and then sends the missing journal immediately
+in batches of at most 250 events. It never accumulates a complete event history in memory. Events
+appended after the snapshot's `lastSequence` wait for the next pass, and a retry or supervisor
+restart resumes from Platform rather than trusting local progress. Periodic visit sweeps and the
+state under `/var/lib/motion-levels/session-sync/state.json` only optimize discovery; removing that
+local state cannot lose history because controller/visit/event upserts are server-idempotent.
 
-Every finished run replay is read back through the authenticated venue-runtime history API, checked
-against its declared byte size and SHA-256, streamed to the Platform recording upload URL, and only
-then marked complete in the local visit manifest. Interrupted runs with a partial but valid replay
-follow the same durable path. Failed transfers retain the local gzip artifact and are retried; the
-supervisor never reads a replay into memory as one large byte string and never trusts the
-`RecordingAsset.localPath` as an arbitrary filesystem path. Interrupted uploader temporaries are
-isolated under `/var/lib/motion-levels/session-sync/artifacts`; the supervisor removes only its own
-filename pattern after a 24-hour safety window. The games runtime caps finalized local replay files
-at 512 MiB via `MOTION_LEVELS_REPLAY_MAX_LOCAL_BYTES`; it may prune only the oldest asset that the
-supervisor has already marked `complete` with a remote URL, and retains every pending, partial, or
-otherwise unverified local artifact.
+Every run produces bounded gzip replay parts with deterministic IDs derived from the SHA-256 of the
+run ID and a six-digit part index. The supervisor validates that identity and the part metadata,
+orders candidates by part index, and reads each exact asset through the authenticated venue-runtime
+history API. Each part is checked against its declared byte size and a recomputed SHA-256, streamed
+independently to the Platform recording upload URL, and only then marked complete in the local visit
+manifest. A failed earlier part does not block later idempotent uploads; interrupted final parts
+retain `metadata.partial=true` while following the same durable path. The uploader accepts at most
+64 MiB per artifact (`MOTION_LEVELS_SESSION_SYNC_MAX_ARTIFACT_BYTES`), never reads a replay into
+memory as one large byte string, and never trusts `RecordingAsset.localPath` as an arbitrary
+filesystem path. Interrupted uploader temporaries are isolated under
+`/var/lib/motion-levels/session-sync/artifacts`; the supervisor removes only its own filename pattern
+after a 24-hour safety window. The games runtime separately caps the full finalized local replay
+cache at 512 MiB via `MOTION_LEVELS_REPLAY_MAX_LOCAL_BYTES`; it may prune only the oldest asset that
+the supervisor has already marked `complete` with a remote URL, and retains every pending, partial,
+or otherwise unverified local artifact.
 
 After every native health gate succeeds, the playbook retires old display/audio/container units and
 stops and disables Docker and containerd. It then removes only the allowlisted legacy container

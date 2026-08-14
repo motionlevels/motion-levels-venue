@@ -355,8 +355,13 @@ test("the supervisor durably syncs canonical history and streams run replays", (
   assert.match(supervisor, /motion-levels-session-history-sync-v1/);
   assert.match(supervisor, /\/api\/ingest\/session-history\/v1/);
   assert.match(supervisor, /\/api\/history\/v1/);
+  assert.match(supervisor, /afterSequence/);
+  assert.match(supervisor, /lastStoredEventSequence/);
+  assert.match(supervisor, /min\(250, int\(os\.environ\.get\("MOTION_LEVELS_SESSION_SYNC_EVENT_LIMIT"/);
   assert.match(supervisor, /\/api\/recording-uploads\/init/);
   assert.match(supervisor, /\/api\/recording-uploads\/complete/);
+  assert.match(supervisor, /run-replay-\{run_digest\}-part-\{part_index:06d\}/);
+  assert.match(supervisor, /\/replay\/\{path_segment\(asset_id\)\}/);
   assert.match(supervisor, /x-motion-levels-engine-token/);
   assert.match(supervisor, /x-amz-meta-sha256/);
   assert.match(supervisor, /while chunk := source\.read\(1024 \* 1024\)/);
@@ -365,6 +370,7 @@ test("the supervisor durably syncs canonical history and streams run replays", (
   assert.match(environment, /^MOTION_LEVELS_SESSION_SYNC_ENABLED=1$/m);
   assert.match(environment, /^MOTION_LEVELS_ENGINE_TOKEN_FILE=\/etc\/motion-levels\/camera-recorder-token$/m);
   assert.match(environment, /^MOTION_LEVELS_REPLAY_MAX_LOCAL_BYTES=536870912$/m);
+  assert.match(environment, /^MOTION_LEVELS_SESSION_SYNC_MAX_ARTIFACT_BYTES=67108864$/m);
   assert.match(environment, /MOTION_LEVELS_SESSION_SYNC_STATE_PATH=\{\{ motion_levels_state_root \}\}\/session-sync\/state\.json/);
   assert.match(environment, /MOTION_LEVELS_SESSION_SYNC_TEMP_DIR=\{\{ motion_levels_state_root \}\}\/session-sync\/artifacts/);
   assert.match(supervisor, /\.replay-upload-/);
