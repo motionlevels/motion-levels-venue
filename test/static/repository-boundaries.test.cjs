@@ -282,6 +282,17 @@ test("the Twitch stream key stays in a host-owned file", () => {
   assert.match(playbook, /group: motion-levels-cameras\n\s+mode: "0440"/);
 });
 
+test("motionlevels-1 passes its default GoPro recording profile to the camera service", () => {
+  const hostVars = read("ansible/inventory/production/host_vars/motionlevels-1.yml");
+  const environment = read("ansible/templates/motion-levels-cameras.env.j2");
+
+  assert.match(hostVars, /recording:\n\s+default_profile: hero12-test-2026-08-13/);
+  assert.match(
+    environment,
+    /^ML_CAMERAS_GOPRO_DEFAULT_RECORDING_PROFILE=\{\{ motion_levels_camera\.recording\.default_profile \}\}$/m,
+  );
+});
+
 test("the native floor adapter is pinned to the venue LAN source address", () => {
   const hostVars = read("ansible/inventory/production/host_vars/motionlevels-1.yml");
   const environment = read("ansible/templates/motion-levels.env.j2");

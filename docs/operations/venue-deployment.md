@@ -196,8 +196,10 @@ next start.
 
 The camera environment and udev rule are rendered from production host vars. Runtime reconciliation
 requires the exact GoPro USB vendor, product, and serial; another HERO12 is ignored by the control
-service. Deployment does not inspect that hardware identity. Health checks are read-only and never
-start or stop a recording.
+service. The venue's `recording.default_profile` is passed to the camera service as
+`ML_CAMERAS_GOPRO_DEFAULT_RECORDING_PROFILE`, so the deployed default remains explicit and
+venue-specific. Deployment does not inspect that hardware identity. Health checks are read-only and
+never start or stop a recording.
 
 ## Health and observability
 
