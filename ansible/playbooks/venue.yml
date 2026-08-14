@@ -50,6 +50,7 @@
           - motion_levels_camera.twitch.framerate | int > 0
           - motion_levels_camera.twitch.video_bitrate_kbps | int > 0
           - motion_levels_camera.twitch.audio_bitrate_kbps | int > 0
+          - motion_levels_display.audio_enabled is boolean
           - (motion_levels_display.alsa.card | int) >= 0
           - (motion_levels_display.alsa.device | int) >= 0
         fail_msg: "Venue host vars or deploy/motionlevels-pc/venue-components.lock.json are incomplete."

@@ -28,6 +28,7 @@ motion_levels_display:
   output: HDMI-1
   mode: 1920x1080
   refresh_hz: 60
+  audio_enabled: true
   alsa:
     card: 0
     device: 5

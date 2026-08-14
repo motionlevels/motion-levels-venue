@@ -46,6 +46,7 @@ MOTION_LEVELS_XRANDR_OUTPUT="$(env_file_value MOTION_LEVELS_XRANDR_OUTPUT)"
 MOTION_LEVELS_PLAYER_PROFILE="$(env_file_value MOTION_LEVELS_PLAYER_PROFILE /var/lib/motion-levels/rebuild-player-chromium)"
 MOTION_LEVELS_PLAYER_URL="$(env_file_value MOTION_LEVELS_PLAYER_URL http://127.0.0.1/display/)"
 MOTION_LEVELS_FORCE_ALSA_OUTPUT="$(env_file_value MOTION_LEVELS_FORCE_ALSA_OUTPUT 0)"
+MOTION_LEVELS_HDMI_ALSA_DEVICE="$(env_file_value MOTION_LEVELS_HDMI_ALSA_DEVICE)"
 MOTION_LEVELS_PLAYER_WINDOW_SIZE="${MOTION_LEVELS_XRANDR_MODE:-1920x1080}"
 MOTION_LEVELS_PLAYER_WINDOW_SIZE="${MOTION_LEVELS_PLAYER_WINDOW_SIZE//x/,}"
 
@@ -232,6 +233,13 @@ main() {
     --check-for-update-interval=31536000
     --autoplay-policy=no-user-gesture-required
   )
+
+  # Route Chromium directly to the inventory-owned HDMI PCM. /etc/asound.conf
+  # remains the process-wide fallback, while the explicit flag prevents a
+  # hotplug or probe-order change from sending Web Audio to another card.
+  if truthy_env "${MOTION_LEVELS_FORCE_ALSA_OUTPUT}" && [ -n "${MOTION_LEVELS_HDMI_ALSA_DEVICE}" ]; then
+    chrome_flags+=( "--alsa-output-device=${MOTION_LEVELS_HDMI_ALSA_DEVICE}" )
+  fi
 
   # Force the window to cover the whole screen (no WM to maximise it for us).
   if [ -n "${screen_width:-}" ] && [ -n "${screen_height:-}" ]; then
