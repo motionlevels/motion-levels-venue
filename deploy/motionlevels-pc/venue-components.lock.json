@@ -10,7 +10,7 @@
     },
     "games": {
       "repository": "https://github.com/motionlevels/motion-levels-games.git",
-      "revision": "0a575aa29f7809549768a03ddcb8fba92cc22d31",
+      "revision": "11409a59478de09346071bfed83471627529f7f5",
       "nodeVersion": "20"
     },
     "cameras": {

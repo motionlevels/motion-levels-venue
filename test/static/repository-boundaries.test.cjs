@@ -110,6 +110,14 @@ test("the verified native bundle contains the runtime, menu, and complete displa
   assert.match(runtime, /exec "\$node_binary" "\$runtime_entry"/);
 });
 
+test("Caddy leaves engine event streams uncompressed", () => {
+  const caddy = read("deploy/motionlevels-pc/Caddyfile");
+
+  assert.match(caddy, /@compressible not path \/engine\/api\/\*\/events/);
+  assert.match(caddy, /encode @compressible zstd gzip/);
+  assert.doesNotMatch(caddy, /^\s*encode zstd gzip\s*$/m);
+});
+
 test("native cutover safety precedes live replacement and services activate in dependency order", () => {
   const playbook = read("ansible/playbooks/venue.yml");
   const installLive = read("ansible/tasks/install-native-live.yml");
