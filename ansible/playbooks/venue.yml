@@ -474,6 +474,27 @@
         mode: "0755"
       when: motion_levels_camera.enabled
 
+    - name: Keep the venue LAN resolver ahead of USB peripheral DNS
+      ansible.builtin.copy:
+        dest: /etc/resolv.conf.head
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Managed by motion-levels-venue Ansible. USB cameras may advertise
+          # device-only resolvers which must not delay Platform connectivity.
+          nameserver {{ motion_levels_network.lan.gateway }}
+      register: motion_levels_resolver_head
+
+    - name: Refresh resolver ordering after updating the persistent head
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/dhcpcd
+          - --rebind
+          - "{{ motion_levels_network.lan.interface }}"
+      changed_when: true
+      when: motion_levels_resolver_head.changed
+
     - name: Install the venue-specific GoPro USB network configuration
       ansible.builtin.template:
         src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels-gopro-interface.j2"
