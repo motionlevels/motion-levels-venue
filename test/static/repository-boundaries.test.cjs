@@ -135,6 +135,59 @@ test("native cutover gates precede live replacement and activation is display-aw
   assert.match(playbook, /motion_levels_display\.mode/);
 });
 
+test("camera-offline maintenance is one-deployment, exact, and fail-closed", () => {
+  const playbook = read("ansible/playbooks/venue.yml");
+  const helper = read("ansible/tasks/verify-camera-offline-maintenance.yml");
+  const groupVars = read("ansible/inventory/production/group_vars/all.yml");
+  const hostVars = read("ansible/inventory/production/host_vars/motionlevels-1.yml");
+  const liveReplacement = playbook.indexOf("Replace live native files inside the rollback boundary");
+  const preCutoverCheck = playbook.indexOf("Reverify camera-offline maintenance immediately before cutover");
+  const postHealthCheck = playbook.indexOf("Reverify camera-offline maintenance after complete venue health");
+  const runtimeStop = playbook.indexOf("Stop and disable the retired container runtime");
+
+  assert.match(
+    playbook,
+    /== 'CAMERA-OFFLINE:' ~ inventory_hostname ~ ':'\n\s+~ motion_levels_camera\.expected_serial ~ ':' ~ motion_levels_venue_revision/,
+  );
+  assert.match(playbook, /motion_levels_camera_offline_maintenance_ack: ""/);
+  assert.equal(groupVars.includes("motion_levels_camera_offline_maintenance_ack"), false);
+  assert.equal(hostVars.includes("motion_levels_camera_offline_maintenance_ack"), false);
+  assert.equal((playbook.match(/verify-camera-offline-maintenance\.yml/g) || []).length, 5);
+  assert.ok(preCutoverCheck >= 0 && preCutoverCheck < liveReplacement);
+  assert.ok(postHealthCheck > liveReplacement && postHealthCheck < runtimeStop);
+  assert.match(playbook, /camera_health_mode/);
+  assert.match(playbook, /offline-maintenance/);
+  assert.doesNotMatch(playbook, /^\s*motion_levels_camera_offline_maintenance:\s*/m);
+  assert.doesNotMatch(playbook, /when:\s+motion_levels_camera_offline_maintenance\s*$/m);
+  assert.ok(
+    (playbook.match(/[!=]= 'CAMERA-OFFLINE:' ~ inventory_hostname/g) || []).length >= 12,
+    "every exception gate must compare the exact acknowledgement directly",
+  );
+  assert.match(playbook, /motion_levels_camera_offline_maintenance_ack[\s\S]*cameraDetected/);
+  assert.match(playbook, /http:\/\/127\.0\.0\.1:8040\/healthz[\s\S]*motion_levels_camera_offline_maintenance_ack[\s\S]*http:\/\/127\.0\.0\.1:8040\/readyz/);
+
+  for (const evidence of [
+    "existing complete native release",
+    "physically absent",
+    "is-active --quiet motion-levels-cameras.service",
+    "is-enabled --quiet motion-levels-cameras.service",
+    "/healthz",
+    "/readyz",
+    "/status?refresh=true",
+    "/capture",
+    "/host-recording",
+    "/api/v1/media/jobs?limit=1000",
+    "pendingMediaJobs",
+    "active_recording_clip",
+    "camera media spool is not empty",
+  ]) {
+    assert.match(helper, new RegExp(evidence.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.match(helper, /test "\$matches" -eq 0/);
+  assert.match(helper, /motion_levels_camera\.expected_serial/);
+  assert.match(helper, /rejectattr\('state', 'equalto', 'complete'\)/);
+});
+
 test("rollback stops native units first and restores only a known stack", () => {
   const playbook = read("ansible/playbooks/venue.yml");
   const rescue = playbook.indexOf("rescue:", playbook.indexOf("Activate and health-gate the native release"));

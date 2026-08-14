@@ -83,6 +83,11 @@ switches the native systemd stack, verifies all local HTTP surfaces and the seri
 automatically restores the previous healthy release if activation fails. It refuses dirty or
 revision-mismatched source trees. There is no CI, container image, or GHCR wait in this path.
 
+If a known camera is intentionally powered off, the runbook documents a one-deployment
+camera-offline maintenance acknowledgement. It is scoped to the target host, configured serial, and
+exact venue revision; the default path still requires the camera online. Never persist that
+acknowledgement in inventory.
+
 Useful operator commands:
 
 ```sh

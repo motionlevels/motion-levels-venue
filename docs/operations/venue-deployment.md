@@ -128,6 +128,35 @@ Compose model, or legacy container helpers from older revisions. The native play
 bounded first-cutover safety check for an old camera container; that migration guard is not a
 container deployment mechanism.
 
+### Intentional camera-off maintenance
+
+Normal deployment always requires the exact configured camera online. When that camera is
+intentionally powered off and cannot be reached physically, an existing native venue may be updated
+with a one-deployment acknowledgement. First verify that no recording or upload work is expected,
+then run from the clean, committed venue revision being deployed:
+
+```sh
+venue_revision="$(git rev-parse HEAD)"
+ansible-playbook ansible/playbooks/venue.yml --limit motionlevels-1 \
+  --extra-vars "motion_levels_camera_offline_maintenance_ack=CAMERA-OFFLINE:motionlevels-1:C3501324639939:${venue_revision}"
+```
+
+Never place this value in host or group variables. The acknowledgement is valid only for that host,
+configured serial, and exact venue commit. Before live replacement, immediately before cutover,
+after camera-service restart, after full health, and after any rollback, Ansible proves that:
+
+- the expected USB device, port, and network interface are physically absent;
+- the native camera service is active and enabled but `/readyz` remains fail-closed;
+- preview, managed capture, host recording, and looping are inactive;
+- the expected serial remains in durable state;
+- there are zero pending media jobs, no active clip record, and no spool entries.
+
+This exception does not disable camera configuration, the serial-specific udev rule, or the service.
+When the same GoPro is later powered on at its configured port, normal hotplug reconciliation brings
+it online. `/etc/motion-levels/stack.json` records `camera_health_mode: offline-maintenance` for this
+activation. A typo, another serial, another target, another venue commit, a connected-but-unhealthy
+camera, or any pending media work is rejected.
+
 ## What activation changes
 
 Ansible stages the verified output at
