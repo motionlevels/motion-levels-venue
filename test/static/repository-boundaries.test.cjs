@@ -265,6 +265,8 @@ test("the native floor adapter is pinned to the venue LAN source address", () =>
 
   assert.match(hostVars, /floor:\n\s+#[\s\S]*?source_address: 192\.168\.1\.142/);
   assert.match(environment, /MOTION_LEVELS_FLOOR_SOURCE_IP=\{\{ motion_levels_network\.floor\.source_address \}\}/);
+  assert.match(environment, /^MOTION_LEVELS_LIVE_PUSH_FPS=5$/m);
+  assert.match(environment, /^MOTION_LEVELS_LOCAL_LIVE_FLOOR_FPS=25$/m);
   assert.match(service, /-floor-source-ip \$\{MOTION_LEVELS_FLOOR_SOURCE_IP\}/);
 });
 
