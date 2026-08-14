@@ -28,9 +28,13 @@ non-empty files:
 
 - `/etc/motion-levels/camera-recorder-token`
 - `/etc/motion-levels-cameras/platform-token`
+- `/etc/motion-levels-cameras/twitch-stream-key`
 
-The venue playbook refuses deployment when either file is absent or empty. Other platform secrets
-remain in `/etc/motion-levels/platform.env`.
+The last file contains the Twitch **stream key**, not a Helix API or OAuth token. Provision it from
+a protected local file without placing its value in Git, inventory, shell history, or the rendered
+environment. The venue playbook refuses deployment when any file is absent or empty and normalizes
+camera-secret ownership to `root:motion-levels-cameras` mode `0440`. Other platform secrets remain
+in `/etc/motion-levels/platform.env`.
 
 ## Release assembly
 
@@ -97,7 +101,7 @@ The native playbook requires:
 - Debian 13 or newer on x86-64;
 - Node.js 20 or newer and Python 3.13;
 - SSH access as the inventory user (`root` in production);
-- both protected camera token files already present on the host;
+- all three protected camera secret files already present on the host;
 - the controller, games, and camera source checkouts available on the control machine.
 
 Install the required Ansible collection once:
@@ -147,8 +151,9 @@ reconciled automatically when it appears later.
 configuration directory.
 
 The only camera-specific pre-cutover safety check is workload state: Ansible refuses to terminate an
-actively recording capture. Durable queued or retrying uploads do not block deployment and resume
-from their persisted state after restart.
+active capture, host recording, or Twitch broadcast. Durable queued or retrying uploads do not block
+deployment and resume from their persisted state after restart. The post-activation health gate
+checks that Twitch broadcasting is configured; it deliberately does not start a public broadcast.
 
 ## What activation changes
 

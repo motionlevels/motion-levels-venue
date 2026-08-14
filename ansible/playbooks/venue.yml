@@ -42,6 +42,12 @@
           - motion_levels_network.floor.source_address == (motion_levels_network.lan.address | regex_replace('/.*$', ''))
           - motion_levels_camera.api_token_file.startswith('/etc/')
           - motion_levels_camera.platform_token_file.startswith('/etc/')
+          - motion_levels_camera.twitch.stream_key_file.startswith('/etc/')
+          - motion_levels_camera.twitch.ingest_url.startswith('rtmps://')
+          - motion_levels_camera.twitch.video_size is match('^[0-9]+x[0-9]+$')
+          - motion_levels_camera.twitch.framerate | int > 0
+          - motion_levels_camera.twitch.video_bitrate_kbps | int > 0
+          - motion_levels_camera.twitch.audio_bitrate_kbps | int > 0
           - (motion_levels_display.alsa.card | int) >= 0
           - (motion_levels_display.alsa.device | int) >= 0
         fail_msg: "Venue host vars or deploy/motionlevels-pc/venue-components.lock.json are incomplete."
@@ -313,6 +319,7 @@
       loop:
         - "{{ motion_levels_camera.api_token_file }}"
         - "{{ motion_levels_camera.platform_token_file }}"
+        - "{{ motion_levels_camera.twitch.stream_key_file }}"
       when: motion_levels_camera.enabled
 
     - name: Require camera secrets to exist outside Git
@@ -334,6 +341,7 @@
       loop:
         - "{{ motion_levels_camera.api_token_file }}"
         - "{{ motion_levels_camera.platform_token_file }}"
+        - "{{ motion_levels_camera.twitch.stream_key_file }}"
       no_log: true
       when: motion_levels_camera.enabled
 
@@ -645,7 +653,7 @@
           venueSessionId={{ motion_levels_cutover_status.json.venueSessionId | default('none', true) }}.
       when: (motion_levels_cutover_status.status | default(0) | int) == 200
 
-    - name: Refuse to interrupt an active camera capture during cutover
+    - name: Refuse to interrupt active camera workloads during cutover
       ansible.builtin.import_tasks: ../tasks/verify-camera-cutover-safety.yml
 
     - name: Classify the pre-cutover stack for rollback
@@ -881,6 +889,7 @@
             - motion_levels_camera_health.status == 200
             - motion_levels_camera_health.json.ok | default(false) | bool
             - motion_levels_camera_health.json.mediaPipelineConfigured | default(false) | bool
+            - motion_levels_camera_health.json.twitchBroadcast.configured | default(false) | bool
           when: motion_levels_camera.enabled
 
         - name: Enable and restart Caddy on the activated release

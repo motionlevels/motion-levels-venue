@@ -1,5 +1,5 @@
 ---
-- name: Refuse to interrupt an active camera capture during cutover
+- name: Refuse to interrupt active camera workloads during cutover
   ansible.builtin.shell: |
     set -euo pipefail
     if systemctl is-active --quiet motion-levels-cameras.service; then
@@ -9,6 +9,11 @@
           >/dev/null
       curl -fsS --max-time 10 "{{ motion_levels_camera.api_url }}/api/v1/cameras/{{ motion_levels_camera.camera_id }}/host-recording" \
         | jq -e '.active == false' >/dev/null
+      camera_health="$(curl -fsS --max-time 10 "{{ motion_levels_camera.api_url }}/healthz")"
+      if jq -e 'has("twitchBroadcast")' <<<"$camera_health" >/dev/null; then
+        curl -fsS --max-time 10 "{{ motion_levels_camera.api_url }}/api/v1/cameras/{{ motion_levels_camera.camera_id }}/broadcasts/twitch" \
+          | jq -e '.active == false' >/dev/null
+      fi
     fi
 
     database="{{ motion_levels_camera_state_root }}/state.db"

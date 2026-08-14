@@ -113,14 +113,14 @@ test("the verified native bundle contains the runtime, menu, and complete displa
 test("native cutover safety precedes live replacement and services activate in dependency order", () => {
   const playbook = read("ansible/playbooks/venue.yml");
   const installLive = read("ansible/tasks/install-native-live.yml");
-  const captureGate = playbook.indexOf("Refuse to interrupt an active camera capture during cutover");
+  const workloadGate = playbook.indexOf("Refuse to interrupt active camera workloads during cutover");
   const idleGate = playbook.indexOf("Require an idle venue before disrupting runtime services");
   const liveReplacement = playbook.indexOf("Replace live native files inside the rollback boundary");
   const coreActivation = playbook.indexOf("Enable and restart native core services in dependency order");
   const caddyActivation = playbook.indexOf("Enable and restart Caddy on the activated release");
   const displayActivation = playbook.indexOf("Enable and restart the kiosk and hotplug watchdog");
 
-  assert.ok(captureGate >= 0 && captureGate < liveReplacement);
+  assert.ok(workloadGate >= 0 && workloadGate < liveReplacement);
   assert.ok(idleGate >= 0 && idleGate < liveReplacement);
   assert.match(installLive, /Render the venue runtime environment/);
   assert.match(installLive, /Render the venue-specific Caddy configuration/);
@@ -147,6 +147,7 @@ test("hardware state is observable at runtime but never gates deployment", () =>
   assert.match(playbook, /Verify native camera service health independently of hardware/);
   assert.match(playbook, /http:\/\/127\.0\.0\.1:8040\/healthz/);
   assert.match(playbook, /mediaPipelineConfigured/);
+  assert.match(playbook, /twitchBroadcast\.configured/);
   assert.match(playbook, /"deployment_health_contract": "software-only"/);
   assert.match(playbook, /"hardware_state_contract": "observed-not-gated"/);
   assert.match(playbook, /Publish non-secret deployed stack metadata/);
@@ -156,6 +157,7 @@ test("hardware state is observable at runtime but never gates deployment", () =>
   assert.match(playbook, /Queue exact GoPro hotplug reconciliation without gating activation[\s\S]*timeout[\s\S]*udevadm[\s\S]*failed_when: false/);
   assert.match(safety, /\/capture/);
   assert.match(safety, /\/host-recording/);
+  assert.match(safety, /\/broadcasts\/twitch/);
   assert.match(safety, /active_recording_clip/);
   assert.doesNotMatch(safety, /idVendor|idProduct|expected_serial|\/readyz/);
   assert.match(udev, /ATTR\{serial\}=="\{\{ motion_levels_camera\.expected_serial \}\}"/);
@@ -256,6 +258,18 @@ test("the native camera can traverse to its group-readable API token", () => {
   const playbook = read("ansible/playbooks/venue.yml");
   assert.match(playbook, /Allow the camera account to traverse the shared config directory/);
   assert.match(playbook, /group: motion-levels-cameras\n\s+mode: "0710"/);
+});
+
+test("the Twitch stream key stays in a host-owned file", () => {
+  const playbook = read("ansible/playbooks/venue.yml");
+  const hostVars = read("ansible/inventory/production/host_vars/motionlevels-1.yml");
+  const environment = read("ansible/templates/motion-levels-cameras.env.j2");
+
+  assert.match(hostVars, /stream_key_file: \/etc\/motion-levels-cameras\/twitch-stream-key/);
+  assert.match(environment, /^ML_CAMERAS_TWITCH_STREAM_KEY_FILE=\{\{ motion_levels_camera\.twitch\.stream_key_file \}\}$/m);
+  assert.doesNotMatch(environment, /^ML_CAMERAS_TWITCH_STREAM_KEY=/m);
+  assert.match(playbook, /motion_levels_camera\.twitch\.stream_key_file/);
+  assert.match(playbook, /group: motion-levels-cameras\n\s+mode: "0440"/);
 });
 
 test("the native floor adapter is pinned to the venue LAN source address", () => {
