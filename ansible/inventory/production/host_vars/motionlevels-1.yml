@@ -42,6 +42,7 @@ motion_levels_camera:
   twitch:
     stream_key_file: /etc/motion-levels-cameras/twitch-stream-key
     ingest_url: rtmps://ingest.global-contribute.live-video.net/app
+    watch_url: https://www.twitch.tv/motionlevels
     video_size: 1280x720
     framerate: 30
     video_bitrate_kbps: 3000

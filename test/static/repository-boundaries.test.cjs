@@ -266,7 +266,9 @@ test("the Twitch stream key stays in a host-owned file", () => {
   const environment = read("ansible/templates/motion-levels-cameras.env.j2");
 
   assert.match(hostVars, /stream_key_file: \/etc\/motion-levels-cameras\/twitch-stream-key/);
+  assert.match(hostVars, /watch_url: https:\/\/www\.twitch\.tv\/motionlevels/);
   assert.match(environment, /^ML_CAMERAS_TWITCH_STREAM_KEY_FILE=\{\{ motion_levels_camera\.twitch\.stream_key_file \}\}$/m);
+  assert.match(environment, /^ML_CAMERAS_TWITCH_WATCH_URL=\{\{ motion_levels_camera\.twitch\.watch_url \}\}$/m);
   assert.doesNotMatch(environment, /^ML_CAMERAS_TWITCH_STREAM_KEY=/m);
   assert.match(playbook, /motion_levels_camera\.twitch\.stream_key_file/);
   assert.match(playbook, /group: motion-levels-cameras\n\s+mode: "0440"/);

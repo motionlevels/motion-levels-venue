@@ -44,6 +44,7 @@
           - motion_levels_camera.platform_token_file.startswith('/etc/')
           - motion_levels_camera.twitch.stream_key_file.startswith('/etc/')
           - motion_levels_camera.twitch.ingest_url.startswith('rtmps://')
+          - motion_levels_camera.twitch.watch_url is match('^https://www\\.twitch\\.tv/[A-Za-z0-9_]{3,25}$')
           - motion_levels_camera.twitch.video_size is match('^[0-9]+x[0-9]+$')
           - motion_levels_camera.twitch.framerate | int > 0
           - motion_levels_camera.twitch.video_bitrate_kbps | int > 0
