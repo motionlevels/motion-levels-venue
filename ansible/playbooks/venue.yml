@@ -41,6 +41,7 @@
           - motion_levels_camera.usb.dhcp_metric | int > 0
           - motion_levels_camera.gopro.base_url.startswith('http://')
           - motion_levels_camera.gopro.rotation_degrees | int in [0, 90, 180, 270]
+          - motion_levels_network.floor.rotation_degrees | int in [0, 180]
           - motion_levels_camera.media.transfer_mode in ['direct-first', 'local-first']
           - motion_levels_camera.media.spool_max_bytes | int > 0
           - motion_levels_camera.media.min_free_bytes | int > 0

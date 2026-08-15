@@ -27,6 +27,7 @@ motion_levels_network:
     # Native controller traffic must retain the venue LAN source address.
     source_address: 192.168.1.142
     broadcast: 255.255.255.255
+    rotation_degrees: 180
 
 motion_levels_display:
   backend: x11

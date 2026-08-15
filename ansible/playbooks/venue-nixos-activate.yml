@@ -467,6 +467,16 @@
       register: motion_levels_nixos_security_camera
       changed_when: false
 
+    - name: Evaluate the production floor orientation
+      ansible.builtin.command:
+        argv:
+          - nix
+          - eval
+          - --json
+          - "{{ motion_levels_nixos_configuration_root }}#nixosConfigurations.{{ motion_levels_nixos_profile }}.config.motionLevels.venueHost.floor.rotationDegrees"
+      register: motion_levels_nixos_floor_rotation
+      changed_when: false
+
     - name: Require production mode and inventory parity before building
       ansible.builtin.assert:
         that:
@@ -474,6 +484,7 @@
           - >-
             motion_levels_nixos_security_camera.stdout | trim
             == (motion_levels_security_camera.enabled | bool | ternary('true', 'false'))
+          - motion_levels_nixos_floor_rotation.stdout | trim | int == motion_levels_network.floor.rotation_degrees | int
         fail_msg: "The production flake profile disagrees with the Ansible activation contract."
 
     - name: Build the exact production NixOS generation without switching

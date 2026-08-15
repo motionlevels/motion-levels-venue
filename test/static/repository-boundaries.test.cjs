@@ -426,16 +426,30 @@ test("motionlevels-1 stages camera media locally within explicit disk limits", (
   assert.doesNotMatch(environment, /^ML_CAMERAS_MEDIA_(?:SPOOL_MAX|MIN_FREE)_BYTES=[0-9]+$/m);
 });
 
-test("the native floor adapter is pinned to the venue LAN source address", () => {
+test("the native floor adapter keeps its source address and room orientation explicit", () => {
   const hostVars = read("ansible/inventory/production/host_vars/motionlevels-1.yml");
+  const nixosHostVars = read("ansible/inventory/production/host_vars/motionlevels-zaragoza.yml");
   const environment = read("ansible/templates/motion-levels.env.j2");
   const service = read("deploy/motionlevels-pc/motion-levels-floor-controller.service");
+  const nixosHost = read("deploy/nixos/hosts/motionlevels-zaragoza.nix");
+  const nixosModule = read("deploy/nixos/modules/motion-levels-venue-native.nix");
+  const activation = read("ansible/playbooks/venue-nixos-activate.yml");
 
   assert.match(hostVars, /floor:\n\s+#[\s\S]*?source_address: 192\.168\.1\.142/);
+  assert.match(hostVars, /floor:[\s\S]*?rotation_degrees: 180/);
+  assert.match(nixosHostVars, /floor:[\s\S]*?rotation_degrees: 180/);
   assert.match(environment, /MOTION_LEVELS_FLOOR_SOURCE_IP=\{\{ motion_levels_network\.floor\.source_address \}\}/);
+  assert.match(
+    environment,
+    /^MOTION_LEVELS_FLOOR_ROTATION_DEGREES=\{\{ motion_levels_network\.floor\.rotation_degrees \}\}$/m,
+  );
   assert.match(environment, /^MOTION_LEVELS_LIVE_PUSH_FPS=5$/m);
   assert.match(environment, /^MOTION_LEVELS_LOCAL_LIVE_FLOOR_FPS=25$/m);
   assert.match(service, /-floor-source-ip \$\{MOTION_LEVELS_FLOOR_SOURCE_IP\}/);
+  assert.match(service, /-floor-rotation \$\{MOTION_LEVELS_FLOOR_ROTATION_DEGREES\}/);
+  assert.match(nixosHost, /floor = \{\n\s+rotationDegrees = 180;/);
+  assert.match(nixosModule, /-floor-rotation \$\{toString cfg\.floor\.rotationDegrees\}/);
+  assert.match(activation, /motion_levels_nixos_floor_rotation\.stdout \| trim \| int == motion_levels_network\.floor\.rotation_degrees \| int/);
 });
 
 test("every active native host unit has a venue-owned source", () => {

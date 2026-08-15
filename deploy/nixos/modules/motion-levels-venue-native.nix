@@ -109,6 +109,7 @@ let
       -duplex "$MOTION_LEVELS_CONTROLLER_DUPLEX" \
       -recv-port "$MOTION_LEVELS_FLOOR_RECV_PORT" \
       -floor-source-ip "$MOTION_LEVELS_FLOOR_SOURCE_IP" \
+      -floor-rotation ${toString cfg.floor.rotationDegrees} \
       -broadcast-ip "$MOTION_LEVELS_LED_BROADCAST_IP" \
       -broadcast-port "$MOTION_LEVELS_LED_BROADCAST_PORT" \
       -refresh-fps "$MOTION_LEVELS_REFRESH_FPS" \
@@ -177,6 +178,19 @@ in
       venueGateway = lib.mkOption { type = types.str; };
       floorSourceAddress = lib.mkOption { type = types.str; };
       floorBroadcastAddress = lib.mkOption { type = types.str; };
+    };
+
+    floor.rotationDegrees = lib.mkOption {
+      type = types.enum [
+        0
+        180
+      ];
+      default = 0;
+      description = ''
+        Half-turn calibration between the room-oriented logical board and the
+        physical LED/sensor wiring. LEDs and pressure coordinates use the same
+        transform.
+      '';
     };
 
     display = {

@@ -15,6 +15,7 @@ ExecStart=/opt/motion-levels/venue/current/bin/floor-controller \
   -duplex ${MOTION_LEVELS_CONTROLLER_DUPLEX} \
   -recv-port ${MOTION_LEVELS_FLOOR_RECV_PORT} \
   -floor-source-ip ${MOTION_LEVELS_FLOOR_SOURCE_IP} \
+  -floor-rotation ${MOTION_LEVELS_FLOOR_ROTATION_DEGREES} \
   -broadcast-ip ${MOTION_LEVELS_LED_BROADCAST_IP} \
   -broadcast-port ${MOTION_LEVELS_LED_BROADCAST_PORT} \
   -refresh-fps ${MOTION_LEVELS_REFRESH_FPS} \

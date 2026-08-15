@@ -115,6 +115,10 @@
       floorBroadcastAddress = "255.255.255.255";
     };
 
+    floor = {
+      rotationDegrees = 180;
+    };
+
     display = {
       output = "HDMI-1";
       mode = "1920x1080";
