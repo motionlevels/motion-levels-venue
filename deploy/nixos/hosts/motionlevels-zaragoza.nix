@@ -46,6 +46,10 @@
         matchConfig.MACAddress = "BC:24:11:2D:D7:75";
         linkConfig.Name = "venue0";
       };
+      "10-gopro" = {
+        matchConfig.MACAddress = "04:57:47:04:B1:1C";
+        linkConfig.Name = "gopro0";
+      };
     };
     networks = {
       "10-mgmt" = {
@@ -75,7 +79,7 @@
         linkConfig.RequiredForOnline = "no";
       };
       "30-gopro" = {
-        matchConfig.Name = "enx04574704b11c";
+        matchConfig.Name = "gopro0";
         networkConfig = {
           DHCP = "ipv4";
           DNSDefaultRoute = false;
@@ -126,7 +130,7 @@
       serial = "C3501324639939";
       usbVendorId = "2672";
       usbProductId = "0059";
-      networkInterface = "enx04574704b11c";
+      networkInterface = "gopro0";
       baseUrl = "http://172.29.139.51:8080";
     };
   };

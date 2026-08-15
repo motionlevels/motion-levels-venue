@@ -214,6 +214,7 @@ in
     ];
 
     environment.systemPackages = runtimePackages;
+    hardware.enableRedistributableFirmware = true;
     hardware.graphics.enable = true;
     fonts.packages = with pkgs; [
       dejavu_fonts

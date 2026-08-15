@@ -66,10 +66,10 @@ motion_levels_camera:
   usb:
     vendor_id: "2672"
     product_id: "0059"
-    # Provisional until the exact USB passthrough topology is visible in NixOS.
-    expected_port: "2-2.1"
-    # Provisional until the passed-through GoPro USB NIC is enumerated in NixOS.
-    network_interface: enx04574704b11c
+    # Observed behind the passed-through c4:00.3 xHCI controller.
+    expected_port: "7-1.2.1"
+    # NixOS renames the exact camera MAC independently of USB bus numbering.
+    network_interface: gopro0
     network_mac: "04:57:47:04:b1:1c"
     host_address: 172.29.139.52/24
     dhcp_metric: 8197
