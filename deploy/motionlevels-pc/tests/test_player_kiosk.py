@@ -15,7 +15,14 @@ class PlayerKioskAudioTests(unittest.TestCase):
 
     def test_chromium_uses_the_configured_hdmi_pcm(self):
         self.assertIn('MOTION_LEVELS_HDMI_ALSA_DEVICE="$(env_file_value MOTION_LEVELS_HDMI_ALSA_DEVICE)"', KIOSK)
-        self.assertIn('chrome_flags+=( "--alsa-output-device=${MOTION_LEVELS_HDMI_ALSA_DEVICE}" )', KIOSK)
+        self.assertIn('resolve_live_hdmi_alsa_device() {', KIOSK)
+        self.assertIn('resolved_alsa_device="$(resolve_hdmi_alsa_device_with_fallback "${screen_output}")"', KIOSK)
+        self.assertIn('chrome_flags+=( "--alsa-output-device=${resolved_alsa_device}" )', KIOSK)
+        self.assertNotIn('chrome_flags+=( "--alsa-output-device=${MOTION_LEVELS_HDMI_ALSA_DEVICE}" )', KIOSK)
+        self.assertLess(
+            KIOSK.index('enable_hdmi_audio_output "${screen_output}"'),
+            KIOSK.index('resolved_alsa_device="$(resolve_hdmi_alsa_device_with_fallback "${screen_output}")"'),
+        )
         self.assertIn('--autoplay-policy=no-user-gesture-required', KIOSK)
 
     def test_kiosk_runtime_directory_does_not_depend_on_a_login_session(self):

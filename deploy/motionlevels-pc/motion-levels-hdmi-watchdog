@@ -79,6 +79,8 @@ failure_count=0
 display_state_initialized=0
 last_display_output=""
 last_display_geometry=""
+alsa_device_state_initialized=0
+last_live_hdmi_alsa_device=""
 restart_pending_reason=""
 
 query_display() {
@@ -89,9 +91,9 @@ display_output_from_query() {
   local query="$1"
   local preferred_output="${2:-}"
   awk -v preferred="${preferred_output}" '
-    $2 == "connected" {
-      if (first_connected == "") {
-        first_connected = $1
+    $2 == "connected" && $1 ~ /^HDMI([.-]|$)/ {
+      if (first_hdmi == "") {
+        first_hdmi = $1
       }
       active = 0
       for (field = 3; field <= NF; field += 1) {
@@ -101,19 +103,19 @@ display_output_from_query() {
         }
       }
       if ($1 == preferred) {
-        preferred_connected = $1
+        preferred_hdmi = $1
       }
-      if (active && first_active == "") {
-        first_active = $1
+      if (active && first_active_hdmi == "") {
+        first_active_hdmi = $1
       }
     }
     END {
-      if (preferred_connected != "") {
-        print preferred_connected
-      } else if (first_active != "") {
-        print first_active
-      } else if (first_connected != "") {
-        print first_connected
+      if (preferred_hdmi != "") {
+        print preferred_hdmi
+      } else if (first_active_hdmi != "") {
+        print first_active_hdmi
+      } else if (first_hdmi != "") {
+        print first_hdmi
       }
     }
   ' <<<"${query}"
@@ -145,6 +147,89 @@ display_geometry_is_usable() {
     && { [ -z "${expected_size}" ] || [ "${size}" = "${expected_size}" ]; }
 }
 
+eld_is_live_hdmi() {
+  local eld_file="$1"
+  awk '
+    $1 == "monitor_present" && $2 == "1" { monitor_present = 1 }
+    $1 == "eld_valid" && $2 == "1" { eld_valid = 1 }
+    $1 == "connection_type" && $2 == "HDMI" { hdmi = 1 }
+    END { exit !(monitor_present && eld_valid && hdmi) }
+  ' "${eld_file}"
+}
+
+alsa_pcm_device_for_eld() {
+  local card_dir="$1"
+  local eld_index="$2"
+  local info_file device="" matched_device=""
+
+  for info_file in "${card_dir}"/pcm*p/info; do
+    [ -r "${info_file}" ] || continue
+    if ! awk -v eld_index="${eld_index}" '
+      $1 == "stream:" && $2 == "PLAYBACK" { playback = 1 }
+      $1 == "id:" && $2 == "HDMI" && $3 == eld_index { matching_id = 1 }
+      END { exit !(playback && matching_id) }
+    ' "${info_file}"; then
+      continue
+    fi
+
+    device="$(awk '$1 == "device:" && $2 ~ /^[0-9]+$/ { print $2; exit }' "${info_file}")"
+    [ -n "${device}" ] || continue
+    [ -z "${matched_device}" ] || return 1
+    matched_device="${device}"
+  done
+
+  [ -n "${matched_device}" ] || return 1
+  printf '%s' "${matched_device}"
+}
+
+hdmi_eld_index_for_output() {
+  local output="$1"
+
+  if [[ "${output}" =~ ^HDMI(-A)?-([1-9][0-9]*)$ ]]; then
+    printf '%s' "$((10#${BASH_REMATCH[2]} - 1))"
+    return 0
+  fi
+  return 1
+}
+
+resolve_live_hdmi_alsa_device() {
+  local output="$1"
+  local asound_root="${MOTION_LEVELS_PROC_ASOUND_ROOT:-/proc/asound}"
+  local eld_file eld_index card_dir card_basename card_number pcm_device
+  local candidate="" resolved_device=""
+
+  eld_index="$(hdmi_eld_index_for_output "${output}")" || return 1
+  for eld_file in "${asound_root}"/card*/eld#*."${eld_index}"; do
+    [ -r "${eld_file}" ] || continue
+    eld_is_live_hdmi "${eld_file}" || continue
+
+    card_dir="${eld_file%/*}"
+    card_basename="${card_dir##*/}"
+    if [[ ! "${card_basename}" =~ ^card([0-9]+)$ ]]; then
+      continue
+    fi
+    card_number="${BASH_REMATCH[1]}"
+    pcm_device="$(alsa_pcm_device_for_eld "${card_dir}" "${eld_index}")" || continue
+    candidate="plughw:${card_number},${pcm_device}"
+
+    [ -z "${resolved_device}" ] || return 1
+    resolved_device="${candidate}"
+  done
+
+  [ -n "${resolved_device}" ] || return 1
+  printf '%s' "${resolved_device}"
+}
+
+alsa_card_from_device() {
+  local device="$1"
+
+  if [[ "${device}" =~ ^plughw:([0-9]+),[0-9]+$ ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  return 1
+}
+
 audio_state_for_output() {
   local query="$1"
   local output="$2"
@@ -155,18 +240,23 @@ audio_state_for_output() {
   ' <<<"${query}"
 }
 
-set_hdmi_audio_on() {
+enable_hdmi_audio_output() {
   local output="$1"
-  local control
 
   if [ -n "${output}" ]; then
     /usr/bin/xrandr --output "${output}" --set audio on 2>/dev/null || true
   fi
+}
 
-  if command -v /usr/bin/amixer >/dev/null 2>&1; then
+configure_hdmi_alsa_controls() {
+  local alsa_device="$1"
+  local control alsa_card=""
+
+  alsa_card="$(alsa_card_from_device "${alsa_device}")" || true
+  if [ -n "${alsa_card}" ] && command -v /usr/bin/amixer >/dev/null 2>&1; then
     for control in IEC958 "IEC958,0" "IEC958,1" "IEC958,2"; do
-      /usr/bin/amixer -q sset "${control}" unmute 2>/dev/null || true
-      /usr/bin/amixer -q sset "${control}" on 2>/dev/null || true
+      /usr/bin/amixer -q -c "${alsa_card}" sset "${control}" unmute 2>/dev/null || true
+      /usr/bin/amixer -q -c "${alsa_card}" sset "${control}" on 2>/dev/null || true
     done
   fi
 }
@@ -272,10 +362,14 @@ restart_kiosk_if_needed() {
 watchdog_check() {
   local xrandr_output output geometry original_geometry audio_state geometry_repaired
   local previous_output previous_geometry state_was_initialized state_changed
+  local previous_alsa_device alsa_state_was_initialized live_alsa_device alsa_device_changed
+  local hdmi_audio_repaired
 
   previous_output="${last_display_output}"
   previous_geometry="${last_display_geometry}"
   state_was_initialized="${display_state_initialized}"
+  previous_alsa_device="${last_live_hdmi_alsa_device}"
+  alsa_state_was_initialized="${alsa_device_state_initialized}"
 
   xrandr_output="$(query_display)"
   output="$(display_output_from_query "${xrandr_output}" "${MOTION_LEVELS_XRANDR_OUTPUT}")"
@@ -290,7 +384,9 @@ watchdog_check() {
     display_state_initialized=1
     last_display_output=""
     last_display_geometry=""
-    log "no HDMI/DP output connected"
+    alsa_device_state_initialized=1
+    last_live_hdmi_alsa_device=""
+    log "no HDMI output connected"
     return 0
   fi
 
@@ -298,6 +394,7 @@ watchdog_check() {
   original_geometry="${geometry}"
   audio_state="$(audio_state_for_output "${xrandr_output}" "${output}")"
   geometry_repaired=0
+  hdmi_audio_repaired=0
 
   if ! display_geometry_is_usable "${geometry}"; then
     log "repairing HDMI geometry '${geometry:-none}' on ${output}"
@@ -308,11 +405,28 @@ watchdog_check() {
     audio_state="$(audio_state_for_output "${xrandr_output}" "${output}")"
   fi
 
-  if truthy_env "${MOTION_LEVELS_FORCE_ALSA_OUTPUT}" && [ -n "${audio_state}" ] && [ "${audio_state}" != "on" ]; then
+  if truthy_env "${MOTION_LEVELS_FORCE_ALSA_OUTPUT}" && [ "${audio_state}" != "on" ]; then
     log "repairing HDMI audio state '${audio_state}' on ${output}"
-    set_hdmi_audio_on "${output}"
+    enable_hdmi_audio_output "${output}"
+    hdmi_audio_repaired=1
     xrandr_output="$(query_display)"
     audio_state="$(audio_state_for_output "${xrandr_output}" "${output}")"
+  fi
+  live_alsa_device="$(resolve_live_hdmi_alsa_device "${output}")" || live_alsa_device=""
+
+  alsa_device_changed=0
+  if truthy_env "${MOTION_LEVELS_FORCE_ALSA_OUTPUT}" \
+    && [ "${alsa_state_was_initialized}" -eq 1 ] \
+    && [ -n "${live_alsa_device}" ] \
+    && [ "${previous_alsa_device}" != "${live_alsa_device}" ]; then
+    alsa_device_changed=1
+  fi
+  alsa_device_state_initialized=1
+  last_live_hdmi_alsa_device="${live_alsa_device}"
+  if truthy_env "${MOTION_LEVELS_FORCE_ALSA_OUTPUT}" \
+    && [ -n "${live_alsa_device}" ] \
+    && { [ "${hdmi_audio_repaired}" -eq 1 ] || [ "${alsa_device_changed}" -eq 1 ]; }; then
+    configure_hdmi_alsa_controls "${live_alsa_device}"
   fi
 
   if ! display_geometry_is_usable "${geometry}"; then
@@ -336,6 +450,8 @@ watchdog_check() {
     queue_kiosk_restart "HDMI geometry changed from '${original_geometry:-none}' to '${geometry}' on ${output}"
   elif [ "${state_changed}" -eq 1 ]; then
     queue_kiosk_restart "display changed from '${previous_output:-none} ${previous_geometry:-none}' to '${output} ${geometry}'"
+  elif [ "${alsa_device_changed}" -eq 1 ]; then
+    queue_kiosk_restart "live HDMI ALSA device changed from '${previous_alsa_device:-fallback}' to '${live_alsa_device}'"
   fi
 
   if [ -n "${restart_pending_reason}" ]; then

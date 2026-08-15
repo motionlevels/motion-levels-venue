@@ -30,15 +30,16 @@ motion_levels_network:
 
 motion_levels_display:
   backend: x11
-  # Provisional until HDMI passthrough is attached and enumerated in the VM.
+  # Preferred connector; the kiosk falls back to any connected HDMI output.
   output: HDMI-1
   mode: 1920x1080
   refresh_hz: 60
   audio_enabled: true
-  # Provisional until the passed-through HDMI audio device is enumerated.
+  # Fallback for HDMI-A-2. Runtime ELD discovery follows the connected TV when
+  # the cable moves between the two HDMI ports.
   alsa:
-    card: 0
-    device: 5
+    card: 1
+    device: 7
 
 motion_levels_camera:
   enabled: true

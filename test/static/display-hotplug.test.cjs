@@ -37,8 +37,23 @@ default_output="$(display_output_from_query "$fixture")"
 preferred_output="$(display_output_from_query "$fixture" HDMI-1)"
 test -z "$inactive_geometry"
 test "$active_geometry" = '1280x720+0+0'
-test "$default_output" = DP-1
+test "$default_output" = HDMI-1
 test "$preferred_output" = HDMI-1
+
+switched_fixture="$(printf '%s\n' \
+  'DP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)' \
+  'HDMI-1 disconnected (normal left inverted right x axis y axis)' \
+  'HDMI-2 connected 1920x1080+0+0 (normal left inverted right x axis y axis)')"
+test "$(display_output_from_query "$switched_fixture" HDMI-1)" = HDMI-2
+
+two_hdmi_fixture="$(printf '%s\n' \
+  'HDMI-1 connected (normal left inverted right x axis y axis)' \
+  'HDMI-2 connected 1920x1080+0+0 (normal left inverted right x axis y axis)')"
+test "$(display_output_from_query "$two_hdmi_fixture")" = HDMI-2
+test "$(display_output_from_query "$two_hdmi_fixture" HDMI-1)" = HDMI-1
+
+only_dp_fixture='DP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)'
+test -z "$(display_output_from_query "$only_dp_fixture")"
 MOTION_LEVELS_XRANDR_MODE=1920x1080
 display_geometry_is_usable '1920x1080+0+0'
 ! display_geometry_is_usable '3840x2160+0+0'
@@ -51,6 +66,68 @@ query_display >/dev/null
 test("display parsers tolerate an inactive connected output under strict shell mode", () => {
   runSourcedScript(watchdog, parsingChecks);
   runSourcedScript(kiosk, parsingChecks);
+});
+
+const alsaDiscoveryChecks = String.raw`
+fixture_root="$(mktemp -d)"
+trap 'rm -rf -- "$fixture_root"' EXIT
+mkdir -p "$fixture_root/card1/pcm3p" "$fixture_root/card1/pcm7p"
+
+write_eld() {
+  local path="$1"
+  local present="$2"
+  local valid="$3"
+  printf '%s\n' \
+    "monitor_present  $present" \
+    "eld_valid        $valid" \
+    'connection_type  HDMI' >"$path"
+}
+write_pcm() {
+  local path="$1"
+  local device="$2"
+  local eld_index="$3"
+  printf '%s\n' \
+    'stream: PLAYBACK' \
+    "device: $device" \
+    "id: HDMI $eld_index" >"$path"
+}
+
+MOTION_LEVELS_PROC_ASOUND_ROOT="$fixture_root"
+write_eld "$fixture_root/card1/eld#0.1" 1 1
+write_pcm "$fixture_root/card1/pcm7p/info" 7 1
+test "$(resolve_live_hdmi_alsa_device HDMI-2)" = 'plughw:1,7'
+
+write_eld "$fixture_root/card1/eld#0.1" 0 0
+write_eld "$fixture_root/card1/eld#0.0" 1 1
+write_pcm "$fixture_root/card1/pcm3p/info" 3 0
+test "$(resolve_live_hdmi_alsa_device HDMI-1)" = 'plughw:1,3'
+
+# Each selected output keeps its own ELD when two HDMI sinks are live.
+write_eld "$fixture_root/card1/eld#0.1" 1 1
+test "$(resolve_live_hdmi_alsa_device HDMI-1)" = 'plughw:1,3'
+test "$(resolve_live_hdmi_alsa_device HDMI-2)" = 'plughw:1,7'
+
+# The same connector ordinal on two cards is deliberately ambiguous.
+mkdir -p "$fixture_root/card2/pcm3p"
+write_eld "$fixture_root/card2/eld#0.0" 1 1
+write_pcm "$fixture_root/card2/pcm3p/info" 3 0
+! resolve_live_hdmi_alsa_device HDMI-1 >/dev/null
+`;
+
+test("ELD discovery maps each selected HDMI connector to its playback PCM", () => {
+  runSourcedScript(watchdog, alsaDiscoveryChecks);
+  runSourcedScript(kiosk, alsaDiscoveryChecks);
+});
+
+test("kiosk ALSA discovery falls back safely when ELD is unavailable", () => {
+  runSourcedScript(kiosk, String.raw`
+fixture_root="$(mktemp -d)"
+trap 'rm -rf -- "$fixture_root"' EXIT
+MOTION_LEVELS_PROC_ASOUND_ROOT="$fixture_root"
+MOTION_LEVELS_HDMI_ALSA_DEVICE='plughw:1,7'
+sleep() { return 0; }
+test "$(resolve_hdmi_alsa_device_with_fallback HDMI-2 2>/dev/null)" = 'plughw:1,7'
+`);
 });
 
 test("watchdog repairs a connected output with no active geometry", () => {
@@ -157,6 +234,78 @@ display_connected=1
 watchdog_check
 test "$kiosk_restarts" -eq 1
 test -z "$restart_pending_reason"
+`);
+});
+
+test("watchdog follows a live cable move from HDMI-1 to HDMI-2 exactly once", () => {
+  runSourcedScript(watchdog, String.raw`
+active_output=HDMI-1
+kiosk_restarts=0
+MOTION_LEVELS_XRANDR_MODE=1920x1080
+MOTION_LEVELS_XRANDR_OUTPUT=HDMI-1
+MOTION_LEVELS_FORCE_ALSA_OUTPUT=0
+query_display() {
+  if [ "$active_output" = HDMI-1 ]; then
+    printf '%s\n' \
+      'HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)' \
+      'HDMI-2 disconnected (normal left inverted right x axis y axis)'
+  else
+    printf '%s\n' \
+      'HDMI-1 disconnected (normal left inverted right x axis y axis)' \
+      'HDMI-2 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)'
+  fi
+}
+resolve_live_hdmi_alsa_device() { return 1; }
+systemctl() { kiosk_restarts=$((kiosk_restarts + 1)); }
+chromium_running() { return 0; }
+display_client_healthy() { return 0; }
+RESTART_COOLDOWN_SECONDS=0
+
+watchdog_check
+active_output=HDMI-2
+watchdog_check
+test "$last_display_output" = HDMI-2
+test "$kiosk_restarts" -eq 1
+watchdog_check
+test "$kiosk_restarts" -eq 1
+`);
+});
+
+test("watchdog reloads once when delayed ELD appears or changes PCM", () => {
+  runSourcedScript(watchdog, String.raw`
+mock_live_alsa_device=''
+kiosk_restarts=0
+MOTION_LEVELS_XRANDR_MODE=1920x1080
+MOTION_LEVELS_XRANDR_OUTPUT=HDMI-1
+MOTION_LEVELS_FORCE_ALSA_OUTPUT=1
+query_display() {
+  printf '%s\n' \
+    'HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)' \
+    '    audio: on'
+}
+resolve_live_hdmi_alsa_device() {
+  test "$1" = HDMI-1
+  [ -n "$mock_live_alsa_device" ] || return 1
+  printf '%s' "$mock_live_alsa_device"
+}
+configure_hdmi_alsa_controls() { return 0; }
+systemctl() { kiosk_restarts=$((kiosk_restarts + 1)); }
+chromium_running() { return 0; }
+display_client_healthy() { return 0; }
+RESTART_COOLDOWN_SECONDS=0
+
+watchdog_check
+test "$kiosk_restarts" -eq 0
+mock_live_alsa_device='plughw:1,7'
+watchdog_check
+test "$kiosk_restarts" -eq 1
+watchdog_check
+test "$kiosk_restarts" -eq 1
+mock_live_alsa_device='plughw:1,3'
+watchdog_check
+test "$kiosk_restarts" -eq 2
+watchdog_check
+test "$kiosk_restarts" -eq 2
 `);
 });
 

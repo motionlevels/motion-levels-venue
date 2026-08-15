@@ -119,8 +119,9 @@
       output = "HDMI-1";
       mode = "1920x1080";
       refreshHz = 60;
-      alsaCard = 0;
-      alsaDevice = 5;
+      # Verified fallback for HDMI-A-2; the kiosk follows the live ELD/PCM.
+      alsaCard = 1;
+      alsaDevice = 7;
     };
 
     gopro = {
