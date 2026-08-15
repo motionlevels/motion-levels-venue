@@ -130,6 +130,25 @@ test "$(resolve_hdmi_alsa_device_with_fallback HDMI-2 2>/dev/null)" = 'plughw:1,
 `);
 });
 
+test("watchdog recognizes the kiosk across Debian and NixOS Chromium paths", () => {
+  runSourcedScript(watchdog, String.raw`
+MOTION_LEVELS_PLAYER_URL='http://127.0.0.1/display/'
+pgrep() {
+  test "$1" = -af
+  test "$2" = chromium
+  printf '%s\n' \
+    '101 /nix/store/example-chromium/libexec/chromium/chromium --kiosk --app=http://127.0.0.1/display/' \
+    '102 /nix/store/example-chromium/libexec/chromium/chromium --type=renderer'
+}
+chromium_running
+
+pgrep() {
+  printf '%s\n' '102 /usr/lib/chromium/chromium --type=renderer'
+}
+! chromium_running
+`);
+});
+
 test("watchdog repairs a connected output with no active geometry", () => {
   runSourcedScript(watchdog, String.raw`
 display_configured=0

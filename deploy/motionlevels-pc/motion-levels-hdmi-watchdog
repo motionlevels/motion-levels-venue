@@ -273,8 +273,13 @@ configure_display() {
 }
 
 chromium_running() {
-  pgrep -f "/usr/lib/chromium/chromium .*--app=${MOTION_LEVELS_PLAYER_URL}" >/dev/null 2>&1 ||
-    pgrep -f "/usr/lib/chromium/chromium .*${MOTION_LEVELS_PLAYER_URL}" >/dev/null 2>&1
+  # Chromium re-execs its real binary after the compatibility launcher. On
+  # NixOS that leaves a /nix/store path in the process list, while Debian uses
+  # /usr/lib/chromium. Match the exact kiosk argument instead of either
+  # distribution-specific executable path; helper processes do not carry it.
+  pgrep -af chromium 2>/dev/null \
+    | grep -F -- "--app=${MOTION_LEVELS_PLAYER_URL}" \
+    >/dev/null
 }
 
 fetch_display_client() {

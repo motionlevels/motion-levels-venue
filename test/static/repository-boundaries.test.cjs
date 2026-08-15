@@ -381,6 +381,13 @@ test("the Twitch stream key stays in a host-owned file", () => {
   assert.match(playbook, /group: motion-levels-cameras\n\s+mode: "0440"/);
 });
 
+test("the native camera resolves ffmpeg through the service PATH", () => {
+  const environment = read("ansible/templates/motion-levels-cameras.env.j2");
+
+  assert.match(environment, /^ML_CAMERAS_PREVIEW_FFMPEG_PATH=ffmpeg$/m);
+  assert.doesNotMatch(environment, /^ML_CAMERAS_PREVIEW_FFMPEG_PATH=\/usr\/bin\/ffmpeg$/m);
+});
+
 test("motionlevels-1 passes its default GoPro recording profile to the camera service", () => {
   const hostVars = read("ansible/inventory/production/host_vars/motionlevels-1.yml");
   const environment = read("ansible/templates/motion-levels-cameras.env.j2");
