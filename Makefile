@@ -13,7 +13,7 @@ NATIVE_SERVICES = \
 	motion-levels-hdmi-watchdog.service \
 	caddy.service
 
-.PHONY: install-ansible-collections ansible-ping show-pins build-native-release verify-native-release deploy-venues deploy-motionlevels-1 stage-motionlevels-zaragoza status-motionlevels-1 status-motionlevels-zaragoza health-motionlevels-1 release-motionlevels-1 logs-motionlevels-1 restart-motionlevels-1 rollback-motionlevels-1
+.PHONY: install-ansible-collections ansible-ping show-pins build-native-release verify-native-release deploy-venues deploy-motionlevels-1 stage-motionlevels-zaragoza activate-motionlevels-zaragoza status-motionlevels-1 status-motionlevels-zaragoza health-motionlevels-1 release-motionlevels-1 logs-motionlevels-1 restart-motionlevels-1 rollback-motionlevels-1
 
 install-ansible-collections:
 	ansible-galaxy collection install -r ansible/requirements.yml
@@ -39,6 +39,9 @@ deploy-motionlevels-1:
 
 stage-motionlevels-zaragoza:
 	ansible-playbook ansible/playbooks/venue-nixos-stage.yml --limit motionlevels-zaragoza
+
+activate-motionlevels-zaragoza:
+	ansible-playbook ansible/playbooks/venue-nixos-activate.yml --limit motionlevels-zaragoza
 
 status-motionlevels-1:
 	ssh "$(HOST)" 'systemctl --no-pager --full status $(NATIVE_SERVICES)'

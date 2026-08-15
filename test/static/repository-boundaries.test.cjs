@@ -84,6 +84,51 @@ test("the Zaragoza GoPro preview and Twitch profile stay on the isolated USB lin
   assert.match(hostVars, /stream_url: udp:\/\/@0\.0\.0\.0:8554/);
   assert.match(nixosHost, /gopro0\.allowedUDPPorts = \[ 8554 \];/);
   assert.equal((nixosHost.match(/\b8554\b/g) || []).length, 1);
+  assert.match(hostVars, /expected_port: "6-1\.2\.1"/);
+});
+
+test("Zaragoza NixOS activation is explicit, software-gated, and transactional", () => {
+  const flake = read("deploy/nixos/flake.nix");
+  const host = read("deploy/nixos/hosts/motionlevels-zaragoza.nix");
+  const module = read("deploy/nixos/modules/motion-levels-venue-native.nix");
+  const environment = read("ansible/templates/motion-levels.env.j2");
+  const activation = read("ansible/playbooks/venue-nixos-activate.yml");
+  const makefile = read("Makefile");
+  const verifier = read("scripts/verify-native-release.py");
+
+  assert.match(flake, /motionlevels-zaragoza-commissioning = mkZaragoza true;/);
+  assert.match(flake, /motionlevels-zaragoza-production = mkZaragoza false;/);
+  assert.match(flake, /commissioningMode = nixpkgs\.lib\.mkForce commissioningMode/);
+  assert.match(host, /securityCamera\.enable = false;/);
+  assert.match(module, /securityCameraWantedBy = lib\.optionals[\s\S]*cfg\.securityCamera\.enable/);
+  assert.match(module, /wantedBy = securityCameraWantedBy;/);
+  assert.match(module, /Restart = if cfg\.securityCamera\.enable then "always" else "no";/);
+  assert.match(environment, /motion_levels_security_camera\.enabled else \[\]/);
+  assert.match(makefile, /activate-motionlevels-zaragoza:[\s\S]*venue-nixos-activate\.yml/);
+  assert.match(verifier, /native release completion marker does not match venue revision/);
+
+  const relayGate = activation.indexOf("Require the temporary Twitch relay and its timer to be inactive");
+  const portGate = activation.indexOf("Require every native TCP and UDP listener port to be free");
+  const switchGeneration = activation.indexOf("Switch to the exact production NixOS profile");
+  const rendererGate = activation.indexOf("Verify the software renderer without requiring an HDMI connector");
+  const writeStack = activation.indexOf("Record healthy production stack metadata");
+  const rescue = activation.indexOf("rescue:", switchGeneration);
+  const rollback = activation.indexOf("--rollback", rescue);
+
+  assert.ok(relayGate >= 0 && relayGate < switchGeneration);
+  assert.ok(portGate >= 0 && portGate < switchGeneration);
+  assert.ok(switchGeneration < rendererGate && rendererGate < writeStack);
+  assert.ok(rescue > writeStack && rollback > rescue);
+  assert.match(activation, /motionlevels-zaragoza-production/);
+  assert.match(activation, /motionlevels-twitch-live-1080p\*/);
+  assert.match(activation, /mediaPipelineConfigured/);
+  assert.match(activation, /twitchBroadcast\.configured/);
+  assert.match(activation, /renderStatus \| default\(''\) == 'ready'/);
+  assert.match(activation, /"commissioning": false/);
+  assert.match(activation, /"services_started": true/);
+  assert.match(activation, /"deployment_health_contract": "software-only"/);
+  assert.match(activation, /"hardware_state_contract": "observed-not-gated"/);
+  assert.doesNotMatch(activation, /displayConnection\.connected|cameraDetected|\bxrandr\b/);
 });
 
 test("native releases are assembled from clean pinned sibling checkouts", () => {

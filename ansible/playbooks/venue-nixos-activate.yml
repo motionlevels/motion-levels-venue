@@ -1,0 +1,874 @@
+---
+- name: Select the exact venue and NixOS source revision for activation
+  hosts: motion_levels_venues
+  gather_facts: false
+  connection: local
+  become: false
+  any_errors_fatal: true
+  serial: 1
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    motion_levels_repo_root: "{{ playbook_dir }}/../.."
+    motion_levels_component_lock_path: "{{ motion_levels_repo_root }}/deploy/motionlevels-pc/venue-components.lock.json"
+    motion_levels_local_nixos_root: "{{ motion_levels_repo_root }}/deploy/nixos"
+  pre_tasks:
+    - name: Ignore hosts outside explicit NixOS commissioning
+      ansible.builtin.meta: end_host
+      when: not (motion_levels_commissioning | default(false) | bool)
+
+  tasks:
+    - name: Resolve the exact venue source revision
+      ansible.builtin.command:
+        argv:
+          - git
+          - rev-parse
+          - HEAD
+      args:
+        chdir: "{{ motion_levels_repo_root }}"
+      register: motion_levels_venue_revision_command
+      changed_when: false
+
+    - name: Refuse a dirty venue source checkout
+      ansible.builtin.command:
+        argv:
+          - git
+          - status
+          - --porcelain
+          - --untracked-files=normal
+      args:
+        chdir: "{{ motion_levels_repo_root }}"
+      register: motion_levels_venue_dirty
+      changed_when: false
+      failed_when: motion_levels_venue_dirty.stdout | length > 0
+
+    - name: Inspect the checked-in NixOS flake
+      ansible.builtin.stat:
+        path: "{{ motion_levels_local_nixos_root }}/{{ item }}"
+      register: motion_levels_local_nixos_files
+      loop:
+        - flake.nix
+        - flake.lock
+        - hosts/motionlevels-zaragoza.nix
+        - modules/motion-levels-venue-native.nix
+
+    - name: Load immutable component pins and share activation facts
+      ansible.builtin.set_fact:
+        motion_levels_venue_revision: "{{ motion_levels_venue_revision_command.stdout | trim }}"
+        motion_levels_component_lock: "{{ lookup('file', motion_levels_component_lock_path) | from_json }}"
+
+    - name: Require a complete production activation source
+      ansible.builtin.assert:
+        that:
+          - motion_levels_venue_revision is match('^[0-9a-f]{40}$')
+          - motion_levels_component_lock.schema == 'motion-levels-venue-components-v2'
+          - motion_levels_component_lock.components.controller.revision is match('^[0-9a-f]{40}$')
+          - motion_levels_component_lock.components.games.revision is match('^[0-9a-f]{40}$')
+          - motion_levels_component_lock.components.cameras.revision is match('^[0-9a-f]{40}$')
+          - motion_levels_local_nixos_files.results | selectattr('stat.isreg') | list | length == 4
+        fail_msg: "The exact venue revision, component lock, or Zaragoza NixOS flake is incomplete."
+
+- name: Activate the staged Zaragoza NixOS venue transactionally
+  hosts: motion_levels_venues
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  vars:
+    ansible_python_interpreter: "{{ motion_levels_nixos_python_interpreter | default('/run/current-system/sw/bin/python3') }}"
+    motion_levels_repo_root: "{{ playbook_dir }}/../.."
+    motion_levels_nixos_profile: motionlevels-zaragoza-production
+    motion_levels_nixos_configuration_root: "/var/lib/motion-levels/nixos-configurations/{{ motion_levels_venue_revision }}"
+    motion_levels_nixos_configuration_candidate: "{{ motion_levels_nixos_configuration_root }}.candidate"
+    motion_levels_activation_ports:
+      - 80
+      - 4101
+      - 4102
+      - 4103
+      - 4201
+      - 4202
+      - 4203
+      - 7800
+      - 8020
+      - 8040
+      - 8554
+    motion_levels_activation_services:
+      - motion-levels-lan-ip.service
+      - motion-levels-floor-controller.service
+      - motion-levels-venue-runtime.service
+      - motion-levels-venue-supervisor.service
+      - motion-levels-cameras.service
+      - motion-levels-security-recorder.service
+      - motion-levels-camera-helper.service
+      - caddy.service
+      - motion-levels-kiosk.service
+      - motion-levels-hdmi-watchdog.service
+    motion_levels_required_activation_services: >-
+      {{
+        [
+          'motion-levels-lan-ip.service',
+          'motion-levels-floor-controller.service',
+          'motion-levels-venue-runtime.service',
+          'motion-levels-venue-supervisor.service'
+        ]
+        + (['motion-levels-cameras.service'] if motion_levels_camera.enabled else [])
+        + (
+          ['motion-levels-security-recorder.service', 'motion-levels-camera-helper.service']
+          if motion_levels_security_camera.enabled else []
+        )
+        + ['caddy.service', 'motion-levels-kiosk.service', 'motion-levels-hdmi-watchdog.service']
+      }}
+    motion_levels_disabled_activation_services: >-
+      {{
+        ([] if motion_levels_camera.enabled else ['motion-levels-cameras.service'])
+        + (
+          [] if motion_levels_security_camera.enabled
+          else ['motion-levels-security-recorder.service', 'motion-levels-camera-helper.service']
+        )
+      }}
+    motion_levels_required_secret_files: >-
+      {{
+        ['/etc/motion-levels/platform.env']
+        + (
+          [
+            motion_levels_camera.api_token_file,
+            motion_levels_camera.platform_token_file,
+            motion_levels_camera.twitch.stream_key_file
+          ] if motion_levels_camera.enabled else []
+        )
+        + (
+          ['/etc/motion-levels/camera.env']
+          if motion_levels_security_camera.enabled else []
+        )
+      }}
+    motion_levels_public_health_urls: >-
+      {{
+        [
+          'http://127.0.0.1/controller/health',
+          'http://127.0.0.1/engine/api/status',
+          'http://127.0.0.1/venue-api/v1/snapshot',
+          'http://127.0.0.1/menu/',
+          'http://127.0.0.1/display/',
+          'http://127.0.0.1/menu/build.json',
+          'http://127.0.0.1/display/build.json'
+        ]
+        + (['http://127.0.0.1/camera-recorder/healthz'] if motion_levels_camera.enabled else [])
+      }}
+  pre_tasks:
+    - name: Ignore hosts outside explicit NixOS commissioning
+      ansible.builtin.meta: end_host
+      when: not (motion_levels_commissioning | default(false) | bool)
+
+    - name: Identify the activation operating system without Python facts
+      ansible.builtin.raw: |
+        set -eu
+        . /etc/os-release
+        printf '%s|%s\n' "${ID:-}" "$(uname -m)"
+      register: motion_levels_activation_os
+      changed_when: false
+
+    - name: Require the Zaragoza x86_64 NixOS commissioning target
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == 'motionlevels-zaragoza'
+          - motion_levels_activation_os.stdout | trim == 'nixos|x86_64'
+          - motion_levels_commissioning | bool
+          - motion_levels_install_root == '/opt/motion-levels/venue'
+          - motion_levels_config_root == '/etc/motion-levels'
+          - motion_levels_state_root == '/var/lib/motion-levels'
+        fail_msg: "Production activation is restricted to the explicit Zaragoza NixOS commissioning host."
+
+  tasks:
+    - name: Inspect the staged current release link
+      ansible.builtin.stat:
+        path: "{{ motion_levels_install_root }}/current"
+        follow: false
+      register: motion_levels_current_release_link
+
+    - name: Resolve the staged current release
+      ansible.builtin.command:
+        argv:
+          - readlink
+          - -f
+          - "{{ motion_levels_install_root }}/current"
+      register: motion_levels_current_release
+      changed_when: false
+
+    - name: Inspect staged release contract files
+      ansible.builtin.stat:
+        path: "{{ motion_levels_current_release.stdout | trim }}/{{ item }}"
+        follow: false
+      register: motion_levels_staged_release_files
+      loop:
+        - release-manifest.json
+        - .complete
+
+    - name: Require the exact immutable staged release
+      ansible.builtin.assert:
+        that:
+          - motion_levels_current_release_link.stat.islnk | default(false)
+          - motion_levels_current_release.stdout | trim == motion_levels_install_root ~ '/releases/' ~ motion_levels_venue_revision
+          - motion_levels_staged_release_files.results | selectattr('stat.isreg') | list | length == 2
+          - motion_levels_staged_release_files.results | selectattr('stat.islnk') | list | length == 0
+        fail_msg: "current must select the complete immutable release built from this exact venue HEAD."
+
+    - name: Verify the complete staged release with the canonical verifier
+      ansible.builtin.script:
+        cmd: >-
+          {{ motion_levels_repo_root }}/scripts/verify-native-release.py
+          {{ motion_levels_current_release.stdout | trim }}
+        executable: "{{ ansible_python_interpreter }}"
+      changed_when: false
+
+    - name: Inspect commissioning stack metadata files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      register: motion_levels_activation_metadata_files
+      loop:
+        - "{{ motion_levels_config_root }}/stack.json"
+        - "{{ motion_levels_state_root }}/public/stack.json"
+
+    - name: Require regular commissioning stack metadata files
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+          - not (item.stat.islnk | default(false))
+          - item.stat.size | default(0) | int > 0
+        fail_msg: "Commissioning metadata is absent, empty, or a symlink: {{ item.item }}"
+      loop: "{{ motion_levels_activation_metadata_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read staged release and stack metadata
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      register: motion_levels_activation_metadata
+      loop:
+        - "{{ motion_levels_current_release.stdout | trim }}/release-manifest.json"
+        - "{{ motion_levels_config_root }}/stack.json"
+        - "{{ motion_levels_state_root }}/public/stack.json"
+
+    - name: Decode staged release and rollback metadata
+      ansible.builtin.set_fact:
+        motion_levels_release_manifest: "{{ motion_levels_activation_metadata.results[0].content | b64decode | from_json }}"
+        motion_levels_staged_stack: "{{ motion_levels_activation_metadata.results[1].content | b64decode | from_json }}"
+        motion_levels_original_stack_content: "{{ motion_levels_activation_metadata.results[1].content }}"
+        motion_levels_original_public_stack_content: "{{ motion_levels_activation_metadata.results[2].content }}"
+
+    - name: Require commissioning metadata and exact immutable component pins
+      ansible.builtin.assert:
+        that:
+          - motion_levels_release_manifest.schema == 'motion-levels-native-venue-release-v1'
+          - motion_levels_release_manifest.venueRevision == motion_levels_venue_revision
+          - motion_levels_release_manifest.components.controller == motion_levels_component_lock.components.controller.revision
+          - motion_levels_release_manifest.components.games == motion_levels_component_lock.components.games.revision
+          - motion_levels_release_manifest.components.cameras == motion_levels_component_lock.components.cameras.revision
+          - motion_levels_staged_stack.schema == 'motion-levels-native-stack-v1'
+          - motion_levels_staged_stack.revision == motion_levels_venue_revision
+          - motion_levels_staged_stack.commissioning | bool
+          - not (motion_levels_staged_stack.services_started | bool)
+        fail_msg: "The staged manifest or stack.json does not describe this commissioning release."
+
+    - name: Inspect required mutable non-secret configuration
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      register: motion_levels_activation_configuration
+      loop:
+        - "{{ motion_levels_config_root }}/motion-levels.env"
+        - /etc/motion-levels-cameras.env
+        - /etc/caddy/Caddyfile
+
+    - name: Require regular non-secret configuration files
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+          - not (item.stat.islnk | default(false))
+          - item.stat.size | default(0) | int > 0
+        fail_msg: "Required mutable configuration is absent, empty, or a symlink: {{ item.item }}"
+      loop: "{{ motion_levels_activation_configuration.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Inspect required host-owned secret files without reading them
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      register: motion_levels_activation_secrets
+      loop: "{{ motion_levels_required_secret_files }}"
+      no_log: true
+
+    - name: Require non-empty regular host-owned secret files
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+          - not (item.stat.islnk | default(false))
+          - item.stat.size | default(0) | int > 0
+        fail_msg: "A required host-owned secret is absent, empty, or a symlink."
+      loop: "{{ motion_levels_activation_secrets.results }}"
+      no_log: true
+
+    - name: Validate Caddy before any service is activated
+      ansible.builtin.command:
+        argv:
+          - caddy
+          - validate
+          - --config
+          - /etc/caddy/Caddyfile
+      changed_when: false
+
+    - name: Inspect every venue unit before production activation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ item }}"
+      register: motion_levels_pre_activation_services
+      changed_when: false
+      failed_when: false
+      loop: "{{ motion_levels_activation_services + ['motion-levels-gopro-reconcile.service'] }}"
+
+    - name: Refuse activation over any running venue unit
+      ansible.builtin.assert:
+        that:
+          - item.stdout | trim not in ['active', 'activating', 'reloading', 'deactivating']
+        fail_msg: "Venue unit {{ item.item }} is not safely inactive."
+      loop: "{{ motion_levels_pre_activation_services.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Find active temporary Twitch relay services or timers
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - list-units
+          - --all
+          - --state=active
+          - --plain
+          - --no-legend
+          - "motionlevels-twitch-live-1080p*"
+      register: motion_levels_twitch_relay_units
+      changed_when: false
+
+    - name: Require the temporary Twitch relay and its timer to be inactive
+      ansible.builtin.assert:
+        that:
+          - motion_levels_twitch_relay_units.stdout | trim | length == 0
+        fail_msg: >-
+          A motionlevels-twitch-live-1080p relay unit is still active. Let the
+          temporary relay finish; this playbook never stops or restarts it.
+
+    - name: Require every native TCP and UDP listener port to be free
+      ansible.builtin.shell: |
+        set -eu
+        listeners="$(ss -H -lntu | awk '{ local_address=$5; sub(/^.*:/, "", local_address); if (local_address ~ /^[0-9]+$/) print local_address }' | sort -u)"
+        busy=""
+        for port in {{ motion_levels_activation_ports | join(' ') }}; do
+          if printf '%s\n' "$listeners" | grep -qx "$port"; then
+            busy="$busy $port"
+          fi
+        done
+        if [ -n "$busy" ]; then
+          echo "native listener ports already in use:$busy" >&2
+          exit 1
+        fi
+      args:
+        executable: /bin/sh
+      changed_when: false
+
+    - name: Inspect the revision-scoped NixOS source
+      ansible.builtin.stat:
+        path: "{{ motion_levels_nixos_configuration_root }}"
+        follow: false
+      register: motion_levels_nixos_configuration
+
+    - name: Inspect the revision marker for an existing NixOS source
+      ansible.builtin.slurp:
+        src: "{{ motion_levels_nixos_configuration_root }}/.venue-revision"
+      register: motion_levels_nixos_configuration_marker
+      when: motion_levels_nixos_configuration.stat.exists
+
+    - name: Refuse a replaced revision-scoped NixOS source
+      ansible.builtin.assert:
+        that:
+          - not motion_levels_nixos_configuration.stat.islnk
+          - motion_levels_nixos_configuration.stat.isdir
+          - motion_levels_nixos_configuration_marker.content | b64decode | trim == motion_levels_venue_revision
+        fail_msg: "The existing revision-scoped NixOS source is incomplete or does not match its path."
+      when: motion_levels_nixos_configuration.stat.exists
+
+    - name: Transfer the exact NixOS source when it is not cached
+      when: not motion_levels_nixos_configuration.stat.exists
+      block:
+        - name: Recreate the revision-scoped NixOS candidate
+          ansible.builtin.file:
+            path: "{{ motion_levels_nixos_configuration_candidate }}"
+            state: "{{ item }}"
+            mode: "0755"
+          loop:
+            - absent
+            - directory
+
+        - name: Transfer only the checked-in NixOS flake
+          ansible.posix.synchronize:
+            src: "{{ motion_levels_repo_root }}/deploy/nixos/"
+            dest: "{{ motion_levels_nixos_configuration_candidate }}/"
+            archive: true
+            checksum: true
+            delete: true
+
+        - name: Mark the NixOS source with its venue revision
+          ansible.builtin.copy:
+            dest: "{{ motion_levels_nixos_configuration_candidate }}/.venue-revision"
+            content: "{{ motion_levels_venue_revision }}\n"
+            owner: root
+            group: root
+            mode: "0644"
+
+        - name: Make the NixOS source root-owned and read-only to services
+          ansible.builtin.file:
+            path: "{{ motion_levels_nixos_configuration_candidate }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "u=rwX,go=rX"
+            recurse: true
+
+        - name: Promote the complete NixOS source atomically
+          ansible.builtin.command:
+            argv:
+              - mv
+              - "{{ motion_levels_nixos_configuration_candidate }}"
+              - "{{ motion_levels_nixos_configuration_root }}"
+          changed_when: true
+
+    - name: Evaluate the production commissioning boundary
+      ansible.builtin.command:
+        argv:
+          - nix
+          - eval
+          - --json
+          - "{{ motion_levels_nixos_configuration_root }}#nixosConfigurations.{{ motion_levels_nixos_profile }}.config.motionLevels.venueHost.commissioningMode"
+      register: motion_levels_nixos_commissioning_mode
+      changed_when: false
+
+    - name: Evaluate the production security-camera boundary
+      ansible.builtin.command:
+        argv:
+          - nix
+          - eval
+          - --json
+          - "{{ motion_levels_nixos_configuration_root }}#nixosConfigurations.{{ motion_levels_nixos_profile }}.config.motionLevels.venueHost.securityCamera.enable"
+      register: motion_levels_nixos_security_camera
+      changed_when: false
+
+    - name: Require production mode and inventory parity before building
+      ansible.builtin.assert:
+        that:
+          - motion_levels_nixos_commissioning_mode.stdout | trim == 'false'
+          - >-
+            motion_levels_nixos_security_camera.stdout | trim
+            == (motion_levels_security_camera.enabled | bool | ternary('true', 'false'))
+        fail_msg: "The production flake profile disagrees with the Ansible activation contract."
+
+    - name: Build the exact production NixOS generation without switching
+      ansible.builtin.command:
+        argv:
+          - nix
+          - build
+          - --no-link
+          - --print-out-paths
+          - "{{ motion_levels_nixos_configuration_root }}#nixosConfigurations.{{ motion_levels_nixos_profile }}.config.system.build.toplevel"
+      register: motion_levels_candidate_system
+      changed_when: false
+
+    - name: Require one immutable production system closure
+      ansible.builtin.assert:
+        that:
+          - motion_levels_candidate_system.stdout_lines | length == 1
+          - motion_levels_candidate_system.stdout | trim is match('^/nix/store/[0-9a-z]{32}-nixos-system-motionlevels-zaragoza-')
+        fail_msg: "The production profile did not build one Zaragoza NixOS system closure."
+
+    - name: Capture the current commissioning generation
+      ansible.builtin.command:
+        argv:
+          - readlink
+          - -f
+          - /run/current-system
+      register: motion_levels_previous_system
+      changed_when: false
+
+    - name: Activate and health-gate the production NixOS generation
+      block:
+        - name: Mark the production switch as attempted
+          ansible.builtin.set_fact:
+            motion_levels_nixos_switch_attempted: true
+
+        - name: Switch to the exact production NixOS profile
+          ansible.builtin.command:
+            argv:
+              - nixos-rebuild
+              - switch
+              - --flake
+              - "{{ motion_levels_nixos_configuration_root }}#{{ motion_levels_nixos_profile }}"
+          changed_when: true
+
+        - name: Resolve the activated NixOS generation
+          ansible.builtin.command:
+            argv:
+              - readlink
+              - -f
+              - /run/current-system
+          register: motion_levels_activated_system
+          changed_when: false
+
+        - name: Require the prebuilt system closure to be active
+          ansible.builtin.assert:
+            that:
+              - motion_levels_activated_system.stdout | trim == motion_levels_candidate_system.stdout | trim
+            fail_msg: "nixos-rebuild did not activate the prebuilt production closure."
+
+        - name: Wait for every inventory-required venue service
+          ansible.builtin.command:
+            argv:
+              - systemctl
+              - is-active
+              - "{{ item }}"
+          register: motion_levels_required_service_state
+          changed_when: false
+          retries: 60
+          delay: 2
+          until: motion_levels_required_service_state.stdout | trim == 'active'
+          loop: "{{ motion_levels_required_activation_services }}"
+          loop_control:
+            label: "{{ item }}"
+
+        - name: Require inventory-disabled venue services to remain inactive
+          ansible.builtin.command:
+            argv:
+              - systemctl
+              - is-active
+              - "{{ item }}"
+          register: motion_levels_disabled_service_state
+          changed_when: false
+          failed_when: motion_levels_disabled_service_state.stdout | trim in ['active', 'activating', 'reloading']
+          loop: "{{ motion_levels_disabled_activation_services }}"
+          loop_control:
+            label: "{{ item }}"
+
+        - name: Require inventory-disabled venue services to stay outside boot targets
+          ansible.builtin.command:
+            argv:
+              - systemctl
+              - is-enabled
+              - "{{ item }}"
+          register: motion_levels_disabled_service_enablement
+          changed_when: false
+          failed_when: motion_levels_disabled_service_enablement.stdout | trim == 'enabled'
+          loop: "{{ motion_levels_disabled_activation_services }}"
+          loop_control:
+            label: "{{ item }}"
+
+        - name: Queue exact GoPro reconciliation without gating activation
+          ansible.builtin.command:
+            argv:
+              - timeout
+              - "5"
+              - udevadm
+              - trigger
+              - --action=change
+              - --subsystem-match=usb
+              - "--attr-match=idVendor={{ motion_levels_camera.usb.vendor_id }}"
+              - "--attr-match=idProduct={{ motion_levels_camera.usb.product_id }}"
+          changed_when: false
+          failed_when: false
+          when: motion_levels_camera.enabled
+
+        - name: Verify private native core HTTP health
+          ansible.builtin.uri:
+            url: "{{ item }}"
+            status_code: 200
+          register: motion_levels_private_health
+          retries: 60
+          delay: 2
+          until: motion_levels_private_health.status == 200
+          loop:
+            - http://127.0.0.1:4101/health
+            - http://127.0.0.1:4102/api/status
+            - http://127.0.0.1:4103/v1/snapshot
+
+        - name: Verify camera software health independently of GoPro presence
+          ansible.builtin.uri:
+            url: http://127.0.0.1:8040/healthz
+            return_content: true
+            status_code: 200
+          register: motion_levels_camera_health
+          retries: 60
+          delay: 2
+          until:
+            - motion_levels_camera_health.status == 200
+            - motion_levels_camera_health.json.ok | default(false) | bool
+            - motion_levels_camera_health.json.mediaPipelineConfigured | default(false) | bool
+            - motion_levels_camera_health.json.twitchBroadcast.configured | default(false) | bool
+          when: motion_levels_camera.enabled
+
+        - name: Verify every public Caddy route
+          ansible.builtin.uri:
+            url: "{{ item }}"
+            status_code: 200
+          register: motion_levels_public_health
+          retries: 60
+          delay: 2
+          until: motion_levels_public_health.status == 200
+          loop: "{{ motion_levels_public_health_urls }}"
+
+        - name: Verify the runtime games revision
+          ansible.builtin.uri:
+            url: http://127.0.0.1/engine/api/status
+            return_content: true
+            status_code: 200
+          register: motion_levels_runtime_revision_health
+          retries: 60
+          delay: 2
+          until:
+            - motion_levels_runtime_revision_health.status == 200
+            - >-
+              (motion_levels_runtime_revision_health.json | default({})).get('sourceRevision', '')
+              == motion_levels_component_lock.components.games.revision
+
+        - name: Verify the player menu games revision
+          ansible.builtin.uri:
+            url: http://127.0.0.1/menu/build.json
+            return_content: true
+            status_code: 200
+          register: motion_levels_menu_revision_health
+          retries: 60
+          delay: 2
+          until:
+            - motion_levels_menu_revision_health.status == 200
+            - >-
+              (motion_levels_menu_revision_health.json | default({})).get('gamesSourceRevision', '')
+              == motion_levels_component_lock.components.games.revision
+
+        - name: Verify the player display games revision
+          ansible.builtin.uri:
+            url: http://127.0.0.1/display/build.json
+            return_content: true
+            status_code: 200
+          register: motion_levels_display_revision_health
+          retries: 60
+          delay: 2
+          until:
+            - motion_levels_display_revision_health.status == 200
+            - >-
+              (motion_levels_display_revision_health.json | default({})).get('gamesSourceRevision', '')
+              == motion_levels_component_lock.components.games.revision
+
+        - name: Verify the software renderer without requiring an HDMI connector
+          ansible.builtin.uri:
+            url: http://127.0.0.1/engine/api/display-client
+            return_content: true
+            status_code: 200
+          register: motion_levels_player_display_health
+          retries: 60
+          delay: 2
+          until:
+            - motion_levels_player_display_health.status == 200
+            - motion_levels_player_display_health.json.fresh | default(false) | bool
+            - motion_levels_player_display_health.json.healthy | default(false) | bool
+            - motion_levels_player_display_health.json.renderStatus | default('') == 'ready'
+            - >-
+              motion_levels_player_display_health.json.expectedRevision | default('')
+              == motion_levels_component_lock.components.games.revision
+            - >-
+              motion_levels_player_display_health.json.loadedRevision | default('')
+              == motion_levels_component_lock.components.games.revision
+            - >-
+              motion_levels_player_display_health.json.shellRevision | default('')
+              == motion_levels_component_lock.components.games.revision
+            - (motion_levels_player_display_health.json.receivedUnixMillis | default(0) | int) > 0
+            - (motion_levels_player_display_health.json.pageLoadedUnixMillis | default(0) | int) > 0
+            - (motion_levels_player_display_health.json.lastPaintUnixMillis | default(0) | int) > 0
+            - >-
+              (
+                (
+                  (motion_levels_player_display_health.json.receivedUnixMillis | default(0) | int)
+                  - (motion_levels_player_display_health.json.lastPaintUnixMillis | default(0) | int)
+                ) | abs
+              ) <= 15000
+
+        - name: Verify the complete supervisor snapshot without gating hardware state
+          ansible.builtin.uri:
+            url: http://127.0.0.1/venue-api/v1/snapshot
+            return_content: true
+            status_code: 200
+          register: motion_levels_venue_snapshot
+          retries: 60
+          delay: 2
+          until:
+            - motion_levels_venue_snapshot.status == 200
+            - motion_levels_venue_snapshot.json.ok | default(false) | bool
+
+        - name: Record healthy production stack metadata
+          ansible.builtin.copy:
+            dest: "{{ motion_levels_config_root }}/stack.json"
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              {
+                "schema": "motion-levels-native-stack-v1",
+                "revision": {{ motion_levels_venue_revision | to_json }},
+                "deployed_at": {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') | to_json }},
+                "venue": {{ motion_levels_venue.slug | to_json }},
+                "target": {{ inventory_hostname | to_json }},
+                "commissioning": false,
+                "services_started": true,
+                "nixos_system": {{ (motion_levels_activated_system.stdout | trim) | to_json }},
+                "components": {
+                  "controller": {
+                    "revision": {{ motion_levels_component_lock.components.controller.revision | to_json }},
+                    "platform": {{ motion_levels_component_lock.components.controller.target | to_json }},
+                    "protocol": {{ motion_levels_component_lock.components.controller.protocol | to_json }}
+                  },
+                  "games": {
+                    "revision": {{ motion_levels_component_lock.components.games.revision | to_json }}
+                  },
+                  "cameras": {
+                    "revision": {{ motion_levels_component_lock.components.cameras.revision | to_json }}
+                  }
+                },
+                "deployment_health_contract": "software-only",
+                "hardware_state_contract": "observed-not-gated"
+              }
+
+        - name: Publish non-secret production stack metadata
+          ansible.builtin.copy:
+            src: "{{ motion_levels_config_root }}/stack.json"
+            dest: "{{ motion_levels_state_root }}/public/stack.json"
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0644"
+
+        - name: Verify the published production contract
+          ansible.builtin.uri:
+            url: http://127.0.0.1/stack.json
+            return_content: true
+            status_code: 200
+          register: motion_levels_published_stack
+          retries: 10
+          delay: 1
+          until:
+            - motion_levels_published_stack.status == 200
+            - motion_levels_published_stack.json.revision | default('') == motion_levels_venue_revision
+            - not (motion_levels_published_stack.json.commissioning | default(true) | bool)
+            - motion_levels_published_stack.json.services_started | default(false) | bool
+
+      rescue:
+        - name: Stop every native unit before NixOS rollback
+          ansible.builtin.systemd_service:
+            name: "{{ item }}"
+            state: stopped
+          loop: >-
+            {{
+              (motion_levels_activation_services | reverse | list)
+              + ['motion-levels-gopro-reconcile.service']
+            }}
+          failed_when: false
+
+        - name: Resolve the failed activation generation
+          ansible.builtin.command:
+            argv:
+              - readlink
+              - -f
+              - /run/current-system
+          register: motion_levels_failed_system
+          changed_when: false
+          failed_when: false
+
+        - name: Roll back only when the production generation became current
+          ansible.builtin.command:
+            argv:
+              - nixos-rebuild
+              - switch
+              - --rollback
+          register: motion_levels_nixos_rollback
+          changed_when: true
+          failed_when: false
+          when: motion_levels_failed_system.stdout | trim != motion_levels_previous_system.stdout | trim
+
+        - name: Keep restored venue units inactive after rollback
+          ansible.builtin.systemd_service:
+            name: "{{ item }}"
+            state: stopped
+          loop: "{{ motion_levels_activation_services + ['motion-levels-gopro-reconcile.service'] }}"
+          failed_when: false
+
+        - name: Restore the commissioning stack metadata
+          ansible.builtin.copy:
+            dest: "{{ motion_levels_config_root }}/stack.json"
+            content: "{{ motion_levels_original_stack_content | b64decode }}"
+            owner: root
+            group: root
+            mode: "0644"
+
+        - name: Restore the published commissioning stack metadata
+          ansible.builtin.copy:
+            dest: "{{ motion_levels_state_root }}/public/stack.json"
+            content: "{{ motion_levels_original_public_stack_content | b64decode }}"
+            owner: root
+            group: root
+            mode: "0644"
+
+        - name: Resolve the restored NixOS generation
+          ansible.builtin.command:
+            argv:
+              - readlink
+              - -f
+              - /run/current-system
+          register: motion_levels_restored_system
+          changed_when: false
+          failed_when: false
+
+        - name: Verify every venue service is inactive after rollback
+          ansible.builtin.command:
+            argv:
+              - systemctl
+              - is-active
+              - "{{ item }}"
+          register: motion_levels_rollback_service_state
+          changed_when: false
+          failed_when: motion_levels_rollback_service_state.stdout | trim in ['active', 'activating', 'reloading']
+          loop: "{{ motion_levels_activation_services + ['motion-levels-gopro-reconcile.service'] }}"
+
+        - name: Verify native listener ports are free after rollback
+          ansible.builtin.shell: |
+            set -eu
+            listeners="$(ss -H -lntu | awk '{ local_address=$5; sub(/^.*:/, "", local_address); if (local_address ~ /^[0-9]+$/) print local_address }' | sort -u)"
+            busy=""
+            for port in {{ motion_levels_activation_ports | join(' ') }}; do
+              if printf '%s\n' "$listeners" | grep -qx "$port"; then
+                busy="$busy $port"
+              fi
+            done
+            test -z "$busy" || { echo "native listener ports still in use:$busy" >&2; exit 1; }
+          args:
+            executable: /bin/sh
+          changed_when: false
+
+        - name: Require the exact commissioning generation to be restored
+          ansible.builtin.assert:
+            that:
+              - motion_levels_restored_system.stdout | trim == motion_levels_previous_system.stdout | trim
+              - >-
+                motion_levels_nixos_rollback is not defined
+                or motion_levels_nixos_rollback.rc | default(0) == 0
+            fail_msg: "Production activation failed and the commissioning generation could not be restored exactly."
+
+        - name: Fail after restoring the inactive commissioning system
+          ansible.builtin.fail:
+            msg: >-
+              NixOS production activation for {{ motion_levels_venue_revision }}
+              failed. The prior generation and both commissioning stack.json
+              files were restored, all venue units were stopped, and the
+              temporary Twitch relay was not restarted.

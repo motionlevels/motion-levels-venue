@@ -65,6 +65,13 @@ actual = {
     for path in root.rglob("*")
     if (path.is_file() or path.is_symlink()) and path != manifest_path
 }
+complete_path = root / ".complete"
+if ".complete" in actual:
+    if complete_path.is_symlink() or not complete_path.is_file():
+        fail("native release completion marker must be a regular file")
+    if complete_path.read_text(encoding="utf-8").strip() != manifest["venueRevision"]:
+        fail("native release completion marker does not match venue revision")
+    actual.remove(".complete")
 if actual != seen:
     fail(f"native release contains unmanifested files: {sorted(actual - seen)}")
 for path in root.rglob("*"):
