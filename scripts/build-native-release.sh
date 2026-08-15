@@ -29,10 +29,10 @@ validate_source() {
   local name="$1"
   local root="$2"
   local expected_revision="$3"
-  test -d "$root/.git" || {
+  if [[ ! -d "$root" ]] || ! git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "$name source repository is missing at $root" >&2
     exit 66
-  }
+  fi
   local actual_revision
   actual_revision="$(git -C "$root" rev-parse HEAD)"
   if [[ "$actual_revision" != "$expected_revision" ]]; then
