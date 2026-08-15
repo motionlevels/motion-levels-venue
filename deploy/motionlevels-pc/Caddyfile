@@ -140,6 +140,11 @@
 	}
 
 	redir /menu /menu/
+	handle /menu/venue-config.json {
+		header Content-Type application/json
+		header Cache-Control "no-store"
+		respond `{"schema":"motion-levels-venue-client-v1","floorRotationDegrees":{{ motion_levels_floor_view.kiosk_rotation_degrees }}}` 200
+	}
 	handle_path /menu/* {
 		root * {{ motion_levels_install_root }}/current/game-bundles/motion-levels-games/current/menu
 		@menu_assets path /assets/*
@@ -153,6 +158,11 @@
 	}
 
 	redir /display /display/
+	handle /display/venue-config.json {
+		header Content-Type application/json
+		header Cache-Control "no-store"
+		respond `{"schema":"motion-levels-venue-client-v1","floorRotationDegrees":{{ motion_levels_floor_view.player_display_rotation_degrees }}}` 200
+	}
 	handle_path /display/* {
 		root * {{ motion_levels_install_root }}/current/game-bundles/motion-levels-games/current/display
 		@display_assets path /assets/*
