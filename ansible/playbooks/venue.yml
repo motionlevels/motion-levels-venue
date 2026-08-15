@@ -27,6 +27,7 @@
           - motion_levels_component_lock.components.controller.target == 'linux/amd64'
           - motion_levels_component_lock.components.controller.protocol == 'v1+v2'
           - motion_levels_component_lock.components.games.revision is match('^[0-9a-f]{40}$')
+          - motion_levels_component_lock.components.games.nodeVersion is match('^[0-9]+$')
           - motion_levels_component_lock.components.cameras.revision is match('^[0-9a-f]{40}$')
           - motion_levels_venue.slug is match('^[a-z0-9]+(?:-[a-z0-9]+)*$')
           - motion_levels_venue.platform_room_id is match('^[0-9a-f-]{36}$')
@@ -99,6 +100,7 @@
         MOTION_LEVELS_CONTROLLER_SOURCE: "{{ motion_levels_component_source_roots.controller }}"
         MOTION_LEVELS_GAMES_SOURCE: "{{ motion_levels_component_source_roots.games }}"
         MOTION_LEVELS_CAMERAS_SOURCE: "{{ motion_levels_component_source_roots.cameras }}"
+        MOTION_LEVELS_NODE_BIN_DIR: "{{ lookup('env', 'MOTION_LEVELS_NODE_BIN_DIR') | default('', true) }}"
       register: motion_levels_native_build
       changed_when: false
 

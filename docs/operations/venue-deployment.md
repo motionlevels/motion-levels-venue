@@ -55,6 +55,7 @@ Alternative checkout paths are supported without changing inventory:
 export MOTION_LEVELS_CONTROLLER_SOURCE=/absolute/path/to/motion-levels-controller
 export MOTION_LEVELS_GAMES_SOURCE=/absolute/path/to/motion-levels-games
 export MOTION_LEVELS_CAMERAS_SOURCE=/absolute/path/to/motion-levels-cameras
+export MOTION_LEVELS_NODE_BIN_DIR=/absolute/path/to/the/locked-node/bin
 ```
 
 Inspect the required revisions and compare each checkout before deploying:
@@ -72,7 +73,9 @@ git -C ../motion-levels-cameras status --short
 ```
 
 Every status command must be empty, and the three component revisions must match the lock exactly.
-The build fails closed on a dirty or mismatched checkout.
+The build fails closed on a dirty or mismatched checkout. It also requires the Node.js major declared
+by `components.games.nodeVersion` in the component lock. `MOTION_LEVELS_NODE_BIN_DIR` is optional
+when the default `node` and `npm` already provide that exact major.
 
 `scripts/build-native-release.sh` then:
 
@@ -99,9 +102,11 @@ The same build and verification run automatically at the beginning of the Ansibl
 
 The native playbook requires:
 
-- `ansible`, `git`, `go`, `jq`, `node`, `npm`, `python3`, and `rsync` on the control machine;
+- `ansible`, `git`, `go`, `jq`, `python3`, and `rsync` on the control machine;
+- `node` and `npm` at the exact locked major on the control machine, either on the default `PATH` or
+  selected with `MOTION_LEVELS_NODE_BIN_DIR`;
 - Debian 13 or newer on x86-64;
-- Node.js 20 or newer and Python 3.13;
+- Node.js 20 or newer and Python 3.13 on the Debian venue host;
 - SSH access as the inventory user (`root` in production);
 - all three protected camera secret files already present on the host;
 - the controller, games, and camera source checkouts available on the control machine.

@@ -14,7 +14,10 @@ jq -r '.components.games.revision' deploy/motionlevels-pc/venue-components.lock.
 
 The default source checkout is the sibling directory `../motion-levels-games`. Override it with
 `MOTION_LEVELS_GAMES_SOURCE=/absolute/path` when necessary. The native release builder requires that
-checkout's `HEAD` to equal the lock and rejects tracked or untracked changes.
+checkout's `HEAD` to equal the lock and rejects tracked or untracked changes. It also requires the
+exact Node.js major in `components.games.nodeVersion`; set `MOTION_LEVELS_NODE_BIN_DIR` to an
+absolute directory containing that version's `node` and `npm` executables when it is not the system
+default.
 
 Do not restore or edit the old venue `game-bundles/`, player-menu/display applications, or
 historical game engine to update a game. They are not production authoring or fallback paths. Make

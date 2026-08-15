@@ -7,6 +7,7 @@ build_root="${MOTION_LEVELS_NATIVE_BUILD_ROOT:-/tmp/motion-levels-venue-native}"
 controller_root="${MOTION_LEVELS_CONTROLLER_SOURCE:-$repo_root/../motion-levels-controller}"
 games_root="${MOTION_LEVELS_GAMES_SOURCE:-$repo_root/../motion-levels-games}"
 cameras_root="${MOTION_LEVELS_CAMERAS_SOURCE:-$repo_root/../motion-levels-cameras}"
+node_bin_dir="${MOTION_LEVELS_NODE_BIN_DIR:-}"
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -15,7 +16,7 @@ require_command() {
   }
 }
 
-for command in git go jq node npm python3 rsync; do
+for command in git go jq python3 rsync; do
   require_command "$command"
 done
 
@@ -24,6 +25,35 @@ controller_revision="$(jq -er '.components.controller.revision' "$lock_path")"
 games_revision="$(jq -er '.components.games.revision' "$lock_path")"
 cameras_revision="$(jq -er '.components.cameras.revision' "$lock_path")"
 controller_go_version="$(jq -er '.components.controller.goVersion' "$lock_path")"
+games_node_version="$(
+  jq -er '.components.games.nodeVersion | select(type == "string" and test("^[0-9]+$"))' "$lock_path"
+)"
+
+if [[ -n "$node_bin_dir" ]]; then
+  if [[ "$node_bin_dir" != /* ]] || [[ "$node_bin_dir" == *:* ]]; then
+    echo "MOTION_LEVELS_NODE_BIN_DIR must be an absolute directory without ':'" >&2
+    exit 64
+  fi
+  for command in node npm; do
+    if [[ ! -x "$node_bin_dir/$command" ]]; then
+      echo "MOTION_LEVELS_NODE_BIN_DIR is missing executable $command at $node_bin_dir/$command" >&2
+      exit 69
+    fi
+  done
+  export PATH="$node_bin_dir${PATH:+:$PATH}"
+fi
+
+for command in node npm; do
+  require_command "$command"
+done
+
+actual_node_version="$(node --version)"
+actual_node_major="$(node -p 'process.versions.node.split(".")[0]')"
+if [[ "$actual_node_major" != "$games_node_version" ]]; then
+  echo "Games lock requires Node major $games_node_version, but $(command -v node) is $actual_node_version" >&2
+  echo "Set MOTION_LEVELS_NODE_BIN_DIR to an absolute bin directory containing matching node and npm executables" >&2
+  exit 69
+fi
 
 validate_source() {
   local name="$1"

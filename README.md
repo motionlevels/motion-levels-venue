@@ -55,6 +55,9 @@ clean sibling checkouts at:
 Override those locations with `MOTION_LEVELS_CONTROLLER_SOURCE`, `MOTION_LEVELS_GAMES_SOURCE`, and
 `MOTION_LEVELS_CAMERAS_SOURCE`. Each checkout must be clean and at the exact locked revision. The
 venue checkout must also be clean because its own full `HEAD` becomes the release identity.
+The builder requires the exact Node.js major in `components.games.nodeVersion`; when that version is
+not the system default, set `MOTION_LEVELS_NODE_BIN_DIR` to an absolute directory containing its
+`node` and `npm` executables (for example, a versioned Homebrew formula's `bin` directory).
 
 `scripts/build-native-release.sh` builds locally into
 `/tmp/motion-levels-venue-native/releases/<venue-sha>` by default. It produces only derived runtime

@@ -73,6 +73,8 @@ test("the component lock pins external source repositories", () => {
 
 test("native releases are assembled from clean pinned sibling checkouts", () => {
   const build = read("scripts/build-native-release.sh");
+  const debianPlaybook = read("ansible/playbooks/venue.yml");
+  const nixosStagePlaybook = read("ansible/playbooks/venue-nixos-stage.yml");
   assert.match(build, /validate_source controller/);
   assert.match(build, /validate_source games/);
   assert.match(build, /validate_source cameras/);
@@ -80,6 +82,11 @@ test("native releases are assembled from clean pinned sibling checkouts", () => 
   assert.match(build, /scripts\/build-native\.sh/);
   assert.match(build, /npm --prefix "\$games_root" run build:bundle/);
   assert.match(build, /npm run verify:bundle/);
+  assert.match(build, /components\.games\.nodeVersion/);
+  assert.match(build, /MOTION_LEVELS_NODE_BIN_DIR/);
+  assert.match(build, /actual_node_major.*games_node_version/);
+  assert.match(debianPlaybook, /MOTION_LEVELS_NODE_BIN_DIR:.*lookup\('env', 'MOTION_LEVELS_NODE_BIN_DIR'\)/);
+  assert.match(nixosStagePlaybook, /MOTION_LEVELS_NODE_BIN_DIR:.*lookup\('env', 'MOTION_LEVELS_NODE_BIN_DIR'\)/);
   assert.match(build, /components\/cameras\/source\/motion_levels_cameras/);
   assert.match(build, /requirements-native\.lock/);
   assert.match(build, /chmod 0755 "\$candidate"/);
