@@ -87,7 +87,10 @@ motion_levels_camera:
     delete_remote_after_verified_upload: true
 
 motion_levels_security_camera:
-  enabled: true
+  # The old Tapo password is not present in OpenBao or the live homelab.
+  # Keep this auxiliary recorder disabled instead of restart-looping until its
+  # credential is recovered from the operator's encrypted Vaultwarden item.
+  enabled: false
   id: "130"
   label: Cámara frontal
   role: front
