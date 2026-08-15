@@ -177,7 +177,10 @@ test("Zaragoza HDMI metrics use node_exporter with a source-restricted managemen
   assert.doesNotMatch(host, /tailscale0\.allowedTCPPorts = \[[^\]]*\b9100\b/);
   assert.match(watchdog, /motionlevels_hdmi_connected\{connector="%s"\}/);
   assert.match(watchdog, /motionlevels_hdmi_detector_up/);
-  assert.match(watchdog, /motionlevels_hdmi_last_transition_timestamp_seconds/);
+  assert.match(
+    watchdog,
+    /motionlevels_hdmi_last_transition_timestamp_seconds\{connector="%s"\}/,
+  );
   assert.doesNotMatch(watchdog, /(?:site|vmid)="/);
 });
 

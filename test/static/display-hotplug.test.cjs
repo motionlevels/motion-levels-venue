@@ -647,7 +647,7 @@ reset_metrics_runtime() {
 record_hdmi_metrics_observation 1 0
 metric_is 'motionlevels_hdmi_connected{connector="HDMI-A-2"} 0'
 metric_is 'motionlevels_hdmi_detector_up 1'
-metric_is 'motionlevels_hdmi_last_transition_timestamp_seconds 0'
+metric_is 'motionlevels_hdmi_last_transition_timestamp_seconds{connector="HDMI-A-2"} 0'
 ! grep -Eq 'site=|vmid=' "$HDMI_METRICS_FILE"
 
 # Three consecutive observations are required to publish a transition.
@@ -656,7 +656,7 @@ record_hdmi_metrics_observation 1 1
 metric_is 'motionlevels_hdmi_connected{connector="HDMI-A-2"} 0'
 record_hdmi_metrics_observation 1 1
 metric_is 'motionlevels_hdmi_connected{connector="HDMI-A-2"} 1'
-metric_is 'motionlevels_hdmi_last_transition_timestamp_seconds 1700000000'
+metric_is 'motionlevels_hdmi_last_transition_timestamp_seconds{connector="HDMI-A-2"} 1700000000'
 
 # Detector failure is exported immediately but preserves last-known HDMI state
 # and clears an incomplete disconnect candidate.
@@ -665,7 +665,7 @@ record_hdmi_metrics_observation 1 0
 record_hdmi_metrics_observation 0 0
 metric_is 'motionlevels_hdmi_connected{connector="HDMI-A-2"} 1'
 metric_is 'motionlevels_hdmi_detector_up 0'
-metric_is 'motionlevels_hdmi_last_transition_timestamp_seconds 1700000000'
+metric_is 'motionlevels_hdmi_last_transition_timestamp_seconds{connector="HDMI-A-2"} 1700000000'
 mock_now=1700000060
 record_hdmi_metrics_observation 1 0
 record_hdmi_metrics_observation 1 0
@@ -673,7 +673,7 @@ metric_is 'motionlevels_hdmi_connected{connector="HDMI-A-2"} 1'
 record_hdmi_metrics_observation 1 0
 metric_is 'motionlevels_hdmi_connected{connector="HDMI-A-2"} 0'
 metric_is 'motionlevels_hdmi_detector_up 1'
-metric_is 'motionlevels_hdmi_last_transition_timestamp_seconds 1700000060'
+metric_is 'motionlevels_hdmi_last_transition_timestamp_seconds{connector="HDMI-A-2"} 1700000060'
 
 # A same-boot service restart retains state and still debounces changes.
 reset_metrics_runtime
@@ -683,14 +683,14 @@ record_hdmi_metrics_observation 1 1
 metric_is 'motionlevels_hdmi_connected{connector="HDMI-A-2"} 0'
 record_hdmi_metrics_observation 1 1
 metric_is 'motionlevels_hdmi_connected{connector="HDMI-A-2"} 1'
-metric_is 'motionlevels_hdmi_last_transition_timestamp_seconds 1700000120'
+metric_is 'motionlevels_hdmi_last_transition_timestamp_seconds{connector="HDMI-A-2"} 1700000120'
 
 # A new VM boot takes a fresh baseline and does not replay a shutdown event.
 printf '%s\n' '22222222-2222-2222-2222-222222222222' >"$MOTION_LEVELS_BOOT_ID_FILE"
 reset_metrics_runtime
 record_hdmi_metrics_observation 1 0
 metric_is 'motionlevels_hdmi_connected{connector="HDMI-A-2"} 0'
-metric_is 'motionlevels_hdmi_last_transition_timestamp_seconds 1700000120'
+metric_is 'motionlevels_hdmi_last_transition_timestamp_seconds{connector="HDMI-A-2"} 1700000120'
 test "$(find "$fixture_root" -name '*.tmp.*' -print -quit)" = ''
 `);
 });

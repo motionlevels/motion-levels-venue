@@ -206,7 +206,7 @@ write_hdmi_metrics() {
     printf 'motionlevels_hdmi_detector_up %s\n' "${detector_up}"
     printf '# HELP motionlevels_hdmi_last_transition_timestamp_seconds Unix timestamp of the most recent debounced HDMI connect or disconnect transition.\n'
     printf '# TYPE motionlevels_hdmi_last_transition_timestamp_seconds gauge\n'
-    printf 'motionlevels_hdmi_last_transition_timestamp_seconds %s\n' "${hdmi_metrics_last_transition_timestamp}"
+    printf 'motionlevels_hdmi_last_transition_timestamp_seconds{connector="%s"} %s\n' "${connector}" "${hdmi_metrics_last_transition_timestamp}"
   } >"${temp_file}"; then
     rm -f -- "${temp_file}"
     return 1
