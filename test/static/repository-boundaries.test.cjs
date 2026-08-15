@@ -95,8 +95,11 @@ test("native releases are assembled from clean pinned sibling checkouts", () => 
   assert.match(build, /validate_source cameras/);
   assert.match(build, /status --porcelain --untracked-files=normal/);
   assert.match(build, /scripts\/build-native\.sh/);
-  assert.match(build, /npm --prefix "\$games_root" run build:bundle/);
-  assert.match(build, /npm run verify:bundle/);
+  assert.match(
+    build,
+    /\(\n\s+cd "\$games_root"\n\s+npm ci[\s\S]*?npm run build[\s\S]*?npm run generate:media[\s\S]*?npm run build:bundle[\s\S]*?npm run verify:bundle[\s\S]*?\n\)/,
+  );
+  assert.doesNotMatch(build, /npm --prefix/);
   assert.match(build, /components\.games\.nodeVersion/);
   assert.match(build, /MOTION_LEVELS_NODE_BIN_DIR/);
   assert.match(build, /actual_node_major.*games_node_version/);

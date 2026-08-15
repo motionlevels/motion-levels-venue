@@ -118,14 +118,17 @@ install -m 0755 "$controller_binary" "$candidate/bin/floor-controller"
 
 # Build the complete revision-matched runtime/menu/display bundle from games
 # source. Media is generated from the same manifests before bundle hashing.
-npm --prefix "$games_root" ci >/dev/null
-npm --prefix "$games_root" run build >/dev/null
-npm --prefix "$games_root" run generate:media >/dev/null
 games_output="$candidate/game-bundles/motion-levels-games/$games_revision"
-MOTION_LEVELS_GAMES_SOURCE_REVISION="$games_revision" \
-MOTION_LEVELS_GAMES_BUNDLE_DIR="$games_output" \
-  npm --prefix "$games_root" run build:bundle >/dev/null
-(cd "$games_root" && MOTION_LEVELS_GAMES_BUNDLE_DIR="$games_output" npm run verify:bundle >/dev/null)
+(
+  cd "$games_root"
+  npm ci >/dev/null
+  npm run build >/dev/null
+  npm run generate:media >/dev/null
+  MOTION_LEVELS_GAMES_SOURCE_REVISION="$games_revision" \
+  MOTION_LEVELS_GAMES_BUNDLE_DIR="$games_output" \
+    npm run build:bundle >/dev/null
+  MOTION_LEVELS_GAMES_BUNDLE_DIR="$games_output" npm run verify:bundle >/dev/null
+)
 cat > "$candidate/game-bundles/motion-levels-games/pin.json" <<EOF
 {
   "schema": "motion-levels-games-source-pin-v1",
