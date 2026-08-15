@@ -148,6 +148,39 @@ test("Zaragoza NixOS activation is explicit, software-gated, and transactional",
   assert.doesNotMatch(activation, /displayConnection\.connected|cameraDetected|\bxrandr\b/);
 });
 
+test("Zaragoza HDMI metrics use node_exporter with a source-restricted management listener", () => {
+  const host = read("deploy/nixos/hosts/motionlevels-zaragoza.nix");
+  const module = read("deploy/nixos/modules/motion-levels-venue-native.nix");
+  const watchdog = read("deploy/motionlevels-pc/motion-levels-hdmi-watchdog");
+  const watchdogUnit = module.slice(
+    module.indexOf("systemd.services.motion-levels-hdmi-watchdog"),
+    module.indexOf("systemd.services.motion-levels-gopro-reconcile"),
+  );
+
+  assert.match(module, /services\.prometheus\.exporters\.node = \{/);
+  assert.match(module, /enabledCollectors = \[[\s\S]*?"systemd"[\s\S]*?"textfile"[\s\S]*?\];/);
+  assert.match(
+    module,
+    /--collector\.textfile\.directory=\$\{cfg\.stateRoot\}\/node-exporter-textfile/,
+  );
+  assert.match(module, /listenAddress = "10\.137\.50\.100";/);
+  assert.doesNotMatch(module, /listenAddress = "(?:0\.0\.0\.0|127\.0\.0\.1)";/);
+  assert.match(watchdogUnit, /MOTION_LEVELS_HDMI_METRICS_CONNECTOR = cfg\.display\.connector;/);
+  assert.match(watchdogUnit, /MOTION_LEVELS_HDMI_METRICS_CONFIRMATIONS = "3";/);
+  assert.match(watchdogUnit, /ExecStopPost = .*--mark-detector-down/);
+  assert.match(host, /connector = "HDMI-A-2";/);
+  assert.match(
+    host,
+    /iptables -w -A nixos-fw -i mgmt0 -s 10\.137\.50\.215\/32 -p tcp --dport 9100 -j nixos-fw-accept/,
+  );
+  assert.doesNotMatch(host, /mgmt0\.allowedTCPPorts = \[[^\]]*\b9100\b/);
+  assert.doesNotMatch(host, /tailscale0\.allowedTCPPorts = \[[^\]]*\b9100\b/);
+  assert.match(watchdog, /motionlevels_hdmi_connected\{connector="%s"\}/);
+  assert.match(watchdog, /motionlevels_hdmi_detector_up/);
+  assert.match(watchdog, /motionlevels_hdmi_last_transition_timestamp_seconds/);
+  assert.doesNotMatch(watchdog, /(?:site|vmid)="/);
+});
+
 test("release scripts launched directly by NixOS remain executable", () => {
   const verifier = read("scripts/verify-native-release.py");
   for (const relativePath of [

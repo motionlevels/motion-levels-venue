@@ -195,6 +195,10 @@ in
 
     display = {
       output = lib.mkOption { type = types.str; };
+      connector = lib.mkOption {
+        type = types.str;
+        description = "Stable DRM connector label exported in HDMI metrics.";
+      };
       mode = lib.mkOption { type = types.str; };
       refreshHz = lib.mkOption { type = types.ints.positive; };
       alsaCard = lib.mkOption { type = types.ints.unsigned; };
@@ -240,6 +244,19 @@ in
     ];
 
     environment.systemPackages = runtimePackages;
+    services.prometheus.exporters.node = {
+      enable = true;
+      enabledCollectors = [
+        "systemd"
+        "textfile"
+      ];
+      extraFlags = [
+        "--collector.textfile.directory=${cfg.stateRoot}/node-exporter-textfile"
+      ];
+      listenAddress = "10.137.50.100";
+      openFirewall = false;
+      port = 9100;
+    };
     hardware.enableRedistributableFirmware = true;
     hardware.graphics.enable = true;
     fonts.packages = with pkgs; [
@@ -287,6 +304,7 @@ in
       "d ${cfg.stateRoot}/camera-recordings 0750 motion-levels-cameras motion-levels-cameras -"
       "d ${cfg.stateRoot}/security-recordings 0750 root root -"
       "d ${cfg.stateRoot}/player-chromium 0750 root root -"
+      "d ${cfg.stateRoot}/node-exporter-textfile 0755 root root -"
       "d ${cfg.cameraStateRoot} 0750 motion-levels-cameras motion-levels-cameras -"
       "d /etc/motion-levels 0710 root motion-levels-cameras -"
       "d /etc/motion-levels-cameras 0750 root motion-levels-cameras -"
@@ -325,6 +343,11 @@ in
         RemainAfterExit = true;
         ExecStart = "${pkgs.iproute2}/bin/ip link set ${cfg.network.venueInterface} up";
       };
+    };
+
+    systemd.services.prometheus-node-exporter = {
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
     };
 
     systemd.services.motion-levels-floor-controller = commonService // {
@@ -589,12 +612,16 @@ in
       environment = {
         DISPLAY = ":0";
         XDG_RUNTIME_DIR = "/run/motion-levels-kiosk";
+        MOTION_LEVELS_HDMI_METRICS_CONNECTOR = cfg.display.connector;
+        MOTION_LEVELS_HDMI_METRICS_CONFIRMATIONS = "3";
+        MOTION_LEVELS_HDMI_METRICS_FILE = "${cfg.stateRoot}/node-exporter-textfile/motion-levels-hdmi.prom";
       };
       serviceConfig = {
         Type = "simple";
         EnvironmentFile = "/etc/motion-levels/motion-levels.env";
         WorkingDirectory = cfg.stateRoot;
         ExecStart = "${runtimeRoot}/motion-levels-hdmi-watchdog";
+        ExecStopPost = "${runtimeRoot}/motion-levels-hdmi-watchdog --mark-detector-down";
         Restart = "always";
         RestartSec = 5;
       };

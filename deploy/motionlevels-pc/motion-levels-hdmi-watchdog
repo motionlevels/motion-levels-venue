@@ -73,6 +73,10 @@ MOTION_LEVELS_FORCE_ALSA_OUTPUT="$(env_file_value MOTION_LEVELS_FORCE_ALSA_OUTPU
 POLL_SECONDS="$(validated_integer "$(env_file_value MOTION_LEVELS_HDMI_WATCHDOG_INTERVAL 10)" 10 1 3600 MOTION_LEVELS_HDMI_WATCHDOG_INTERVAL)"
 RESTART_COOLDOWN_SECONDS="$(validated_integer "$(env_file_value MOTION_LEVELS_HDMI_WATCHDOG_RESTART_COOLDOWN 45)" 45 0 86400 MOTION_LEVELS_HDMI_WATCHDOG_RESTART_COOLDOWN)"
 FAILURES_BEFORE_RESTART="$(validated_integer "$(env_file_value MOTION_LEVELS_HDMI_WATCHDOG_FAILURES 3)" 3 1 100 MOTION_LEVELS_HDMI_WATCHDOG_FAILURES)"
+HDMI_METRICS_FILE="${MOTION_LEVELS_HDMI_METRICS_FILE:-$(env_file_value MOTION_LEVELS_HDMI_METRICS_FILE)}"
+HDMI_METRICS_CONNECTOR="${MOTION_LEVELS_HDMI_METRICS_CONNECTOR:-$(env_file_value MOTION_LEVELS_HDMI_METRICS_CONNECTOR "${MOTION_LEVELS_XRANDR_OUTPUT:-unknown}")}"
+HDMI_METRICS_CONFIRMATIONS="$(validated_integer "${MOTION_LEVELS_HDMI_METRICS_CONFIRMATIONS:-$(env_file_value MOTION_LEVELS_HDMI_METRICS_CONFIRMATIONS 3)}" 3 1 60 MOTION_LEVELS_HDMI_METRICS_CONFIRMATIONS)"
+MOTION_LEVELS_BOOT_ID_FILE="${MOTION_LEVELS_BOOT_ID_FILE:-/proc/sys/kernel/random/boot_id}"
 
 last_restart=0
 failure_count=0
@@ -82,6 +86,178 @@ last_display_geometry=""
 alsa_device_state_initialized=0
 last_live_hdmi_alsa_device=""
 restart_pending_reason=""
+hdmi_metrics_loaded=0
+hdmi_metrics_baselined=0
+hdmi_metrics_connected=0
+hdmi_metrics_last_transition_timestamp=0
+hdmi_metrics_candidate_connected=""
+hdmi_metrics_candidate_count=0
+hdmi_metrics_boot_id=""
+
+hdmi_metrics_state_file() {
+  if [[ "${HDMI_METRICS_FILE}" == *.prom ]]; then
+    printf '%s.state' "${HDMI_METRICS_FILE%.prom}"
+  else
+    printf '%s.state' "${HDMI_METRICS_FILE}"
+  fi
+}
+
+current_boot_id() {
+  local boot_id=""
+
+  if [ -r "${MOTION_LEVELS_BOOT_ID_FILE}" ]; then
+    IFS= read -r boot_id <"${MOTION_LEVELS_BOOT_ID_FILE}" || true
+  fi
+  if [[ "${boot_id}" =~ ^[0-9A-Fa-f-]+$ ]]; then
+    printf '%s' "${boot_id}"
+  fi
+}
+
+load_hdmi_metrics_state() {
+  local state_file stored_boot_id="" stored_connected="" stored_timestamp=""
+  local key value
+
+  [ "${hdmi_metrics_loaded}" -eq 0 ] || return 0
+  hdmi_metrics_loaded=1
+  [ -n "${HDMI_METRICS_FILE}" ] || return 0
+
+  hdmi_metrics_boot_id="$(current_boot_id)"
+  state_file="$(hdmi_metrics_state_file)"
+  if [ -r "${state_file}" ]; then
+    while IFS='=' read -r key value; do
+      case "${key}" in
+        boot_id)
+          if [[ "${value}" =~ ^[0-9A-Fa-f-]+$ ]]; then
+            stored_boot_id="${value}"
+          fi
+          ;;
+        connected)
+          if [ "${value}" = 0 ] || [ "${value}" = 1 ]; then
+            stored_connected="${value}"
+          fi
+          ;;
+        last_transition_timestamp)
+          if [[ "${value}" =~ ^[0-9]+$ ]]; then
+            stored_timestamp="${value}"
+          fi
+          ;;
+      esac
+    done <"${state_file}"
+  fi
+
+  if [ -n "${stored_connected}" ]; then
+    hdmi_metrics_connected="${stored_connected}"
+  fi
+  if [ -n "${stored_timestamp}" ]; then
+    hdmi_metrics_last_transition_timestamp="${stored_timestamp}"
+  fi
+  if [ -n "${hdmi_metrics_boot_id}" ] \
+    && [ "${stored_boot_id}" = "${hdmi_metrics_boot_id}" ] \
+    && [ -n "${stored_connected}" ]; then
+    hdmi_metrics_baselined=1
+  fi
+}
+
+write_hdmi_metrics_state() {
+  local state_file temp_file
+
+  [ -n "${HDMI_METRICS_FILE}" ] || return 0
+  state_file="$(hdmi_metrics_state_file)"
+  [ -d "${state_file%/*}" ] || return 1
+  temp_file="$(mktemp "${state_file}.tmp.XXXXXX")" || return 1
+  if ! {
+    printf 'boot_id=%s\n' "${hdmi_metrics_boot_id}"
+    printf 'connected=%s\n' "${hdmi_metrics_connected}"
+    printf 'last_transition_timestamp=%s\n' "${hdmi_metrics_last_transition_timestamp}"
+  } >"${temp_file}"; then
+    rm -f -- "${temp_file}"
+    return 1
+  fi
+  chmod 0644 "${temp_file}" || {
+    rm -f -- "${temp_file}"
+    return 1
+  }
+  mv -f -- "${temp_file}" "${state_file}"
+}
+
+prometheus_escape_label() {
+  local value="$1"
+
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  printf '%s' "${value}"
+}
+
+write_hdmi_metrics() {
+  local detector_up="$1"
+  local temp_file connector
+
+  [ -n "${HDMI_METRICS_FILE}" ] || return 0
+  [ -d "${HDMI_METRICS_FILE%/*}" ] || return 1
+  connector="$(prometheus_escape_label "${HDMI_METRICS_CONNECTOR:-unknown}")"
+  temp_file="$(mktemp "${HDMI_METRICS_FILE}.tmp.XXXXXX")" || return 1
+  if ! {
+    printf '# HELP motionlevels_hdmi_connected Whether the debounced HDMI connector state is connected.\n'
+    printf '# TYPE motionlevels_hdmi_connected gauge\n'
+    printf 'motionlevels_hdmi_connected{connector="%s"} %s\n' "${connector}" "${hdmi_metrics_connected}"
+    printf '# HELP motionlevels_hdmi_detector_up Whether the HDMI detector returned a usable X display observation.\n'
+    printf '# TYPE motionlevels_hdmi_detector_up gauge\n'
+    printf 'motionlevels_hdmi_detector_up %s\n' "${detector_up}"
+    printf '# HELP motionlevels_hdmi_last_transition_timestamp_seconds Unix timestamp of the most recent debounced HDMI connect or disconnect transition.\n'
+    printf '# TYPE motionlevels_hdmi_last_transition_timestamp_seconds gauge\n'
+    printf 'motionlevels_hdmi_last_transition_timestamp_seconds %s\n' "${hdmi_metrics_last_transition_timestamp}"
+  } >"${temp_file}"; then
+    rm -f -- "${temp_file}"
+    return 1
+  fi
+  chmod 0644 "${temp_file}" || {
+    rm -f -- "${temp_file}"
+    return 1
+  }
+  mv -f -- "${temp_file}" "${HDMI_METRICS_FILE}"
+}
+
+record_hdmi_metrics_observation() {
+  local detector_up="$1"
+  local observed_connected="$2"
+
+  [ -n "${HDMI_METRICS_FILE}" ] || return 0
+  load_hdmi_metrics_state
+
+  if [ "${detector_up}" -eq 0 ]; then
+    hdmi_metrics_candidate_connected=""
+    hdmi_metrics_candidate_count=0
+  elif [ "${hdmi_metrics_baselined}" -eq 0 ]; then
+    # A new VM boot establishes a baseline without replaying a synthetic
+    # disconnect caused by the previous shutdown.
+    hdmi_metrics_connected="${observed_connected}"
+    hdmi_metrics_baselined=1
+    hdmi_metrics_candidate_connected=""
+    hdmi_metrics_candidate_count=0
+    write_hdmi_metrics_state || log "could not persist HDMI metrics baseline" >&2
+  elif [ "${observed_connected}" = "${hdmi_metrics_connected}" ]; then
+    hdmi_metrics_candidate_connected=""
+    hdmi_metrics_candidate_count=0
+  else
+    if [ "${observed_connected}" = "${hdmi_metrics_candidate_connected}" ]; then
+      hdmi_metrics_candidate_count=$((hdmi_metrics_candidate_count + 1))
+    else
+      hdmi_metrics_candidate_connected="${observed_connected}"
+      hdmi_metrics_candidate_count=1
+    fi
+
+    if [ "${hdmi_metrics_candidate_count}" -ge "${HDMI_METRICS_CONFIRMATIONS}" ]; then
+      hdmi_metrics_connected="${observed_connected}"
+      hdmi_metrics_last_transition_timestamp="$(date +%s)"
+      hdmi_metrics_candidate_connected=""
+      hdmi_metrics_candidate_count=0
+      write_hdmi_metrics_state || log "could not persist HDMI metrics transition" >&2
+    fi
+  fi
+
+  write_hdmi_metrics "${detector_up}" || log "could not publish HDMI metrics" >&2
+}
 
 query_display() {
   /usr/bin/xrandr --query --props 2>/dev/null || true
@@ -380,11 +556,13 @@ watchdog_check() {
   output="$(display_output_from_query "${xrandr_output}" "${MOTION_LEVELS_XRANDR_OUTPUT}")"
 
   if [ -z "${xrandr_output}" ]; then
+    record_hdmi_metrics_observation 0 0
     restart_kiosk_if_needed "X display is unavailable"
     return 0
   fi
 
   if [ -z "${output}" ]; then
+    record_hdmi_metrics_observation 1 0
     failure_count=0
     display_state_initialized=1
     last_display_output=""
@@ -394,6 +572,8 @@ watchdog_check() {
     log "no HDMI output connected"
     return 0
   fi
+
+  record_hdmi_metrics_observation 1 1
 
   geometry="$(active_geometry_for_output "${xrandr_output}" "${output}")"
   original_geometry="${geometry}"
@@ -483,6 +663,11 @@ watchdog_check() {
 }
 
 main() {
+  if [ "${1:-}" = "--mark-detector-down" ]; then
+    record_hdmi_metrics_observation 0 0
+    return 0
+  fi
+
   while true; do
     watchdog_check
     sleep "${POLL_SECONDS}"

@@ -18,6 +18,11 @@
     firewall = {
       enable = true;
       checkReversePath = "loose";
+      # node_exporter is reachable only by the monitoring Agent in CT 257.
+      # Keep port 9100 out of every interface-wide allowlist.
+      extraCommands = ''
+        iptables -w -A nixos-fw -i mgmt0 -s 10.137.50.215/32 -p tcp --dport 9100 -j nixos-fw-accept
+      '';
       interfaces = {
         mgmt0.allowedTCPPorts = [
           22
@@ -121,6 +126,7 @@
 
     display = {
       output = "HDMI-1";
+      connector = "HDMI-A-2";
       mode = "1920x1080";
       refreshHz = 60;
       # Verified fallback for HDMI-A-2; the kiosk follows the live ELD/PCM.
