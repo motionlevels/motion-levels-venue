@@ -71,6 +71,8 @@
           - motion_levels_venue.platform_room_id is match('^[0-9a-f-]{36}$')
           - motion_levels_venue.hostname | length > 0
           - motion_levels_network.floor.rotation_degrees | int in [0, 180]
+          - motion_levels_floor_view.kiosk_rotation_degrees | int in [0, 90, 180, 270]
+          - motion_levels_floor_view.player_display_rotation_degrees | int in [0, 90, 180, 270]
           - motion_levels_camera.api_token_file.startswith('/etc/')
           - motion_levels_camera.platform_token_file.startswith('/etc/')
           - motion_levels_camera.twitch.stream_key_file.startswith('/etc/')

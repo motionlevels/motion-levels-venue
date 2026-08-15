@@ -14,6 +14,12 @@ motion_levels_platform_host: platform.motionlevels.obis.dev
 motion_levels_camera_uid: 10001
 motion_levels_camera_gid: 10001
 
+# Visual quarter-turns are independent from floor wiring calibration. A venue
+# can place its touch kiosk and player-facing display on different sides.
+motion_levels_floor_view:
+  kiosk_rotation_degrees: 0
+  player_display_rotation_degrees: 0
+
 motion_levels_runtime_packages:
   - alsa-utils
   - caddy

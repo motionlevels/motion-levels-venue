@@ -18,6 +18,14 @@ per-venue configuration rendered into mutable files under `/etc`. The old
 `motionlevels-1` mini PC must remain disconnected while this replacement
 retains the same logical room identity.
 
+The browser-facing board orientation is also inventory-owned. Configure
+`motion_levels_floor_view.kiosk_rotation_degrees` and
+`motion_levels_floor_view.player_display_rotation_degrees` independently with
+one of `0`, `90`, `180`, or `270`. These presentation-only quarter turns keep
+the game start edge next to the physical kiosk without changing game
+coordinates or `motion_levels_network.floor.rotation_degrees`, which is only
+the LED/sensor wiring calibration.
+
 ## VM contract
 
 - UEFI/OVMF, Q35, x86-64, QEMU guest agent;

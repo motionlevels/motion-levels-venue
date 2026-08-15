@@ -42,6 +42,13 @@ motion_levels_display:
     card: 1
     device: 7
 
+# Keep the game start edge nearest the physical kiosk. These are presentation
+# rotations only; motion_levels_network.floor.rotation_degrees calibrates the
+# LED/sensor wiring and must not be used to orient browser previews.
+motion_levels_floor_view:
+  kiosk_rotation_degrees: 0
+  player_display_rotation_degrees: 0
+
 motion_levels_camera:
   enabled: true
   camera_id: gopro-hero12

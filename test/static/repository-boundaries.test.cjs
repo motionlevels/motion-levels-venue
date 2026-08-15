@@ -67,7 +67,7 @@ test("the component lock pins external source repositories", () => {
   assert.equal(lock.components.controller.target, "linux/amd64");
   assert.equal(lock.components.controller.protocol, "v1+v2");
   assert.match(lock.components.controller.goVersion, /^go1\./);
-  assert.equal(lock.components.games.revision, "b69a14964426b12ffdaa0c724e248e0ec3887cd8");
+  assert.equal(lock.components.games.revision, "d59ec199c292160de6f31e298eed41346e88cc42");
   assert.equal(lock.components.games.nodeVersion, "24");
   assert.match(lock.components.cameras.pythonVersion, /^\d+\.\d+$/);
 });
