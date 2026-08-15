@@ -1,0 +1,555 @@
+---
+- name: Select explicit NixOS venue commissioning targets
+  hosts: motion_levels_venues
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  tasks:
+    - name: Ignore every host that is not explicitly in commissioning
+      ansible.builtin.meta: end_host
+      when: not (motion_levels_commissioning | default(false) | bool)
+
+    - name: Identify the commissioning operating system without Python
+      ansible.builtin.raw: |
+        set -eu
+        . /etc/os-release
+        printf '%s|%s\n' "${ID:-}" "$(uname -m)"
+      register: motion_levels_commissioning_os
+      changed_when: false
+
+    - name: Require an x86_64 NixOS commissioning target
+      ansible.builtin.assert:
+        that:
+          - motion_levels_commissioning_os.stdout | trim == 'nixos|x86_64'
+        fail_msg: >-
+          Staging is restricted to x86_64 NixOS hosts with
+          motion_levels_commissioning=true.
+
+    - name: Mark the host eligible for the remaining staging plays
+      ansible.builtin.set_fact:
+        motion_levels_nixos_commissioning_eligible: true
+
+- name: Build the exact native release on the control machine
+  hosts: motion_levels_venues
+  gather_facts: false
+  connection: local
+  become: false
+  any_errors_fatal: true
+  serial: 1
+  vars:
+    # A NixOS host overrides its remote interpreter in inventory. This play is
+    # local and must keep using the Python interpreter running Ansible itself.
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    motion_levels_repo_root: "{{ playbook_dir }}/../.."
+    motion_levels_component_lock_path: "{{ motion_levels_repo_root }}/deploy/motionlevels-pc/venue-components.lock.json"
+    motion_levels_local_build_root: "{{ lookup('env', 'MOTION_LEVELS_NATIVE_BUILD_ROOT') | default('/tmp/motion-levels-venue-native', true) }}"
+    motion_levels_component_source_roots:
+      controller: "{{ lookup('env', 'MOTION_LEVELS_CONTROLLER_SOURCE') | default(motion_levels_repo_root ~ '/../motion-levels-controller', true) }}"
+      games: "{{ lookup('env', 'MOTION_LEVELS_GAMES_SOURCE') | default(motion_levels_repo_root ~ '/../motion-levels-games', true) }}"
+      cameras: "{{ lookup('env', 'MOTION_LEVELS_CAMERAS_SOURCE') | default(motion_levels_repo_root ~ '/../motion-levels-cameras', true) }}"
+  pre_tasks:
+    - name: Ignore hosts that did not pass the NixOS commissioning gate
+      ansible.builtin.meta: end_host
+      when: not (motion_levels_nixos_commissioning_eligible | default(false) | bool)
+  tasks:
+    - name: Load the native component lock
+      ansible.builtin.set_fact:
+        motion_levels_component_lock: "{{ lookup('file', motion_levels_component_lock_path) | from_json }}"
+
+    - name: Validate commissioning identity and immutable pins
+      ansible.builtin.assert:
+        that:
+          - motion_levels_commissioning | bool
+          - motion_levels_component_lock.schema == 'motion-levels-venue-components-v2'
+          - motion_levels_component_lock.components.controller.revision is match('^[0-9a-f]{40}$')
+          - motion_levels_component_lock.components.controller.target == 'linux/amd64'
+          - motion_levels_component_lock.components.controller.protocol == 'v1+v2'
+          - motion_levels_component_lock.components.games.revision is match('^[0-9a-f]{40}$')
+          - motion_levels_component_lock.components.cameras.revision is match('^[0-9a-f]{40}$')
+          - motion_levels_venue.slug is match('^[a-z0-9]+(?:-[a-z0-9]+)*$')
+          - motion_levels_venue.platform_room_id is match('^[0-9a-f-]{36}$')
+          - motion_levels_venue.hostname | length > 0
+          - motion_levels_camera.api_token_file.startswith('/etc/')
+          - motion_levels_camera.platform_token_file.startswith('/etc/')
+          - motion_levels_camera.twitch.stream_key_file.startswith('/etc/')
+        fail_msg: >-
+          The commissioning host vars or native component lock are incomplete.
+
+    - name: Inspect pinned component source checkouts
+      ansible.builtin.stat:
+        path: "{{ item.value }}"
+      register: motion_levels_component_sources
+      loop: "{{ motion_levels_component_source_roots | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Require every pinned component source checkout
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isdir
+        fail_msg: "The {{ item.item.key }} source checkout is unavailable at {{ item.item.value }}."
+      loop: "{{ motion_levels_component_sources.results }}"
+      loop_control:
+        label: "{{ item.item.key }}"
+
+    - name: Resolve each component source revision
+      ansible.builtin.command:
+        cmd: git rev-parse HEAD
+        chdir: "{{ item.value }}"
+      register: motion_levels_component_revisions
+      changed_when: false
+      loop: "{{ motion_levels_component_source_roots | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Require each source checkout to match its lock pin
+      ansible.builtin.assert:
+        that:
+          - item.stdout | trim == motion_levels_component_lock.components[item.item.key].revision
+        fail_msg: >-
+          The {{ item.item.key }} checkout is {{ item.stdout | trim }} but the
+          venue lock requires {{ motion_levels_component_lock.components[item.item.key].revision }}.
+      loop: "{{ motion_levels_component_revisions.results }}"
+      loop_control:
+        label: "{{ item.item.key }}"
+
+    - name: Refuse dirty component source checkouts  # noqa command-instead-of-module
+      ansible.builtin.command:
+        cmd: git status --porcelain --untracked-files=normal
+        chdir: "{{ item.value }}"
+      register: motion_levels_component_dirty
+      changed_when: false
+      failed_when: motion_levels_component_dirty.stdout | length > 0
+      loop: "{{ motion_levels_component_source_roots | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Resolve the exact venue source revision
+      ansible.builtin.command:
+        cmd: git rev-parse HEAD
+        chdir: "{{ motion_levels_repo_root }}"
+      register: motion_levels_venue_revision_command
+      changed_when: false
+
+    - name: Refuse a dirty venue source checkout  # noqa command-instead-of-module
+      ansible.builtin.command:
+        cmd: git status --porcelain --untracked-files=normal
+        chdir: "{{ motion_levels_repo_root }}"
+      register: motion_levels_venue_dirty
+      changed_when: false
+      failed_when: motion_levels_venue_dirty.stdout | length > 0
+
+    - name: Build the pinned native source release
+      ansible.builtin.command:
+        cmd: "{{ motion_levels_repo_root }}/scripts/build-native-release.sh"
+        chdir: "{{ motion_levels_repo_root }}"
+      environment:
+        MOTION_LEVELS_NATIVE_BUILD_ROOT: "{{ motion_levels_local_build_root }}"
+        MOTION_LEVELS_CONTROLLER_SOURCE: "{{ motion_levels_component_source_roots.controller }}"
+        MOTION_LEVELS_GAMES_SOURCE: "{{ motion_levels_component_source_roots.games }}"
+        MOTION_LEVELS_CAMERAS_SOURCE: "{{ motion_levels_component_source_roots.cameras }}"
+      register: motion_levels_native_build
+      changed_when: false
+
+    - name: Record the built release path
+      ansible.builtin.set_fact:
+        motion_levels_venue_revision: "{{ motion_levels_venue_revision_command.stdout | trim }}"
+        motion_levels_local_release_dir: "{{ motion_levels_native_build.stdout_lines | last }}"
+
+    - name: Verify the completed release with the canonical verifier
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ motion_levels_repo_root }}/scripts/verify-native-release.py"
+          - "{{ motion_levels_local_release_dir }}"
+      register: motion_levels_local_release_verification
+      changed_when: false
+
+    - name: Load the verified release manifest
+      ansible.builtin.set_fact:
+        motion_levels_release_manifest: >-
+          {{ lookup('file', motion_levels_local_release_dir ~ '/release-manifest.json') | from_json }}
+
+    - name: Require the built manifest to match every selected revision
+      ansible.builtin.assert:
+        that:
+          - motion_levels_release_manifest.venueRevision == motion_levels_venue_revision
+          - motion_levels_release_manifest.components.controller == motion_levels_component_lock.components.controller.revision
+          - motion_levels_release_manifest.components.games == motion_levels_component_lock.components.games.revision
+          - motion_levels_release_manifest.components.cameras == motion_levels_component_lock.components.cameras.revision
+        fail_msg: "The verified release manifest does not match the selected source revisions."
+
+    - name: Read the deterministic venue commit timestamp
+      ansible.builtin.command:
+        argv:
+          - git
+          - show
+          - -s
+          - --format=%cI
+          - "{{ motion_levels_venue_revision }}"
+      args:
+        chdir: "{{ motion_levels_repo_root }}"
+      register: motion_levels_venue_commit_timestamp
+      changed_when: false
+
+    - name: Share immutable staging facts
+      ansible.builtin.set_fact:
+        motion_levels_remote_release_dir: "{{ motion_levels_install_root }}/releases/{{ motion_levels_venue_revision }}"
+        motion_levels_stage_timestamp: "{{ motion_levels_venue_commit_timestamp.stdout | trim }}"
+
+- name: Stage the native release on NixOS without activating services
+  hosts: motion_levels_venues
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  vars:
+    ansible_python_interpreter: "{{ motion_levels_nixos_python_interpreter | default('/run/current-system/sw/bin/python3') }}"
+    motion_levels_repo_root: "{{ playbook_dir }}/../.."
+    motion_levels_candidate_dir: "{{ motion_levels_remote_release_dir }}.candidate"
+  pre_tasks:
+    - name: Ignore hosts that did not pass the NixOS commissioning gate
+      ansible.builtin.meta: end_host
+      when: not (motion_levels_nixos_commissioning_eligible | default(false) | bool)
+
+    - name: Reassert the commissioning safety boundary
+      ansible.builtin.assert:
+        that:
+          - motion_levels_commissioning | bool
+          - motion_levels_install_root == '/opt/motion-levels/venue'
+          - motion_levels_config_root == '/etc/motion-levels'
+          - motion_levels_state_root == '/var/lib/motion-levels'
+          - motion_levels_camera_state_root == '/var/lib/motion-levels-cameras'
+          - motion_levels_remote_release_dir == motion_levels_install_root ~ '/releases/' ~ motion_levels_venue_revision
+          - motion_levels_venue_revision is match('^[0-9a-f]{40}$')
+        fail_msg: "The NixOS commissioning safety boundary is incomplete."
+
+    - name: Inspect venue services before changing the staged release
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ item }}"
+      register: motion_levels_commissioning_service_state
+      changed_when: false
+      failed_when: false
+      loop: "{{ motion_levels_native_services + ['caddy.service'] }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Refuse to move release links under an active venue stack
+      ansible.builtin.assert:
+        that:
+          - item.stdout | trim != 'active'
+        fail_msg: >-
+          {{ item.item }} is active. The commissioning-only staging playbook
+          never changes current/previous while venue services are running.
+      loop: "{{ motion_levels_commissioning_service_state.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Require the immutable-host staging tools
+      ansible.builtin.shell: |
+        set -eu
+        for command in python3 rsync caddy; do
+          command -v "$command" >/dev/null
+        done
+      args:
+        executable: /bin/sh
+      changed_when: false
+
+    - name: Inspect mutable configuration destinations
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      register: motion_levels_staged_configuration_files
+      loop:
+        - "{{ motion_levels_config_root }}/motion-levels.env"
+        - /etc/motion-levels-cameras.env
+        - /etc/caddy/Caddyfile
+
+    - name: Refuse to replace Nix-store managed configuration symlinks
+      ansible.builtin.assert:
+        that:
+          - not (item.stat.islnk | default(false))
+        fail_msg: >-
+          {{ item.item }} is a symlink. Leave commissioning configuration
+          mutable instead of trying to overwrite an environment.etc target.
+      loop: "{{ motion_levels_staged_configuration_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+  tasks:
+    - name: Create release, configuration, state, and Caddy directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner | default('root') }}"
+        group: "{{ item.group | default('root') }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ motion_levels_install_root }}", mode: "0755" }
+        - { path: "{{ motion_levels_install_root }}/releases", mode: "0755" }
+        - { path: "{{ motion_levels_config_root }}", group: motion-levels-cameras, mode: "0710" }
+        - { path: "{{ motion_levels_state_root }}", mode: "0755" }
+        - { path: "{{ motion_levels_state_root }}/public", mode: "0755" }
+        - { path: "{{ motion_levels_camera_state_root }}", owner: motion-levels-cameras, group: motion-levels-cameras, mode: "0750" }
+        - { path: /etc/motion-levels-cameras, group: motion-levels-cameras, mode: "0750" }
+        - { path: /etc/caddy, mode: "0755" }
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Inspect the immutable release directory
+      ansible.builtin.stat:
+        path: "{{ motion_levels_remote_release_dir }}"
+        follow: false
+      register: motion_levels_release_directory
+
+    - name: Inspect the immutable release manifest
+      ansible.builtin.stat:
+        path: "{{ motion_levels_remote_release_dir }}/release-manifest.json"
+        follow: false
+      register: motion_levels_release_manifest_file
+
+    - name: Inspect the immutable release completion marker
+      ansible.builtin.stat:
+        path: "{{ motion_levels_remote_release_dir }}/.complete"
+        follow: false
+      register: motion_levels_release_complete_file
+
+    - name: Refuse a partial or replaced immutable release
+      ansible.builtin.assert:
+        that:
+          - >-
+            not motion_levels_release_directory.stat.exists
+            or (
+              motion_levels_release_directory.stat.isdir
+              and not motion_levels_release_directory.stat.islnk
+              and (motion_levels_release_manifest_file.stat.isreg | default(false))
+              and not (motion_levels_release_manifest_file.stat.islnk | default(false))
+              and (motion_levels_release_complete_file.stat.isreg | default(false))
+              and not (motion_levels_release_complete_file.stat.islnk | default(false))
+            )
+        fail_msg: >-
+          {{ motion_levels_remote_release_dir }} is not a complete regular
+          immutable release; inspect it instead of overwriting it.
+
+    - name: Transfer and promote the verified native release
+      when: not motion_levels_release_directory.stat.exists
+      block:
+        - name: Recreate the revision-scoped candidate directory
+          ansible.builtin.file:
+            path: "{{ motion_levels_candidate_dir }}"
+            state: "{{ item }}"
+            mode: "0755"
+          loop:
+            - absent
+            - directory
+
+        - name: Transfer only the locally built release
+          ansible.posix.synchronize:
+            src: "{{ motion_levels_local_release_dir }}/"
+            dest: "{{ motion_levels_candidate_dir }}/"
+            archive: true
+            checksum: true
+            delete: true
+
+        - name: Verify the transferred candidate with the canonical verifier
+          ansible.builtin.script:
+            cmd: >-
+              {{ motion_levels_repo_root }}/scripts/verify-native-release.py
+              {{ motion_levels_candidate_dir }}
+            executable: "{{ ansible_python_interpreter }}"
+          changed_when: false
+
+        - name: Mark the revision-scoped candidate complete
+          ansible.builtin.copy:
+            dest: "{{ motion_levels_candidate_dir }}/.complete"
+            content: "{{ motion_levels_venue_revision }}\n"
+            owner: root
+            group: root
+            mode: "0644"
+
+        - name: Make the completed candidate root-owned and read-only to services
+          ansible.builtin.file:
+            path: "{{ motion_levels_candidate_dir }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "u=rwX,go=rX"
+            recurse: true
+
+        - name: Promote the complete candidate to its immutable revision path
+          ansible.builtin.command:
+            argv:
+              - mv
+              - "{{ motion_levels_candidate_dir }}"
+              - "{{ motion_levels_remote_release_dir }}"
+          changed_when: true
+
+    - name: Verify the complete remote release and allow only its marker
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "-"
+          - "{{ motion_levels_remote_release_dir }}"
+          - "{{ motion_levels_venue_revision }}"
+        stdin: |
+          from hashlib import sha256
+          import json
+          from pathlib import Path
+          import re
+          import sys
+
+          root = Path(sys.argv[1])
+          expected_revision = sys.argv[2]
+          assert root.is_dir() and not root.is_symlink()
+          assert root.stat().st_mode & 0o777 == 0o755
+          manifest_path = root / "release-manifest.json"
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          assert manifest["schema"] == "motion-levels-native-venue-release-v1"
+          assert manifest["venueRevision"] == expected_revision
+          assert re.fullmatch(r"[0-9a-f]{40}", expected_revision)
+          seen = set()
+          for record in manifest["files"]:
+              relative = str(record["path"])
+              path = Path(relative)
+              assert relative and not path.is_absolute() and ".." not in path.parts
+              assert relative not in seen
+              seen.add(relative)
+              target = root / path
+              record_type = record.get("type", "file")
+              assert record_type in {"file", "symlink"}
+              assert target.is_symlink() if record_type == "symlink" else target.is_file() and not target.is_symlink()
+              payload = target.readlink().as_posix().encode() if target.is_symlink() else target.read_bytes()
+              assert record["bytes"] == len(payload)
+              assert record["sha256"] == sha256(payload).hexdigest()
+          actual = {
+              path.relative_to(root).as_posix()
+              for path in root.rglob("*")
+              if path.is_file() or path.is_symlink()
+          }
+          assert actual == seen | {"release-manifest.json", ".complete"}
+          assert (root / ".complete").read_text(encoding="utf-8").strip() == expected_revision
+      changed_when: false
+
+    - name: Render the non-secret venue runtime environment
+      ansible.builtin.template:
+        src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels.env.j2"
+        dest: "{{ motion_levels_config_root }}/motion-levels.env"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Render the non-secret camera runtime environment
+      ansible.builtin.template:
+        src: "{{ motion_levels_repo_root }}/ansible/templates/motion-levels-cameras.env.j2"
+        dest: /etc/motion-levels-cameras.env
+        owner: root
+        group: motion-levels-cameras
+        mode: "0640"
+
+    - name: Render the venue-specific Caddy configuration
+      ansible.builtin.template:
+        src: "{{ motion_levels_repo_root }}/deploy/motionlevels-pc/Caddyfile"
+        dest: /etc/caddy/Caddyfile
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Validate the staged Caddy configuration without starting Caddy
+      ansible.builtin.command:
+        argv:
+          - caddy
+          - validate
+          - --config
+          - /etc/caddy/Caddyfile
+      changed_when: false
+
+    - name: Activate current and previous release links atomically
+      ansible.builtin.shell: |
+        set -eu
+        root="{{ motion_levels_install_root }}"
+        candidate="{{ motion_levels_remote_release_dir }}"
+        current_link="$root/.current.$$.tmp"
+        previous_link="$root/.previous.$$.tmp"
+        active=""
+        cleanup_links() {
+          rm -f "$current_link" "$previous_link"
+        }
+        trap cleanup_links 0 1 2 15
+        test -f "$candidate/release-manifest.json"
+        test -f "$candidate/.complete"
+        test "$(cat "$candidate/.complete")" = "{{ motion_levels_venue_revision }}"
+        for link in current previous; do
+          if [ -e "$root/$link" ] || [ -L "$root/$link" ]; then
+            test -L "$root/$link"
+          fi
+        done
+        if [ -L "$root/current" ]; then
+          active="$(readlink -f "$root/current")"
+          case "$active" in
+            "$root"/releases/*)
+              test -d "$active"
+              test -f "$active/release-manifest.json"
+              test -f "$active/.complete"
+              ;;
+            *) echo "unsafe current release target: $active" >&2; exit 65 ;;
+          esac
+        fi
+        if [ "$active" = "$candidate" ]; then
+          echo already-staged
+          exit 0
+        fi
+        if [ -n "$active" ]; then
+          ln -s "$active" "$previous_link"
+          mv -Tf "$previous_link" "$root/previous"
+        fi
+        ln -s "$candidate" "$current_link"
+        mv -Tf "$current_link" "$root/current"
+        echo staged
+      args:
+        executable: /bin/sh
+      register: motion_levels_release_activation
+      changed_when: motion_levels_release_activation.stdout | trim != 'already-staged'
+
+    - name: Install deterministic commissioning stack metadata
+      ansible.builtin.copy:
+        dest: "{{ motion_levels_config_root }}/stack.json"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          {
+            "schema": "motion-levels-native-stack-v1",
+            "revision": {{ motion_levels_venue_revision | to_json }},
+            "staged_at": {{ motion_levels_stage_timestamp | to_json }},
+            "venue": {{ motion_levels_venue.slug | to_json }},
+            "target": {{ inventory_hostname | to_json }},
+            "commissioning": true,
+            "services_started": false,
+            "components": {
+              "controller": {
+                "revision": {{ motion_levels_component_lock.components.controller.revision | to_json }},
+                "platform": {{ motion_levels_component_lock.components.controller.target | to_json }},
+                "protocol": {{ motion_levels_component_lock.components.controller.protocol | to_json }}
+              },
+              "games": {
+                "revision": {{ motion_levels_component_lock.components.games.revision | to_json }}
+              },
+              "cameras": {
+                "revision": {{ motion_levels_component_lock.components.cameras.revision | to_json }}
+              }
+            },
+            "deployment_health_contract": "not-run-during-commissioning-stage",
+            "hardware_state_contract": "observed-not-gated"
+          }
+
+    - name: Publish non-secret commissioning stack metadata
+      ansible.builtin.copy:
+        src: "{{ motion_levels_config_root }}/stack.json"
+        dest: "{{ motion_levels_state_root }}/public/stack.json"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"

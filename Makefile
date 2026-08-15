@@ -13,7 +13,7 @@ NATIVE_SERVICES = \
 	motion-levels-hdmi-watchdog.service \
 	caddy.service
 
-.PHONY: install-ansible-collections ansible-ping show-pins build-native-release verify-native-release deploy-venues deploy-motionlevels-1 status-motionlevels-1 health-motionlevels-1 release-motionlevels-1 logs-motionlevels-1 restart-motionlevels-1 rollback-motionlevels-1
+.PHONY: install-ansible-collections ansible-ping show-pins build-native-release verify-native-release deploy-venues deploy-motionlevels-1 stage-motionlevels-zaragoza status-motionlevels-1 status-motionlevels-zaragoza health-motionlevels-1 release-motionlevels-1 logs-motionlevels-1 restart-motionlevels-1 rollback-motionlevels-1
 
 install-ansible-collections:
 	ansible-galaxy collection install -r ansible/requirements.yml
@@ -37,8 +37,14 @@ deploy-venues:
 deploy-motionlevels-1:
 	$(MAKE) deploy-venues LIMIT=motionlevels-1
 
+stage-motionlevels-zaragoza:
+	ansible-playbook ansible/playbooks/venue-nixos-stage.yml --limit motionlevels-zaragoza
+
 status-motionlevels-1:
 	ssh "$(HOST)" 'systemctl --no-pager --full status $(NATIVE_SERVICES)'
+
+status-motionlevels-zaragoza:
+	ansible motion_levels_venues --limit motionlevels-zaragoza -m ansible.builtin.shell -a 'set -eu; root=/opt/motion-levels/venue; current=$$(readlink -f "$$root/current"); test -f "$$current/release-manifest.json"; test -f "$$current/.complete"; printf "current  %s\n" "$$current"; if [ -L "$$root/previous" ]; then printf "previous %s\n" "$$(readlink -f "$$root/previous")"; else echo "previous none"; fi; python3 -m json.tool /etc/motion-levels/stack.json'
 
 health-motionlevels-1:
 	ssh "$(HOST)" 'set -eu; for url in http://127.0.0.1/controller/health http://127.0.0.1/engine/api/status http://127.0.0.1/venue-api/v1/snapshot http://127.0.0.1/menu/ http://127.0.0.1/display/ http://127.0.0.1:8040/healthz; do printf "%-58s" "$$url"; curl -fsS -o /dev/null "$$url"; echo ok; done'
