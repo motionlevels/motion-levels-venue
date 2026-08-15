@@ -148,6 +148,18 @@ test("Zaragoza NixOS activation is explicit, software-gated, and transactional",
   assert.doesNotMatch(activation, /displayConnection\.connected|cameraDetected|\bxrandr\b/);
 });
 
+test("release scripts launched directly by NixOS remain executable", () => {
+  const verifier = read("scripts/verify-native-release.py");
+  for (const relativePath of [
+    "deploy/motionlevels-pc/motion-levels-hdmi-watchdog",
+    "deploy/motionlevels-pc/motion-levels-player-kiosk",
+  ]) {
+    const mode = fs.statSync(path.join(repoRoot, relativePath)).mode;
+    assert.notEqual(mode & 0o111, 0, `${relativePath} must retain an executable bit`);
+    assert.match(verifier, new RegExp(relativePath.split("/").at(-1)));
+  }
+});
+
 test("native releases are assembled from clean pinned sibling checkouts", () => {
   const build = read("scripts/build-native-release.sh");
   const debianPlaybook = read("ansible/playbooks/venue.yml");

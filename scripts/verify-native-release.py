@@ -99,6 +99,8 @@ for entry in (
 for executable in (
     root / "bin/floor-controller",
     root / "deploy/motionlevels-pc/venue-runtime",
+    root / "deploy/motionlevels-pc/motion-levels-player-kiosk",
+    root / "deploy/motionlevels-pc/motion-levels-hdmi-watchdog",
 ):
     if not executable.is_file() or not os.access(executable, os.X_OK):
         fail(f"native executable is missing or not executable: {executable.relative_to(root)}")
