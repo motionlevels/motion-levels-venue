@@ -101,6 +101,9 @@
       - caddy.service
       - motion-levels-kiosk.service
       - motion-levels-hdmi-watchdog.service
+    motion_levels_twitch_relay_unit_names:
+      - motionlevels-twitch-live-1080p.service
+      - motionlevels-twitch-stop-1h.timer
     motion_levels_required_activation_services: >-
       {{
         [
@@ -336,26 +339,29 @@
       loop_control:
         label: "{{ item.item }}"
 
-    - name: Find active temporary Twitch relay services or timers
+    - name: Inspect the temporary Twitch relay service and stop timer
       ansible.builtin.command:
         argv:
           - systemctl
-          - list-units
-          - --all
-          - --state=active
-          - --plain
-          - --no-legend
-          - "motionlevels-twitch-live-1080p*"
-      register: motion_levels_twitch_relay_units
+          - is-active
+          - "{{ item }}"
+      register: motion_levels_twitch_relay_states
       changed_when: false
+      failed_when: false
+      loop: "{{ motion_levels_twitch_relay_unit_names }}"
+      loop_control:
+        label: "{{ item }}"
 
     - name: Require the temporary Twitch relay and its timer to be inactive
       ansible.builtin.assert:
         that:
-          - motion_levels_twitch_relay_units.stdout | trim | length == 0
+          - item.stdout | trim not in ['active', 'activating', 'reloading', 'deactivating']
         fail_msg: >-
-          A motionlevels-twitch-live-1080p relay unit is still active. Let the
-          temporary relay finish; this playbook never stops or restarts it.
+          Temporary Twitch unit {{ item.item }} is not safely inactive. Let the
+          relay and its stop timer finish; this playbook never stops or restarts them.
+      loop: "{{ motion_levels_twitch_relay_states.results }}"
+      loop_control:
+        label: "{{ item.item }}"
 
     - name: Require every native TCP and UDP listener port to be free
       ansible.builtin.shell: |
@@ -497,6 +503,47 @@
       register: motion_levels_previous_system
       changed_when: false
 
+    - name: Capture the current boot system profile
+      ansible.builtin.command:
+        argv:
+          - readlink
+          - -f
+          - /nix/var/nix/profiles/system
+      register: motion_levels_previous_system_profile
+      changed_when: false
+
+    - name: Require the running and boot commissioning systems to agree
+      ansible.builtin.assert:
+        that:
+          - motion_levels_previous_system.stdout | trim == motion_levels_previous_system_profile.stdout | trim
+        fail_msg: >-
+          The running NixOS generation and boot system profile differ; refusing
+          a production switch whose rollback baseline is ambiguous.
+
+    - name: Reinspect Twitch units immediately before the production switch
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ item }}"
+      register: motion_levels_twitch_relay_preswitch_states
+      changed_when: false
+      failed_when: false
+      loop: "{{ motion_levels_twitch_relay_unit_names }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Reconfirm the Twitch relay and stop timer are safely inactive
+      ansible.builtin.assert:
+        that:
+          - item.stdout | trim not in ['active', 'activating', 'reloading', 'deactivating']
+        fail_msg: >-
+          Temporary Twitch unit {{ item.item }} changed state while preparing
+          activation. Refusing the production switch without touching the relay.
+      loop: "{{ motion_levels_twitch_relay_preswitch_states.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
     - name: Activate and health-gate the production NixOS generation
       block:
         - name: Mark the production switch as attempted
@@ -521,11 +568,23 @@
           register: motion_levels_activated_system
           changed_when: false
 
+        - name: Resolve the activated boot system profile
+          ansible.builtin.command:
+            argv:
+              - readlink
+              - -f
+              - /nix/var/nix/profiles/system
+          register: motion_levels_activated_system_profile
+          changed_when: false
+
         - name: Require the prebuilt system closure to be active
           ansible.builtin.assert:
             that:
               - motion_levels_activated_system.stdout | trim == motion_levels_candidate_system.stdout | trim
-            fail_msg: "nixos-rebuild did not activate the prebuilt production closure."
+              - motion_levels_activated_system_profile.stdout | trim == motion_levels_candidate_system.stdout | trim
+            fail_msg: >-
+              nixos-rebuild did not activate the prebuilt production closure
+              as both the running system and boot profile.
 
         - name: Wait for every inventory-required venue service
           ansible.builtin.command:
@@ -776,26 +835,26 @@
             }}
           failed_when: false
 
-        - name: Resolve the failed activation generation
+        - name: Restore the exact commissioning system profile
           ansible.builtin.command:
             argv:
-              - readlink
-              - -f
-              - /run/current-system
-          register: motion_levels_failed_system
-          changed_when: false
-          failed_when: false
-
-        - name: Roll back only when the production generation became current
-          ansible.builtin.command:
-            argv:
-              - nixos-rebuild
-              - switch
-              - --rollback
-          register: motion_levels_nixos_rollback
+              - nix-env
+              - --profile
+              - /nix/var/nix/profiles/system
+              - --set
+              - "{{ motion_levels_previous_system.stdout | trim }}"
+          register: motion_levels_nixos_profile_restore
           changed_when: true
           failed_when: false
-          when: motion_levels_failed_system.stdout | trim != motion_levels_previous_system.stdout | trim
+
+        - name: Switch explicitly to the exact commissioning generation
+          ansible.builtin.command:
+            argv:
+              - "{{ motion_levels_previous_system.stdout | trim }}/bin/switch-to-configuration"
+              - switch
+          register: motion_levels_nixos_system_restore
+          changed_when: true
+          failed_when: false
 
         - name: Keep restored venue units inactive after rollback
           ansible.builtin.systemd_service:
@@ -830,6 +889,16 @@
           changed_when: false
           failed_when: false
 
+        - name: Resolve the restored boot system profile
+          ansible.builtin.command:
+            argv:
+              - readlink
+              - -f
+              - /nix/var/nix/profiles/system
+          register: motion_levels_restored_system_profile
+          changed_when: false
+          failed_when: false
+
         - name: Verify every venue service is inactive after rollback
           ansible.builtin.command:
             argv:
@@ -838,7 +907,7 @@
               - "{{ item }}"
           register: motion_levels_rollback_service_state
           changed_when: false
-          failed_when: motion_levels_rollback_service_state.stdout | trim in ['active', 'activating', 'reloading']
+          failed_when: motion_levels_rollback_service_state.stdout | trim in ['active', 'activating', 'reloading', 'deactivating']
           loop: "{{ motion_levels_activation_services + ['motion-levels-gopro-reconcile.service'] }}"
 
         - name: Verify native listener ports are free after rollback
@@ -860,9 +929,9 @@
           ansible.builtin.assert:
             that:
               - motion_levels_restored_system.stdout | trim == motion_levels_previous_system.stdout | trim
-              - >-
-                motion_levels_nixos_rollback is not defined
-                or motion_levels_nixos_rollback.rc | default(0) == 0
+              - motion_levels_restored_system_profile.stdout | trim == motion_levels_previous_system.stdout | trim
+              - motion_levels_nixos_profile_restore.rc | default(1) == 0
+              - motion_levels_nixos_system_restore.rc | default(1) == 0
             fail_msg: "Production activation failed and the commissioning generation could not be restored exactly."
 
         - name: Fail after restoring the inactive commissioning system

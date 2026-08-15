@@ -113,14 +113,31 @@ test("Zaragoza NixOS activation is explicit, software-gated, and transactional",
   const rendererGate = activation.indexOf("Verify the software renderer without requiring an HDMI connector");
   const writeStack = activation.indexOf("Record healthy production stack metadata");
   const rescue = activation.indexOf("rescue:", switchGeneration);
-  const rollback = activation.indexOf("--rollback", rescue);
+  const rollback = activation.indexOf("Restore the exact commissioning system profile", rescue);
+  const preswitchRelayGate = activation.indexOf(
+    "Reconfirm the Twitch relay and stop timer are safely inactive",
+  );
+  const restoreProfile = activation.indexOf("Restore the exact commissioning system profile", rescue);
+  const restoreSystem = activation.indexOf("Switch explicitly to the exact commissioning generation", rescue);
 
   assert.ok(relayGate >= 0 && relayGate < switchGeneration);
   assert.ok(portGate >= 0 && portGate < switchGeneration);
+  assert.ok(preswitchRelayGate > portGate && preswitchRelayGate < switchGeneration);
   assert.ok(switchGeneration < rendererGate && rendererGate < writeStack);
   assert.ok(rescue > writeStack && rollback > rescue);
+  assert.ok(restoreProfile > rescue && restoreSystem > restoreProfile);
   assert.match(activation, /motionlevels-zaragoza-production/);
-  assert.match(activation, /motionlevels-twitch-live-1080p\*/);
+  assert.match(activation, /motionlevels-twitch-live-1080p\.service/);
+  assert.match(activation, /motionlevels-twitch-stop-1h\.timer/);
+  assert.match(activation, /\['active', 'activating', 'reloading', 'deactivating'\]/);
+  assert.match(activation, /\/nix\/var\/nix\/profiles\/system/);
+  assert.match(activation, /--set/);
+  assert.match(activation, /bin\/switch-to-configuration/);
+  assert.match(
+    activation,
+    /motion_levels_restored_system_profile\.stdout \| trim == motion_levels_previous_system\.stdout \| trim/,
+  );
+  assert.doesNotMatch(activation, /--rollback/);
   assert.match(activation, /mediaPipelineConfigured/);
   assert.match(activation, /twitchBroadcast\.configured/);
   assert.match(activation, /renderStatus \| default\(''\) == 'ready'/);
