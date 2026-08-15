@@ -88,6 +88,7 @@ install -m 0755 "$controller_binary" "$candidate/bin/floor-controller"
 
 # Build the complete revision-matched runtime/menu/display bundle from games
 # source. Media is generated from the same manifests before bundle hashing.
+npm --prefix "$games_root" ci >/dev/null
 npm --prefix "$games_root" run build >/dev/null
 npm --prefix "$games_root" run generate:media >/dev/null
 games_output="$candidate/game-bundles/motion-levels-games/$games_revision"
