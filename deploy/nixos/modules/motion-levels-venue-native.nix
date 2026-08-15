@@ -14,6 +14,9 @@ let
   gamesRoot = "${releaseRoot}/game-bundles/motion-levels-games";
   venueAddressOnly = builtins.head (lib.splitString "/" cfg.network.venueAddress);
   productionWantedBy = lib.optionals (!cfg.commissioningMode) [ "multi-user.target" ];
+  securityCameraWantedBy = lib.optionals (!cfg.commissioningMode && cfg.securityCamera.enable) [
+    "multi-user.target"
+  ];
 
   cameraPython = pkgs.python313.withPackages (
     pythonPackages: with pythonPackages; [
@@ -190,6 +193,15 @@ in
       usbProductId = lib.mkOption { type = types.str; };
       networkInterface = lib.mkOption { type = types.str; };
       baseUrl = lib.mkOption { type = types.str; };
+    };
+
+    securityCamera.enable = lib.mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Attach the auxiliary security recorder and snapshot helper to the
+        production boot target. This must match the Ansible venue inventory.
+      '';
     };
   };
 
@@ -441,6 +453,9 @@ in
 
     systemd.services.motion-levels-security-recorder = commonService // {
       description = "Motion Levels security camera recorder";
+      wantedBy = securityCameraWantedBy;
+      restartIfChanged = !cfg.commissioningMode && cfg.securityCamera.enable;
+      stopIfChanged = !cfg.commissioningMode;
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       serviceConfig = {
@@ -452,7 +467,7 @@ in
           "-/etc/motion-levels/security-recorder.env"
         ];
         ExecStart = "${cameraPython}/bin/python3 ${runtimeRoot}/motion-levels-security-recorder.py";
-        Restart = "always";
+        Restart = if cfg.securityCamera.enable then "always" else "no";
         RestartSec = 10;
         TimeoutStopSec = 20;
         KillMode = "control-group";
@@ -463,6 +478,9 @@ in
 
     systemd.services.motion-levels-camera-helper = commonService // {
       description = "Motion Levels camera snapshot helper";
+      wantedBy = securityCameraWantedBy;
+      restartIfChanged = !cfg.commissioningMode && cfg.securityCamera.enable;
+      stopIfChanged = !cfg.commissioningMode;
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       serviceConfig = {
@@ -473,7 +491,7 @@ in
         ];
         WorkingDirectory = runtimeRoot;
         ExecStart = cameraHelperStart;
-        Restart = "always";
+        Restart = if cfg.securityCamera.enable then "always" else "no";
         RestartSec = 2;
         Nice = 12;
         CPUWeight = 100;

@@ -99,10 +99,6 @@
 
   motionLevels.venueHost = {
     enable = true;
-    # The release, units, non-secret configuration, and hardware policy are
-    # installed, but nothing in the venue application stack is pulled into a
-    # boot target until commissioning has been completed at the venue.
-    commissioningMode = true;
 
     identity = {
       slug = "zaragoza-caracol-1";
@@ -134,6 +130,10 @@
       networkInterface = "gopro0";
       baseUrl = "http://172.29.139.51:8080";
     };
+
+    # This recorder remains absent from boot targets until the venue-owned
+    # credential is provisioned and the inventory flag is changed with it.
+    securityCamera.enable = false;
   };
 
   time.timeZone = "Europe/Madrid";

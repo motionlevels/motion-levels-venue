@@ -66,8 +66,9 @@ motion_levels_camera:
   usb:
     vendor_id: "2672"
     product_id: "0059"
-    # Observed behind the passed-through c4:00.3 xHCI controller.
-    expected_port: "7-1.2.1"
+    # Observed sysfs topology behind the passed-through c4:00.3 xHCI
+    # controller. This is a commissioning identity check, not a runtime input.
+    expected_port: "6-1.2.1"
     # NixOS renames the exact camera MAC independently of USB bus numbering.
     network_interface: gopro0
     network_mac: "04:57:47:04:b1:1c"
