@@ -23,8 +23,14 @@ this replacement retains the same logical room identity.
   `10.137.50.100/24` through `10.137.50.1`;
 - venue NIC `BC:24:11:2D:D7:75`, renamed to `venue0`, at
   `192.168.1.142/24` with no default route;
+- isolated GoPro USB link `04:57:47:04:B1:1C`, renamed to `gopro0`, with
+  inbound UDP/8554 allowed only on that interface for the
+  `udp://@0.0.0.0:8554` preview receiver;
 - SSH key authentication only;
 - Tailscale installed but not given an auth key by Nix.
+
+The Zaragoza Twitch transcode is inventory-owned and fixed at 1920x1080,
+30 fps, 6000 kbps video, and 160 kbps audio.
 
 The guest filesystem is ext4 because the Proxmox storage layer already owns
 ZFS. Do not enable discard/TRIM for this VM until the earlier Proxmox/NixOS

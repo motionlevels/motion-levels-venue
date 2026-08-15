@@ -27,6 +27,7 @@
           allowedTCPPorts = [ 80 ];
           allowedUDPPorts = [ 7800 ];
         };
+        gopro0.allowedUDPPorts = [ 8554 ];
         tailscale0.allowedTCPPorts = [
           22
           80

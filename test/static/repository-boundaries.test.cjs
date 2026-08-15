@@ -67,8 +67,23 @@ test("the component lock pins external source repositories", () => {
   assert.equal(lock.components.controller.target, "linux/amd64");
   assert.equal(lock.components.controller.protocol, "v1+v2");
   assert.match(lock.components.controller.goVersion, /^go1\./);
-  assert.match(lock.components.games.nodeVersion, /^\d+$/);
+  assert.equal(lock.components.games.revision, "b69a14964426b12ffdaa0c724e248e0ec3887cd8");
+  assert.equal(lock.components.games.nodeVersion, "24");
   assert.match(lock.components.cameras.pythonVersion, /^\d+\.\d+$/);
+});
+
+test("the Zaragoza GoPro preview and Twitch profile stay on the isolated USB link", () => {
+  const hostVars = read("ansible/inventory/production/host_vars/motionlevels-zaragoza.yml");
+  const nixosHost = read("deploy/nixos/hosts/motionlevels-zaragoza.nix");
+
+  assert.match(
+    hostVars,
+    /twitch:\n\s+stream_key_file:[\s\S]*?video_size: 1920x1080\n\s+framerate: 30\n\s+video_bitrate_kbps: 6000\n\s+audio_bitrate_kbps: 160/,
+  );
+  assert.match(hostVars, /network_interface: gopro0/);
+  assert.match(hostVars, /stream_url: udp:\/\/@0\.0\.0\.0:8554/);
+  assert.match(nixosHost, /gopro0\.allowedUDPPorts = \[ 8554 \];/);
+  assert.equal((nixosHost.match(/\b8554\b/g) || []).length, 1);
 });
 
 test("native releases are assembled from clean pinned sibling checkouts", () => {
