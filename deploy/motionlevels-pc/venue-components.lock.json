@@ -15,7 +15,7 @@
     },
     "cameras": {
       "repository": "https://github.com/motionlevels/motion-levels-cameras.git",
-      "revision": "994c93f9e52ee175d915c209d390c5ba71c422b7",
+      "revision": "c3e6cdd29c80436ad78aca9bfc73f9a1b00bd05f",
       "pythonVersion": "3.13"
     }
   }
